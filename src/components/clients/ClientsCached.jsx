@@ -1204,9 +1204,11 @@ opp.status !== 'Closed Lost' &&
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
                             >
                                 <option value="All Engagement Stages">All Engagement Stages</option>
+                                <option value="Disinterested">Disinterested</option>
                                 <option value="Potential">Potential</option>
                                 <option value="Active">Active</option>
-                                <option value="Disinterested">Disinterested</option>
+                                <option value="Proposal">Proposal</option>
+                                <option value="Tender">Tender</option>
                             </select>
                         </div>
                     </div>

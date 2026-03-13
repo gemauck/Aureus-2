@@ -5522,6 +5522,16 @@ const Clients = React.memo(() => {
                 bValue = stageOrder[bValue] ?? 0;
             }
             
+            // Handle engagement stage sorting (Disinterested < Potential < Active < Proposal < Tender)
+            if (leadSortField === 'engagementStage') {
+                const engStage = (v) => (v && typeof v === 'string' ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : '');
+                const order = ['Disinterested', 'Potential', 'Active', 'Proposal', 'Tender'];
+                aValue = order.indexOf(engStage(aValue));
+                if (aValue === -1) aValue = 999;
+                bValue = order.indexOf(engStage(bValue));
+                if (bValue === -1) bValue = 999;
+            }
+            
             // Handle Company Group sorting
             if (leadSortField === 'companyGroup') {
                 // Extract group names from groupMemberships
@@ -6112,9 +6122,10 @@ const Clients = React.memo(() => {
         return Array.from(serviceSet).sort();
     }, [clients, leads]);
 
-    // Extract all unique engagement stage values from clients and leads dynamically
+    // Engagement stage canonical order: Disinterested, Potential, Active, Proposal, Tender
+    const ENGAGEMENT_STAGE_ORDER = ['Disinterested', 'Potential', 'Active', 'Proposal', 'Tender'];
     const allEngagementStages = useMemo(() => {
-        const stageSet = new Set();
+        const stageSet = new Set(ENGAGEMENT_STAGE_ORDER);
         [...clients, ...leads].forEach(item => {
             const val = item.engagementStage ?? item.status;
             if (val && typeof val === 'string' && val.trim()) {
@@ -6122,7 +6133,14 @@ const Clients = React.memo(() => {
                 stageSet.add(normalized);
             }
         });
-        return Array.from(stageSet).sort();
+        return Array.from(stageSet).sort((a, b) => {
+            const ia = ENGAGEMENT_STAGE_ORDER.indexOf(a);
+            const ib = ENGAGEMENT_STAGE_ORDER.indexOf(b);
+            if (ia !== -1 && ib !== -1) return ia - ib;
+            if (ia !== -1) return -1;
+            if (ib !== -1) return 1;
+            return a.localeCompare(b);
+        });
     }, [clients, leads]);
 
     // Extract all unique Aida Status values from leads dynamically
@@ -9025,7 +9043,7 @@ const Clients = React.memo(() => {
                                                 <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
                                             ) : (
                                             <select
-                                                value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
+                                                value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
                                                 onChange={e => handleUpdateLeadEngagementStage(lead.id, e.target.value)}
                                                 className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                     (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
@@ -9036,9 +9054,9 @@ const Clients = React.memo(() => {
                                                     (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
                                                 }`}
                                             >
+                                                <option value="Disinterested">Disinterested</option>
                                                 <option value="Potential">Potential</option>
                                                 <option value="Active">Active</option>
-                                                <option value="Disinterested">Disinterested</option>
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
                                             </select>
@@ -9117,7 +9135,7 @@ const Clients = React.memo(() => {
                                             </td>
                                             <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                                 <select
-                                                    value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
+                                                    value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
                                                     onChange={e => handleUpdateSiteEngagementStage(lead, site, siteIdx, e.target.value)}
                                                     className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                         (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
@@ -9128,9 +9146,9 @@ const Clients = React.memo(() => {
                                                         (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
                                                     }`}
                                                 >
+                                                    <option value="Disinterested">Disinterested</option>
                                                     <option value="Potential">Potential</option>
                                                     <option value="Active">Active</option>
-                                                    <option value="Disinterested">Disinterested</option>
                                                     <option value="Proposal">Proposal</option>
                                                     <option value="Tender">Tender</option>
                                                 </select>

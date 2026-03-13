@@ -608,10 +608,11 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                             }}
                                             className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
                                         >
-                                            <option value="Active">Active</option>
-                                            <option value="Potential">Potential</option>
-                                            <option value="Proposal">Proposal</option>
                                             <option value="Disinterested">Disinterested</option>
+                                            <option value="Potential">Potential</option>
+                                            <option value="Active">Active</option>
+                                            <option value="Proposal">Proposal</option>
+                                            <option value="Tender">Tender</option>
                                         </select>
                                     </div>
                                     
@@ -736,10 +737,11 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                         }}
                                         className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
                                     >
-                                        <option value="Active">Active</option>
-                                        <option value="Potential">Potential</option>
-                                        <option value="Proposal">Proposal</option>
                                         <option value="Disinterested">Disinterested</option>
+                                        <option value="Potential">Potential</option>
+                                        <option value="Active">Active</option>
+                                        <option value="Proposal">Proposal</option>
+                                        <option value="Tender">Tender</option>
                                     </select>
                                 </div>
                                 

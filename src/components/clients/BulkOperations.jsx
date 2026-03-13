@@ -114,9 +114,11 @@ const BulkOperations = ({
                                 </>
                             ) : (
                                 <>
+                                    <option value="Disinterested">Disinterested</option>
                                     <option value="Potential">Potential</option>
                                     <option value="Active">Active</option>
-                                    <option value="Disinterested">Disinterested</option>
+                                    <option value="Proposal">Proposal</option>
+                                    <option value="Tender">Tender</option>
                                 </>
                             )}
                         </select>

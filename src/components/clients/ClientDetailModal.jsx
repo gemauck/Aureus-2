@@ -4607,9 +4607,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 }}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             >
+                                                <option value="Disinterested">Disinterested</option>
                                                 <option value="Potential">Potential</option>
                                                 <option value="Active">Active</option>
-                                                <option value="Disinterested">Disinterested</option>
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
                                             </select>
@@ -5604,14 +5604,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
-                                                            value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
                                                             onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                             title="Lifecycle status – matches list Engagement Stage column"
                                                         >
+                                                            <option value="Disinterested">Disinterested</option>
                                                             <option value="Potential">Potential</option>
                                                             <option value="Active">Active</option>
-                                                            <option value="Disinterested">Disinterested</option>
                                                             <option value="Proposal">Proposal</option>
                                                             <option value="Tender">Tender</option>
                                                         </select>
@@ -5776,13 +5776,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
-                                                            value={['Potential','Active','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
                                                             onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                         >
+                                                            <option value="Disinterested">Disinterested</option>
                                                             <option value="Potential">Potential</option>
                                                             <option value="Active">Active</option>
-                                                            <option value="Disinterested">Disinterested</option>
                                                             <option value="Proposal">Proposal</option>
                                                             <option value="Tender">Tender</option>
                                                         </select>

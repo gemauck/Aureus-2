@@ -200,8 +200,9 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
     const normalizeLifecycleStage = useCallback(normalizeLifecycleStageValue, []);
 
     const statusOptions = useMemo(() => {
-        // Start with all possible engagement stages to ensure they're always available
-        const statuses = new Set(['Active', 'Potential', 'Proposal', 'Tender', 'Disinterested']);
+        // Start with canonical order: Disinterested, Potential, Active, Proposal, Tender
+        const order = ['Disinterested', 'Potential', 'Active', 'Proposal', 'Tender'];
+        const statuses = new Set(order);
 
         // Also include any stages found in the data (normalized)
         leads.forEach((lead) => {
@@ -218,7 +219,14 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             }
         });
 
-        return Array.from(statuses).filter(Boolean).sort((a, b) => a.localeCompare(b));
+        return Array.from(statuses).filter(Boolean).sort((a, b) => {
+            const ia = order.indexOf(a);
+            const ib = order.indexOf(b);
+            if (ia !== -1 && ib !== -1) return ia - ib;
+            if (ia !== -1) return -1;
+            if (ib !== -1) return 1;
+            return a.localeCompare(b);
+        });
     }, [clients, leads, normalizeLifecycleStage]);
 
     const handleListSort = useCallback((column) => {
@@ -1144,8 +1152,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     };
                 case 'type':
                     return (a, b) => directionMultiplier * a.type.localeCompare(b.type);
-                case 'engagementStage':
-                    return (a, b) => directionMultiplier * normalizeLifecycleStage(a.engagementStage ?? a.status).localeCompare(normalizeLifecycleStage(b.engagementStage ?? b.status));
+                case 'engagementStage': {
+                    const engOrder = ['Disinterested', 'Potential', 'Active', 'Proposal', 'Tender'];
+                    return (a, b) => {
+                        const va = normalizeLifecycleStage(a.engagementStage ?? a.status);
+                        const vb = normalizeLifecycleStage(b.engagementStage ?? b.status);
+                        const ia = engOrder.indexOf(va);
+                        const ib = engOrder.indexOf(vb);
+                        const cmp = (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+                        return directionMultiplier * (cmp !== 0 ? cmp : (va || '').localeCompare(vb || ''));
+                    };
+                }
                 case 'aidaStatus':
                     return (a, b) => {
                         const stageOrder = { 'No Engagement': 0, 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
@@ -1358,7 +1375,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
     };
 
     const STAGE_OPTIONS = ['No Engagement', 'Awareness', 'Interest', 'Desire', 'Action'];
-    const STATUS_OPTIONS = ['Potential', 'Active', 'Disinterested', 'Proposal', 'Tender'];
+    const STATUS_OPTIONS = ['Disinterested', 'Potential', 'Active', 'Proposal', 'Tender'];
 
     const handlePipelineStageChange = useCallback(async (item, newStage) => {
         const token = storage?.getToken?.();
