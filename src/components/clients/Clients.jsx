@@ -3736,6 +3736,7 @@ const Clients = React.memo(() => {
                     address: lead.address || '',
                     website: lead.website || '',
                     notes: lead.notes || '',
+                    thumbnail: lead.thumbnail || '',
                     contacts: parseArrayField(lead.contacts),
                     followUps: parseArrayField(lead.followUps),
                     projectIds: parseArrayField(lead.projectIds),
