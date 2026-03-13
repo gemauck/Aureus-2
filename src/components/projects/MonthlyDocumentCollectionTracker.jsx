@@ -3763,7 +3763,7 @@ const getAssigneeColor = (identifier, users) => {
             <td
                 data-cell-key={cellKey}
                 tabIndex={0}
-                className={`px-3 py-0.5 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
+                className={`px-3 py-1 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
                 onClick={handleCellClick}
                 onMouseEnter={() => setHoveredStatusCell(cellKey)}
                 onMouseLeave={() => setHoveredStatusCell(null)}
@@ -3829,7 +3829,7 @@ const getAssigneeColor = (identifier, users) => {
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full pl-2 pr-20 py-0.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
+                        className={`w-full pl-2 pr-20 py-1 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -4017,7 +4017,7 @@ const getAssigneeColor = (identifier, users) => {
         // We sync to state on change and save on blur. key resets the field when section/doc/month/year changes.
         return (
             <td
-                className={`px-2 py-0.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
+                className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
                 style={{ minWidth: '180px', width: '180px' }}
             >
@@ -4035,7 +4035,7 @@ const getAssigneeColor = (identifier, users) => {
                     }}
                     placeholder="Notes..."
                     rows={2}
-                    className="w-full min-w-0 px-1.5 py-0.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                    className="w-full min-w-0 px-1.5 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                     aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
                 />
             </td>
@@ -7049,7 +7049,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     onDrop={canDrag ? (e) => handleDocumentDrop(e, section.id, docIndex) : undefined}
                                                 >
                                                     <td
-                                                        className={`px-3 py-0.5 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-8 bg-gray-50' : 'bg-white'}`}
+                                                        className={`px-3 py-1 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-8 bg-gray-50' : 'bg-white'}`}
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
@@ -7117,7 +7117,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                 const isExpanded = expandedDescriptionId === doc.id;
                                                                 
                                                                 return (
-                                                                    <div className="mt-0.5 text-[11px] text-gray-500 flex items-center gap-1 overflow-hidden">
+                                                                    <div className="mt-1 text-[11px] text-gray-500 flex items-center gap-1 overflow-hidden">
                                                                         <span className="truncate flex-1 min-w-0">{truncated}</span>
                                                                         {isLong && (
                                                                             <button
@@ -7135,7 +7135,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             })()}
                                                         </div>
                                                             {/* Assign: compact icon + chips only; dropdown rendered fixed so not covered */}
-                                                            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                                                            <div className="mt-1 flex flex-wrap items-center gap-1">
                                                                 {(() => {
                                                                     const assigned = normalizeAssignedTo(doc);
                                                                     const openAssign = (e) => {
@@ -7245,15 +7245,15 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         isMonthlyDataReview ? (
                                                             months.map((month) => (
                                                                 <React.Fragment key={`${doc.id}-${month}`}>
-                                                                    <td className="px-3 py-0.5 text-xs border-l-2 border-gray-200 bg-gray-200" role="gridcell" />
-                                                                    <td className="px-2 py-0.5 text-xs border-l border-gray-200 bg-gray-200" role="gridcell" />
+                                                                    <td className="px-3 py-1 text-xs border-l-2 border-gray-200 bg-gray-200" role="gridcell" />
+                                                                    <td className="px-2 py-1 text-xs border-l border-gray-200 bg-gray-200" role="gridcell" />
                                                                 </React.Fragment>
                                                             ))
                                                         ) : (
                                                             months.map((month) => (
                                                                 <td
                                                                     key={`${doc.id}-${month}`}
-                                                                    className="px-3 py-0.5 text-xs border-l-2 border-gray-200 bg-gray-200"
+                                                                    className="px-3 py-1 text-xs border-l-2 border-gray-200 bg-gray-200"
                                                                     role="gridcell"
                                                                 />
                                                             ))
@@ -7274,7 +7274,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             ))
                                                         )
                                                     )}
-                                                    <td className={`px-3 py-0.5 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
+                                                    <td className={`px-3 py-1 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
                                                         <div className="flex items-center gap-1 justify-center">
                                                             {!doc.parentId && (
                                                                 <button
