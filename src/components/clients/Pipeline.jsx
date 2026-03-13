@@ -3036,6 +3036,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                         const isLead = item.type === 'lead';
                                         const isSite = item.type === 'site';
                                         const isClient = item.type === 'client';
+                                        // When a lead has a site in pipeline, show Aida/Stage blank and uneditable (like clients)
+                                        const leadSites = item.clientSites || item.sites || item.raw?.clientSites || item.raw?.sites || [];
+                                        const hasSiteInPipeline = isLead && Array.isArray(leadSites) && leadSites.some(s => s && typeof s === 'object' && s.siteType !== 'client');
 
                                         const rowPadding = isNested ? 'py-1' : 'py-2';
                                         return (
@@ -3077,8 +3080,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         {isLead ? 'Lead' : isSite ? 'Site' : isClient ? 'Client' : 'Opportunity'}
                                                     </span>
                                                 </td>
-                                                <td className={`px-6 ${rowPadding}`} onClick={e => e.stopPropagation()}>
-                                                    {isClient ? (
+                                                <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => { if (hasSiteInPipeline) e.stopPropagation(); else e.stopPropagation(); }}>
+                                                    {(isClient || hasSiteInPipeline) ? (
                                                         <span className="text-gray-400 text-xs">—</span>
                                                     ) : (
                                                         <select
@@ -3099,8 +3102,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         </select>
                                                     )}
                                                 </td>
-                                                <td className={`px-6 ${rowPadding}`} onClick={e => e.stopPropagation()}>
-                                                    {isClient ? (
+                                                <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => { if (hasSiteInPipeline) e.stopPropagation(); else e.stopPropagation(); }}>
+                                                    {(isClient || hasSiteInPipeline) ? (
                                                         <span className="text-gray-400 text-xs">—</span>
                                                     ) : (
                                                         <select

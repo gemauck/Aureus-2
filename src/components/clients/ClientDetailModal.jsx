@@ -1630,12 +1630,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         // Mark as loaded for this client to prevent infinite loop
                         sitesLoadedForClientIdRef.current = String(clientId);
                         
-                        // CRITICAL FIX: Merge with existing sites to prevent duplicates
+                        // CRITICAL FIX: Merge with existing sites; prefer DB sites by id so engagementStage/aidaStatus stay aligned with list/API
             console.log(`🔧 About to call setFormData with ${sites.length} sites`);
             try {
                 const currentFormData = formDataRef.current || {};
                 const existingSites = currentFormData.sites || [];
-                            const mergedSites = mergeUniqueById([...sites, ...existingSites, ...(optimisticSitesRef.current || [])]);
+                const optimistic = optimisticSitesRef.current || [];
+                const byId = new Map();
+                [...sites, ...existingSites, ...optimistic].forEach(s => {
+                    if (!s) return;
+                    const id = s.id != null ? String(s.id) : null;
+                    if (id && !byId.has(id)) byId.set(id, s);
+                });
+                const mergedSites = Array.from(byId.values());
                             const updated = {
                     ...currentFormData,
                                 sites: mergedSites
@@ -1869,7 +1876,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     contactPerson: site.contactPerson || '',
                     contactPhone: site.contactPhone || '',
                     contactEmail: site.contactEmail || '',
-                    notes: site.notes || ''
+                    notes: site.notes || '',
+                    siteLead: site.siteLead ?? '',
+                    siteType: site.siteType === 'client' ? 'client' : 'lead',
+                    engagementStage: (site.engagementStage != null && String(site.engagementStage).trim() !== '') ? String(site.engagementStage).trim() : 'Potential',
+                    aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus).trim() : 'Awareness'
                 }));
             } else {
                 const parsedSites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
@@ -5546,12 +5557,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             {!isLead && (
                                                 <>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
-                                                            value={newSite.stage ?? 'Potential'}
-                                                            onChange={(e) => setNewSite({...newSite, stage: e.target.value})}
+                                                            value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                            title="Lifecycle status – matches Pipeline Status column"
+                                                            title="Lifecycle status – matches list Engagement Stage column"
                                                         >
                                                             <option value="Potential">Potential</option>
                                                             <option value="Active">Active</option>
@@ -5562,15 +5573,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <option value="Proposal">Proposal</option>
                                                             <option value="Tender">Tender</option>
                                                         </select>
-                                                        <p className="text-xs text-gray-500 mt-0.5">Lifecycle status – syncs with Pipeline.</p>
+                                                        <p className="text-xs text-gray-500 mt-0.5">Lifecycle status – syncs with list.</p>
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
                                                         <select
-                                                            value={newSite.aidaStatus ?? 'Awareness'}
+                                                            value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'}
                                                             onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                            title="AIDA stage – matches Pipeline Stage column"
+                                                            title="AIDA stage – matches list AIDA Status column"
                                                         >
                                                             <option value="No Engagement">No Engagement</option>
                                                             <option value="Awareness">Awareness</option>
@@ -5578,7 +5589,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <option value="Desire">Desire</option>
                                                             <option value="Action">Action</option>
                                                         </select>
-                                                        <p className="text-xs text-gray-500 mt-0.5">AIDA stage – syncs with Pipeline.</p>
+                                                        <p className="text-xs text-gray-500 mt-0.5">AIDA stage – syncs with list.</p>
                                                     </div>
                                                 </>
                                             )}
@@ -5725,14 +5736,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
                                                         <select
-                                                            value={newSite.stage ?? 'Potential'}
-                                                            onChange={(e) => setNewSite({...newSite, stage: e.target.value})}
+                                                            value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                         >
                                                             <option value="Potential">Potential</option>
                                                             <option value="Active">Active</option>
                                                             <option value="Inactive">Inactive</option>
                                                             <option value="On Hold">On Hold</option>
+                                                            <option value="Qualified">Qualified</option>
                                                             <option value="Disinterested">Disinterested</option>
                                                             <option value="Proposal">Proposal</option>
                                                             <option value="Tender">Tender</option>
@@ -5741,7 +5753,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
                                                         <select
-                                                            value={newSite.aidaStatus ?? 'Awareness'}
+                                                            value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'}
                                                             onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                         >
