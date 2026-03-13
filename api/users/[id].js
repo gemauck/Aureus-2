@@ -111,6 +111,13 @@ async function handler(req, res) {
                 if (!currentUserRecord || !dbIsAdmin) {
                     return unauthorized(res, 'Only administrators can change user roles')
                 }
+                // Only a superadmin can assign the superadmin role
+                const newRole = (updateData.role || '').toString().trim().toLowerCase()
+                const isAssigningSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(newRole)
+                const dbIsSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(dbRole)
+                if (isAssigningSuperAdmin && !dbIsSuperAdmin) {
+                    return res.status(403).json({ error: 'Only a Super Administrator can assign the Super Administrator role' })
+                }
             }
 
             // Filter out fields that shouldn't be updated via this endpoint

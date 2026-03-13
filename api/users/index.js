@@ -192,8 +192,9 @@ async function handler(req, res) {
     if (req.method === 'PUT') {
         try {
             // Check if user has permission to manage users (admin, SuperAdmin, or manage_users)
-            const putUserRole = req.user?.role?.toLowerCase();
+            const putUserRole = (req.user?.role || '').toString().trim().toLowerCase();
             const putIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(putUserRole);
+            const putIsSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(putUserRole);
             if (!req.user || (!putIsAdmin && !req.user.permissions?.includes('manage_users'))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
@@ -217,6 +218,13 @@ async function handler(req, res) {
                 if (emailTaken) {
                     return badRequest(res, 'Email already taken by another user')
                 }
+            }
+
+            // Only a superadmin can assign the superadmin role
+            const requestedRole = (role || '').toString().trim().toLowerCase();
+            const isAssigningSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(requestedRole);
+            if (isAssigningSuperAdmin && !putIsSuperAdmin) {
+                return res.status(403).json({ error: 'Only a Super Administrator can assign the Super Administrator role' });
             }
 
             // Prepare updateData - ensure it's a JSON string

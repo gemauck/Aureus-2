@@ -56,7 +56,15 @@ async function handler(req, res) {
                 accessibleProjectIdsJson = '[]';
             }
         }
-        
+
+        // Only a superadmin can invite someone as Super Administrator
+        const inviterRole = (req.user?.role || '').toString().trim().toLowerCase();
+        const inviterIsSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(inviterRole);
+        const inviteRoleNormalized = (role || 'user').toString().trim().toLowerCase();
+        const isInvitingAsSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(inviteRoleNormalized);
+        if (isInvitingAsSuperAdmin && !inviterIsSuperAdmin) {
+            return res.status(403).json({ error: 'Only a Super Administrator can invite users as Super Administrator' });
+        }
         
         // Check if user already exists
         const existingUser = await prisma.user.findUnique({ where: { email } })

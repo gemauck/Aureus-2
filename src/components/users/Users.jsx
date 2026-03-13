@@ -9,6 +9,7 @@ const Users = () => {
     // Check if current user is admin or SuperAdmin (case-insensitive)
     const userRole = currentUser?.role?.toLowerCase();
     const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
+    const isSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(userRole);
     
     const [users, setUsers] = useState([]);
     const [showUserModal, setShowUserModal] = useState(false);
@@ -26,8 +27,14 @@ const Users = () => {
     const [sortColumn, setSortColumn] = useState('name'); // Default sort by name (alphabetical)
     const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
 
-    // Role definitions with permissions (Admin > Manager > User > Guest hierarchy)
+    // Role definitions with permissions (Super Admin > Admin > Manager > User > Guest hierarchy)
     const roleDefinitions = {
+        superadmin: {
+            name: 'Super Administrator',
+            color: 'red',
+            permissions: ['all'],
+            description: 'Full system access including all teams and user management'
+        },
         admin: {
             name: 'Administrator',
             color: 'red',
@@ -1275,7 +1282,7 @@ const Users = () => {
                     user={selectedUser}
                     onClose={() => setShowUserModal(false)}
                     onSave={handleSaveUser}
-                    roleDefinitions={roleDefinitions}
+                    roleDefinitions={isSuperAdmin ? roleDefinitions : Object.fromEntries(Object.entries(roleDefinitions).filter(([k]) => k !== 'superadmin'))}
                     departments={departments}
                 />
             )}
@@ -1287,7 +1294,7 @@ const Users = () => {
                     setShowInviteModal(false);
                 },
                 onSave: handleSaveInvitation,
-                roleDefinitions: roleDefinitions,
+                roleDefinitions: isSuperAdmin ? roleDefinitions : Object.fromEntries(Object.entries(roleDefinitions).filter(([k]) => k !== 'superadmin')),
                 departments: departments
             })}
         </div>

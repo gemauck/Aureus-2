@@ -290,9 +290,63 @@ const AuditTrail = () => {
     // Get unique values for filters (ensure logs is an array)
     // CRITICAL: Always ensure logs is an array before using .map()
     const logsArray = Array.isArray(logs) ? logs : (logs && typeof logs === 'object' && logs.logs && Array.isArray(logs.logs) ? logs.logs : []);
-    const modules = logsArray.length > 0 ? [...new Set(logsArray.map(log => log.module))] : [];
-    const actions = logsArray.length > 0 ? [...new Set(logsArray.map(log => log.action))] : [];
-    const users = logsArray.length > 0 ? [...new Set(logsArray.map(log => ({ id: log.userId, name: log.user })))] : [];
+    const modules = logsArray.length > 0 ? [...new Set(logsArray.map(log => log.module).filter(Boolean))] : [];
+    const actions = logsArray.length > 0 ? [...new Set(logsArray.map(log => log.action).filter(Boolean))] : [];
+    const users = logsArray.length > 0 ? [...new Set(logsArray.map(log => log.userId || log.userEmail || log.user || '').filter(Boolean))].map(id => {
+        const log = logsArray.find(l => (l.userId || l.userEmail || l.user) === id);
+        return { id, name: log?.user || id };
+    }) : [];
+
+    // Metrics derived from filtered results (so they match what the user is looking at)
+    const totalLoaded = logsArray.length;
+    const resultsCount = filteredLogs.length;
+    const uniqueUsersInResults = resultsCount > 0
+        ? new Set(filteredLogs.map(log => (log.userId || log.userEmail || log.user || '').toString().trim()).filter(Boolean)).size
+        : 0;
+    const modulesInResults = resultsCount > 0
+        ? new Set(filteredLogs.map(log => log.module).filter(Boolean)).size
+        : 0;
+    const successCount = resultsCount > 0 ? filteredLogs.filter(log => log.success === true).length : 0;
+    const successRate = resultsCount > 0 ? Math.round((successCount / resultsCount) * 100) : 0;
+    const dateSpan = (() => {
+        if (resultsCount === 0) return null;
+        const dates = filteredLogs.map(log => new Date(log.timestamp).getTime()).filter(Boolean);
+        if (dates.length === 0) return null;
+        const min = new Date(Math.min(...dates));
+        const max = new Date(Math.max(...dates));
+        const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        return min.getTime() === max.getTime() ? fmt(min) : `${fmt(min)} – ${fmt(max)}`;
+    })();
+
+    // Most active users (from filtered results)
+    const mostActiveUsers = (() => {
+        if (filteredLogs.length === 0) return [];
+        const byKey = {};
+        filteredLogs.forEach(log => {
+            const key = (log.userId || log.userEmail || log.user || 'Unknown').toString().trim() || 'Unknown';
+            if (!byKey[key]) byKey[key] = { label: log.user || log.userEmail || key, email: log.userEmail || null, count: 0 };
+            byKey[key].count += 1;
+        });
+        return Object.values(byKey)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 15);
+    })();
+    const maxUserCount = mostActiveUsers.length ? Math.max(...mostActiveUsers.map(u => u.count)) : 1;
+
+    // Most used modules (from filtered results)
+    const mostUsedModules = (() => {
+        if (filteredLogs.length === 0) return [];
+        const byModule = {};
+        filteredLogs.forEach(log => {
+            const m = (log.module || 'Other').toString().trim();
+            byModule[m] = (byModule[m] || 0) + 1;
+        });
+        return Object.entries(byModule)
+            .map(([module, count]) => ({ module, count }))
+            .sort((a, b) => b.count - a.count);
+    })();
+    const maxModuleCount = mostUsedModules.length ? Math.max(...mostUsedModules.map(m => m.count)) : 1;
+    const totalModuleActions = mostUsedModules.reduce((s, m) => s + m.count, 0);
 
     // Pagination
     const indexOfLastLog = currentPage * logsPerPage;
@@ -309,7 +363,6 @@ const AuditTrail = () => {
             case 'export': return 'text-purple-600 bg-purple-50';
             case 'login': return 'text-teal-600 bg-teal-50';
             case 'logout': return 'text-orange-600 bg-orange-50';
-            case 'view': return 'text-slate-600 bg-slate-50';
             default: return 'text-gray-600 bg-gray-50';
         }
     };
@@ -323,7 +376,6 @@ const AuditTrail = () => {
             case 'export': return 'fa-file-export';
             case 'login': return 'fa-sign-in-alt';
             case 'logout': return 'fa-sign-out-alt';
-            case 'view': return 'fa-eye';
             default: return 'fa-circle';
         }
     };
@@ -382,23 +434,147 @@ const AuditTrail = () => {
                 </div>
             )}
 
-            {/* Summary Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-[10px] text-blue-600 font-medium mb-0.5">Total Logs</p>
-                    <p className="text-xl font-bold text-blue-900">{Array.isArray(logs) ? logs.length : 0}</p>
+            {/* Summary Stats – all metrics refer to current filters */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    <p className="text-[10px] text-slate-600 font-medium mb-0.5">Logs loaded</p>
+                    <p className="text-xl font-bold text-slate-900">{totalLoaded}</p>
+                    <p className="text-[9px] text-slate-500 mt-0.5">in this session</p>
                 </div>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                    <p className="text-[10px] text-green-600 font-medium mb-0.5">Filtered Results</p>
-                    <p className="text-xl font-bold text-green-900">{filteredLogs.length}</p>
+                    <p className="text-[10px] text-green-600 font-medium mb-0.5">Results</p>
+                    <p className="text-xl font-bold text-green-900">{resultsCount}</p>
+                    <p className="text-[9px] text-green-600 mt-0.5">matching filters</p>
                 </div>
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                    <p className="text-[10px] text-purple-600 font-medium mb-0.5">Unique Users</p>
-                    <p className="text-xl font-bold text-purple-900">{users.length}</p>
+                    <p className="text-[10px] text-purple-600 font-medium mb-0.5">Unique users</p>
+                    <p className="text-xl font-bold text-purple-900">{uniqueUsersInResults}</p>
+                    <p className="text-[9px] text-purple-600 mt-0.5">in results</p>
                 </div>
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                     <p className="text-[10px] text-orange-600 font-medium mb-0.5">Modules</p>
-                    <p className="text-xl font-bold text-orange-900">{modules.length}</p>
+                    <p className="text-xl font-bold text-orange-900">{modulesInResults}</p>
+                    <p className="text-[9px] text-orange-600 mt-0.5">in results</p>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                    <p className="text-[10px] text-emerald-600 font-medium mb-0.5">Success rate</p>
+                    <p className="text-xl font-bold text-emerald-900">{resultsCount ? `${successRate}%` : '—'}</p>
+                    <p className="text-[9px] text-emerald-600 mt-0.5">{resultsCount ? `${successCount}/${resultsCount} successful` : 'no data'}</p>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-[10px] text-blue-600 font-medium mb-0.5">Date range</p>
+                    <p className="text-sm font-bold text-blue-900 truncate" title={dateSpan || ''}>{dateSpan || '—'}</p>
+                    <p className="text-[9px] text-blue-600 mt-0.5">of results</p>
+                </div>
+            </div>
+
+            {/* Most active users report */}
+            <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/80">
+                    <h2 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                        <i className="fas fa-users text-indigo-600"></i>
+                        Most active users
+                    </h2>
+                    <p className="text-[10px] text-indigo-600 mt-0.5">Activity count from filtered audit logs</p>
+                </div>
+                <div className="p-4">
+                    {mostActiveUsers.length === 0 ? (
+                        <p className="text-xs text-gray-500 py-4 text-center">No user activity in current filters.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {mostActiveUsers.map((u, i) => (
+                                <div key={i} className="flex items-center gap-3">
+                                    <span className="text-[10px] font-mono text-indigo-700 w-6">{i + 1}.</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                                            <span className="text-xs font-medium text-gray-900 truncate" title={u.email || u.label}>{u.label}</span>
+                                            <span className="text-xs font-semibold text-indigo-700 tabular-nums">{u.count.toLocaleString()}</span>
+                                        </div>
+                                        <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400 transition-all duration-500"
+                                                style={{ width: `${Math.max(4, (u.count / maxUserCount) * 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Most used modules report */}
+            <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-emerald-100 bg-emerald-50/80">
+                    <h2 className="text-sm font-semibold text-emerald-900 flex items-center gap-2">
+                        <i className="fas fa-cubes text-emerald-600"></i>
+                        Most used modules
+                    </h2>
+                    <p className="text-[10px] text-emerald-600 mt-0.5">Actions per module (filtered results)</p>
+                </div>
+                <div className="p-4">
+                    {mostUsedModules.length === 0 ? (
+                        <p className="text-xs text-gray-500 py-4 text-center">No module data in current filters.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-3">
+                                {mostUsedModules.slice(0, 10).map((m, i) => (
+                                    <div key={m.module} className="flex items-center gap-3">
+                                        <span className="text-[10px] font-mono text-emerald-700 w-6">{i + 1}.</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                                                <span className="text-xs font-medium text-gray-900 capitalize">{m.module}</span>
+                                                <span className="text-xs font-semibold text-emerald-700 tabular-nums">{m.count.toLocaleString()}</span>
+                                            </div>
+                                            <div className="h-2 bg-emerald-100 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
+                                                    style={{ width: `${Math.max(4, (m.count / maxModuleCount) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex flex-col items-center justify-center">
+                                <div className="relative w-32 h-32">
+                                    <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                                        {mostUsedModules.slice(0, 8).map((m, i) => {
+                                            const pct = totalModuleActions ? (m.count / totalModuleActions) * 100 : 0;
+                                            const dashArray = `${pct} ${100 - pct}`;
+                                            const offset = mostUsedModules.slice(0, i).reduce((s, x) => s + (totalModuleActions ? (x.count / totalModuleActions) * 100 : 0), 0);
+                                            const dashOffset = -offset;
+                                            const colors = ['#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#34d399', '#6ee7b7', '#a7f3d0'];
+                                            return (
+                                                <circle
+                                                    key={m.module}
+                                                    cx="18"
+                                                    cy="18"
+                                                    r="14"
+                                                    fill="none"
+                                                    stroke={colors[i % colors.length]}
+                                                    strokeWidth="3"
+                                                    strokeDasharray={dashArray}
+                                                    strokeDashoffset={dashOffset}
+                                                    className="transition-opacity hover:opacity-90"
+                                                />
+                                            );
+                                        })}
+                                    </svg>
+                                </div>
+                                <p className="text-[10px] text-emerald-600 mt-2 font-medium">Share of actions</p>
+                                <div className="flex flex-wrap gap-1.5 mt-1 justify-center max-w-[140px]">
+                                    {mostUsedModules.slice(0, 5).map((m, i) => (
+                                        <span key={m.module} className="inline-flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" style={{ backgroundColor: ['#10b981', '#059669', '#047857', '#065f46', '#34d399'][i % 5] }}></span>
+                                            <span className="text-[9px] text-gray-600 truncate max-w-[60px]" title={m.module}>{m.module}</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

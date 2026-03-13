@@ -7,6 +7,7 @@ const UserManagement = () => {
     // Check if current user is admin or SuperAdmin (case-insensitive)
     const userRole = currentUser?.role?.toLowerCase();
     const isAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
+    const isSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(userRole);
     
     const [users, setUsers] = useState([]);
     const [invitations, setInvitations] = useState([]);
@@ -1376,6 +1377,7 @@ const UserManagement = () => {
                                     <option value="user">User</option>
                                     <option value="manager">Manager</option>
                                     <option value="admin">Admin</option>
+                                    {isSuperAdmin && <option value="superadmin">Super Administrator</option>}
                                     <option value="guest">Guest</option>
                                 </select>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -1563,6 +1565,7 @@ const UserManagement = () => {
                                     <option value="user">User</option>
                                     <option value="manager">Manager</option>
                                     <option value="admin">Admin</option>
+                                    {isSuperAdmin && <option value="superadmin">Super Administrator</option>}
                                 </select>
                             </div>
 
@@ -1570,7 +1573,7 @@ const UserManagement = () => {
                                 <button
                                     type="submit"
                                     className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-                                >
+                                    >
                                     <i className="fas fa-envelope mr-2"></i>
                                     Send Email Invitation
                                 </button>
@@ -1690,6 +1693,7 @@ const UserManagement = () => {
                                     <option value="user">User</option>
                                     <option value="manager">Manager</option>
                                     <option value="admin">Admin</option>
+                                    {isSuperAdmin && <option value="superadmin">Super Administrator</option>}
                                     <option value="guest">Guest</option>
                                 </select>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">

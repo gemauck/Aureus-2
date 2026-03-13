@@ -292,10 +292,17 @@ async function handler(req, res) {
                     where: { id: currentUserId },
                     select: { role: true }
                 })
-                const dbRole = currentUserRecord?.role?.toLowerCase();
+                const dbRole = (currentUserRecord?.role || '').toString().trim().toLowerCase();
                 const dbIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(dbRole);
                 if (!currentUserRecord || !dbIsAdmin) {
                     return unauthorized(res, 'Only administrators can change user roles')
+                }
+                // Only a superadmin can assign the superadmin role
+                const newRole = (updateData.role || '').toString().trim().toLowerCase();
+                const isAssigningSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(newRole);
+                const dbIsSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(dbRole);
+                if (isAssigningSuperAdmin && !dbIsSuperAdmin) {
+                    return res.status(403).json({ error: 'Only a Super Administrator can assign the Super Administrator role' });
                 }
             }
 
