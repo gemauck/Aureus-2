@@ -3080,7 +3080,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         {isLead ? 'Lead' : isSite ? 'Site' : isClient ? 'Client' : 'Opportunity'}
                                                     </span>
                                                 </td>
-                                                <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => { if (hasSiteInPipeline) e.stopPropagation(); else e.stopPropagation(); }}>
+                                                <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => e.stopPropagation()}>
                                                     {(isClient || hasSiteInPipeline) ? (
                                                         <span className="text-gray-400 text-xs">—</span>
                                                     ) : (
@@ -3102,7 +3102,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         </select>
                                                     )}
                                                 </td>
-                                                <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => { if (hasSiteInPipeline) e.stopPropagation(); else e.stopPropagation(); }}>
+                                                <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => e.stopPropagation()}>
                                                     {(isClient || hasSiteInPipeline) ? (
                                                         <span className="text-gray-400 text-xs">—</span>
                                                     ) : (
