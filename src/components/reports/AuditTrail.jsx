@@ -483,8 +483,10 @@ const AuditTrail = () => {
                     ) : (
                         <div className="space-y-3">
                             {mostActiveUsers.map((u, i) => (
-                                <div key={i} className="flex items-center gap-3">
-                                    <span className="text-[10px] font-mono text-indigo-700 w-6">{i + 1}.</span>
+                                <div key={i} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-indigo-50/60' : ''}`}>
+                                    <span className="text-[10px] font-mono w-6 flex items-center justify-center">
+                                        {i === 0 ? <i className="fas fa-trophy text-amber-500" title="Top user"></i> : i === 1 ? <span className="text-slate-500">2</span> : i === 2 ? <span className="text-amber-600">3</span> : `${i + 1}.`}
+                                    </span>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-baseline justify-between gap-2 mb-0.5">
                                             <span className="text-xs font-medium text-gray-900 truncate" title={u.email || u.label}>{u.label}</span>
@@ -520,12 +522,14 @@ const AuditTrail = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-3">
                                 {mostUsedModules.slice(0, 10).map((m, i) => (
-                                    <div key={m.module} className="flex items-center gap-3">
-                                        <span className="text-[10px] font-mono text-emerald-700 w-6">{i + 1}.</span>
+                                    <div key={m.module} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-emerald-50/60' : ''}`}>
+                                        <span className="text-[10px] font-mono w-6 flex items-center justify-center">
+                                            {i === 0 ? <i className="fas fa-chart-pie text-emerald-600" title="Most used"></i> : `${i + 1}.`}
+                                        </span>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-baseline justify-between gap-2 mb-0.5">
                                                 <span className="text-xs font-medium text-gray-900 capitalize">{m.module}</span>
-                                                <span className="text-xs font-semibold text-emerald-700 tabular-nums">{m.count.toLocaleString()}</span>
+                                                <span className="text-xs font-semibold text-emerald-700 tabular-nums">{m.count.toLocaleString()}{totalModuleActions ? ` (${Math.round((m.count / totalModuleActions) * 100)}%)` : ''}</span>
                                             </div>
                                             <div className="h-2 bg-emerald-100 rounded-full overflow-hidden">
                                                 <div
