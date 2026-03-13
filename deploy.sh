@@ -45,7 +45,12 @@ echo "-> Pulling latest code from origin/${GIT_BRANCH}..."
 git fetch origin "${GIT_BRANCH}"
 # Discard local changes to index.html (build updates it; avoids pull conflict on next deploy)
 git checkout -- index.html 2>/dev/null || true
-git pull origin "${GIT_BRANCH}"
+# Prefer reset to origin so deploy always matches remote (avoids "divergent branches" failure)
+if git rev-parse --verify "origin/${GIT_BRANCH}" >/dev/null 2>&1; then
+  git reset --hard "origin/${GIT_BRANCH}"
+else
+  git pull origin "${GIT_BRANCH}" || { echo "ERROR: git pull failed."; exit 1; }
+fi
 
 echo
 echo "-> Installing dependencies (including dev, needed for build)..."
