@@ -2439,18 +2439,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
             e.preventDefault();
             e.stopPropagation();
             if (setDraggedOverStage) setDraggedOverStage(null);
+            if (!columnName) return;
             const dt = e.dataTransfer;
-            if (!dt || !columnName) return;
-            let itemIdStr = dt.getData('pipelineItemId');
-            let itemTypeStr = dt.getData('pipelineItemType');
-            if (!itemIdStr) {
-                const text = dt.getData('text/plain') || '';
-                const parts = text.split('|');
-                itemIdStr = parts[0] ? String(parts[0]).trim() : '';
-                itemTypeStr = parts[1] ? String(parts[1]).trim() : itemTypeStr || 'lead';
+            let itemToMove = null;
+            if (dt) {
+                let itemIdStr = dt.getData('pipelineItemId');
+                let itemTypeStr = dt.getData('pipelineItemType');
+                if (!itemIdStr) {
+                    const text = dt.getData('text/plain') || '';
+                    const parts = text.split('|');
+                    itemIdStr = parts[0] ? String(parts[0]).trim() : '';
+                    itemTypeStr = parts[1] ? String(parts[1]).trim() : itemTypeStr || 'lead';
+                }
+                if (itemIdStr) itemToMove = items.find(item => String(item.id) === itemIdStr);
             }
-            if (!itemIdStr) return;
-            const itemToMove = items.find(item => String(item.id) === itemIdStr);
+            if (!itemToMove && draggedItem) itemToMove = draggedItem;
             if (!itemToMove) return;
             if (onItemDrop) onItemDrop(e, columnName, groupBy, itemToMove);
         };
@@ -2511,13 +2514,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     </div>
                                 </div>
 
-                                {/* Column Cards - no drag handlers here; column wrapper is the only drop zone */}
+                                {/* Column Cards - also a drop zone so drop works when released over cards area */}
                                 <div 
                                     className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 ${
                                         isDraggedOver 
                                             ? 'border-blue-400 border-dashed bg-blue-50/50' 
                                             : 'border-transparent hover:border-gray-200'
                                     }`}
+                                    onDragEnter={(e) => { e.preventDefault(); if (setDraggedOverStage) setDraggedOverStage(column.name); }}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={(e) => handleDrop(e, column.name)}
                                 >
                                     {columnItems.length === 0 ? (
                                         <div className="text-center py-8 text-gray-400">
@@ -2545,10 +2552,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         }
                                                         const dt = e.dataTransfer;
                                                         if (dt) {
-                                                            dt.setData('pipelineItemId', String(item.id));
-                                                            dt.setData('pipelineItemType', String(itemType));
-                                                            dt.setData('text/plain', `${item.id}|${itemType}`);
                                                             dt.effectAllowed = 'move';
+                                                            dt.setData('text/plain', `${item.id}|${itemType}`);
+                                                            try {
+                                                                dt.setData('pipelineItemId', String(item.id));
+                                                                dt.setData('pipelineItemType', String(itemType));
+                                                            } catch (_) {}
                                                         }
                                                         if (onItemDragStart) onItemDragStart(e, item, itemType);
                                                     }}
