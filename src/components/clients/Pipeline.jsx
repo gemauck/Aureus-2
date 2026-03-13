@@ -1816,8 +1816,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
         
         // Don't prevent default immediately - wait to see if it's a drag or click
-        console.log('🖱️ MouseDown triggered', { itemId: item.id });
-        
         const cardElement = e.currentTarget;
         const cardRect = cardElement.getBoundingClientRect();
         
@@ -1890,8 +1888,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 
                 document.body.appendChild(ghost);
                 dragGhostRef.current = ghost;
-                console.log('👻 Ghost element created and appended', ghost);
-                
                 // Make original card semi-transparent
                 cardElement.style.opacity = '0.3';
                 cardElement.style.transition = 'none';
@@ -1922,9 +1918,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             // Update ghost position - this is what the user sees moving
             ghostEl.style.left = `${newX}px`;
             ghostEl.style.top = `${newY}px`;
-            
-            console.log('🔄 MouseMove: Updating ghost position', { newX, newY, clientX: moveEvent.clientX, clientY: moveEvent.clientY });
-            
             // Update current position tracking
             state.currentX = moveEvent.clientX;
             state.currentY = moveEvent.clientY;
@@ -2577,7 +2570,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         e.dataTransfer.setData('pipelineItemType', String(itemType));
                                                         e.dataTransfer.setData('text/plain', String(item.id));
                                                         e.dataTransfer.effectAllowed = 'move';
-                                                        e.preventDefault(); // Custom mouse/touch only; no native drag
                                                         if (onItemDragStart) onItemDragStart(e, item, itemType);
                                                     }}
                                                     onDragEnd={(e) => {
