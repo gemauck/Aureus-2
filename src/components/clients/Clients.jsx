@@ -6516,6 +6516,10 @@ const Clients = React.memo(() => {
                 try { window.storage?.setLeads?.(next); } catch (_) {}
                 return next;
             });
+            // Update selected lead ref immediately so detail panel stays in sync without waiting for API
+            if (selectedLeadRef.current?.id === leadId) {
+                selectedLeadRef.current = stateUpdater(selectedLeadRef.current);
+            }
             const token = window.storage?.getToken?.();
             if (!token) { alert('Authentication required'); throw new Error('auth'); }
             let response;
@@ -6558,6 +6562,9 @@ const Clients = React.memo(() => {
         } catch (err) {
             if (original) {
                 setLeads(prev => prev.map(l => l.id === leadId ? original : l));
+                if (selectedLeadRef.current?.id === leadId) {
+                    selectedLeadRef.current = original;
+                }
             }
             const message = (err && (err.message || err.details)) || 'Failed to save. Please try again.';
             alert(message);
@@ -9247,9 +9254,9 @@ const Clients = React.memo(() => {
     const LeadDetailView = () => {
         // Use ClientDetailModal for leads too - unified UI
         const ClientDetailModalComponent = useEnsureGlobalComponent('ClientDetailModal');
-        // Prefer the ref (updated immediately on click) and fall back to leads state lookup
-        const selectedLead = selectedLeadRef.current ||
-            (editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null);
+        // Prefer leads list over ref so table edits (engagement stage, company group, etc.) update the detail immediately
+        const selectedLead = (editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null) ||
+            selectedLeadRef.current;
         
         return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
