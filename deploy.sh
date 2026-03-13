@@ -43,7 +43,12 @@ fi
 
 echo
 echo "-> Syncing to origin/${GIT_BRANCH} (fetch + reset --hard)..."
-git fetch origin "${GIT_BRANCH}" || { echo "ERROR: git fetch failed."; exit 1; }
+# Prune stale refs to avoid "cannot lock ref" / inconsistent ref errors
+git fetch origin --prune "${GIT_BRANCH}" 2>/dev/null || {
+  echo "  (fetch with prune failed, retrying after clearing stale ref)..."
+  git update-ref -d "refs/remotes/origin/${GIT_BRANCH}" 2>/dev/null || true
+  git fetch origin --prune "${GIT_BRANCH}" || { echo "ERROR: git fetch failed."; exit 1; }
+}
 if ! git rev-parse --verify "origin/${GIT_BRANCH}" >/dev/null 2>&1; then
   echo "ERROR: origin/${GIT_BRANCH} not found after fetch."
   exit 1
