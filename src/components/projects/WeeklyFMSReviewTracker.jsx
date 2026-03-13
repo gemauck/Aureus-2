@@ -2659,16 +2659,19 @@ const getAssigneeColor = (identifier, users) => {
             setCommentPopupPosition({ top: popupTop, left: popupLeft });
         };
         
-        // Update immediately and on resize only (no scroll listener)
+        // Update once after paint (no scroll listener). Do NOT depend on commentPopupPosition to avoid jitter.
         if (hoverCommentCell) {
-            setTimeout(updatePopupPosition, 50); // Wait for DOM to update
+            const rafId = requestAnimationFrame(() => {
+                updatePopupPosition();
+            });
             window.addEventListener('resize', updatePopupPosition);
             
             return () => {
+                cancelAnimationFrame(rafId);
                 window.removeEventListener('resize', updatePopupPosition);
             };
         }
-    }, [hoverCommentCell, sections, commentPopupPosition]);
+    }, [hoverCommentCell, sections]);
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -3231,7 +3234,27 @@ const getAssigneeColor = (identifier, users) => {
                                         });
                                     }
                                 } else {
-                                    // Set initial position - smart positioning will update it
+                                    // Set position synchronously from button rect so first paint is correct (no jump/jitter)
+                                    const commentButton = e.currentTarget;
+                                    if (commentButton) {
+                                        const buttonRect = commentButton.getBoundingClientRect();
+                                        const vw = window.innerWidth;
+                                        const vh = window.innerHeight;
+                                        const popupWidth = 288;
+                                        const popupHeight = 300;
+                                        const spacing = 8;
+                                        const tailSize = 12;
+                                        const spaceBelow = vh - buttonRect.bottom;
+                                        const spaceAbove = buttonRect.top;
+                                        const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+                                        const popupTop = positionAbove
+                                            ? buttonRect.top - popupHeight - spacing - tailSize
+                                            : buttonRect.bottom + spacing + tailSize;
+                                        let preferredLeft = buttonRect.left + buttonRect.width / 2 - popupWidth / 2;
+                                        if (preferredLeft < 10) preferredLeft = 10;
+                                        else if (preferredLeft + popupWidth > vw - 10) preferredLeft = vw - popupWidth - 10;
+                                        setCommentPopupPosition({ top: popupTop, left: preferredLeft });
+                                    }
                                     setHoverCommentCell(cellKey);
                                     
                                     // Update URL with deep link when opening popup (week is the week param; weekLabel is derived from it)
@@ -3251,45 +3274,6 @@ const getAssigneeColor = (identifier, users) => {
                                             window.location.hash = deepLinkUrl;
                                         }
                                     }
-                                    
-                                    // Trigger position update after state is set
-                                    setTimeout(() => {
-                                        const commentButton = documentRef.querySelector(`[data-comment-cell="${cellKey}"]`);
-                                        if (commentButton) {
-                                            const buttonRect = commentButton.getBoundingClientRect();
-                                            const viewportWidth = window.innerWidth;
-                                            const viewportHeight = window.innerHeight;
-                                            const popupWidth = 288;
-                                            const popupHeight = 300;
-                                            const spacing = 8;
-                                            const tailSize = 12;
-                                            
-                                            // Determine if popup should be above or below
-                                            const spaceBelow = viewportHeight - buttonRect.bottom;
-                                            const spaceAbove = buttonRect.top;
-                                            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
-                                            
-                                            let popupTop, popupLeft;
-                                            
-                                            if (positionAbove) {
-                                                popupTop = buttonRect.top - popupHeight - spacing - tailSize;
-                                            } else {
-                                                popupTop = buttonRect.bottom + spacing + tailSize;
-                                            }
-                                            
-                                            // Align horizontally with button center, but stay in viewport
-                                            const buttonCenterX = buttonRect.left + buttonRect.width / 2;
-                                            let preferredLeft = buttonCenterX - popupWidth / 2;
-                                            
-                                            if (preferredLeft < 10) {
-                                                preferredLeft = 10;
-                                            } else if (preferredLeft + popupWidth > viewportWidth - 10) {
-                                                preferredLeft = viewportWidth - popupWidth - 10;
-                                            }
-                                            
-                                            setCommentPopupPosition({ top: popupTop, left: preferredLeft });
-                                        }
-                                    }, 10);
                                 }
                             }}
                             className="text-red-300 hover:text-red-400 transition-colors relative p-1"
@@ -4015,10 +3999,10 @@ const getAssigneeColor = (identifier, users) => {
                 
                 return (
                     <>
-                        {/* Comment Popup */}
+                        {/* Comment Popup - fixed size and contain:layout to prevent jitter when typing/adding attachments */}
                         <div 
-                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
-                            style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
+                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999] max-h-[min(80vh,420px)] flex flex-col overflow-hidden"
+                            style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px`, contain: 'layout' }}
                         >
                         {/* Show section and document context */}
                         {section && doc && (
@@ -4032,12 +4016,12 @@ const getAssigneeColor = (identifier, users) => {
                             </div>
                         )}
                         {comments.length > 0 && (
-                            <div className="mb-3">
-                                <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
+                            <div className="flex-1 min-h-0 flex flex-col mb-2">
+                                <div className="text-[10px] font-semibold text-gray-600 mb-1.5 shrink-0">Comments</div>
                                 <div 
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
-                                    className="comment-scroll-container mb-2"
+                                    className="comment-scroll-container overflow-y-auto min-h-0 flex-1 mb-2"
                                 >
                                     <div className="space-y-2 pr-1">
                                         {comments.map((comment, idx) => (
