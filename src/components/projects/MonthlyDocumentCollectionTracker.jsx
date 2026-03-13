@@ -1718,20 +1718,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // STATUS OPTIONS
     // ============================================================
     
-    // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable
+    // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable (pastel)
     const documentCollectionStatusOptions = [
-        { value: 'requested', label: 'Requested', color: 'bg-sky-400 text-white font-semibold', cellColor: 'bg-sky-400 border-l-4 border-sky-600 shadow-sm' },
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' }
+        { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-sky-800 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-400 shadow-sm' },
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-800 font-semibold', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm' },
+        { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm' }
     ];
-    // Monthly Data Review: Not Done, In Progress, Done, Issue
+    // Monthly Data Review: Not Done, In Progress, Done, Issue (pastel)
     const monthlyDataReviewStatusOptions = [
-        { value: 'not-done', label: 'Not Done', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
-        { value: 'in-progress', label: 'In Progress', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
-        { value: 'done', label: 'Done', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
-        { value: 'issue', label: 'Issue', color: 'bg-orange-200 text-slate-700 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' }
+        { value: 'not-done', label: 'Not Done', color: 'bg-rose-200 text-rose-800 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
+        { value: 'in-progress', label: 'In Progress', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
+        { value: 'done', label: 'Done', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
+        { value: 'issue', label: 'Issue', color: 'bg-orange-200 text-orange-800 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' }
     ];
     const statusOptions = isMonthlyDataReview ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
 
@@ -3733,18 +3733,18 @@ const getAssigneeColor = (identifier, users) => {
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
         let cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
-            : (isWorkingMonth ? 'bg-primary-50' : '');
+            : (isWorkingMonth ? 'bg-sky-50' : '');
         
-        // Add selection styling (with higher priority)
+        // Add selection styling (with higher priority) - pastel
         if (isSelected) {
-            cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
+            cellBackgroundClass = 'bg-sky-200 border-2 border-sky-400';
         }
         
         const baseTextColorClass = statusConfig && statusConfig.color 
             ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
             : 'text-gray-400';
         
-        const textColorClass = isSelected ? 'text-white' : baseTextColorClass;
+        const textColorClass = isSelected ? 'text-sky-900' : baseTextColorClass;
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -3847,7 +3847,7 @@ const getAssigneeColor = (identifier, users) => {
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary-400`}
+                        className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -3869,7 +3869,7 @@ const getAssigneeColor = (identifier, users) => {
                                     const latestReceivedAt = receivedMeta.latestReceivedAt ? new Date(receivedMeta.latestReceivedAt).getTime() : null;
                                     const openedAt = openedNotificationByCell[docMonthKey]?.email ? new Date(openedNotificationByCell[docMonthKey].email).getTime() : null;
                                     const isEmailUnread = !!latestReceivedAt && (!openedAt || latestReceivedAt > openedAt);
-                                    const emailBadgeClass = isEmailUnread ? 'bg-amber-300 text-slate-800' : 'bg-rose-300 text-slate-800';
+                                    const emailBadgeClass = isEmailUnread ? 'bg-amber-200 text-amber-800' : 'bg-rose-200 text-rose-800';
                                     return (
                                         <button
                                             type="button"
@@ -3880,7 +3880,7 @@ const getAssigneeColor = (identifier, users) => {
                                                 markNotificationOpened(doc.id, monthNum, 'email');
                                                 setEmailModalContext({ section, doc, month });
                                             }}
-                                            className="relative text-gray-500 hover:text-primary-600 transition-colors p-0.5 rounded shrink-0"
+                                            className="relative text-gray-500 hover:text-sky-600 transition-colors p-0.5 rounded shrink-0"
                                             title={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                             aria-label={hasReceived ? `${receivedCount} received email(s)` : 'Request documents via email'}
                                         >
@@ -3905,7 +3905,7 @@ const getAssigneeColor = (identifier, users) => {
                                         }, null)
                                         : null;
                                     const isCommentUnread = !!latestCommentAt && (!openedAt || latestCommentAt > openedAt);
-                                    const commentBadgeClass = isCommentUnread ? 'bg-amber-300 text-slate-800' : 'bg-rose-300 text-slate-800';
+                                    const commentBadgeClass = isCommentUnread ? 'bg-amber-200 text-amber-800' : 'bg-rose-200 text-rose-800';
                                     return (
                                 <button
                                     data-comment-cell={cellKey}
@@ -4030,7 +4030,7 @@ const getAssigneeColor = (identifier, users) => {
     const renderNotesCell = (section, doc, month) => {
         const notes = getDocumentNotes(doc, month);
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
-        const cellBg = isWorkingMonth ? 'bg-primary-50' : '';
+        const cellBg = isWorkingMonth ? 'bg-sky-50' : '';
         return (
             <td
                 className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
@@ -4072,7 +4072,7 @@ const getAssigneeColor = (identifier, users) => {
                     }}
                     placeholder="Notes..."
                     rows={3}
-                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400"
+                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                     aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
                 />
             </td>
@@ -4117,7 +4117,7 @@ const getAssigneeColor = (identifier, users) => {
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                 placeholder="e.g., Financial Documents"
                                 required
                             />
@@ -4128,7 +4128,7 @@ const getAssigneeColor = (identifier, users) => {
                             <textarea
                                 value={formData.description}
                                 onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                 rows="2"
                                 placeholder="Brief description..."
                             ></textarea>
@@ -4144,7 +4144,7 @@ const getAssigneeColor = (identifier, users) => {
                             </button>
                             <button
                                 type="submit"
-                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                className="px-3 py-1.5 text-xs bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300"
                             >
                                 {editingSection ? 'Update' : 'Add'} Section
                             </button>
@@ -5394,7 +5394,7 @@ Abcotronics`;
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => openReply(r)}
-                                                                    className="p-1.5 rounded text-gray-500 hover:text-primary-600 hover:bg-primary-50"
+                                                                    className="p-1.5 rounded text-gray-500 hover:text-sky-600 hover:bg-sky-50"
                                                                     title="Reply to this email"
                                                                 >
                                                                     <i className="fas fa-reply text-xs"></i>
@@ -5452,7 +5452,7 @@ Abcotronics`;
                                                                         <button
                                                                             type="button"
                                                                             onClick={addReplyCc}
-                                                                            className="px-2.5 py-1.5 text-xs font-medium text-white bg-primary-600 rounded hover:bg-primary-700"
+                                                                            className="px-2.5 py-1.5 text-xs font-medium bg-sky-200 text-sky-800 rounded hover:bg-sky-300"
                                                                         >
                                                                             Add
                                                                         </button>
@@ -5509,7 +5509,7 @@ Abcotronics`;
                                                                         type="button"
                                                                         onClick={handleSendReply}
                                                                         disabled={sendingReply || !replyBody.trim()}
-                                                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                                                                        className="px-3 py-1.5 text-xs bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 disabled:opacity-50"
                                                                     >
                                                                         {sendingReply ? <i className="fas fa-spinner fa-spin mr-1"></i> : null}
                                                                         Send reply
@@ -5696,7 +5696,7 @@ Abcotronics`;
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                 placeholder="e.g., Bank Statements"
                                 required
                             />
@@ -5707,7 +5707,7 @@ Abcotronics`;
                             <textarea
                                 value={formData.description}
                                 onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                 rows="2"
                                 placeholder="Additional details..."
                             ></textarea>
@@ -5723,7 +5723,7 @@ Abcotronics`;
                             </button>
                             <button
                                 type="submit"
-                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                className="px-3 py-1.5 text-xs bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300"
                             >
                                 {editingDocument ? 'Update' : 'Add'}
                             </button>
@@ -5846,7 +5846,7 @@ Abcotronics`;
                                         setEditingTemplate(null);
                                         setShowTemplateList(false);
                                     }}
-                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                    className="px-3 py-1.5 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-xs font-medium"
                                 >
                                     <i className="fas fa-plus mr-1"></i>
                                     Create New Template
@@ -5958,7 +5958,7 @@ Abcotronics`;
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                 placeholder="e.g., Standard Monthly Checklist"
                                 required
                             />
@@ -5969,7 +5969,7 @@ Abcotronics`;
                             <textarea
                                 value={formData.description}
                                 onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                 rows="2"
                                 placeholder="Brief description..."
                             ></textarea>
@@ -5984,7 +5984,7 @@ Abcotronics`;
                                         ...formData,
                                         sections: [...formData.sections, { name: '', description: '', documents: [] }]
                                     })}
-                                    className="px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium"
+                                    className="px-2 py-1 bg-sky-200 text-sky-800 rounded text-[10px] font-medium"
                                 >
                                     <i className="fas fa-plus mr-1"></i>
                                     Add Section
@@ -6046,7 +6046,7 @@ Abcotronics`;
                                                     onDragOver={(e) => handleTemplateDocDragOver(e, idx, docIdx)}
                                                     onDragLeave={handleTemplateDocDragLeave}
                                                     onDrop={(e) => handleTemplateDocDrop(e, idx, docIdx)}
-                                                    className={`flex items-center gap-1 bg-white p-1.5 rounded border transition-colors cursor-grab active:cursor-grabbing ${dragOverTemplateDoc.sectionIdx === idx && dragOverTemplateDoc.docIdx === docIdx ? 'border-primary-300 ring-1 ring-primary-200 bg-primary-50' : 'border-gray-200'}`}
+                                                    className={`flex items-center gap-1 bg-white p-1.5 rounded border transition-colors cursor-grab active:cursor-grabbing ${dragOverTemplateDoc.sectionIdx === idx && dragOverTemplateDoc.docIdx === docIdx ? 'border-sky-300 ring-1 ring-sky-200 bg-sky-50' : 'border-gray-200'}`}
                                                 >
                                                     <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 flex-shrink-0" title="Drag to reorder">
                                                         <i className="fas fa-grip-vertical text-[9px]"></i>
@@ -6092,7 +6092,7 @@ Abcotronics`;
                             </button>
                             <button
                                 type="submit"
-                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                className="px-3 py-1.5 text-xs bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300"
                             >
                                 {editingTemplate ? 'Update' : 'Create'} Template
                             </button>
@@ -6144,7 +6144,7 @@ Abcotronics`;
                                         setShowApplyTemplateModal(false);
                                         setShowTemplateModal(true);
                                     }}
-                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                    className="px-3 py-1.5 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-xs font-medium"
                                 >
                                     Create Template
                                 </button>
@@ -6171,7 +6171,7 @@ Abcotronics`;
                                         role="combobox"
                                         aria-haspopup="listbox"
                                         data-testid="template-selector"
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                     >
                                         <option value="">-- Select a template --</option>
                                         {templates.map(template => (
@@ -6187,7 +6187,7 @@ Abcotronics`;
                                     <select
                                         value={targetYear}
                                         onChange={(e) => setTargetYear(parseInt(e.target.value))}
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                     >
                                         {yearOptions.map(year => (
                                             <option key={year} value={year}>{year}</option>
@@ -6207,7 +6207,7 @@ Abcotronics`;
                                         type="button"
                                         onClick={handleApply}
                                         disabled={!selectedTemplateId}
-                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                        className="px-3 py-1.5 text-xs bg-violet-200 text-violet-800 rounded-lg hover:bg-violet-300 disabled:opacity-50"
                                     >
                                         Apply Template
                                     </button>
@@ -6228,7 +6228,7 @@ Abcotronics`;
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-3"></i>
+                    <i className="fas fa-spinner fa-spin text-3xl text-sky-600 mb-3"></i>
                     <p className="text-sm text-gray-600">Loading document collection tracker...</p>
                 </div>
             </div>
@@ -6597,7 +6597,7 @@ Abcotronics`;
                                                 })();
                                             }
                                         }}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-sky-400"
                                         rows="2"
                                         placeholder="Type comment... (Ctrl+Enter to submit)"
                                     />
@@ -6621,7 +6621,7 @@ Abcotronics`;
                                             setQuickComment('');
                                         }}
                                         disabled={!quickComment.trim() || uploadingCommentAttachments}
-                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
+                                        className="mt-1.5 w-full px-2 py-1 bg-sky-200 text-sky-800 rounded text-[10px] font-medium hover:bg-sky-300 disabled:opacity-50"
                                     >
                                         {uploadingCommentAttachments ? 'Uploading…' : 'Add Comment'}
                                     </button>
@@ -6683,14 +6683,14 @@ Abcotronics`;
                             <button
                                 type="button"
                                 onClick={handleAddSection}
-                                className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-semibold flex items-center gap-1.5"
+                                className="px-3 py-1.5 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-xs font-semibold flex items-center gap-1.5"
                             >
                                 <i className="fas fa-plus"></i><span>Add Section</span>
                             </button>
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
                                     onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
-                                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold flex items-center gap-1.5"
+                                    className="px-3 py-1.5 bg-violet-200 text-violet-800 rounded-lg hover:bg-violet-300 text-xs font-semibold flex items-center gap-1.5"
                                 >
                                     <i className="fas fa-layer-group"></i><span>Templates</span>
                                     <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
@@ -6713,9 +6713,9 @@ Abcotronics`;
                                                 setShowTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-layer-group text-indigo-600"></i>
+                                            <i className="fas fa-layer-group text-violet-600"></i>
                                             <span>Manage Templates</span>
                                         </button>
                                         <button
@@ -6759,7 +6759,7 @@ Abcotronics`;
                             <button
                                 onClick={handleExportToExcel}
                                 disabled={isExporting || sections.length === 0}
-                                className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                className="px-3 py-1.5 bg-emerald-200 text-emerald-800 rounded-lg hover:bg-emerald-300 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                             >
                                 {isExporting ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-excel"></i>}
                                 <span>{isExporting ? 'Exporting…' : 'Export'}</span>
@@ -6774,7 +6774,7 @@ Abcotronics`;
                 <button
                     type="button"
                     onClick={() => setLegendCollapsed(!legendCollapsed)}
-                    className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-gray-100/80 transition-colors"
+                                    className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-sky-50/80 transition-colors"
                     aria-expanded={!legendCollapsed}
                 >
                     <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status legend</span>
@@ -6805,15 +6805,15 @@ Abcotronics`;
                         return (
                     <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
                         <div className="flex flex-col items-center gap-4">
-                            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
-                                <i className="fas fa-folder-open text-3xl text-primary-600"></i>
+                            <div className="w-20 h-20 bg-gradient-to-br from-sky-100 to-sky-200 rounded-full flex items-center justify-center">
+                                <i className="fas fa-folder-open text-3xl text-sky-600"></i>
                             </div>
                             <div>
                                 <p className="text-lg font-bold text-gray-900">No sections yet</p>
                                 {hasDataInOtherYears ? (
                                     <>
                                         <p className="text-sm text-gray-600 mt-1">No sections for <strong>{selectedYear}</strong>. Your document collection has data for {yearsWithSections.join(', ')}.</p>
-                                        <p className="text-sm text-primary-600 mt-2">Change the <strong>Year</strong> dropdown above, or click below to view that year.</p>
+                                        <p className="text-sm text-sky-600 mt-2">Change the <strong>Year</strong> dropdown above, or click below to view that year.</p>
                                     </>
                                 ) : (
                                     <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
@@ -6828,7 +6828,7 @@ Abcotronics`;
                                 {hasDataInOtherYears && bestYear != null && bestYear !== selectedYear && (
                                     <button
                                         onClick={() => copyYearData(bestYear, selectedYear)}
-                                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-semibold flex items-center gap-2"
+                                        className="px-4 py-2 bg-emerald-200 text-emerald-800 rounded-lg hover:bg-emerald-300 text-sm font-semibold flex items-center gap-2"
                                     >
                                         <i className="fas fa-arrow-right"></i>
                                         <span>Copy {bestYear} → {selectedYear}</span>
@@ -6837,7 +6837,7 @@ Abcotronics`;
                                 {hasDataInOtherYears && bestYear != null && (
                                     <button
                                         onClick={() => handleYearChange(bestYear)}
-                                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold"
+                                        className="px-4 py-2 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-sm font-semibold"
                                     >
                                         Show {bestYear}
                                     </button>
@@ -6873,7 +6873,7 @@ Abcotronics`;
                                 <button
                                     type="button"
                                     onClick={handleAddSection}
-                                    className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                                    className="px-6 py-3 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
                                 >
                                     <i className="fas fa-plus"></i><span>Add First Section</span>
                                 </button>
@@ -6886,7 +6886,7 @@ Abcotronics`;
                     sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
-                            className={`bg-white rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragOverIndex === sectionIndex ? 'ring-2 ring-primary-500 ring-offset-2 border-primary-300' : 'border-gray-200'}`}
+                            className={`bg-white rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragOverIndex === sectionIndex ? 'ring-2 ring-sky-400 ring-offset-2 border-sky-300' : 'border-gray-200'}`}
                             draggable="true"
                             onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
                             onDragEnd={handleSectionDragEnd}
@@ -6925,9 +6925,9 @@ Abcotronics`;
                                             <button
                                                 type="button"
                                                 onClick={() => { handleAddDocument(section.id); setSectionActionsOpenId(null); }}
-                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-700 flex items-center gap-2"
+                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-sky-50 hover:text-sky-700 flex items-center gap-2"
                                             >
-                                                <i className="fas fa-plus text-primary-600"></i>
+                                                <i className="fas fa-plus text-sky-600"></i>
                                                 <span>Add Document</span>
                                             </button>
                                             <button
@@ -6971,7 +6971,7 @@ Abcotronics`;
                                                             colSpan={2}
                                                             className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-b-2 border-gray-300 ${
                                                                 isOneMonthArrears(selectedYear, idx)
-                                                                    ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                                    ? 'bg-sky-100 text-sky-800 border-sky-300'
                                                                     : 'text-gray-700'
                                                             }`}
                                                         >
@@ -6994,7 +6994,7 @@ Abcotronics`;
                                                             <th
                                                                 className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
                                                                     isOneMonthArrears(selectedYear, idx)
-                                                                        ? 'bg-primary-50 text-primary-800 border-primary-200'
+                                                                        ? 'bg-sky-50 text-sky-800 border-sky-200'
                                                                         : 'text-gray-600'
                                                                 }`}
                                                                 style={{ minWidth: '180px', width: '180px' }}
@@ -7004,7 +7004,7 @@ Abcotronics`;
                                                             <th
                                                                 className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
                                                                     isOneMonthArrears(selectedYear, idx)
-                                                                        ? 'bg-primary-50 text-primary-800 border-primary-200'
+                                                                        ? 'bg-sky-50 text-sky-800 border-sky-200'
                                                                         : 'text-gray-600'
                                                                 }`}
                                                                 style={{ minWidth: '180px', width: '180px' }}
@@ -7028,7 +7028,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     key={month}
                                                     className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
                                                         isOneMonthArrears(selectedYear, idx)
-                                                            ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                            ? 'bg-sky-100 text-sky-800 border-sky-300'
                                                             : 'text-gray-700'
                                                     }`}
                                                     style={{ minWidth: '180px' }}
@@ -7062,7 +7062,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         </div>
                                                         <button
                                                             onClick={() => handleAddDocument(section.id)}
-                                                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
+                                                            className="px-4 py-2 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
                                                         >
                                                             <i className="fas fa-plus"></i><span>Add Document</span>
                                                         </button>
@@ -7077,7 +7077,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 return (
                                                 <tr
                                                     key={doc.id}
-                                                    className={`transition-colors border-b border-gray-100 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'} ${isSubRow ? 'bg-gray-50/50' : ''}`}
+                                                    className={`transition-colors border-b border-gray-100 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-sky-50 ring-1 ring-sky-200' : 'hover:bg-gray-50'} ${isSubRow ? 'bg-gray-50/50' : ''}`}
                                                     draggable={canDrag}
                                                     onDragStart={canDrag ? (e) => handleDocumentDragStart(section.id, docIndex, e) : undefined}
                                                     onDragEnd={handleDocumentDragEnd}
@@ -7162,7 +7162,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                                     e.stopPropagation();
                                                                                     setExpandedDescriptionId(doc.id);
                                                                                 }}
-                                                                                className="text-primary-600 hover:text-primary-700 underline cursor-pointer flex-shrink-0"
+                                                                                className="text-sky-600 hover:text-sky-700 underline cursor-pointer flex-shrink-0"
                                                                             >
                                                                                 ...more
                                                                             </button>
@@ -7266,7 +7266,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                                     type="button"
                                                                                     title="Assign User"
                                                                                     onClick={openAssign}
-                                                                                    className="inline-flex items-center justify-center w-6 h-6 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                                                                    className="inline-flex items-center justify-center w-6 h-6 text-sky-600 hover:text-sky-700 hover:bg-sky-50 rounded"
                                                                                     aria-label="Assign User"
                                                                                 >
                                                                                     <i className="fas fa-user-plus text-xs"></i>
@@ -7316,7 +7316,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             {!doc.parentId && (
                                                                 <button
                                                                     onClick={() => handleAddSubDocument(section.id, doc)}
-                                                                    className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                    className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
                                                                     title="Add sub-document"
                                                                 >
                                                                     <i className="fas fa-layer-group text-sm"></i>
@@ -7325,7 +7325,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             <span className={isMasterGreyedOut ? 'opacity-60 pointer-events-none inline-flex items-center gap-2' : 'inline-flex items-center gap-2'}>
                                                                 <button
                                                                     onClick={() => handleEditDocument(section, doc)}
-                                                                    className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                    className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
                                                                     title="Edit document"
                                                                     disabled={isMasterGreyedOut}
                                                                 >
@@ -7402,7 +7402,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                             <div className="flex justify-end px-4 py-3 border-t border-gray-200">
                                 <button
                                     onClick={() => setExpandedDescriptionId(null)}
-                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                    className="px-3 py-1.5 text-xs bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300"
                                 >
                                     Close
                                 </button>
@@ -7460,7 +7460,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         : [...current, ident].filter(Boolean);
                                                     handleAssignmentChange(section.id, doc.id, next);
                                                 }}
-                                                className="rounded border-gray-300 text-primary-600"
+                                                className="rounded border-gray-300 text-sky-600"
                                             />
                                             <span
                                                 className="w-3.5 h-3.5 rounded-full shrink-0"
