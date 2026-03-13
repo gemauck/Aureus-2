@@ -9015,7 +9015,7 @@ const Clients = React.memo(() => {
                                             </div>
                                         </td>
                                         <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
-                                        <td className={`px-6 py-2 whitespace-nowrap ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => hasSiteInPipeline && e.stopPropagation()}>
+                                        <td className={`px-6 py-2 whitespace-nowrap ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => e.stopPropagation()}>
                                             {hasSiteInPipeline ? (
                                                 <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
                                             ) : (
@@ -9038,7 +9038,7 @@ const Clients = React.memo(() => {
                                             </select>
                                             )}
                                         </td>
-                                        <td className={`px-6 py-2 whitespace-nowrap ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => hasSiteInPipeline && e.stopPropagation()}>
+                                        <td className={`px-6 py-2 whitespace-nowrap ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => e.stopPropagation()}>
                                             {hasSiteInPipeline ? (
                                                 <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
                                             ) : (
