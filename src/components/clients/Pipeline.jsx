@@ -1334,7 +1334,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         let snapshot = leads;
         setLeads((prevLeads) => {
             const updated = prevLeads.map((lead) =>
-                String(lead.id) === normalizedLeadId ? { ...lead, stage: newStage } : lead
+                String(lead.id) === normalizedLeadId ? { ...lead, stage: newStage, aidaStatus: newStage } : lead
             );
             snapshot = updated;
             if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
@@ -1360,7 +1360,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 }
 
                 const updatedOpportunities = (client.opportunities || []).map((opp) =>
-                    String(opp.id) === normalizedOpportunityId ? { ...opp, stage: newStage } : opp
+                    String(opp.id) === normalizedOpportunityId ? { ...opp, stage: newStage, aidaStatus: newStage } : opp
                 );
 
                 return { ...client, opportunities: updatedOpportunities };
@@ -1806,10 +1806,24 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
     };
 
-    // Mouse-based drag handlers (used by List view PipelineCard only; Kanban uses native DnD)
-    // Use refs to avoid stale closures in drag handlers
+    // Resolve drop target at (clientX, clientY). Uses elementsFromPoint so it works even with ghost overlay.
+    const getDropTargetAtPoint = (clientX, clientY) => {
+        const elements = document.elementsFromPoint(clientX, clientY);
+        for (let i = 0; i < elements.length; i++) {
+            const el = elements[i];
+            if (el.id === 'pipeline-drag-ghost') continue;
+            const stageEl = el.closest && el.closest('[data-pipeline-stage]');
+            if (stageEl) {
+                const stage = stageEl.getAttribute('data-pipeline-stage');
+                if (stage) return stage;
+            }
+        }
+        return null;
+    };
+
+    // Mouse-based drag handlers (used by List view PipelineCard and Kanban)
     const dragStateRef = useRef(null);
-    const dragGhostRef = useRef(null); // Separate ghost element that follows cursor
+    const dragGhostRef = useRef(null);
 
     const handleMouseDown = (e, item, type) => {
         // Don't interfere with button clicks
@@ -1924,23 +1938,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
             state.currentX = moveEvent.clientX;
             state.currentY = moveEvent.clientY;
             
-            // Find which column we're over (match touch path: use data-pipeline-stage first)
-            const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-            let columnName = null;
-            if (elementBelow) {
-                const pipelineStageEl = elementBelow.closest('[data-pipeline-stage]');
-                if (pipelineStageEl) {
-                    columnName = pipelineStageEl.getAttribute('data-pipeline-stage');
-                }
-                if (!columnName) {
-                    const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
-                    if (columnContainer) {
-                        const heading = columnContainer.querySelector('h3');
-                        if (heading) columnName = heading.textContent?.trim();
-                    }
-                }
-            }
-            
+            // Resolve column under cursor (skips ghost via getDropTargetAtPoint)
+            const columnName = getDropTargetAtPoint(moveEvent.clientX, moveEvent.clientY);
             if (columnName && columnName !== state.targetStage) {
                 state.targetStage = columnName;
                 setDraggedOverStage(columnName);
@@ -1978,23 +1977,23 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 return;
             }
             
-            const { item, type, targetStage, initialStage, hasMoved } = state;
+            const { item, type, initialStage, hasMoved } = state;
             
             // If no movement occurred, it was a click - allow it to proceed
             if (!hasMoved) {
-                // Reset state immediately so click handler can work
                 dragStateRef.current = null;
                 setMouseDragState(null);
                 setDraggedItem(null);
                 setDraggedType(null);
                 setIsDragging(false);
                 setDraggedOverStage(null);
-                // Don't prevent default - let the click event fire
                 return;
             }
             
-            // Handle drop
-            if (hasMoved && targetStage && targetStage !== initialStage) {
+            // Resolve drop target at release point (ghost already removed, so cursor is over column)
+            const finalDropTarget = getDropTargetAtPoint(upEvent.clientX, upEvent.clientY) || state.targetStage;
+            
+            if (finalDropTarget && finalDropTarget !== initialStage) {
                 setJustDragged(true);
                 upEvent.preventDefault();
                 upEvent.stopPropagation();
@@ -2011,7 +2010,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     }
                 };
                 
-                await handleKanbanDrop(fakeEvent, targetStage, kanbanGroupBy, item);
+                await handleKanbanDrop(fakeEvent, finalDropTarget, kanbanGroupBy, item);
                 setTimeout(() => setJustDragged(false), 300);
             }
             
@@ -2062,42 +2061,24 @@ function doesOpportunityBelongToClient(opportunity, client) {
             if (!dragState || moveEvent.touches.length !== 1) return;
             
             const moveTouch = moveEvent.touches[0];
-            
-            // Find which stage column we're over
-            const stageElements = document.querySelectorAll('[data-pipeline-stage]');
-            let targetStage = null;
-            
-            stageElements.forEach(stageEl => {
-                const rect = stageEl.getBoundingClientRect();
-                if (moveTouch.clientX >= rect.left && moveTouch.clientX <= rect.right &&
-                    moveTouch.clientY >= rect.top && moveTouch.clientY <= rect.bottom) {
-                    targetStage = stageEl.getAttribute('data-pipeline-stage');
-                }
-            });
-            
-            // Update drag state
             dragState.currentY = moveTouch.clientY;
             dragState.currentX = moveTouch.clientX;
+            
+            const targetStage = getDropTargetAtPoint(moveTouch.clientX, moveTouch.clientY);
             dragState.targetStage = targetStage;
             setDraggedOverStage(targetStage || null);
-            
             setTouchDragState({ ...dragState });
             
             moveEvent.preventDefault();
         };
         
         const touchEndHandler = async (endEvent) => {
-            // Remove listeners
             document.removeEventListener('touchmove', touchMoveHandler, { passive: false });
             document.removeEventListener('touchend', touchEndHandler);
             document.removeEventListener('touchcancel', touchEndHandler);
             
-            // Restore body scrolling
-            if (dragState.cleanup) {
-                dragState.cleanup();
-            }
+            if (dragState.cleanup) dragState.cleanup();
             
-            // Remove visual feedback
             if (dragState.cardElement) {
                 dragState.cardElement.style.transform = '';
                 dragState.cardElement.style.opacity = '';
@@ -2105,14 +2086,16 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }
             
             const { item, type, targetStage, initialStage } = dragState;
-            
-            // Only perform drop if we moved enough (to distinguish from tap)
             const deltaX = Math.abs(dragState.currentX - dragState.startX);
             const deltaY = Math.abs(dragState.currentY - dragState.startY);
-            const minDragDistance = 10; // pixels
+            const minDragDistance = 10;
+            const didDrag = deltaX > minDragDistance || deltaY > minDragDistance;
             
-            if ((deltaX > minDragDistance || deltaY > minDragDistance) && targetStage && targetStage !== initialStage) {
+            const finalDropTarget = getDropTargetAtPoint(dragState.currentX, dragState.currentY) || targetStage;
+            
+            if (didDrag && finalDropTarget && finalDropTarget !== initialStage) {
                 setJustDragged(true);
+                endEvent.preventDefault();
                 const fakeEvent = {
                     preventDefault: () => {},
                     stopPropagation: () => {},
@@ -2124,26 +2107,22 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         }
                     }
                 };
-                await handleKanbanDrop(fakeEvent, targetStage, kanbanGroupBy, item);
+                await handleKanbanDrop(fakeEvent, finalDropTarget, kanbanGroupBy, item);
                 setTimeout(() => setJustDragged(false), 300);
+            } else if (!didDrag && (!finalDropTarget || finalDropTarget === initialStage)) {
+                openDealDetail(item);
             }
             
-            // Reset state
             setTouchDragState(null);
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
             setDraggedOverStage(null);
             
-            // Prevent click event from firing if we dragged
-            if (deltaX > minDragDistance || deltaY > minDragDistance) {
-                setJustDragged(true);
+            if (didDrag) {
                 endEvent.preventDefault();
-                // Reset justDragged after a short delay
+                setJustDragged(true);
                 setTimeout(() => setJustDragged(false), 300);
-            } else if (!targetStage || targetStage === initialStage) {
-                // Treat as tap/click when no stage change occurred
-                openDealDetail(item);
             }
         };
         
