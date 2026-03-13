@@ -4449,10 +4449,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             </select>
                                         </div>
                                     )}
-                                    {isLead && (
+                                    {isLead && (() => {
+                                        const leadHasSites = Array.isArray(formData.sites) && formData.sites.length > 0;
+                                        return (
+                                        <>
+                                        {leadHasSites && (
+                                            <p className="text-sm text-gray-500 italic col-span-full mb-1">Lead Status' managed at site level</p>
+                                        )}
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">AIDA Status</label>
+                                            <label className={`block text-sm font-medium mb-1.5 ${leadHasSites ? 'text-gray-400' : 'text-gray-700'}`}>AIDA Status</label>
                                             <select 
+                                                disabled={leadHasSites}
                                                 value={formData.aidaStatus || 'Awareness'}
                                                 onFocus={() => {
                                                     isEditingRef.current = true;
@@ -4539,7 +4546,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         isEditingRef.current = false;
                                                     }, 500);
                                                 }}
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${leadHasSites ? 'border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-300'}`}
                                             >
                                                 <option value="No Engagement">No Engagement</option>
                                                 <option value="Awareness">Awareness</option>
@@ -4548,11 +4555,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <option value="Action">Action</option>
                                             </select>
                                         </div>
-                                    )}
-                                    {isLead && (
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Engagement Stage</label>
-                                            <select 
+                                            <label className={`block text-sm font-medium mb-1.5 ${leadHasSites ? 'text-gray-400' : 'text-gray-700'}`}>Engagement Stage</label>
+                                            <select
+                                                disabled={leadHasSites} 
                                                 value={formData.engagementStage ?? formData.status ?? 'Potential'}
                                                 onFocus={() => {
                                                     isEditingRef.current = true;
@@ -4605,7 +4611,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         isEditingRef.current = false;
                                                     }, 500);
                                                 }}
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${leadHasSites ? 'border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-300'}`}
                                             >
                                                 <option value="Disinterested">Disinterested</option>
                                                 <option value="Potential">Potential</option>
@@ -4614,7 +4620,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <option value="Tender">Tender</option>
                                             </select>
                                         </div>
-                                    )}
+                                        </>
+                                        );
+                                    })()}
                                     {isLead && (
                                         <div>
                                             <div className="flex items-center justify-between mb-1.5">
@@ -5882,8 +5890,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{site.stage || '—'}</td>
                                                             <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                                                                 <div className="flex justify-end gap-1">
-                                                                    <button type="button" onClick={() => handleEditSite(site)} className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors" title="Edit Site"><i className="fas fa-edit"></i></button>
-                                                                    <button type="button" onClick={() => handleDeleteSite(site.id)} className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors" title="Delete Site"><i className="fas fa-trash"></i></button>
+                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleEditSite(site); }} className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors" title="Edit Site"><i className="fas fa-edit"></i></button>
+                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteSite(site.id); }} className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors shrink-0" title="Delete Site"><i className="fas fa-trash"></i></button>
                                                                 </div>
                                                             </td>
                                                         </tr>
