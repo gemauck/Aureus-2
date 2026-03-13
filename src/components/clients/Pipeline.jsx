@@ -1801,10 +1801,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedType(null);
             setIsDragging(false);
             setDraggedOverStage(null);
+            setJustDragged(true);
+            setTimeout(() => setJustDragged(false), 250);
         }
     };
 
-    // Mouse-based drag handlers (fallback for when HTML5 drag doesn't work)
+    // Mouse-based drag handlers (used by List view PipelineCard only; Kanban uses native DnD)
     // Use refs to avoid stale closures in drag handlers
     const dragStateRef = useRef(null);
     const dragGhostRef = useRef(null); // Separate ghost element that follows cursor
@@ -2413,21 +2415,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         const handleDragOver = (e) => {
             e.preventDefault();
-            if (e?.dataTransfer) {
-                e.dataTransfer.dropEffect = 'move';
-            }
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
         };
 
         const handleDragLeave = (e) => {
-            const relatedTarget = e.relatedTarget;
-            if (!relatedTarget) {
+            const rt = e.relatedTarget;
+            if (!rt) {
                 if (setDraggedOverStage) setDraggedOverStage(null);
                 return;
             }
-            if (e.currentTarget.contains(relatedTarget)) return; // Still inside this column
-            const otherColumn = relatedTarget.closest && relatedTarget.closest('[data-pipeline-stage]');
-            if (otherColumn && setDraggedOverStage) {
-                const stage = otherColumn.getAttribute('data-pipeline-stage');
+            if (e.currentTarget.contains(rt)) return;
+            const other = rt.closest && rt.closest('[data-pipeline-stage]');
+            if (other && setDraggedOverStage) {
+                const stage = other.getAttribute('data-pipeline-stage');
                 if (stage) setDraggedOverStage(stage);
                 return;
             }
@@ -2436,32 +2437,22 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         const handleDrop = (e, columnName) => {
             e.preventDefault();
-            if (setDraggedOverStage) {
-                setDraggedOverStage(null);
+            e.stopPropagation();
+            if (setDraggedOverStage) setDraggedOverStage(null);
+            const dt = e.dataTransfer;
+            if (!dt || !columnName) return;
+            let itemIdStr = dt.getData('pipelineItemId');
+            let itemTypeStr = dt.getData('pipelineItemType');
+            if (!itemIdStr) {
+                const text = dt.getData('text/plain') || '';
+                const parts = text.split('|');
+                itemIdStr = parts[0] ? String(parts[0]).trim() : '';
+                itemTypeStr = parts[1] ? String(parts[1]).trim() : itemTypeStr || 'lead';
             }
-            
-            // Get item data from dataTransfer (like working KanbanView)
-            const itemIdStr = e.dataTransfer.getData('pipelineItemId');
-            const itemTypeStr = e.dataTransfer.getData('pipelineItemType');
-            
-            if (!itemIdStr || !columnName) {
-                console.log('❌ Kanban drop: Missing data', { itemIdStr, columnName });
-                return;
-            }
-            
-            // Find the item from the items array
+            if (!itemIdStr) return;
             const itemToMove = items.find(item => String(item.id) === itemIdStr);
-            if (!itemToMove) {
-                console.log('❌ Kanban drop: Item not found', { itemIdStr, items: items.length });
-                return;
-            }
-            
-            console.log('✅ Kanban drop:', { item: itemToMove.name || itemToMove.company, targetColumn: columnName, groupBy });
-            
-            // Call the drop handler with the item
-            if (onItemDrop) {
-                onItemDrop(e, columnName, groupBy, itemToMove);
-            }
+            if (!itemToMove) return;
+            if (onItemDrop) onItemDrop(e, columnName, groupBy, itemToMove);
         };
 
         const getColumnColorClasses = (color) => {
@@ -2496,10 +2487,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             <div
                                 key={column.id}
                                 data-pipeline-stage={column.name}
-                                className={`flex-shrink-0 w-72 sm:w-80 ${
+                                className={`flex-shrink-0 w-72 sm:w-80 rounded-lg ${
                                     isDraggedOver ? 'ring-2 ring-blue-400 ring-opacity-50' : ''
                                 }`}
+                                onDragEnter={(e) => {
+                                    e.preventDefault();
+                                    if (setDraggedOverStage) setDraggedOverStage(column.name);
+                                }}
                                 onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, column.name)}
                             >
                                 {/* Column Header */}
@@ -2515,22 +2511,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     </div>
                                 </div>
 
-                                {/* Column Cards */}
+                                {/* Column Cards - no drag handlers here; column wrapper is the only drop zone */}
                                 <div 
                                     className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 ${
                                         isDraggedOver 
                                             ? 'border-blue-400 border-dashed bg-blue-50/50' 
                                             : 'border-transparent hover:border-gray-200'
                                     }`}
-                                    onDragEnter={(e) => {
-                                        e.preventDefault();
-                                        if (setDraggedOverStage) {
-                                            setDraggedOverStage(column.name);
-                                        }
-                                    }}
-                                    onDragOver={handleDragOver}
-                                    onDragLeave={handleDragLeave}
-                                    onDrop={(e) => handleDrop(e, column.name)}
                                 >
                                     {columnItems.length === 0 ? (
                                         <div className="text-center py-8 text-gray-400">
@@ -2550,62 +2537,31 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                             return (
                                                 <div
                                                     key={`${itemType}-${item.id}`}
-                                                    draggable="true"
-                                                    onTouchStart={(e) => {
-                                                        if (e.target.closest('button')) return;
-                                                        handleTouchStart(e, item, itemType);
-                                                    }}
+                                                    draggable
                                                     onDragStart={(e) => {
-                                                        if (e.target.tagName === 'BUTTON' || (e.target.closest('button') && e.target.closest('button') === e.target)) {
+                                                        if (e.target.closest('button')) {
                                                             e.preventDefault();
-                                                            e.stopPropagation();
-                                                            return false;
+                                                            return;
                                                         }
-                                                        e.dataTransfer.setData('pipelineItemId', String(item.id));
-                                                        e.dataTransfer.setData('pipelineItemType', String(itemType));
-                                                        e.dataTransfer.setData('text/plain', String(item.id));
-                                                        e.dataTransfer.effectAllowed = 'move';
+                                                        const dt = e.dataTransfer;
+                                                        if (dt) {
+                                                            dt.setData('pipelineItemId', String(item.id));
+                                                            dt.setData('pipelineItemType', String(itemType));
+                                                            dt.setData('text/plain', `${item.id}|${itemType}`);
+                                                            dt.effectAllowed = 'move';
+                                                        }
                                                         if (onItemDragStart) onItemDragStart(e, item, itemType);
                                                     }}
-                                                    onDragEnd={(e) => {
-                                                        // Clear drag start time
-                                                        if (e.currentTarget.dataset.dragStartTime) {
-                                                            delete e.currentTarget.dataset.dragStartTime;
-                                                        }
-                                                        if (onItemDragEnd) {
-                                                            onItemDragEnd(e);
-                                                        }
-                                                    }}
+                                                    onDragEnd={(e) => onItemDragEnd && onItemDragEnd(e)}
                                                     onClick={(e) => {
-                                                        // Don't trigger card click if:
-                                                        // 1. Clicking button
-                                                        // 2. We just dragged (mouse or touch)
-                                                        // 3. This item is currently being dragged
-                                                        if (e.target.closest('button')) {
-                                                            return;
-                                                        }
-                                                        if (justDragged) {
-                                                            return;
-                                                        }
-                                                        if (isDragging && draggedItem?.id === item.id) {
-                                                            return;
-                                                        }
-                                                        // Don't trigger if mouse drag is active for this item
-                                                        if (mouseDragState?.item?.id === item.id && mouseDragState?.hasMoved) {
-                                                            return;
-                                                        }
-                                                        if (onItemClick) {
-                                                            onItemClick(item);
-                                                        }
+                                                        if (e.target.closest('button')) return;
+                                                        if (justDragged || (draggedItem?.id === item.id)) return;
+                                                        if (onItemClick) onItemClick(item);
                                                     }}
-                                                    className={`bg-white rounded-lg p-3 cursor-move border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
-                                                        isDragging && draggedItem?.id === item.id 
-                                                            ? 'opacity-30' 
-                                                            : mouseDragState?.item?.id === item.id
-                                                            ? 'opacity-30'
-                                                            : 'opacity-100'
+                                                    className={`bg-white rounded-lg p-3 cursor-grab active:cursor-grabbing border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
+                                                        draggedItem?.id === item.id ? 'opacity-50' : ''
                                                     }`}
-                                                    style={{ userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none' }}
+                                                    style={{ userSelect: 'none' }}
                                                 >
                                                     {/* Card Header */}
                                                     <div 
