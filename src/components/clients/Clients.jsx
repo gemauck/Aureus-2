@@ -1113,7 +1113,7 @@ const Clients = React.memo(() => {
         if (viewMode === 'clients' && clientsPage > 1) {
             setClientsPage(1);
         }
-    }, [searchTerm, filterIndustry, filterEngagementStage, filterServices, showStarredOnly, viewMode]);
+    }, [searchTerm, filterIndustry, filterServices, showStarredOnly, viewMode]);
     
     useEffect(() => {
         if (viewMode === 'leads' && leadsPage > 1) {
@@ -5379,6 +5379,8 @@ const Clients = React.memo(() => {
     const sortClients = useCallback((clients) => {
         // CRITICAL: Preserve groupMemberships by creating a map before sorting
         const clientsMap = new Map(clients.map(c => [c.id, c]));
+        // Clients do not have engagement stages - fall back to name when that column was selected
+        const effectiveSortField = sortField === 'engagementStage' ? 'name' : sortField;
         
         // Sort clients - spread operator preserves all properties including groupMemberships
         const sorted = [...clients].sort((a, b) => {
@@ -5389,17 +5391,17 @@ const Clients = React.memo(() => {
                 return bStarred ? 1 : -1; // Starred items come first
             }
             
-            let aValue = a[sortField];
-            let bValue = b[sortField];
+            let aValue = a[effectiveSortField];
+            let bValue = b[effectiveSortField];
             
             // Handle date fields
-            if (sortField === 'lastContact') {
+            if (effectiveSortField === 'lastContact') {
                 aValue = new Date(aValue || 0);
                 bValue = new Date(bValue || 0);
             }
             
             // Handle Company Group sorting
-            if (sortField === 'companyGroup') {
+            if (effectiveSortField === 'companyGroup') {
                 // Extract group names from groupMemberships (check ref first)
                 const getGroupNames = (client) => {
                     // Priority 1: Check ref (restored groups that should never be cleared)
@@ -5427,7 +5429,7 @@ const Clients = React.memo(() => {
             }
             
             // Handle Services sorting (sort by first service name or count)
-            if (sortField === 'services') {
+            if (effectiveSortField === 'services') {
                 const getServicesValue = (client) => {
                     const services = Array.isArray(client.services)
                         ? client.services
@@ -5606,9 +5608,7 @@ const Clients = React.memo(() => {
                 );
             
             const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-            // Normalize status for comparison
-            const clientEngagementStage = client.engagementStage ? (client.engagementStage.charAt(0).toUpperCase() + client.engagementStage.slice(1).toLowerCase()) : '';
-            const matchesEngagementStage = filterEngagementStage === 'All Engagement Stages' || clientEngagementStage === filterEngagementStage;
+            // Clients do not have engagement stages - no filter by engagement stage
             
             // Check if client matches selected services (if any are selected)
             const matchesServices = filterServices.length === 0 || 
@@ -5617,9 +5617,9 @@ const Clients = React.memo(() => {
             // Check if starred filter is applied
             const matchesStarred = !showStarredOnly || resolveStarredState(client);
             
-            return matchesSearch && matchesIndustry && matchesEngagementStage && matchesServices && matchesStarred;
+            return matchesSearch && matchesIndustry && matchesServices && matchesStarred;
         });
-    }, [clients, searchTerm, filterIndustry, filterEngagementStage, filterServices, showStarredOnly]);
+    }, [clients, searchTerm, filterIndustry, filterServices, showStarredOnly]);
 
     // PERFORMANCE FIX: Memoize sorted clients
     const sortedClients = useMemo(() => {
@@ -7161,23 +7161,12 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th 
-                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('engagementStage')}
-                            >
-                                <div className="flex items-center">
-                                    Engagement Stage
-                                    {sortField === 'engagementStage' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
                         {parsedClientsData.length === 0 ? (
                             <tr>
-                                <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="4" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
                                 </td>
@@ -7257,14 +7246,6 @@ const Clients = React.memo(() => {
                                                 })()}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-2 whitespace-nowrap">
-                                            {(() => {
-                                                const stage = (client.engagementStage ?? (client.status || '')).toString().toLowerCase();
-                                                const stageClass = stage === 'active' ? 'bg-green-100 text-green-800' : stage === 'potential' || !stage ? 'bg-white text-gray-800 border border-gray-200' : stage === 'disinterested' ? 'bg-purple-100 text-purple-800' : (stage === 'proposal' || stage === 'tender') ? 'bg-green-100 text-green-800' : 'bg-white text-gray-800 border border-gray-200';
-                                                const display = (client.engagementStage ?? client.status) === 'active' ? 'Active' : (client.engagementStage ?? client.status) || '—';
-                                                return <span className={`px-2 py-1 text-xs font-medium rounded-full ${stageClass}`}>{display}</span>;
-                                            })()}
-                                        </td>
                                     </tr>,
                                     ...siteRows.map((site, siteIdx) => (
                                         <tr
@@ -7292,7 +7273,6 @@ const Clients = React.memo(() => {
                                             </td>
                                             <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
                                             <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{client.industry || '—'}</td>
-                                            <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
                                             <td className={`px-6 py-1.5 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>—</td>
                                         </tr>
                                     ))
@@ -9727,24 +9707,26 @@ className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                                 </select>
                             </div>
                         )}
-                        <div>
-                            <select
-                                value={filterEngagementStage}
-                                onChange={(e) => setFilterEngagementStage(e.target.value)}
-className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                        {viewMode === 'leads' && (
+                            <div>
+                                <select
+                                    value={filterEngagementStage}
+                                    onChange={(e) => setFilterEngagementStage(e.target.value)}
+                                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                                         isDark 
                                             ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
                                             : 'bg-gray-100 border-gray-200 text-gray-900 focus:bg-white'
-                                }`}
-                            >
-                                <option value="All Engagement Stages">All Engagement Stages</option>
-                                {allEngagementStages.map((stage) => (
-                                    <option key={stage} value={stage}>
-                                        {stage}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                                    }`}
+                                >
+                                    <option value="All Engagement Stages">All Engagement Stages</option>
+                                    {allEngagementStages.map((stage) => (
+                                        <option key={stage} value={stage}>
+                                            {stage}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         {viewMode !== 'leads' && (
                             <div>
                                 <ServicesDropdown
@@ -9800,7 +9782,7 @@ className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterEngagementStage !== 'All Engagement Stages' || (viewMode === 'leads' && filterAidaStatus !== 'All AIDA Status') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || (viewMode === 'leads' && (filterEngagementStage !== 'All Engagement Stages' || filterAidaStatus !== 'All AIDA Status')) || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
                         <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">

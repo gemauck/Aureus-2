@@ -313,10 +313,10 @@ const ClientsMobileOptimized = () => {
             const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                 client.industry.toLowerCase().includes(searchTerm.toLowerCase());
             const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-            const matchesStatus = filterEngagementStage === 'All Engagement Stages' || client.engagementStage === filterEngagementStage || client.status === filterEngagementStage;
-            return matchesSearch && matchesIndustry && matchesStatus;
+            // Clients do not have engagement stages - no filter by engagement stage
+            return matchesSearch && matchesIndustry;
         });
-    }, [clients, searchTerm, filterIndustry, filterEngagementStage]);
+    }, [clients, searchTerm, filterIndustry]);
 
     const filteredLeads = useMemo(() => {
         return leads.filter(lead => {
@@ -414,20 +414,22 @@ const ClientsMobileOptimized = () => {
                         <option>Other</option>
                     </select>
                     
-                    <select
-                        value={filterEngagementStage}
-                        onChange={(e) => setFilterEngagementStage(e.target.value)}
-                        className={`px-3 py-2 ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-200'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500`}
-                    >
-                        <option value="All Engagement Stages">All Engagement Stages</option>
-                        <option value="Active">Active</option>
-                        <option value="New">New</option>
-                        <option value="Contacted">Contacted</option>
-                        <option value="Proposal">Proposal</option>
-                        <option value="Negotiation">Negotiation</option>
-                        <option value="Closed Won">Closed Won</option>
-                        <option value="Closed Lost">Closed Lost</option>
-                    </select>
+                    {viewMode === 'leads' && (
+                        <select
+                            value={filterEngagementStage}
+                            onChange={(e) => setFilterEngagementStage(e.target.value)}
+                            className={`px-3 py-2 ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-200'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                        >
+                            <option value="All Engagement Stages">All Engagement Stages</option>
+                            <option value="Active">Active</option>
+                            <option value="New">New</option>
+                            <option value="Contacted">Contacted</option>
+                            <option value="Proposal">Proposal</option>
+                            <option value="Negotiation">Negotiation</option>
+                            <option value="Closed Won">Closed Won</option>
+                            <option value="Closed Lost">Closed Lost</option>
+                        </select>
+                    )}
                 </div>
             )}
         </div>
