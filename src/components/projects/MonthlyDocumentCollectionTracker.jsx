@@ -592,6 +592,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
     const selectedCellsRef = useRef(new Set());
+    const handleUpdateNotesRef = useRef(null);
     
     // Keep ref in sync with state
     useEffect(() => {
@@ -941,17 +942,35 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         };
     }, []);
 
-    // Allow Space and Enter in Monthly Data Review notes: block other keydown handlers from running
-    // so they cannot preventDefault, but do NOT stop propagation for Space/Enter so the textarea's
-    // onKeyDown can run and insert the character.
+    // Allow Space and Enter in Monthly Data Review notes: handle them in capture phase so no other
+    // handler can preventDefault first. Manually insert the character and update state via ref.
     useEffect(() => {
         if (!isMonthlyDataReview || typeof document === 'undefined') return;
         const handler = (e) => {
             const target = e.target;
-            if (target && target.getAttribute && target.getAttribute('data-monthly-notes-input') === 'true') {
-                if (e.key !== ' ' && e.key !== 'Enter') {
-                    e.stopImmediatePropagation();
+            if (!target || !target.getAttribute || target.getAttribute('data-monthly-notes-input') !== 'true') return;
+            if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                const sectionId = target.getAttribute('data-section-id');
+                const documentId = target.getAttribute('data-document-id');
+                const month = target.getAttribute('data-month');
+                const updateNotes = handleUpdateNotesRef.current;
+                if (sectionId && documentId && month && typeof updateNotes === 'function') {
+                    const start = target.selectionStart;
+                    const end = target.selectionEnd;
+                    const notes = target.value || '';
+                    const ch = e.key === ' ' ? ' ' : '\n';
+                    const newValue = notes.slice(0, start) + ch + notes.slice(end);
+                    updateNotes(sectionId, documentId, month, newValue);
+                    const nextPos = start + 1;
+                    setTimeout(() => {
+                        target.selectionStart = nextPos;
+                        target.selectionEnd = nextPos;
+                    }, 0);
                 }
+            } else {
+                e.stopImmediatePropagation();
             }
         };
         window.addEventListener('keydown', handler, true);
@@ -2435,6 +2454,11 @@ const getAssigneeColor = (identifier, users) => {
         }
         saveToDatabase();
     }, [selectedYear]);
+
+    useEffect(() => {
+        handleUpdateNotesRef.current = handleUpdateNotes;
+        return () => { handleUpdateNotesRef.current = null; };
+    }, [handleUpdateNotes]);
 
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -4042,31 +4066,11 @@ const getAssigneeColor = (identifier, users) => {
             >
                 <textarea
                     data-monthly-notes-input="true"
+                    data-section-id={section.id}
+                    data-document-id={doc.id}
+                    data-month={month}
                     value={notes}
                     onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
-                    onKeyDownCapture={(e) => {
-                        if (e.key !== ' ' && e.key !== 'Enter') e.stopImmediatePropagation();
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key !== ' ' && e.key !== 'Enter') {
-                            e.stopPropagation();
-                            return;
-                        }
-                        // Manually insert Space/Enter so typing works even if another handler preventDefaults
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const ta = e.target;
-                        const start = ta.selectionStart;
-                        const end = ta.selectionEnd;
-                        const ch = e.key === ' ' ? ' ' : '\n';
-                        const newValue = notes.slice(0, start) + ch + notes.slice(end);
-                        handleUpdateNotes(section.id, doc.id, month, newValue);
-                        const nextPos = start + 1;
-                        setTimeout(() => {
-                            ta.selectionStart = nextPos;
-                            ta.selectionEnd = nextPos;
-                        }, 0);
-                    }}
                     onBlur={() => {
                         lastSavedDataRef.current = null;
                         if (saveTimeoutRef.current) {
