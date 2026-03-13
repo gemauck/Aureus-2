@@ -866,9 +866,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setDataLoaded(true);
     };
 
-    // Get all pipeline items (leads + client opportunities)
+    // True if lead has at least one site that would show in the pipeline (then we show only sites, not the lead).
+    const leadHasPipelineSites = (lead) => {
+        const sites = lead?.clientSites || lead?.sites || [];
+        const list = Array.isArray(sites) ? sites : [];
+        return list.some(site => site && typeof site === 'object' && site.siteType !== 'client');
+    };
+
+    // Get all pipeline items (leads without sites + client opportunities + all sites)
     const getPipelineItems = () => {
-        const leadItems = leads.map(lead => {
+        const leadItems = leads
+            .filter(lead => !leadHasPipelineSites(lead))
+            .map(lead => {
             const normalized = normalizeEntityId(lead, 'lead');
             const normalizedId = String(normalized.id);
 
