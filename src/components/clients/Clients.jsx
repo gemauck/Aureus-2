@@ -245,6 +245,23 @@ function resolveStarredState(entity) {
     return false;
 }
 
+/** Returns true only for non-empty, valid-looking thumbnail URLs. Rejects undefined, "undefined", and blob:.../undefined to prevent ERR_INVALID_URL and logo flashing. */
+function isValidThumbnailUrl(url) {
+    if (url == null || typeof url !== 'string') return false;
+    const s = url.trim();
+    if (!s || s === 'undefined') return false;
+    if (s.includes('undefined')) return false; // e.g. blob:origin/undefined
+    try {
+        if (s.startsWith('data:')) return true;
+        if (s.startsWith('blob:')) return true;
+        if (s.startsWith('http://') || s.startsWith('https://')) {
+            new URL(s);
+            return true;
+        }
+    } catch (_) { /* invalid URL */ }
+    return false;
+}
+
 function extractStageValue(value) {
     if (!value) {
         return null;
@@ -933,6 +950,7 @@ const Clients = React.memo(() => {
     const processedClientIdsRef = useRef(new Set()); // Track which client IDs have been processed to prevent re-fetching
     const restoredGroupMembershipsRef = useRef(new Map()); // Track restored groupMemberships by client ID to prevent overwriting
     const hasForceRefreshedLeadsForSitesRef = useRef(false); // Force refresh once when opening Leads so site child rows load
+    const lastLeadFieldUpdateByIdRef = useRef({}); // { [leadId]: timestamp } - avoid LiveDataSync overwriting just-saved AIDA/Engagement
     
     // Industry management state - declared early to avoid temporal dead zone issues
     const [industries, setIndustries] = useState([]);
@@ -1060,6 +1078,7 @@ const Clients = React.memo(() => {
     const [sortDirection, setSortDirection] = useState('asc');
     const [leadSortField, setLeadSortField] = useState('name');
     const [leadSortDirection, setLeadSortDirection] = useState('asc');
+    const [failedThumbnailIds, setFailedThumbnailIds] = useState(() => new Set());
     const [showSitesInLeadsList, setShowSitesInLeadsList] = useState(() => {
         try {
             const v = localStorage.getItem('clients.leads.showSitesInList');
@@ -3426,8 +3445,8 @@ const Clients = React.memo(() => {
                     
                     const processedLeads = message.data.map(mapDbClient).filter(c => (c.type || 'lead') === 'lead');
                     
-                    // CRITICAL: Preserve groupMemberships and externalAgentId from current state
-                    // LiveDataSync might not include these fields, so preserve existing values
+                    // CRITICAL: Preserve groupMemberships, externalAgentId, and stage fields from current state
+                    // LiveDataSync might not include these fields, or may deliver stale data and overwrite a just-saved AIDA/Engagement change
                     const currentLeads = leadsRef.current.length > 0 ? leadsRef.current : leads;
                     const leadsWithPreservedData = processedLeads.map(processedLead => {
                         const existingLead = currentLeads.find(l => l.id === processedLead.id);
@@ -3443,7 +3462,22 @@ const Clients = React.memo(() => {
                                 // Preserve externalAgentId if incoming data doesn't have it
                                 externalAgentId: processedLead.externalAgentId || existingLead.externalAgentId || null,
                                 // Preserve externalAgent if incoming data doesn't have it
-                                externalAgent: processedLead.externalAgent || existingLead.externalAgent || null
+                                externalAgent: processedLead.externalAgent || existingLead.externalAgent || null,
+                                // Preserve AIDA/Engagement only for a short window after we saved this lead locally,
+                                // so stale LiveDataSync data doesn't overwrite a just-saved change
+                                ...( (() => {
+                                    const updatedAt = lastLeadFieldUpdateByIdRef.current[String(processedLead.id)];
+                                    const recentlyUpdated = updatedAt != null && (Date.now() - updatedAt) < 10000;
+                                    if (!recentlyUpdated) return {};
+                                    return {
+                                        engagementStage: existingLead.engagementStage != null && existingLead.engagementStage !== ''
+                                            ? existingLead.engagementStage
+                                            : (processedLead.engagementStage ?? existingLead.engagementStage),
+                                        aidaStatus: existingLead.aidaStatus != null && existingLead.aidaStatus !== ''
+                                            ? existingLead.aidaStatus
+                                            : (processedLead.aidaStatus ?? existingLead.aidaStatus)
+                                    };
+                                })() )
                             };
                         }
                         return processedLead;
@@ -6544,6 +6578,9 @@ const Clients = React.memo(() => {
                         if (l.id !== leadId) return l;
                         const merged = { ...l, ...serverLead };
                         if (mergedSites) merged.sites = mergedSites;
+                        // Don't overwrite with undefined if API omits these fields
+                        if (serverLead.engagementStage === undefined) merged.engagementStage = l.engagementStage;
+                        if (serverLead.aidaStatus === undefined) merged.aidaStatus = l.aidaStatus;
                         return merged;
                     });
                     try { window.storage?.setLeads?.(next); } catch (_) {}
@@ -6555,10 +6592,14 @@ const Clients = React.memo(() => {
                     if (mergedSites) merged.sites = mergedSites;
                     selectedLeadRef.current = merged;
                 }
+                // Mark this lead as just updated so LiveDataSync won't overwrite AIDA/Engagement with stale data
+                lastLeadFieldUpdateByIdRef.current[String(leadId)] = Date.now();
             }
             if (window.ClientCache?.clearCache) window.ClientCache.clearCache();
             if (window.DatabaseAPI?.clearCache) window.DatabaseAPI.clearCache('/leads');
-            if (window.LiveDataSync?.forceSync) window.LiveDataSync.forceSync().catch(() => {});
+            // Don't call forceSync() here: it can trigger a full sync whose leads response may race
+            // with this update and overwrite the just-saved AIDA/Engagement values. The server
+            // response was already merged above; periodic sync will refresh other data.
         } catch (err) {
             if (original) {
                 setLeads(prev => prev.map(l => l.id === leadId ? original : l));
@@ -7197,8 +7238,13 @@ const Clients = React.memo(() => {
                                                 >
                                                     <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
                                                 </button>
-                                                {client.thumbnail ? (
-                                                    <img src={client.thumbnail} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                                {isValidThumbnailUrl(client.thumbnail) && !failedThumbnailIds.has(`client-${client.id}`) ? (
+                                                    <img
+                                                        src={client.thumbnail}
+                                                        alt={client.name}
+                                                        className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                                        onError={() => setFailedThumbnailIds(prev => new Set(prev).add(`client-${client.id}`))}
+                                                    />
                                                 ) : (
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                                                         {(client.name || '?').charAt(0).toUpperCase()}
@@ -8981,8 +9027,13 @@ const Clients = React.memo(() => {
                                                 >
                                                     <i className={`${lead.isStarred ? 'fas' : 'far'} fa-star ${lead.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
                                                 </button>
-                                                {lead.thumbnail ? (
-                                                    <img src={lead.thumbnail} alt={lead.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                                {isValidThumbnailUrl(lead.thumbnail) && !failedThumbnailIds.has(`lead-${lead.id}`) ? (
+                                                    <img
+                                                        src={lead.thumbnail}
+                                                        alt={lead.name}
+                                                        className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                                        onError={() => setFailedThumbnailIds(prev => new Set(prev).add(`lead-${lead.id}`))}
+                                                    />
                                                 ) : (
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                                                         {(lead.name || '?').charAt(0).toUpperCase()}
