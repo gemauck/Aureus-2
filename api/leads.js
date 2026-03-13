@@ -12,6 +12,13 @@ import { logDatabaseError } from './_lib/dbErrorHandler.js'
 import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
 
+/** Return null for empty engagementStage/aidaStatus so Pipeline can show "—" for blank */
+function blankStagesForLead(parsed) {
+  if (parsed.engagementStage != null && String(parsed.engagementStage).trim() === '') parsed.engagementStage = null
+  if (parsed.aidaStatus != null && String(parsed.aidaStatus).trim() === '') parsed.aidaStatus = null
+  return parsed
+}
+
 // Phase 2: JSON field parsing and dual-write utilities moved to shared module
 // See: api/_lib/clientJsonFields.js
 
@@ -434,8 +441,8 @@ async function handler(req, res) {
             })
             leads = allRecords.map(l => ({
               ...l,
-              engagementStage: l.engagementStage ?? 'Potential',
-              aidaStatus: l.aidaStatus ?? 'Awareness',
+              engagementStage: (l.engagementStage != null && String(l.engagementStage).trim() !== '') ? l.engagementStage : null,
+              aidaStatus: (l.aidaStatus != null && String(l.aidaStatus).trim() !== '') ? l.aidaStatus : null,
               externalAgent: null,
               groupMemberships: []
             }))
@@ -690,6 +697,8 @@ async function handler(req, res) {
           const starredByArray = Array.isArray(lead.starredBy) ? lead.starredBy : []
           const hasStarredBy = starredByArray.length > 0
           parsed.isStarred = !!(validUserId && hasStarredBy)
+          
+          blankStagesForLead(parsed)
           
           // Debug logging for starred status (log first few leads and any that should be starred)
           // Use leads.length instead of parsedLeads.length since parsedLeads is still being created
@@ -1369,7 +1378,7 @@ async function handler(req, res) {
           if (!lead) return notFound(res)
           
           // Phase 3: Parse using shared function which handles normalized tables
-          const parsedLead = parseClientJsonFields(lead)
+          const parsedLead = blankStagesForLead(parseClientJsonFields(lead))
           // #region agent log
           debugAppend({ location: 'api/leads.js:GET single lead', message: 'GET /api/leads/[id] success', data: { leadId: parsedLead.id, engagementStage: parsedLead.engagementStage }, hypothesisId: 'B', runId: 'crm' })
           // #endregion
@@ -1405,8 +1414,8 @@ async function handler(req, res) {
         // Only include fields if they're explicitly provided in the body
         if (body.name !== undefined) updateData.name = body.name
         if (body.industry !== undefined) updateData.industry = body.industry
-        if (body.engagementStage !== undefined) updateData.engagementStage = body.engagementStage
-        if (body.aidaStatus !== undefined) updateData.aidaStatus = body.aidaStatus
+        if (body.engagementStage !== undefined) updateData.engagementStage = (body.engagementStage === null || body.engagementStage === '') ? '' : body.engagementStage
+        if (body.aidaStatus !== undefined) updateData.aidaStatus = (body.aidaStatus === null || body.aidaStatus === '') ? '' : body.aidaStatus
         // #region agent log
         debugAppend({ location: 'api/leads.js:PATCH update', message: 'PATCH /api/leads/[id] body vs updateData', data: { leadId: id, bodyEngagementStage: body.engagementStage, updateDataEngagementStage: updateData.engagementStage }, hypothesisId: 'D', runId: 'crm' })
         // #endregion
@@ -1888,8 +1897,8 @@ async function handler(req, res) {
         }
         
         // Parse JSON fields before returning using shared utility
-        const parsedLead = parseClientJsonFields(lead)
-        
+        const parsedLead = blankStagesForLead(parseClientJsonFields(lead))
+
         // #region agent log
         debugAppend({ location: 'api/leads.js:PATCH response', message: 'PATCH /api/leads/[id] saved engagementStage', data: { leadId: id, savedEngagementStage: parsedLead.engagementStage }, hypothesisId: 'D', runId: 'crm' })
         // #endregion

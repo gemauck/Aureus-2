@@ -872,9 +872,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 });
             }
 
-            const originalStage = lead.aidaStatus ?? lead.stage;
-            const mappedStage = normalizeStageToAida(originalStage);
-            const engagementStage = normalizeLifecycleStage(lead.engagementStage ?? lead.status);
+            const hasAida = (lead.aidaStatus != null && String(lead.aidaStatus).trim() !== '') || (lead.stage != null && String(lead.stage).trim() !== '');
+            const originalStage = hasAida ? (lead.aidaStatus ?? lead.stage) : null;
+            const mappedStage = originalStage != null && String(originalStage).trim() !== '' ? normalizeStageToAida(originalStage) : null;
+            const hasEng = (lead.engagementStage != null && String(lead.engagementStage).trim() !== '') || (lead.status != null && String(lead.status).trim() !== '');
+            const engagementStageVal = hasEng ? normalizeLifecycleStage(lead.engagementStage ?? lead.status) : null;
             
             if (originalStage && originalStage !== mappedStage) {
             }
@@ -887,8 +889,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 itemType: 'New Lead',
                 stage: mappedStage,
                 aidaStatus: mappedStage,
-                status: engagementStage,
-                engagementStage,
+                status: engagementStageVal,
+                engagementStage: engagementStageVal,
                 isStarred: Boolean(lead.isStarred),
                 value: lead.value || 0,
                 createdDate: lead.createdDate || new Date().toISOString(),
@@ -1360,13 +1362,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     const handlePipelineStageChange = useCallback(async (item, newStage) => {
         const token = storage?.getToken?.();
-        const normalized = STAGE_OPTIONS.find(s => s.toLowerCase() === (newStage || '').toLowerCase()) || 'Awareness';
+        const isBlank = newStage === '' || newStage == null || String(newStage).trim() === '';
+        const normalized = isBlank ? '' : (STAGE_OPTIONS.find(s => s.toLowerCase() === (newStage || '').toLowerCase()) || 'Awareness');
         try {
             if (item.type === 'lead') {
-                updateLeadStageOptimistically(item.id, normalized);
+                updateLeadStageOptimistically(item.id, normalized === '' ? null : normalized);
                 if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
                     try {
-                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { aidaStatus: normalized });
+                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { aidaStatus: normalized === '' ? null : normalized });
                     } catch (apiErr) {
                         schedulePipelineRefresh();
                         console.error('❌ Pipeline: Failed to save lead stage:', apiErr);
@@ -1469,18 +1472,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     const handlePipelineStatusChange = useCallback(async (item, newStatus) => {
         const token = storage?.getToken?.();
-        const normalized = normalizeLifecycleStage(newStatus) || 'Potential';
+        const isBlank = newStatus === '' || newStatus == null || String(newStatus).trim() === '';
+        const normalized = isBlank ? '' : (normalizeLifecycleStage(newStatus) || 'Potential');
         try {
             if (item.type === 'lead') {
                 setLeads(prev => {
-                    const updated = prev.map(lead => (String(lead.id) === String(item.id) ? { ...lead, status: normalized } : lead));
+                    const updated = prev.map(lead => (String(lead.id) === String(item.id) ? { ...lead, status: normalized === '' ? null : normalized, engagementStage: normalized === '' ? null : normalized } : lead));
                     if (typeof storage?.setLeads === 'function') storage.setLeads(updated);
                     try { window.dispatchEvent(new CustomEvent('pipelineLeadsClientsUpdated', { detail: { leads: updated } })); } catch (_) {}
                     return updated;
                 });
                 if (token && (window.DatabaseAPI?.updateLead || window.api?.updateLead)) {
                     try {
-                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { engagementStage: normalized });
+                        await (window.api?.updateLead || window.DatabaseAPI.updateLead)(item.id, { engagementStage: normalized === '' ? null : normalized });
                     } catch (apiErr) {
                         schedulePipelineRefresh();
                         console.error('❌ Pipeline: Failed to save lead status:', apiErr);
@@ -3078,9 +3082,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         <span className="text-gray-400 text-xs">—</span>
                                                     ) : (
                                                         <select
-                                                            value={STAGE_OPTIONS.find(s => s.toLowerCase() === (item.stage || 'awareness').toLowerCase()) || 'Awareness'}
+                                                            id={`pipeline-aida-${item.type}-${String(item.id).replace(/[^a-zA-Z0-9-_]/g, '-')}`}
+                                                            value={STAGE_OPTIONS.find(s => s.toLowerCase() === (item.stage || '').toLowerCase()) || ''}
                                                             onChange={e => handlePipelineStageChange(item, e.target.value)}
-                                                            className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${
+                                                            className={`min-w-[7rem] w-full max-w-[10rem] px-2 py-1.5 text-xs font-medium rounded-full border border-gray-200 cursor-pointer focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
                                                                 (item.stage || '').toLowerCase() === 'no engagement' ? 'bg-slate-100 text-slate-800' :
                                                                 (item.stage || '').toLowerCase() === 'awareness' ? 'bg-gray-100 text-gray-800' :
                                                                 (item.stage || '').toLowerCase() === 'interest' ? 'bg-blue-100 text-blue-800' :
@@ -3089,6 +3094,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                                 'bg-gray-100 text-gray-800'
                                                             }`}
                                                         >
+                                                            <option value="">—</option>
                                                             {STAGE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                                         </select>
                                                     )}
@@ -3098,10 +3104,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         <span className="text-gray-400 text-xs">—</span>
                                                     ) : (
                                                         <select
-                                                            value={STATUS_OPTIONS.find(s => s.toLowerCase() === (item.status || 'potential').toLowerCase()) || 'Potential'}
+                                                            id={`pipeline-engagement-${item.type}-${String(item.id).replace(/[^a-zA-Z0-9-_]/g, '-')}`}
+                                                            value={STATUS_OPTIONS.find(s => s.toLowerCase() === (item.status || item.engagementStage || '').toLowerCase()) || ''}
                                                             onChange={e => handlePipelineStatusChange(item, e.target.value)}
-                                                            className={`min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer focus:ring-1 focus:ring-blue-500 ${getLifecycleBadgeColor(item.status || 'Potential')}`}
+                                                            className={`min-w-[7rem] w-full max-w-[10rem] px-2 py-1.5 text-xs font-medium rounded-full border border-gray-200 cursor-pointer focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${getLifecycleBadgeColor(item.status || item.engagementStage || 'Potential')}`}
                                                         >
+                                                            <option value="">—</option>
                                                             {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                                         </select>
                                                     )}
