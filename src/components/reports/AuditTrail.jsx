@@ -14,6 +14,7 @@ const AuditTrail = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [expandedLogId, setExpandedLogId] = useState(null); // For full-detail row expand
+    const [auditReportTab, setAuditReportTab] = useState('log'); // 'log' | 'users' | 'modules'
     const logsPerPage = 50;
 
     const AuditLogger = window.AuditLogger;
@@ -468,118 +469,28 @@ const AuditTrail = () => {
                 </div>
             </div>
 
-            {/* Most active users report */}
-            <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/80">
-                    <h2 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
-                        <i className="fas fa-users text-indigo-600"></i>
-                        Most active users
-                    </h2>
-                    <p className="text-[10px] text-indigo-600 mt-0.5">Activity count from filtered audit logs</p>
-                </div>
-                <div className="p-4">
-                    {mostActiveUsers.length === 0 ? (
-                        <p className="text-xs text-gray-500 py-4 text-center">No user activity in current filters.</p>
-                    ) : (
-                        <div className="space-y-3">
-                            {mostActiveUsers.map((u, i) => (
-                                <div key={i} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-indigo-50/60' : ''}`}>
-                                    <span className="text-[10px] font-mono w-6 flex items-center justify-center">
-                                        {i === 0 ? <i className="fas fa-trophy text-amber-500" title="Top user"></i> : i === 1 ? <span className="text-slate-500">2</span> : i === 2 ? <span className="text-amber-600">3</span> : `${i + 1}.`}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                                            <span className="text-xs font-medium text-gray-900 truncate" title={u.email || u.label}>{u.label}</span>
-                                            <span className="text-xs font-semibold text-indigo-700 tabular-nums">{u.count.toLocaleString()}</span>
-                                        </div>
-                                        <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400 transition-all duration-500"
-                                                style={{ width: `${Math.max(4, (u.count / maxUserCount) * 100)}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Most used modules report */}
-            <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-emerald-100 bg-emerald-50/80">
-                    <h2 className="text-sm font-semibold text-emerald-900 flex items-center gap-2">
-                        <i className="fas fa-cubes text-emerald-600"></i>
-                        Most used modules
-                    </h2>
-                    <p className="text-[10px] text-emerald-600 mt-0.5">Actions per module (filtered results)</p>
-                </div>
-                <div className="p-4">
-                    {mostUsedModules.length === 0 ? (
-                        <p className="text-xs text-gray-500 py-4 text-center">No module data in current filters.</p>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-3">
-                                {mostUsedModules.slice(0, 10).map((m, i) => (
-                                    <div key={m.module} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-emerald-50/60' : ''}`}>
-                                        <span className="text-[10px] font-mono w-6 flex items-center justify-center">
-                                            {i === 0 ? <i className="fas fa-chart-pie text-emerald-600" title="Most used"></i> : `${i + 1}.`}
-                                        </span>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                                                <span className="text-xs font-medium text-gray-900 capitalize">{m.module}</span>
-                                                <span className="text-xs font-semibold text-emerald-700 tabular-nums">{m.count.toLocaleString()}{totalModuleActions ? ` (${Math.round((m.count / totalModuleActions) * 100)}%)` : ''}</span>
-                                            </div>
-                                            <div className="h-2 bg-emerald-100 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
-                                                    style={{ width: `${Math.max(4, (m.count / maxModuleCount) * 100)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="flex flex-col items-center justify-center">
-                                <div className="relative w-32 h-32">
-                                    <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                                        {mostUsedModules.slice(0, 8).map((m, i) => {
-                                            const pct = totalModuleActions ? (m.count / totalModuleActions) * 100 : 0;
-                                            const dashArray = `${pct} ${100 - pct}`;
-                                            const offset = mostUsedModules.slice(0, i).reduce((s, x) => s + (totalModuleActions ? (x.count / totalModuleActions) * 100 : 0), 0);
-                                            const dashOffset = -offset;
-                                            const colors = ['#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#34d399', '#6ee7b7', '#a7f3d0'];
-                                            return (
-                                                <circle
-                                                    key={m.module}
-                                                    cx="18"
-                                                    cy="18"
-                                                    r="14"
-                                                    fill="none"
-                                                    stroke={colors[i % colors.length]}
-                                                    strokeWidth="3"
-                                                    strokeDasharray={dashArray}
-                                                    strokeDashoffset={dashOffset}
-                                                    className="transition-opacity hover:opacity-90"
-                                                />
-                                            );
-                                        })}
-                                    </svg>
-                                </div>
-                                <p className="text-[10px] text-emerald-600 mt-2 font-medium">Share of actions</p>
-                                <div className="flex flex-wrap gap-1.5 mt-1 justify-center max-w-[140px]">
-                                    {mostUsedModules.slice(0, 5).map((m, i) => (
-                                        <span key={m.module} className="inline-flex items-center gap-1">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" style={{ backgroundColor: ['#10b981', '#059669', '#047857', '#065f46', '#34d399'][i % 5] }}></span>
-                                            <span className="text-[9px] text-gray-600 truncate max-w-[60px]" title={m.module}>{m.module}</span>
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
+            {/* Report tabs */}
+            <div className="border-b border-gray-200">
+                <nav className="flex gap-1" aria-label="Report type">
+                    {[
+                        { id: 'log', label: 'Audit log', icon: 'fa-list-alt' },
+                        { id: 'users', label: 'Most active users', icon: 'fa-users' },
+                        { id: 'modules', label: 'Most used modules', icon: 'fa-cubes' }
+                    ].map(({ id, label, icon }) => (
+                        <button
+                            key={id}
+                            onClick={() => setAuditReportTab(id)}
+                            className={`py-2 px-3 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+                                auditReportTab === id
+                                    ? 'border-primary-500 text-primary-600 bg-white border-gray-200 -mb-px'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                            <i className={`fas ${icon} mr-1.5 text-[10px]`}></i>
+                            {label}
+                        </button>
+                    ))}
+                </nav>
             </div>
 
             {/* Filters */}
@@ -688,24 +599,146 @@ const AuditTrail = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={exportToCSV}
-                            className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded transition-colors font-medium"
-                        >
-                            <i className="fas fa-file-csv mr-1"></i>
-                            Export CSV
-                        </button>
-                        <button
-                            onClick={exportToExcel}
-                            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded transition-colors font-medium"
-                        >
-                            <i className="fas fa-file-excel mr-1"></i>
-                            Export Excel
-                        </button>
+                        {auditReportTab === 'log' && (
+                            <>
+                                <button
+                                    onClick={exportToCSV}
+                                    className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded transition-colors font-medium"
+                                >
+                                    <i className="fas fa-file-csv mr-1"></i>
+                                    Export CSV
+                                </button>
+                                <button
+                                    onClick={exportToExcel}
+                                    className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded transition-colors font-medium"
+                                >
+                                    <i className="fas fa-file-excel mr-1"></i>
+                                    Export Excel
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
 
+            {/* Tab content */}
+            {auditReportTab === 'users' && (
+                <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/80">
+                        <h2 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                            <i className="fas fa-users text-indigo-600"></i>
+                            Most active users
+                        </h2>
+                        <p className="text-[10px] text-indigo-600 mt-0.5">Activity count from filtered audit logs</p>
+                    </div>
+                    <div className="p-4">
+                        {mostActiveUsers.length === 0 ? (
+                            <p className="text-xs text-gray-500 py-4 text-center">No user activity in current filters.</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {mostActiveUsers.map((u, i) => (
+                                    <div key={i} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-indigo-50/60' : ''}`}>
+                                        <span className="text-[10px] font-mono w-6 flex items-center justify-center">
+                                            {i === 0 ? <i className="fas fa-trophy text-amber-500" title="Top user"></i> : i === 1 ? <span className="text-slate-500">2</span> : i === 2 ? <span className="text-amber-600">3</span> : `${i + 1}.`}
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                                                <span className="text-xs font-medium text-gray-900 truncate" title={u.email || u.label}>{u.label}</span>
+                                                <span className="text-xs font-semibold text-indigo-700 tabular-nums">{u.count.toLocaleString()}</span>
+                                            </div>
+                                            <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400 transition-all duration-500"
+                                                    style={{ width: `${Math.max(4, (u.count / maxUserCount) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {auditReportTab === 'modules' && (
+                <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b border-emerald-100 bg-emerald-50/80">
+                        <h2 className="text-sm font-semibold text-emerald-900 flex items-center gap-2">
+                            <i className="fas fa-cubes text-emerald-600"></i>
+                            Most used modules
+                        </h2>
+                        <p className="text-[10px] text-emerald-600 mt-0.5">Actions per module (filtered results)</p>
+                    </div>
+                    <div className="p-4">
+                        {mostUsedModules.length === 0 ? (
+                            <p className="text-xs text-gray-500 py-4 text-center">No module data in current filters.</p>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-3">
+                                    {mostUsedModules.slice(0, 10).map((m, i) => (
+                                        <div key={m.module} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-emerald-50/60' : ''}`}>
+                                            <span className="text-[10px] font-mono w-6 flex items-center justify-center">
+                                                {i === 0 ? <i className="fas fa-chart-pie text-emerald-600" title="Most used"></i> : `${i + 1}.`}
+                                            </span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                                                    <span className="text-xs font-medium text-gray-900 capitalize">{m.module}</span>
+                                                    <span className="text-xs font-semibold text-emerald-700 tabular-nums">{m.count.toLocaleString()}{totalModuleActions ? ` (${Math.round((m.count / totalModuleActions) * 100)}%)` : ''}</span>
+                                                </div>
+                                                <div className="h-2 bg-emerald-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
+                                                        style={{ width: `${Math.max(4, (m.count / maxModuleCount) * 100)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex flex-col items-center justify-center">
+                                    <div className="relative w-32 h-32">
+                                        <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                                            {mostUsedModules.slice(0, 8).map((m, i) => {
+                                                const pct = totalModuleActions ? (m.count / totalModuleActions) * 100 : 0;
+                                                const dashArray = `${pct} ${100 - pct}`;
+                                                const offset = mostUsedModules.slice(0, i).reduce((s, x) => s + (totalModuleActions ? (x.count / totalModuleActions) * 100 : 0), 0);
+                                                const dashOffset = -offset;
+                                                const colors = ['#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#34d399', '#6ee7b7', '#a7f3d0'];
+                                                return (
+                                                    <circle
+                                                        key={m.module}
+                                                        cx="18"
+                                                        cy="18"
+                                                        r="14"
+                                                        fill="none"
+                                                        stroke={colors[i % colors.length]}
+                                                        strokeWidth="3"
+                                                        strokeDasharray={dashArray}
+                                                        strokeDashoffset={dashOffset}
+                                                        className="transition-opacity hover:opacity-90"
+                                                    />
+                                                );
+                                            })}
+                                        </svg>
+                                    </div>
+                                    <p className="text-[10px] text-emerald-600 mt-2 font-medium">Share of actions</p>
+                                    <div className="flex flex-wrap gap-1.5 mt-1 justify-center max-w-[140px]">
+                                        {mostUsedModules.slice(0, 5).map((m, i) => (
+                                            <span key={m.module} className="inline-flex items-center gap-1">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" style={{ backgroundColor: ['#10b981', '#059669', '#047857', '#065f46', '#34d399'][i % 5] }}></span>
+                                                <span className="text-[9px] text-gray-600 truncate max-w-[60px]" title={m.module}>{m.module}</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {auditReportTab === 'log' && (
             {/* Logs Table - Extreme detail */}
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <div className="overflow-x-auto">
@@ -842,6 +875,7 @@ const AuditTrail = () => {
                     </div>
                 )}
             </div>
+            )}
         </div>
     );
 };
