@@ -262,6 +262,27 @@ function isValidThumbnailUrl(url) {
     return false;
 }
 
+const LOGO_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours - logos refresh at most once daily
+const logoDisplayCache = new Map(); // key -> { useImage, url?, ts }
+
+/** Returns stable logo display for an entity so logos don't flash on filter/sort/other changes. Uses a 24h cache. */
+function getLogoDisplay(entityKey, thumbnail, failedSet) {
+    const cached = logoDisplayCache.get(entityKey);
+    const now = Date.now();
+    if (cached && (now - cached.ts) < LOGO_CACHE_TTL_MS) {
+        return { useImage: cached.useImage, url: cached.url };
+    }
+    const useImage = isValidThumbnailUrl(thumbnail) && !failedSet.has(entityKey);
+    const url = useImage ? thumbnail : undefined;
+    logoDisplayCache.set(entityKey, { useImage, url, ts: now });
+    return { useImage, url };
+}
+
+/** Call when an image fails to load so we cache "use initial" and stop retrying. */
+function setLogoFailed(entityKey) {
+    logoDisplayCache.set(entityKey, { useImage: false, url: undefined, ts: Date.now() });
+}
+
 function extractStageValue(value) {
     if (!value) {
         return null;
@@ -7238,18 +7259,26 @@ const Clients = React.memo(() => {
                                                 >
                                                     <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
                                                 </button>
-                                                {isValidThumbnailUrl(client.thumbnail) && !failedThumbnailIds.has(`client-${client.id}`) ? (
-                                                    <img
-                                                        src={client.thumbnail}
-                                                        alt={client.name}
-                                                        className="w-8 h-8 rounded-full object-cover border border-gray-200"
-                                                        onError={() => setFailedThumbnailIds(prev => new Set(prev).add(`client-${client.id}`))}
-                                                    />
-                                                ) : (
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                                        {(client.name || '?').charAt(0).toUpperCase()}
-                                                    </div>
-                                                )}
+                                                {(() => {
+                                                    const key = `client-${client.id}`;
+                                                    const logo = getLogoDisplay(key, client.thumbnail, failedThumbnailIds);
+                                                    if (logo.useImage && logo.url) {
+                                                        return (
+                                                            <img
+                                                                key={`logo-${key}`}
+                                                                src={logo.url}
+                                                                alt={client.name}
+                                                                className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                                                onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
+                                                            />
+                                                        );
+                                                    }
+                                                    return (
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {(client.name || '?').charAt(0).toUpperCase()}
+                                                        </div>
+                                                    );
+                                                })()}
                                                 <a
                                                     href={window.EntityUrl ? window.EntityUrl.getEntityUrl('client', client.id) : '#'}
                                                     onClick={(e) => {
@@ -9027,18 +9056,26 @@ const Clients = React.memo(() => {
                                                 >
                                                     <i className={`${lead.isStarred ? 'fas' : 'far'} fa-star ${lead.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
                                                 </button>
-                                                {isValidThumbnailUrl(lead.thumbnail) && !failedThumbnailIds.has(`lead-${lead.id}`) ? (
-                                                    <img
-                                                        src={lead.thumbnail}
-                                                        alt={lead.name}
-                                                        className="w-8 h-8 rounded-full object-cover border border-gray-200"
-                                                        onError={() => setFailedThumbnailIds(prev => new Set(prev).add(`lead-${lead.id}`))}
-                                                    />
-                                                ) : (
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                                        {(lead.name || '?').charAt(0).toUpperCase()}
-                                                    </div>
-                                                )}
+                                                {(() => {
+                                                    const key = `lead-${lead.id}`;
+                                                    const logo = getLogoDisplay(key, lead.thumbnail, failedThumbnailIds);
+                                                    if (logo.useImage && logo.url) {
+                                                        return (
+                                                            <img
+                                                                key={`logo-${key}`}
+                                                                src={logo.url}
+                                                                alt={lead.name}
+                                                                className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                                                onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
+                                                            />
+                                                        );
+                                                    }
+                                                    return (
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {(lead.name || '?').charAt(0).toUpperCase()}
+                                                        </div>
+                                                    );
+                                                })()}
                                                 <a
                                                     href={window.EntityUrl ? window.EntityUrl.getEntityUrl('lead', lead.id) : '#'}
                                                     onClick={(e) => {
