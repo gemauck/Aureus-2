@@ -9,10 +9,11 @@
 #   ./deploy.sh
 #
 # What it does:
-#   1) Pulls latest code from origin/main
+#   1) Fetches and resets to origin/<branch> (server always matches remote; no merge)
 #   2) Installs production dependencies
 #   3) Builds the app
-#   4) Restarts the PM2 process (or prints a hint for systemd)
+#   4) Applies DB migrations (if any)
+#   5) Restarts the PM2 process
 ###############################################################################
 
 set -euo pipefail
@@ -41,16 +42,13 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo
-echo "-> Pulling latest code from origin/${GIT_BRANCH}..."
-git fetch origin "${GIT_BRANCH}"
-# Discard local changes to index.html (build updates it; avoids pull conflict on next deploy)
-git checkout -- index.html 2>/dev/null || true
-# Prefer reset to origin so deploy always matches remote (avoids "divergent branches" failure)
-if git rev-parse --verify "origin/${GIT_BRANCH}" >/dev/null 2>&1; then
-  git reset --hard "origin/${GIT_BRANCH}"
-else
-  git pull origin "${GIT_BRANCH}" || { echo "ERROR: git pull failed."; exit 1; }
+echo "-> Syncing to origin/${GIT_BRANCH} (fetch + reset --hard)..."
+git fetch origin "${GIT_BRANCH}" || { echo "ERROR: git fetch failed."; exit 1; }
+if ! git rev-parse --verify "origin/${GIT_BRANCH}" >/dev/null 2>&1; then
+  echo "ERROR: origin/${GIT_BRANCH} not found after fetch."
+  exit 1
 fi
+git reset --hard "origin/${GIT_BRANCH}"
 
 echo
 echo "-> Installing dependencies (including dev, needed for build)..."
