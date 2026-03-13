@@ -4183,9 +4183,8 @@ const LeadDetailModal = ({
                                                         </div>
                                                     )}
                                                 </div>
-                                            ))
-                                        );
-                                    })()}
+                                            ));
+                                    }); })()}
                                 </div>
                             </div>
                         )}
