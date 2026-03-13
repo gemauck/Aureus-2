@@ -2317,12 +2317,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
             case 'active':
                 return 'bg-green-100 text-green-700';
             case 'proposal':
-                return 'bg-purple-100 text-purple-700';
+            case 'tender':
+                return 'bg-green-100 text-green-700';
             case 'disinterested':
-                return 'bg-gray-200 text-gray-600';
+                return 'bg-purple-100 text-purple-700';
             case 'potential':
             default:
-                return 'bg-blue-100 text-blue-700';
+                return 'bg-white text-gray-700 border border-gray-200';
         }
     };
 

@@ -940,10 +940,11 @@ opp.status !== 'Closed Lost' &&
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                            lead.status === 'Potential' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
                                             lead.status === 'Active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
-                                            lead.status === 'Disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-700') :
-                                            (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800')
+                                            lead.status === 'Potential' || !lead.status ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
+                                            lead.status === 'Disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-700') :
+                                            (lead.status === 'Proposal' || lead.status === 'Tender') ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
+                                            (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
                                         }`}>
                                             {lead.status || 'Potential'}
                                         </span>

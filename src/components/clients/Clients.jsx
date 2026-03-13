@@ -7258,11 +7258,12 @@ const Clients = React.memo(() => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-2 whitespace-nowrap">
-                                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                                (client.engagementStage ?? client.status) === 'Active' || (client.engagementStage ?? client.status) === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                                            }`}>
-                                                {(client.engagementStage ?? client.status) === 'active' ? 'Active' : (client.engagementStage ?? client.status)}
-                                            </span>
+                                            {(() => {
+                                                const stage = (client.engagementStage ?? client.status || '').toString().toLowerCase();
+                                                const stageClass = stage === 'active' ? 'bg-green-100 text-green-800' : stage === 'potential' || !stage ? 'bg-white text-gray-800 border border-gray-200' : stage === 'disinterested' ? 'bg-purple-100 text-purple-800' : (stage === 'proposal' || stage === 'tender') ? 'bg-green-100 text-green-800' : 'bg-white text-gray-800 border border-gray-200';
+                                                const display = (client.engagementStage ?? client.status) === 'active' ? 'Active' : (client.engagementStage ?? client.status) || '—';
+                                                return <span className={`px-2 py-1 text-xs font-medium rounded-full ${stageClass}`}>{display}</span>;
+                                            })()}
                                         </td>
                                     </tr>,
                                     ...siteRows.map((site, siteIdx) => (
@@ -9047,11 +9048,10 @@ const Clients = React.memo(() => {
                                                 onChange={e => handleUpdateLeadEngagementStage(lead.id, e.target.value)}
                                                 className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                     (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
-                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
-                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
-                                                    (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'proposal' || (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                    (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
                                                 }`}
                                             >
                                                 <option value="Disinterested">Disinterested</option>
@@ -9139,11 +9139,10 @@ const Clients = React.memo(() => {
                                                     onChange={e => handleUpdateSiteEngagementStage(lead, site, siteIdx, e.target.value)}
                                                     className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                         (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
-                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
-                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
-                                                        (isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200')
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'proposal' || (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                        (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
                                                     }`}
                                                 >
                                                     <option value="Disinterested">Disinterested</option>
