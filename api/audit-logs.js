@@ -135,11 +135,11 @@ async function handler(req, res) {
     }
 
     // Get Audit Logs (GET /api/audit-logs)
-    // Only garethm@abcotronics.co.za can view the detailed audit trail (all users' interactions)
+    // Only Superadmins can view the detailed audit trail (all users' interactions)
     if (req.method === 'GET') {
-      const viewerEmail = (user.email || '').toLowerCase();
-      if (viewerEmail !== 'garethm@abcotronics.co.za') {
-        return forbidden(res, 'Only garethm@abcotronics.co.za can view the detailed audit trail. All users\' interactions are tracked, but access to this report is restricted.');
+      const viewerRole = (user.role || '').toLowerCase();
+      if (viewerRole !== 'superadmin') {
+        return forbidden(res, 'Access to the detailed audit trail is restricted to Superadmins only.');
       }
 
       // Parse query parameters from req.url
@@ -156,9 +156,9 @@ async function handler(req, res) {
 
       const where = {};
       
-      // Check if user is admin - if not, only show their own logs
-      const isAdmin = user.role?.toLowerCase() === 'admin';
-      if (!isAdmin) {
+      // Only superadmins can reach this GET; they see all users' activity.
+      const canViewAllActivity = true;
+      if (!canViewAllActivity) {
         where.actorId = user.id;
       } else {
         if (email) {
@@ -194,7 +194,7 @@ async function handler(req, res) {
 
       try {
         console.log('📊 Fetching audit logs with where clause:', JSON.stringify(where, null, 2));
-        console.log('📊 User info:', { id: user.id, role: user.role, isAdmin });
+        console.log('📊 User info:', { id: user.id, role: user.role, canViewAllActivity });
         
         // First, let's just count ALL audit logs to see if any exist
         const totalAllLogs = await prisma.auditLog.count();
@@ -259,6 +259,7 @@ async function handler(req, res) {
             userRole: userRole,
             action: log.action,
             module: log.entity,
+            entityId: log.entityId || null,
             details: diff.details || {},
             ipAddress: diff.ipAddress || 'N/A',
             sessionId: diff.sessionId || 'N/A',

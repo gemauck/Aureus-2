@@ -8,7 +8,7 @@ const Reports = () => {
     const { user } = window.useAuth();
 
     const isAdmin = user?.role?.toLowerCase() === 'admin';
-    const canViewAuditTrail = (user?.email || '').toLowerCase() === 'garethm@abcotronics.co.za';
+    const canViewAuditTrail = user?.role?.toLowerCase() === 'superadmin';
 
     const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
     const [activeTab, setActiveTab] = useState(canViewAuditTrail ? 'audit' : (isAdmin ? 'feedback' : 'restricted'));
@@ -121,10 +121,10 @@ const Reports = () => {
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-8 text-center`}>
                         <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
                         <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Access to the detailed audit trail is restricted to garethm@abcotronics.co.za.
+                            Access to the detailed audit trail is restricted to Superadmins only.
                         </p>
                         <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                            All users&apos; interactions are tracked in detail; only Gareth can view this report.
+                            All users&apos; interactions are tracked; only users with the Superadmin role can view this report.
                         </p>
                     </div>
                 )}

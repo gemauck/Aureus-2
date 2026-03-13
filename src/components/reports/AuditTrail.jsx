@@ -13,6 +13,7 @@ const AuditTrail = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [expandedLogId, setExpandedLogId] = useState(null); // For full-detail row expand
     const logsPerPage = 50;
 
     const AuditLogger = window.AuditLogger;
@@ -60,11 +61,12 @@ const AuditTrail = () => {
         }
     };
     
-    // Check if current user is admin
-    const isAdmin = () => {
+    // Only superadmins can see all users' activity; report access is already restricted to superadmin in Reports.jsx
+    const isSuperadmin = () => {
         const user = getCurrentUser();
-        return user?.role?.toLowerCase() === 'admin';
+        return (user?.role || '').toLowerCase() === 'superadmin';
     };
+    const isAdmin = () => isSuperadmin(); // For this report, only superadmins have full view
 
     // Load logs
     useEffect(() => {
@@ -226,17 +228,21 @@ const AuditTrail = () => {
     };
 
     const exportToExcel = () => {
-        // Create Excel-compatible format
-        const headers = ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Details', 'Success', 'Session ID'];
+        // Create Excel-compatible format (extreme detail: all fields)
+        const headers = ['Log ID', 'Timestamp', 'User', 'Email', 'Role', 'Action', 'Module', 'Entity ID', 'Details (JSON)', 'IP Address', 'Session ID', 'Success'];
         const rows = filteredLogs.map(log => [
+            log.id || '',
             new Date(log.timestamp).toLocaleString('en-ZA'),
             log.user,
+            log.userEmail || '',
             log.userRole,
             log.action,
             log.module,
+            log.entityId || '',
             JSON.stringify(log.details),
-            log.success ? 'Yes' : 'No',
-            log.sessionId
+            log.ipAddress || 'N/A',
+            log.sessionId || 'N/A',
+            log.success ? 'Yes' : 'No'
         ]);
 
         let excelContent = '<html xmlns:x="urn:schemas-microsoft-com:office:excel">';
@@ -325,6 +331,17 @@ const AuditTrail = () => {
     const userIsAdmin = isAdmin();
     const currentUser = getCurrentUser();
 
+    // Restrict report to superadmins only
+    if (!isSuperadmin()) {
+        return (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-center">
+                <i className="fas fa-lock text-2xl text-amber-600 mb-2"></i>
+                <p className="text-sm font-medium text-amber-800">This report is restricted to Superadmins only.</p>
+                <p className="text-xs text-amber-700 mt-1">You do not have permission to view the audit trail.</p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-3">
             {/* View Mode Indicator */}
@@ -332,7 +349,7 @@ const AuditTrail = () => {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
                     <i className="fas fa-shield-alt text-blue-600"></i>
                     <p className="text-xs text-blue-800 font-medium">
-                        Admin View: Showing all activity for all users
+                        Superadmin View: Full audit trail for all users (extreme detail)
                     </p>
                 </div>
             ) : (
@@ -344,24 +361,8 @@ const AuditTrail = () => {
                 </div>
             )}
 
-            {/* Preset: Show activity for garethm@abcotronics.co.za (admin only) */}
             {userIsAdmin && (
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-gray-600 font-medium">Show activity for:</span>
-                    <button
-                        type="button"
-                        onClick={() => loadLogs({ email: 'garethm@abcotronics.co.za' })}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-primary-500 text-primary-700 bg-primary-50 hover:bg-primary-100 font-medium"
-                    >
-                        garethm@abcotronics.co.za
-                    </button>
-                    {filterByEmail ? (
-                        <span className="text-xs text-gray-600">
-                            Showing: <strong>{filterByEmail}</strong>
-                            <button type="button" onClick={() => { setFilterByEmail(''); loadLogs({ email: '' }); }} className="ml-2 text-primary-600 hover:underline">Clear</button>
-                        </span>
-                    ) : null}
-                </div>
+                <p className="text-[10px] text-gray-500">Use filters below to narrow by user email, module, action, or date. Click a row’s chevron for full log JSON.</p>
             )}
 
             {/* Error Message */}
@@ -525,70 +526,104 @@ const AuditTrail = () => {
                 </div>
             </div>
 
-            {/* Logs Table */}
+            {/* Logs Table - Extreme detail */}
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[900px]">
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Timestamp</th>
-                                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">User</th>
-                                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Action</th>
-                                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Module</th>
-                                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Details</th>
-                                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Status</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase w-8"></th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Timestamp</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">User</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Email</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Role</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Action</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Module</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Entity ID</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Details</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">IP</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Session</th>
+                                <th className="px-2 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase">Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="6" className="px-3 py-12 text-center">
+                                    <td colSpan="12" className="px-3 py-12 text-center">
                                         <i className="fas fa-spinner fa-spin text-2xl text-gray-400 mb-2"></i>
                                         <p className="text-xs text-gray-500">Loading audit logs...</p>
                                     </td>
                                 </tr>
                             ) : currentLogs.length > 0 ? currentLogs.map(log => (
-                                <tr key={log.id} className="hover:bg-gray-50">
-                                    <td className="px-3 py-2.5 text-xs text-gray-900">
-                                        {new Date(log.timestamp).toLocaleString('en-ZA', {
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-xs">
-                                        <div className="font-medium text-gray-900">{log.user}</div>
-                                        <div className="text-[10px] text-gray-500">{log.userRole}</div>
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getActionColor(log.action)}`}>
-                                            <i className={`fas ${getActionIcon(log.action)} mr-1`}></i>
-                                            {log.action}
-                                        </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 text-xs text-gray-900 font-medium capitalize">{log.module}</td>
-                                    <td className="px-3 py-2.5 text-xs text-gray-600 max-w-xs truncate">
-                                        {JSON.stringify(log.details)}
-                                    </td>
-                                    <td className="px-3 py-2.5">
-                                        {log.success ? (
-                                            <span className="inline-flex items-center text-[10px] text-green-700">
-                                                <i className="fas fa-check-circle mr-1"></i>
-                                                Success
+                                <React.Fragment key={log.id}>
+                                    <tr className="hover:bg-gray-50">
+                                        <td className="px-2 py-2 text-xs">
+                                            <button
+                                                type="button"
+                                                onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                                                className="text-gray-500 hover:text-primary-600"
+                                                title={expandedLogId === log.id ? 'Collapse full details' : 'Expand full details'}
+                                            >
+                                                <i className={`fas ${expandedLogId === log.id ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                                            </button>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs text-gray-900 whitespace-nowrap">
+                                            {new Date(log.timestamp).toLocaleString('en-ZA', {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit'
+                                            })}
+                                        </td>
+                                        <td className="px-2 py-2 text-xs">
+                                            <div className="font-medium text-gray-900">{log.user}</div>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs text-gray-600 max-w-[140px] truncate" title={log.userEmail || ''}>{log.userEmail || '—'}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-600">{log.userRole || '—'}</td>
+                                        <td className="px-2 py-2">
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getActionColor(log.action)}`}>
+                                                <i className={`fas ${getActionIcon(log.action)} mr-1`}></i>
+                                                {log.action}
                                             </span>
-                                        ) : (
-                                            <span className="inline-flex items-center text-[10px] text-red-700">
-                                                <i className="fas fa-times-circle mr-1"></i>
-                                                Failed
-                                            </span>
-                                        )}
-                                    </td>
-                                </tr>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs text-gray-900 font-medium capitalize">{log.module}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-500 max-w-[100px] truncate font-mono" title={log.entityId || ''}>{log.entityId || '—'}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-600 max-w-[200px]">
+                                            <span className="truncate block" title={JSON.stringify(log.details)}>{typeof log.details === 'object' ? JSON.stringify(log.details) : (log.details || '—')}</span>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs text-gray-500 font-mono max-w-[120px] truncate" title={log.ipAddress || ''}>{log.ipAddress || '—'}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-500 font-mono max-w-[100px] truncate" title={log.sessionId || ''}>{log.sessionId || '—'}</td>
+                                        <td className="px-2 py-2">
+                                            {log.success ? (
+                                                <span className="inline-flex items-center text-[10px] text-green-700">
+                                                    <i className="fas fa-check-circle mr-1"></i> Success
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center text-[10px] text-red-700">
+                                                    <i className="fas fa-times-circle mr-1"></i> Failed
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                    {expandedLogId === log.id && (
+                                        <tr className="bg-gray-50 border-t border-gray-200">
+                                            <td colSpan="12" className="px-3 py-3">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <p className="text-[10px] font-semibold text-gray-600 uppercase mb-1">Full log record (raw)</p>
+                                                    <button type="button" onClick={() => setExpandedLogId(null)} className="text-[10px] text-gray-500 hover:text-gray-700">Close</button>
+                                                </div>
+                                                <pre className="text-[10px] text-left bg-gray-800 text-gray-100 p-3 rounded overflow-x-auto max-h-48 overflow-y-auto font-mono whitespace-pre-wrap break-all">
+                                                    {JSON.stringify({ id: log.id, timestamp: log.timestamp, user: log.user, userId: log.userId, userEmail: log.userEmail, userRole: log.userRole, action: log.action, module: log.module, entityId: log.entityId, details: log.details, ipAddress: log.ipAddress, sessionId: log.sessionId, success: log.success }, null, 2)}
+                                                </pre>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
                             )) : (
                                 <tr>
-                                    <td colSpan="6" className="px-3 py-12 text-center">
+                                    <td colSpan="12" className="px-3 py-12 text-center">
                                         <i className="fas fa-clipboard-list text-3xl text-gray-300 mb-2"></i>
                                         <p className="text-xs text-gray-500">No audit logs found</p>
                                         <p className="text-[10px] text-gray-400 mt-1">Try adjusting your filters</p>

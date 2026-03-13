@@ -351,14 +351,19 @@ const AuditLogger = {
     
     // Export logs to CSV
     exportToCSV: (logs) => {
-        const headers = ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Details', 'Success'];
+        const headers = ['Log ID', 'Timestamp', 'User', 'Email', 'Role', 'Action', 'Module', 'Entity ID', 'Details (JSON)', 'IP Address', 'Session ID', 'Success'];
         const rows = logs.map(log => [
+            log.id || '',
             new Date(log.timestamp).toLocaleString('en-ZA'),
             log.user,
+            log.userEmail || '',
             log.userRole,
             log.action,
             log.module,
+            log.entityId || '',
             JSON.stringify(log.details),
+            log.ipAddress || 'N/A',
+            log.sessionId || 'N/A',
             log.success ? 'Yes' : 'No'
         ]);
         
