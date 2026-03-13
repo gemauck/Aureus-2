@@ -2366,6 +2366,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
         onItemDragEnd,
         onItemDrop,
         onToggleStar,
+        onCardMouseDown,
+        onCardTouchStart,
         normalizeStageToAida,
         normalizeLifecycleStage,
         formatCurrency,
@@ -2413,51 +2415,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             });
         }, [columns, items, groupBy, normalizeStageToAida, normalizeLifecycleStage]);
 
-        const handleDragOver = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        };
-
-        const handleDragLeave = (e) => {
-            const rt = e.relatedTarget;
-            if (!rt) {
-                if (setDraggedOverStage) setDraggedOverStage(null);
-                return;
-            }
-            if (e.currentTarget.contains(rt)) return;
-            const other = rt.closest && rt.closest('[data-pipeline-stage]');
-            if (other && setDraggedOverStage) {
-                const stage = other.getAttribute('data-pipeline-stage');
-                if (stage) setDraggedOverStage(stage);
-                return;
-            }
-            if (setDraggedOverStage) setDraggedOverStage(null);
-        };
-
-        const handleDrop = (e, columnName) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (setDraggedOverStage) setDraggedOverStage(null);
-            if (!columnName) return;
-            const dt = e.dataTransfer;
-            let itemToMove = null;
-            if (dt) {
-                let itemIdStr = dt.getData('pipelineItemId');
-                let itemTypeStr = dt.getData('pipelineItemType');
-                if (!itemIdStr) {
-                    const text = dt.getData('text/plain') || '';
-                    const parts = text.split('|');
-                    itemIdStr = parts[0] ? String(parts[0]).trim() : '';
-                    itemTypeStr = parts[1] ? String(parts[1]).trim() : itemTypeStr || 'lead';
-                }
-                if (itemIdStr) itemToMove = items.find(item => String(item.id) === itemIdStr);
-            }
-            if (!itemToMove && draggedItem) itemToMove = draggedItem;
-            if (!itemToMove) return;
-            if (onItemDrop) onItemDrop(e, columnName, groupBy, itemToMove);
-        };
-
         const getColumnColorClasses = (color) => {
             const colorMap = {
                 gray: 'bg-gray-50 border-gray-200',
@@ -2493,13 +2450,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 className={`flex-shrink-0 w-72 sm:w-80 rounded-lg ${
                                     isDraggedOver ? 'ring-2 ring-blue-400 ring-opacity-50' : ''
                                 }`}
-                                onDragEnter={(e) => {
-                                    e.preventDefault();
-                                    if (setDraggedOverStage) setDraggedOverStage(column.name);
-                                }}
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, column.name)}
                             >
                                 {/* Column Header */}
                                 <div className={`${headerColorClasses} rounded-t-lg px-4 py-3 border-b-2 mb-2`}>
@@ -2514,17 +2464,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     </div>
                                 </div>
 
-                                {/* Column Cards - also a drop zone so drop works when released over cards area */}
+                                {/* Column Cards - drop target is resolved by pointer handlers via data-pipeline-stage */}
                                 <div 
                                     className={`${columnColorClasses} rounded-b-lg p-3 min-h-[500px] space-y-2 border-2 ${
                                         isDraggedOver 
                                             ? 'border-blue-400 border-dashed bg-blue-50/50' 
                                             : 'border-transparent hover:border-gray-200'
                                     }`}
-                                    onDragEnter={(e) => { e.preventDefault(); if (setDraggedOverStage) setDraggedOverStage(column.name); }}
-                                    onDragOver={handleDragOver}
-                                    onDragLeave={handleDragLeave}
-                                    onDrop={(e) => handleDrop(e, column.name)}
                                 >
                                     {columnItems.length === 0 ? (
                                         <div className="text-center py-8 text-gray-400">
@@ -2545,24 +2491,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 <div
                                                     key={`${itemType}-${item.id}`}
                                                     data-testid="pipeline-kanban-card"
-                                                    draggable
-                                                    onDragStart={(e) => {
-                                                        if (e.target.closest('button')) {
-                                                            e.preventDefault();
-                                                            return;
-                                                        }
-                                                        const dt = e.dataTransfer;
-                                                        if (dt) {
-                                                            dt.effectAllowed = 'move';
-                                                            dt.setData('text/plain', `${item.id}|${itemType}`);
-                                                            try {
-                                                                dt.setData('pipelineItemId', String(item.id));
-                                                                dt.setData('pipelineItemType', String(itemType));
-                                                            } catch (_) {}
-                                                        }
-                                                        if (onItemDragStart) onItemDragStart(e, item, itemType);
-                                                    }}
-                                                    onDragEnd={(e) => onItemDragEnd && onItemDragEnd(e)}
+                                                    onMouseDown={(e) => onCardMouseDown && onCardMouseDown(e, item, itemType)}
+                                                    onTouchStart={(e) => onCardTouchStart && onCardTouchStart(e, item, itemType)}
                                                     onClick={(e) => {
                                                         if (e.target.closest('button')) return;
                                                         if (justDragged || (draggedItem?.id === item.id)) return;
@@ -2571,50 +2501,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     className={`bg-white rounded-lg p-3 cursor-grab active:cursor-grabbing border border-gray-200 hover:shadow-md hover:border-blue-300 select-none ${
                                                         draggedItem?.id === item.id ? 'opacity-50' : ''
                                                     }`}
-                                                    style={{ userSelect: 'none' }}
+                                                    style={{ userSelect: 'none', touchAction: 'none' }}
                                                 >
                                                     {/* Card Header */}
-                                                    <div 
-                                                        className="flex items-start justify-between mb-2 pointer-events-none"
-                                                        draggable="false"
-                                                        onDragStart={(e) => e.preventDefault()}
-                                                        onMouseDown={(e) => e.stopPropagation()}
-                                                    >
-                                                        <div className="flex-1 min-w-0" draggable="false" onDragStart={(e) => e.preventDefault()}>
-                                                            <h4 
-                                                                className="text-sm font-semibold text-gray-900 truncate pointer-events-none"
-                                                                draggable="false"
-                                                                onDragStart={(e) => e.preventDefault()}
-                                                            >
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <h4 className="text-sm font-semibold text-gray-900 truncate">
                                                                 {itemType === 'site' ? (item.site?.name || item.name?.split?.(' · ')?.[1] || itemName) : itemName}
                                                             </h4>
                                                             {itemType === 'site' && (item.lead?.name || item.client?.name || item.name?.split?.(' · ')?.[0]) && (
-                                                                <p 
-                                                                    className="text-xs text-gray-600 mt-0.5 truncate pointer-events-none"
-                                                                    draggable="false"
-                                                                    onDragStart={(e) => e.preventDefault()}
-                                                                >
+                                                                <p className="text-xs text-gray-600 mt-0.5 truncate">
                                                                     {item.leadId ? 'Lead: ' : 'Client: '}{item.lead?.name || item.client?.name || item.name?.split?.(' · ')?.[0]}
                                                                 </p>
                                                             )}
                                                             {itemIndustry && (
-                                                                <p 
-                                                                    className="text-xs text-gray-500 mt-0.5 truncate pointer-events-none"
-                                                                    draggable="false"
-                                                                    onDragStart={(e) => e.preventDefault()}
-                                                                >
+                                                                <p className="text-xs text-gray-500 mt-0.5 truncate">
                                                                     {itemIndustry}
                                                                 </p>
                                                             )}
                                                         </div>
                                                         <button
                                                             type="button"
-                                                            draggable="false"
-                                                            onDragStart={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                return false;
-                                                            }}
                                                             onMouseDown={(e) => {
                                                                 e.stopPropagation();
                                                                 e.preventDefault();
@@ -2622,11 +2529,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 e.preventDefault();
-                                                                if (onToggleStar) {
-                                                                    onToggleStar(e, item);
-                                                                }
+                                                                if (onToggleStar) onToggleStar(e, item);
                                                             }}
-                                                            className={`ml-2 flex-shrink-0 transition-colors cursor-pointer pointer-events-auto ${
+                                                            className={`ml-2 flex-shrink-0 transition-colors cursor-pointer ${
                                                                 item.isStarred 
                                                                     ? 'text-yellow-500' 
                                                                     : 'text-gray-300 hover:text-yellow-400'
@@ -2637,12 +2542,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     </div>
 
                                                     {/* Card Body - Minimal Info */}
-                                                    <div 
-                                                        className="space-y-1.5 pointer-events-none"
-                                                        draggable="false"
-                                                        onDragStart={(e) => e.preventDefault()}
-                                                        onMouseDown={(e) => e.stopPropagation()}
-                                                    >
+                                                    <div className="space-y-1.5">
                                                         {/* Value */}
                                                         {itemValue > 0 && (
                                                             <div className="text-xs font-semibold text-blue-600">
@@ -3287,10 +3187,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     pipelineStages={pipelineStages}
                     statusOptions={statusOptions}
                     onItemClick={openDealDetail}
-                    onItemDragStart={handleDragStart}
-                    onItemDragEnd={handleDragEnd}
                     onItemDrop={handleKanbanDrop}
                     onToggleStar={handleToggleStar}
+                    onCardMouseDown={handleMouseDown}
+                    onCardTouchStart={handleTouchStart}
                     normalizeStageToAida={normalizeStageToAida}
                     normalizeLifecycleStage={normalizeLifecycleStage}
                     formatCurrency={formatCurrency}
