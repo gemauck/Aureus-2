@@ -5857,7 +5857,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Address</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Contact</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>AIDA Status</th>
-                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Stage</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Engagement Stage</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-right text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Actions</th>
                                                     </tr>
                                                 </thead>
@@ -5885,7 +5885,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>—</span>
                                                                 )}
                                                             </td>
-                                                            <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{site.stage || '—'}</td>
+                                                            <td className="px-4 py-3">
+                                                                {(() => {
+                                                                    const engagementStage = site.engagementStage ?? site.stage;
+                                                                    if (!engagementStage) return <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>—</span>;
+                                                                    const stageLower = String(engagementStage).toLowerCase();
+                                                                    return (
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                                            stageLower === 'disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                                            stageLower === 'potential' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
+                                                                            stageLower === 'active' || stageLower === 'proposal' || stageLower === 'tender' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                                                            (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
+                                                                        }`}>{engagementStage}</span>
+                                                                    );
+                                                                })()}
+                                                            </td>
                                                             <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                                                                 <div className="flex justify-end gap-1">
                                                                     <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleEditSite(site); }} className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors" title="Edit Site"><i className="fas fa-edit"></i></button>
