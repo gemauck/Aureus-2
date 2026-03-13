@@ -700,7 +700,12 @@ async function handler(req, res) {
       }
       if (body.dueDate !== undefined || body.due_date !== undefined) {
         const raw = body.dueDate !== undefined ? body.dueDate : body.due_date;
-        updateData.dueDate = (raw !== null && raw !== undefined && raw !== '') ? new Date(raw) : null;
+        if (raw === null || raw === undefined || raw === '') {
+          updateData.dueDate = null;
+        } else {
+          const d = new Date(raw);
+          updateData.dueDate = Number.isNaN(d.getTime()) ? null : d;
+        }
       }
       if (body.listId !== undefined) {
         updateData.listId = body.listId ? parseInt(String(body.listId), 10) : null;

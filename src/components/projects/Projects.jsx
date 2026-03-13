@@ -4197,8 +4197,8 @@ const Projects = () => {
                                                         type="date"
                                                         value={getAllTasksDueDateValue(task)}
                                                         onChange={(e) => {
-                                                            const val = e.target.value || null;
-                                                            patchTaskInAllTasks(task.id, { dueDate: val });
+                                                            const val = e.target.value ? String(e.target.value).trim() : null;
+                                                            patchTaskInAllTasks(task.id, { dueDate: val || null });
                                                         }}
                                                         className={`w-full min-w-[132px] py-1 px-2 rounded-lg text-sm border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0 ${
                                                             isDark
