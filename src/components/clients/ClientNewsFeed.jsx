@@ -21,8 +21,9 @@ const ClientNewsFeed = () => {
     const [isRefreshingNews, setIsRefreshingNews] = useState(false); // true while fetching new articles from RSS
     const [selectedClient, setSelectedClient] = useState('all');
     const [clients, setClients] = useState([]);
-    const [filterDate, setFilterDate] = useState('all'); // all, today, week, month
+    const [filterDate, setFilterDate] = useState('month'); // all, today, week, month — default month so old articles (e.g. Dec 2023) don't show
     const [activeTab, setActiveTab] = useState('activities'); // activities, news
+    const [lastCheckedAt, setLastCheckedAt] = useState(null); // when we last ran the news search
     const hasAutoRefreshedStaleRef = useRef(false);
 
     // Get theme
@@ -327,6 +328,7 @@ const ClientNewsFeed = () => {
                 console.warn('News search request failed:', searchRes.status);
             }
             await Promise.all([loadActivities(), loadNewsArticles()]);
+            setLastCheckedAt(new Date());
             if (searchRes.ok && (articlesFound > 0 || clientsProcessed > 0)) {
                 const msg = articlesFound > 0
                     ? `Found new articles for ${articlesFound} client(s). Feed updated.`
@@ -336,13 +338,14 @@ const ClientNewsFeed = () => {
         } catch (err) {
             console.error('Failed to refresh news:', err);
             await Promise.all([loadActivities(), loadNewsArticles()]);
+            setLastCheckedAt(new Date());
             if (window.toast) window.toast('Could not fetch new articles; showing latest saved news.'); else alert('Could not fetch new articles; showing latest saved news.');
         } finally {
             setIsRefreshingNews(false);
         }
     };
 
-    // Auto-refresh feed once when the newest article is older than STALE_FEED_DAYS (e.g. Dec 2023)
+    // Auto-refresh feed when newest article is older than STALE_FEED_DAYS (once per mount)
     useEffect(() => {
         if (newsArticles.length === 0 || hasAutoRefreshedStaleRef.current) return;
         const newest = newsArticles[0]; // already sorted newest first
@@ -355,6 +358,18 @@ const ClientNewsFeed = () => {
         }
     }, [newsArticles]);
 
+    // When user switches to News tab, if feed is stale try refresh again (in case first run failed)
+    useEffect(() => {
+        if (activeTab !== 'news' || newsArticles.length === 0 || isRefreshingNews) return;
+        const newest = newsArticles[0];
+        const newestDate = new Date(newest.publishedAt || newest.createdAt);
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - STALE_FEED_DAYS);
+        if (newestDate < cutoff) {
+            triggerNewsSearchAndRefresh();
+        }
+    }, [activeTab]);
+
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -363,6 +378,11 @@ const ClientNewsFeed = () => {
                     <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Client News Feed</h1>
                     <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Stay updated with client and lead activities and news
+                        {lastCheckedAt && (
+                            <span className="block mt-1 text-xs opacity-80">
+                                Last checked: {lastCheckedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        )}
                     </p>
                 </div>
                 <button
@@ -523,7 +543,7 @@ const ClientNewsFeed = () => {
                             <i className={`fas fa-newspaper text-3xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
                             <p className={`mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No news articles found</p>
                             <p className={`text-xs mb-4 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                {isLoading ? 'Loading articles...' : 'News articles are automatically fetched daily. Check back tomorrow for updates.'}
+                                {isLoading ? 'Loading articles...' : 'Showing last 30 days by default. Use Refresh to fetch new articles, or switch Date Range to "All Time" to see older items.'}
                             </p>
                             <button
                                 onClick={() => {

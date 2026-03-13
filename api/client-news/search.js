@@ -77,17 +77,18 @@ export async function searchNewsForClient(clientName, website) {
       }
     }
     
-    // Google News RSS feed URL
-    // Using 'when:7d' to get news from last 7 days only
-    const encodedQuery = encodeURIComponent(searchQuery)
+    // Google News RSS: request only last 7 days so we don't fill DB with old articles
+    const queryWithWhen = `${searchQuery} when:7d`
+    const encodedQuery = encodeURIComponent(queryWithWhen)
     const rssUrl = `https://news.google.com/rss/search?q=${encodedQuery}&hl=en&gl=US&ceid=US:en`
-    
-    
-    // Fetch RSS feed
+
+    // Fetch RSS feed (browser-like headers to reduce blocking)
     const response = await fetch(rssUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+      },
+      signal: AbortSignal.timeout(15000)
     })
     
     if (!response.ok) {
