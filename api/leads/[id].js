@@ -356,6 +356,9 @@ async function handler(req, res) {
       if (body.notes !== undefined) {
         updateData.notes = body.notes !== null && body.notes !== undefined ? String(body.notes) : ''
       }
+      if (body.thumbnail !== undefined) {
+        updateData.thumbnail = body.thumbnail !== null && body.thumbnail !== undefined ? String(body.thumbnail) : ''
+      }
       
       // External agent - include even if null (to allow clearing)
       if (body.externalAgentId !== undefined) {

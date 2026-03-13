@@ -568,7 +568,6 @@ const ClientsDatabaseFirst = () => {
                                 <option>Inactive</option>
                                 <option>New</option>
                                 <option>Contacted</option>
-                                <option>Qualified</option>
                                 <option>Proposal</option>
                                 <option>Negotiation</option>
                                 <option>Closed Won</option>

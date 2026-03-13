@@ -443,7 +443,8 @@ async function handler(req, res) {
           ...(body.lastContact !== undefined && { lastContact: body.lastContact ? new Date(body.lastContact) : null }),
           ...(body.address !== undefined && { address: body.address }),
           ...(body.website !== undefined && { website: body.website }),
-          ...(body.notes !== undefined && { notes: body.notes })
+          ...(body.notes !== undefined && { notes: body.notes }),
+          ...(body.thumbnail !== undefined && { thumbnail: body.thumbnail || '' })
         }
         
         // Phase 5: Handle contacts separately to sync to normalized ClientContact table

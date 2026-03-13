@@ -9,6 +9,7 @@ const ClientModal = ({ client, onSave, onClose }) => {
         address: '',
         website: '',
         notes: '',
+        thumbnail: '',
         contacts: [],
         sites: []
     });
@@ -24,6 +25,7 @@ const ClientModal = ({ client, onSave, onClose }) => {
                 address: client.address || '',
                 website: client.website || '',
                 notes: client.notes || '',
+                thumbnail: client.thumbnail || '',
                 contacts: client.contacts || [],
                 sites: client.sites || []
             });
@@ -91,6 +93,16 @@ const ClientModal = ({ client, onSave, onClose }) => {
                                 type="url" 
                                 value={formData.website}
                                 onChange={(e) => setFormData({...formData, website: e.target.value})}
+                                onBlur={async () => {
+                                    const url = (formData.website || '').trim();
+                                    if (!url || !/^https?:\/\/[^\s/]+/i.test(url)) return;
+                                    try {
+                                        const res = await fetch(`/api/website-logo?url=${encodeURIComponent(url)}`);
+                                        if (!res.ok) return;
+                                        const { logoUrl } = await res.json();
+                                        if (logoUrl) setFormData(prev => ({ ...prev, thumbnail: logoUrl }));
+                                    } catch (_) {}
+                                }}
                                 className={`w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                                     isDark 
                                         ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400' 

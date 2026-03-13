@@ -847,6 +847,7 @@ async function handler(req, res) {
         address: body.address || '',
         website: body.website || '',
         notes: body.notes || '',
+        thumbnail: body.thumbnail || '',
         // Phase 2: Dual-write - both String (backward compatibility) and JSONB (new)
         ...jsonFields,
         // CRITICAL FIX: Add services to JSON fields for persistence

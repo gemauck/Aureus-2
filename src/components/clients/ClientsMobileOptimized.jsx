@@ -424,7 +424,6 @@ const ClientsMobileOptimized = () => {
                         <option value="Inactive">Inactive</option>
                         <option value="New">New</option>
                         <option value="Contacted">Contacted</option>
-                        <option value="Qualified">Qualified</option>
                         <option value="Proposal">Proposal</option>
                         <option value="Negotiation">Negotiation</option>
                         <option value="Closed Won">Closed Won</option>

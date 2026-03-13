@@ -193,22 +193,12 @@ async function handler(req, res) {
     // POST /api/client-news/search - Trigger news search for all clients
     if (req.method === 'POST') {
       try {
-        // Get all active clients and leads that are subscribed to RSS feeds
+        // Get ALL clients and leads subscribed to RSS (Client model has no status field)
         const clients = await prisma.client.findMany({
           where: {
-            AND: [
-              {
-                OR: [
-                  { type: 'client', status: 'active' },
-                  { type: 'lead', status: { in: ['Potential', 'Active'] } }
-                ]
-              },
-              {
-                OR: [
-                  { rssSubscribed: true },
-                  { rssSubscribed: null } // Default to true for null values
-                ]
-              }
+            OR: [
+              { rssSubscribed: true },
+              { rssSubscribed: null }
             ]
           },
           select: {
@@ -220,6 +210,11 @@ async function handler(req, res) {
           }
         })
 
+        if (clients.length === 0) {
+          console.warn('   ⚠️ No clients/leads found with rssSubscribed true or null. Check DB.')
+        } else {
+          console.log(`   📰 News search: ${clients.length} client(s)/lead(s) to search`)
+        }
 
         const allArticles = []
         const today = new Date()

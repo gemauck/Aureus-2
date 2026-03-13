@@ -842,6 +842,7 @@ async function handler(req, res) {
         address: String(body.address || '').trim(),
         website: String(body.website || '').trim(),
         notes: String(notes).trim(),
+        thumbnail: String(body.thumbnail || '').trim(),
         externalAgentId: body.externalAgentId || null
       }
       

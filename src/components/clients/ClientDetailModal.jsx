@@ -4113,6 +4113,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
                                 </button>
                             )}
+                            {(formData.thumbnail || (client && client.thumbnail)) ? (
+                                <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 bg-white flex items-center justify-center">
+                                    <img src={formData.thumbnail || client.thumbnail} alt="" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling?.classList.remove('hidden'); }} />
+                                    <i className="fas fa-building hidden text-gray-400 text-lg" aria-hidden></i>
+                                </div>
+                            ) : null}
                             <div className="min-w-0 flex-1">
                                 <h2 className={`text-lg sm:text-xl font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                     {client ? formData.name : `Add New ${entityLabel}`}
@@ -4441,7 +4447,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             >
                                                 <option>Active</option>
                                                 <option>Inactive</option>
-                                                <option>On Hold</option>
                                             </select>
                                         </div>
                                     )}
@@ -4606,7 +4611,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <option value="Potential">Potential</option>
                                                 <option value="Active">Active</option>
                                                 <option value="Inactive">Inactive</option>
-                                                <option value="On Hold">On Hold</option>
                                                 <option value="Disinterested">Disinterested</option>
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
@@ -5557,25 +5561,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             {!isLead && (
                                                 <>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
-                                                        <select
-                                                            value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
-                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
-                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                            title="Lifecycle status – matches list Engagement Stage column"
-                                                        >
-                                                            <option value="Potential">Potential</option>
-                                                            <option value="Active">Active</option>
-                                                            <option value="Inactive">Inactive</option>
-                                                            <option value="On Hold">On Hold</option>
-                                                            <option value="Qualified">Qualified</option>
-                                                            <option value="Disinterested">Disinterested</option>
-                                                            <option value="Proposal">Proposal</option>
-                                                            <option value="Tender">Tender</option>
-                                                        </select>
-                                                        <p className="text-xs text-gray-500 mt-0.5">Lifecycle status – syncs with list.</p>
-                                                    </div>
-                                                    <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
                                                         <select
                                                             value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'}
@@ -5590,6 +5575,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <option value="Action">Action</option>
                                                         </select>
                                                         <p className="text-xs text-gray-500 mt-0.5">AIDA stage – syncs with list.</p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
+                                                        <select
+                                                            value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
+                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                            title="Lifecycle status – matches list Engagement Stage column"
+                                                        >
+                                                            <option value="Potential">Potential</option>
+                                                            <option value="Active">Active</option>
+                                                            <option value="Inactive">Inactive</option>
+                                                            <option value="Disinterested">Disinterested</option>
+                                                            <option value="Proposal">Proposal</option>
+                                                            <option value="Tender">Tender</option>
+                                                        </select>
+                                                        <p className="text-xs text-gray-500 mt-0.5">Lifecycle status – syncs with list.</p>
                                                     </div>
                                                 </>
                                             )}
@@ -5734,23 +5736,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             {isLead && (
                                                 <>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
-                                                        <select
-                                                            value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
-                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
-                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                        >
-                                                            <option value="Potential">Potential</option>
-                                                            <option value="Active">Active</option>
-                                                            <option value="Inactive">Inactive</option>
-                                                            <option value="On Hold">On Hold</option>
-                                                            <option value="Qualified">Qualified</option>
-                                                            <option value="Disinterested">Disinterested</option>
-                                                            <option value="Proposal">Proposal</option>
-                                                            <option value="Tender">Tender</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
                                                         <select
                                                             value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'}
@@ -5762,6 +5747,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <option value="Interest">Interest</option>
                                                             <option value="Desire">Desire</option>
                                                             <option value="Action">Action</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
+                                                        <select
+                                                            value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
+                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
+                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                        >
+                                                            <option value="Potential">Potential</option>
+                                                            <option value="Active">Active</option>
+                                                            <option value="Inactive">Inactive</option>
+                                                            <option value="Disinterested">Disinterested</option>
+                                                            <option value="Proposal">Proposal</option>
+                                                            <option value="Tender">Tender</option>
                                                         </select>
                                                     </div>
                                                 </>

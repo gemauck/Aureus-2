@@ -2904,9 +2904,16 @@ const LeadDetailModal = ({
                 </div>
                 {/* Header */}
                 <div className={`flex justify-between items-center px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                    <div>
+                    <div className="min-w-0 flex-1 flex items-center gap-3">
+                        {(formData.thumbnail || (lead && lead.thumbnail)) ? (
+                            <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 bg-white flex items-center justify-center">
+                                <img src={formData.thumbnail || lead.thumbnail} alt="" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling?.classList.remove('hidden'); }} />
+                                <i className="fas fa-building hidden text-gray-400 text-lg" aria-hidden></i>
+                            </div>
+                        ) : null}
+                        <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            <h2 className={`text-xl font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {lead ? formData.name : 'Add New Lead'}
                             </h2>
                             {isAutoSaving && (
@@ -2924,6 +2931,7 @@ const LeadDetailModal = ({
                                 </span>
                             </div>
                         )}
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
                         {/* Quick Navigation Menu */}
@@ -3179,41 +3187,68 @@ const LeadDetailModal = ({
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Website</label>
-                                        <input 
-                                            type="url" 
-                                            value={formData.website || ''}
-                                            onFocus={() => {
-                                                isEditingRef.current = true;
-                                                userHasStartedTypingRef.current = true;
-                                                notifyEditingChange(true);
-                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                            }}
-                                            onChange={(e) => {
-                                                isEditingRef.current = true;
-                                                userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('website'); // Track that user has edited this field
-                                                notifyEditingChange(true);
-                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                                editingTimeoutRef.current = setTimeout(() => {
-                                                    isEditingRef.current = false;
-                                                    notifyEditingChange(false);
-                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                                setFormData(prev => {
-                                                    const updated = {...prev, website: e.target.value};
-                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
-                                                    formDataRef.current = updated;
-                                                    return updated;
-                                                });
-                                            }}
-                                            onBlur={() => {
-                                                setTimeout(() => {
-                                                    isEditingRef.current = false;
-                                                    notifyEditingChange(false);
-                                                }, 500);
-                                            }}
-                                            placeholder="https://example.com"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
-                                        />
+                                        <div className="flex items-start gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <input 
+                                                    type="url" 
+                                                    value={formData.website || ''}
+                                                    onFocus={() => {
+                                                        isEditingRef.current = true;
+                                                        userHasStartedTypingRef.current = true;
+                                                        notifyEditingChange(true);
+                                                        if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                    }}
+                                                    onChange={(e) => {
+                                                        isEditingRef.current = true;
+                                                        userHasStartedTypingRef.current = true;
+                                                        userEditedFieldsRef.current.add('website'); // Track that user has edited this field
+                                                        notifyEditingChange(true);
+                                                        if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                        editingTimeoutRef.current = setTimeout(() => {
+                                                            isEditingRef.current = false;
+                                                            notifyEditingChange(false);
+                                                        }, 5000); // Clear editing flag 5 seconds after user stops typing
+                                                        setFormData(prev => {
+                                                            const updated = {...prev, website: e.target.value};
+                                                            formDataRef.current = updated;
+                                                            return updated;
+                                                        });
+                                                    }}
+                                                    onBlur={async (e) => {
+                                                        setTimeout(() => { isEditingRef.current = false; notifyEditingChange(false); }, 500);
+                                                        const url = ((e && e.target && e.target.value) || formDataRef.current?.website || formData.website || '').trim();
+                                                        if (!url || !/^https?:\/\/[^\s/]+/i.test(url)) return;
+                                                        try {
+                                                            const logoRes = await fetch(`/api/website-logo?url=${encodeURIComponent(url)}`);
+                                                            if (!logoRes.ok) return;
+                                                            const { logoUrl } = await logoRes.json();
+                                                            if (!logoUrl) return;
+                                                            const updated = { ...formDataRef.current, thumbnail: logoUrl };
+                                                            formDataRef.current = updated;
+                                                            setFormData(prev => ({ ...prev, thumbnail: logoUrl }));
+                                                            if (lead?.id && typeof onSave === 'function') {
+                                                                onSave(updated, true).catch(() => {});
+                                                            }
+                                                            if (onUpdate && lead) onUpdate({ ...lead, thumbnail: logoUrl });
+                                                        } catch (_) {}
+                                                    }}
+                                                    placeholder="https://example.com"
+                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                                />
+                                            </div>
+                                            {(formData.website || '').trim() && /^https?:\/\/[^\s/]+/i.test((formData.website || '').trim()) && (
+                                                <div className="flex-shrink-0 flex items-center gap-1">
+                                                    <div className="w-16 h-12 rounded border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center" title="Site preview">
+                                                        <img src={`/api/website-preview?url=${encodeURIComponent((formData.website || '').trim())}&width=320&height=240`} alt="" className="max-w-full max-h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                                                    </div>
+                                                    {(formData.thumbnail || (lead && lead.thumbnail)) && (
+                                                        <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 bg-white flex items-center justify-center" title="Logo">
+                                                            <img src={formData.thumbnail || lead.thumbnail} alt="" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 

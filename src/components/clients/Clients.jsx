@@ -4348,6 +4348,7 @@ const Clients = React.memo(() => {
                 address: clientFormData.address || '',
                 website: clientFormData.website || '',
                 notes: clientFormData.notes || '',
+                thumbnail: clientFormData.thumbnail || '',
                 contacts: clientFormData.contacts || [],
                 followUps: clientFormData.followUps || [],
                 projectIds: clientFormData.projectIds || [],
@@ -4409,6 +4410,7 @@ const Clients = React.memo(() => {
                             address: comprehensiveClient.address,
                             website: comprehensiveClient.website,
                             notes: comprehensiveClient.notes || '', // Ensure notes is always sent (even if empty string)
+                            thumbnail: comprehensiveClient.thumbnail || '',
                             contacts: comprehensiveClient.contacts,
                             followUps: comprehensiveClient.followUps,
                             projectIds: comprehensiveClient.projectIds,
@@ -4467,6 +4469,7 @@ const Clients = React.memo(() => {
                             address: comprehensiveClient.address,
                             website: comprehensiveClient.website,
                             notes: comprehensiveClient.notes || '', // Ensure notes is always sent
+                            thumbnail: comprehensiveClient.thumbnail || '',
                             contacts: comprehensiveClient.contacts,
                             followUps: comprehensiveClient.followUps,
                             projectIds: comprehensiveClient.projectIds,
@@ -9020,7 +9023,7 @@ const Clients = React.memo(() => {
                                                 <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
                                             ) : (
                                             <select
-                                                value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
+                                                value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((lead.engagementStage ?? (lead.status || 'potential')).toLowerCase())) || 'Potential'}
                                                 onChange={e => handleUpdateLeadEngagementStage(lead.id, e.target.value)}
                                                 className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                     (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
@@ -9034,8 +9037,6 @@ const Clients = React.memo(() => {
                                                 <option value="Potential">Potential</option>
                                                 <option value="Active">Active</option>
                                                 <option value="Inactive">Inactive</option>
-                                                <option value="On Hold">On Hold</option>
-                                                <option value="Qualified">Qualified</option>
                                                 <option value="Disinterested">Disinterested</option>
                                                 <option value="Proposal">Proposal</option>
                                                 <option value="Tender">Tender</option>
@@ -9115,7 +9116,7 @@ const Clients = React.memo(() => {
                                             </td>
                                             <td className="px-6 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                                 <select
-                                                    value={['Potential','Active','Inactive','On Hold','Qualified','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
+                                                    value={['Potential','Active','Inactive','Disinterested','Proposal','Tender'].find(s => s.toLowerCase() === ((site.engagementStage ?? (site.stage || 'potential')).toLowerCase())) || 'Potential'}
                                                     onChange={e => handleUpdateSiteEngagementStage(lead, site, siteIdx, e.target.value)}
                                                     className={`w-full min-w-[7rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
                                                         (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
@@ -9129,8 +9130,6 @@ const Clients = React.memo(() => {
                                                     <option value="Potential">Potential</option>
                                                     <option value="Active">Active</option>
                                                     <option value="Inactive">Inactive</option>
-                                                    <option value="On Hold">On Hold</option>
-                                                    <option value="Qualified">Qualified</option>
                                                     <option value="Disinterested">Disinterested</option>
                                                     <option value="Proposal">Proposal</option>
                                                     <option value="Tender">Tender</option>
