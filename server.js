@@ -2500,6 +2500,18 @@ app.use(
   })
 )
 
+// Serve build-version.json with no-cache so client version check always gets current build (avoids Chrome serving stale bundle)
+app.get('/dist/build-version.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  const versionPath = path.join(rootDir, 'dist', 'build-version.json')
+  if (existsSync(versionPath)) {
+    res.sendFile(versionPath)
+  } else {
+    res.status(404).json({ version: String(Date.now()) })
+  }
+})
+
 // Serve static files from root directory with HTTP/2-safe headers
 // MUST be after API routes to avoid serving HTML for API endpoints
 app.use(

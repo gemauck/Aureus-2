@@ -942,13 +942,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     }, []);
 
     // Allow Space and Enter in Monthly Data Review notes: block other keydown handlers from running
-    // so they cannot preventDefault. Attach to both window and document (capture) to run before others.
+    // so they cannot preventDefault, but do NOT stop propagation for Space/Enter so the textarea's
+    // onKeyDown can run and insert the character.
     useEffect(() => {
         if (!isMonthlyDataReview || typeof document === 'undefined') return;
         const handler = (e) => {
             const target = e.target;
             if (target && target.getAttribute && target.getAttribute('data-monthly-notes-input') === 'true') {
-                e.stopImmediatePropagation();
+                if (e.key !== ' ' && e.key !== 'Enter') {
+                    e.stopImmediatePropagation();
+                }
             }
         };
         window.addEventListener('keydown', handler, true);
@@ -4041,13 +4044,15 @@ const getAssigneeColor = (identifier, users) => {
                     data-monthly-notes-input="true"
                     value={notes}
                     onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
-                    onKeyDownCapture={(e) => e.stopImmediatePropagation()}
+                    onKeyDownCapture={(e) => {
+                        if (e.key !== ' ' && e.key !== 'Enter') e.stopImmediatePropagation();
+                    }}
                     onKeyDown={(e) => {
                         if (e.key !== ' ' && e.key !== 'Enter') {
                             e.stopPropagation();
                             return;
                         }
-                        // Fallback: manually insert Space/Enter so typing works even if another handler preventDefaults
+                        // Manually insert Space/Enter so typing works even if another handler preventDefaults
                         e.preventDefault();
                         e.stopPropagation();
                         const ta = e.target;
