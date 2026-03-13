@@ -767,6 +767,13 @@ async function handler(req, res) {
               name: true,
               email: true
             }
+          },
+          project: {
+            select: {
+              id: true,
+              name: true,
+              clientName: true
+            }
           }
         }
       });

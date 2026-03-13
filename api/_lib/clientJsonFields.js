@@ -64,7 +64,8 @@ export function parseClientJsonFields(client) {
         role: contact.role || contact.title,
         title: contact.title || contact.role,
         isPrimary: contact.isPrimary || false,
-        notes: contact.notes || ''
+        notes: contact.notes || '',
+        siteId: contact.siteId && String(contact.siteId).trim() !== '' ? contact.siteId : null
       }))
     } else {
       // Fallback: Try JSONB field (Phase 2)

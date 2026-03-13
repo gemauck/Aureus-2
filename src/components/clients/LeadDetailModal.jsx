@@ -2377,6 +2377,26 @@ const LeadDetailModal = ({
         }
     };
 
+    // Link/unlink contact to current site (Sites tab – Linked contacts section)
+    const handleLinkContactToSite = (contactId) => {
+        if (!editingSite?.id || !contactId) return;
+        const contacts = formData.contacts || [];
+        const updatedContacts = contacts.map(c => c.id === contactId ? { ...c, siteId: editingSite.id } : c);
+        const updatedFormData = { ...formData, contacts: updatedContacts };
+        setFormData(updatedFormData);
+        const finalFormData = logActivity('Contact linked to site', `Linked contact to site ${editingSite.name || 'this site'}`, null, false, updatedFormData);
+        Promise.resolve().then(() => onSave(finalFormData, true));
+    };
+    const handleUnlinkContactFromSite = (contactId) => {
+        if (!editingSite?.id || !contactId) return;
+        const contacts = formData.contacts || [];
+        const updatedContacts = contacts.map(c => c.id === contactId ? { ...c, siteId: null } : c);
+        const updatedFormData = { ...formData, contacts: updatedContacts };
+        setFormData(updatedFormData);
+        const finalFormData = logActivity('Contact unlinked from site', 'Contact unlinked from this site', null, false, updatedFormData);
+        Promise.resolve().then(() => onSave(finalFormData, true));
+    };
+
     const handleDeleteSite = (siteId) => {
         const site = formData.sites?.find(s => s.id === siteId);
         if (confirm('Delete this site?')) {
@@ -3903,191 +3923,95 @@ const LeadDetailModal = ({
 
                                 {showSiteForm && (
                                     <div className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} rounded-lg p-4 border`}>
-                                        <h4 className={`font-medium mb-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                            {editingSite ? 'Edit Site' : 'New Site'}
-                                        </h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div>
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Site Name *</label>
-                                                <input
-                                                    type="text"
-                                                    value={newSite.name}
-                                                    onChange={(e) => setNewSite({...newSite, name: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                    placeholder="e.g., Main Mine, North Farm"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Site Contact</label>
-                                                <input
-                                                    type="text"
-                                                    value={newSite.contactPerson}
-                                                    onChange={(e) => setNewSite({...newSite, contactPerson: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    placeholder="Contact person name"
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Address</label>
-                                                <textarea
-                                                    value={newSite.address}
-                                                    onChange={(e) => setNewSite({...newSite, address: e.target.value})}
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                    rows="2"
-                                                    placeholder="Full site address"
-                                                ></textarea>
-                                            </div>
-                                            
-                                            {/* GPS Coordinates Section */}
-                                            <div className="col-span-2">
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>GPS Coordinates</label>
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={newSite.gpsCoordinates}
-                                                        onChange={(e) => {
-                                                            const coords = parseGPSCoordinates(e.target.value);
-                                                            setNewSite({
-                                                                ...newSite, 
-                                                                gpsCoordinates: e.target.value,
-                                                                latitude: coords.latitude,
-                                                                longitude: coords.longitude
-                                                            });
-                                                        }}
-                                                        className={`flex-1 px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                        placeholder="e.g., -26.2041, 28.0473 or -26.2041, 28.0473"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={getCurrentLocation}
-                                                        className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                                        title="Get current location"
-                                                    >
-                                                        <i className="fas fa-location-arrow"></i>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (newSite.latitude && newSite.longitude) {
-                                                                window.open(`https://www.openstreetmap.org/?mlat=${newSite.latitude}&mlon=${newSite.longitude}&zoom=15`, '_blank');
-                                                            } else {
-                                                                alert('Please enter GPS coordinates first');
-                                                            }
-                                                        }}
-                                                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                                                        title="Open in OpenStreetMap"
-                                                    >
-                                                        <i className="fas fa-map"></i>
-                                                    </button>
-                                                </div>
-                                                <div className="flex gap-2 mt-2">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        value={newSite.latitude}
-                                                        onChange={(e) => setNewSite({
-                                                            ...newSite, 
-                                                            latitude: e.target.value,
-                                                            gpsCoordinates: e.target.value && newSite.longitude ? `${e.target.value}, ${newSite.longitude}` : ''
-                                                        })}
-                                                        className={`flex-1 px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                        placeholder="Latitude (-90 to 90)"
-                                                    />
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        value={newSite.longitude}
-                                                        onChange={(e) => setNewSite({
-                                                            ...newSite, 
-                                                            longitude: e.target.value,
-                                                            gpsCoordinates: newSite.latitude && e.target.value ? `${newSite.latitude}, ${e.target.value}` : ''
-                                                        })}
-                                                        className={`flex-1 px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                        placeholder="Longitude (-180 to 180)"
-                                                    />
+                                        <div className="flex items-center justify-between mb-3">
+                                            <button type="button" onClick={() => { setShowSiteForm(false); setEditingSite(null); setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '' }); }} className={`text-sm flex items-center gap-1.5 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}><i className="fas fa-arrow-left"></i> Back to list</button>
+                                            <h4 className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{editingSite ? 'Edit Site' : 'New Site'}</h4>
+                                            <span className="w-20" aria-hidden="true" />
+                                        </div>
+                                        {(() => {
+                                            const labelCls = `block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
+                                            const inputCls = `w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`;
+                                            const hintCls = `text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
+                                            const sectionHeadingCls = `text-sm font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`;
+                                            const sectionWrapCls = `rounded-lg p-3 mb-4 ${isDark ? 'bg-gray-600/50 border border-gray-600' : 'bg-white/60 border border-gray-200'}`;
+                                            return (
+                                        <div className="space-y-1">
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>General</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div><label className={labelCls}>Site Name *</label><input type="text" value={newSite.name} onChange={(e) => setNewSite({...newSite, name: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} className={inputCls} placeholder="e.g., Main Mine, North Farm" /></div>
+                                                    <div><label className={labelCls}>Site Contact</label><input type="text" value={newSite.contactPerson} onChange={(e) => setNewSite({...newSite, contactPerson: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} placeholder="Contact person name" className={inputCls} /></div>
                                                 </div>
                                             </div>
-                                            
-                                            {/* Map Selection */}
-                                            {window.MapComponent && (
-                                                <div className="col-span-2">
-                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Location Map</label>
-                                                    <window.MapComponent
-                                                        latitude={newSite.latitude}
-                                                        longitude={newSite.longitude}
-                                                        siteName={newSite.name || 'Site Location'}
-                                                        allowSelection={true}
-                                                        onLocationSelect={handleSiteMapLocationSelect}
-                                                    />
-                                                    <div className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                        💡 <strong>Tip:</strong> Click anywhere on the map to drop a pin and automatically fill in the GPS fields, or use the buttons above to pull your current location or open OpenStreetMap.
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>Location</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div className="md:col-span-2"><label className={labelCls}>Address</label><textarea value={newSite.address} onChange={(e) => setNewSite({...newSite, address: e.target.value})} className={inputCls} rows="2" placeholder="Full site address"></textarea></div>
+                                                    <div className="md:col-span-2">
+                                                        <label className={labelCls}>GPS Coordinates</label>
+                                                        <div className="flex gap-2">
+                                                            <input type="text" value={newSite.gpsCoordinates} onChange={(e) => { const coords = parseGPSCoordinates(e.target.value); setNewSite({...newSite, gpsCoordinates: e.target.value, latitude: coords.latitude, longitude: coords.longitude}); }} className={`flex-1 ${inputCls}`} placeholder="e.g., -26.2041, 28.0473" />
+                                                            <button type="button" onClick={getCurrentLocation} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700" title="Get current location"><i className="fas fa-location-arrow"></i></button>
+                                                            <button type="button" onClick={() => { if (newSite.latitude && newSite.longitude) window.open(`https://www.openstreetmap.org/?mlat=${newSite.latitude}&mlon=${newSite.longitude}&zoom=15`, '_blank'); else alert('Please enter GPS coordinates first'); }} className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700" title="Open in OpenStreetMap"><i className="fas fa-map"></i></button>
+                                                        </div>
+                                                        <div className="flex gap-2 mt-2">
+                                                            <input type="number" step="any" value={newSite.latitude} onChange={(e) => setNewSite({...newSite, latitude: e.target.value, gpsCoordinates: e.target.value && newSite.longitude ? `${e.target.value}, ${newSite.longitude}` : ''})} className={`flex-1 ${inputCls}`} placeholder="Latitude" />
+                                                            <input type="number" step="any" value={newSite.longitude} onChange={(e) => setNewSite({...newSite, longitude: e.target.value, gpsCoordinates: newSite.latitude && e.target.value ? `${newSite.latitude}, ${e.target.value}` : ''})} className={`flex-1 ${inputCls}`} placeholder="Longitude" />
+                                                        </div>
                                                     </div>
+                                                    {window.MapComponent && <div className="md:col-span-2"><label className={labelCls}>Location Map</label><window.MapComponent latitude={newSite.latitude} longitude={newSite.longitude} siteName={newSite.name || 'Site Location'} allowSelection={true} onLocationSelect={handleSiteMapLocationSelect} /><div className={`mt-2 text-xs ${hintCls}`}>💡 Click on the map to set location.</div></div>}
+                                                </div>
+                                            </div>
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>Communication</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div><label className={labelCls}>Phone</label><input type="tel" value={newSite.phone} onChange={(e) => setNewSite({...newSite, phone: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} placeholder="+27 11 123 4567" className={inputCls} /></div>
+                                                    <div><label className={labelCls}>Email</label><input type="email" value={newSite.email} onChange={(e) => setNewSite({...newSite, email: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} placeholder="site@company.com" className={inputCls} /></div>
+                                                </div>
+                                            </div>
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>Notes</h5>
+                                                <textarea value={newSite.notes} onChange={(e) => setNewSite({...newSite, notes: e.target.value})} className={inputCls} rows="2" placeholder="Equipment deployed, special instructions, etc."></textarea>
+                                            </div>
+                                            {editingSite?.id && (
+                                                <div className={sectionWrapCls}>
+                                                    <h5 className={sectionHeadingCls}>Linked contacts</h5>
+                                                    {(() => {
+                                                        const allC = formData.contacts || [];
+                                                        const linkedToThisSite = allC.filter(c => c.siteId === editingSite.id);
+                                                        const availableToLink = allC.filter(c => !c.siteId || c.siteId !== editingSite.id);
+                                                        return (
+                                                            <div className="space-y-3">
+                                                                {linkedToThisSite.length > 0 ? (
+                                                                    <ul className={`divide-y ${isDark ? 'divide-gray-600' : 'divide-gray-200'}`}>
+                                                                        {linkedToThisSite.map(c => (
+                                                                            <li key={c.id} className={`py-2 flex items-center justify-between gap-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                                                                <div className="min-w-0"><span className="font-medium">{c.name}</span>{(c.role || c.phone || c.email) && <div className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{[c.role, c.phone, c.email].filter(Boolean).join(' · ')}</div>}</div>
+                                                                                <button type="button" onClick={() => handleUnlinkContactFromSite(c.id)} className={`shrink-0 px-2 py-1 text-xs rounded ${isDark ? 'text-red-300 hover:bg-gray-600' : 'text-red-600 hover:bg-red-50'}`} title="Unlink">Unlink</button>
+                                                                            </li>
+                                                                        ))}
+                                                                    </ul>
+                                                                ) : <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No contacts linked to this site yet.</p>}
+                                                                {availableToLink.length > 0 && (
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <label className={labelCls + ' mb-0'}>Link contact:</label>
+                                                                        <select className={`${inputCls} max-w-xs`} value="" onChange={(e) => { const id = e.target.value; if (id) { handleLinkContactToSite(id); e.target.value = ''; } }}>
+                                                                            <option value="">Choose a contact…</option>
+                                                                            {availableToLink.map(c => <option key={c.id} value={c.id}>{c.name}{c.role ? ` (${c.role})` : ''}</option>)}
+                                                                        </select>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             )}
-                                            <div>
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Phone</label>
-                                                <input
-                                                    type="tel"
-                                                    value={newSite.phone}
-                                                    onChange={(e) => setNewSite({...newSite, phone: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    placeholder="+27 11 123 4567"
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Email</label>
-                                                <input
-                                                    type="email"
-                                                    value={newSite.email}
-                                                    onChange={(e) => setNewSite({...newSite, email: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    placeholder="site@company.com"
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Notes</label>
-                                                <textarea
-                                                    value={newSite.notes}
-                                                    onChange={(e) => setNewSite({...newSite, notes: e.target.value})}
-                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
-                                                    rows="2"
-                                                    placeholder="Equipment deployed, special instructions, etc."
-                                                ></textarea>
-                                            </div>
                                         </div>
+                                            );
+                                        })()}
                                         <div className="flex justify-end gap-2 mt-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setShowSiteForm(false);
-                                                    setEditingSite(null);
-                                                    setNewSite({
-                                                        name: '',
-                                                        address: '',
-                                                        contactPerson: '',
-                                                        phone: '',
-                                                        email: '',
-                                                        notes: '',
-                                                        latitude: '',
-                                                        longitude: '',
-                                                        gpsCoordinates: ''
-                                                    });
-                                                }}
-                                                className={`px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'border-gray-500 hover:bg-gray-600 text-gray-100' : 'border-gray-300 hover:bg-gray-50'}`}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={editingSite ? handleUpdateSite : handleAddSite}
-                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                                            >
-                                                {editingSite ? 'Update' : 'Add'} Site
-                                            </button>
+                                            <button type="button" onClick={() => { setShowSiteForm(false); setEditingSite(null); setNewSite({ name: '', address: '', contactPerson: '', phone: '', email: '', notes: '', latitude: '', longitude: '', gpsCoordinates: '' }); }} className={`px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'border-gray-500 hover:bg-gray-600 text-gray-100' : 'border-gray-300 hover:bg-gray-50'}`}>Cancel</button>
+                                            <button type="button" onClick={editingSite ? handleUpdateSite : handleAddSite} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">{editingSite ? 'Update' : 'Add'} Site</button>
                                         </div>
                                     </div>
                                 )}
@@ -4118,8 +4042,15 @@ const LeadDetailModal = ({
                                                 <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
                                                 <p>No sites added yet</p>
                                             </div>
-                                        ) : (
-                                            allSites.map(site => (
+                                        ) : (() => {
+                                            const allContactsForSiteCards = formData.contacts || [];
+                                            const getSiteContactDisplay = (s) => {
+                                                const linked = allContactsForSiteCards.find(c => c.siteId === s.id);
+                                                if (linked) return linked.name;
+                                                if (s.contactPerson && String(s.contactPerson).trim()) return s.contactPerson;
+                                                return null;
+                                            };
+                                            return allSites.map(site => (
                                                 <div key={site.id} className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} border rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md`}>
                                                     <div className="flex justify-between items-start mb-3">
                                                         <div className="flex items-center gap-2">
@@ -4150,22 +4081,21 @@ const LeadDetailModal = ({
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                         {/* Left Column - Contact & Location Info */}
                                                         <div className="space-y-3">
+                                                            {(getSiteContactDisplay(site) || site.contactPerson) && (
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    <i className="fas fa-user text-blue-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact</div>
+                                                                        <div className="text-sm">{getSiteContactDisplay(site) || site.contactPerson}</div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                             {site.address && (
                                                                 <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                                     <i className="fas fa-map-marker-alt text-primary-600 mt-0.5 w-4"></i>
                                                                     <div>
                                                                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
                                                                         <div className="text-sm">{site.address}</div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                            
-                                                            {site.contactPerson && (
-                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                    <i className="fas fa-user text-blue-600 mt-0.5 w-4"></i>
-                                                                    <div>
-                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Person</div>
-                                                                        <div className="text-sm">{site.contactPerson}</div>
                                                                     </div>
                                                                 </div>
                                                             )}

@@ -2544,6 +2544,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                             return (
                                                 <div
                                                     key={`${itemType}-${item.id}`}
+                                                    data-testid="pipeline-kanban-card"
                                                     draggable
                                                     onDragStart={(e) => {
                                                         if (e.target.closest('button')) {

@@ -47,7 +47,7 @@ async function handler(req, res) {
         })
         
         if (normalizedContacts.length > 0) {
-          // Convert to array format for backward compatibility
+          // Convert to array format for backward compatibility (include siteId for site linking)
           const contacts = normalizedContacts.map(c => ({
             id: c.id,
             name: c.name,
@@ -58,6 +58,7 @@ async function handler(req, res) {
             title: c.title || '',
             isPrimary: c.isPrimary,
             notes: c.notes || '',
+            siteId: c.siteId && c.siteId.trim() !== '' ? c.siteId : null,
             createdAt: c.createdAt
           }))
           return ok(res, { contacts })
@@ -107,6 +108,7 @@ async function handler(req, res) {
         if (!client) return notFound(res)
         
         // Phase 5: Create contact in normalized ClientContact table
+        const siteIdVal = (body.siteId && String(body.siteId).trim()) || null
         const newContact = await prisma.clientContact.create({
           data: {
             id: body.id || undefined, // Use provided ID or let Prisma generate cuid()
@@ -118,7 +120,8 @@ async function handler(req, res) {
             role: body.role || null,
             title: body.title || body.department || null, // Map department to title if provided
             isPrimary: !!body.isPrimary,
-            notes: body.notes || ''
+            notes: body.notes || '',
+            siteId: siteIdVal
           }
         })
         
@@ -134,7 +137,8 @@ async function handler(req, res) {
           role: newContact.role || '',
           title: newContact.title || '',
           isPrimary: newContact.isPrimary,
-          notes: newContact.notes || ''
+          notes: newContact.notes || '',
+          siteId: newContact.siteId && newContact.siteId.trim() !== '' ? newContact.siteId : null
         }
         
         return created(res, { contact: contactResponse })
@@ -178,6 +182,7 @@ async function handler(req, res) {
         if (body.department !== undefined) updateData.title = body.department || null // Map department to title
         if (body.isPrimary !== undefined) updateData.isPrimary = !!body.isPrimary
         if (body.notes !== undefined) updateData.notes = body.notes || ''
+        if (body.siteId !== undefined) updateData.siteId = (body.siteId && String(body.siteId).trim()) || null
         
         const updatedContact = await prisma.clientContact.update({
           where: { id: contactId },
@@ -196,7 +201,8 @@ async function handler(req, res) {
           role: updatedContact.role || '',
           title: updatedContact.title || '',
           isPrimary: updatedContact.isPrimary,
-          notes: updatedContact.notes || ''
+          notes: updatedContact.notes || '',
+          siteId: updatedContact.siteId && updatedContact.siteId.trim() !== '' ? updatedContact.siteId : null
         }
         
         return ok(res, { contact: contactResponse })

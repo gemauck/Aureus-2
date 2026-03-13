@@ -273,12 +273,15 @@ model ClientContact {
   title     String?
   isPrimary Boolean  @default(false)
   notes     String   @default("")
+  siteId    String?  // Link contact to a specific ClientSite (null = not linked)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site   ClientSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
+  @@index([siteId])
   @@index([email])
   @@index([phone])
   @@index([mobile])
@@ -323,7 +326,8 @@ model ClientSite {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contacts  ClientContact[]
 
   @@index([clientId])
   @@index([contactEmail])

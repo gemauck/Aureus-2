@@ -2901,6 +2901,36 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
+    // Link/unlink contact to current site (used in Sites tab – Linked contacts section)
+    const handleLinkContactToSite = (contactId) => {
+        if (!editingSite?.id || !contactId) return;
+        const allContacts = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
+        const updatedContacts = allContacts.map(c => c.id === contactId ? { ...c, siteId: editingSite.id } : c);
+        const updatedFormData = { ...formData, contacts: updatedContacts };
+        setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        const finalFormData = logActivity('Contact linked to site', `Linked contact to site ${editingSite.name || 'this site'}`, null, false, updatedFormData);
+        Promise.resolve().then(() => onSave(finalFormData, true)).finally(() => {
+            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+        });
+    };
+    const handleUnlinkContactFromSite = (contactId) => {
+        if (!editingSite?.id || !contactId) return;
+        const allContacts = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
+        const updatedContacts = allContacts.map(c => c.id === contactId ? { ...c, siteId: null } : c);
+        const updatedFormData = { ...formData, contacts: updatedContacts };
+        setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        const finalFormData = logActivity('Contact unlinked from site', 'Contact unlinked from this site', null, false, updatedFormData);
+        Promise.resolve().then(() => onSave(finalFormData, true)).finally(() => {
+            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+        });
+    };
+
     const handleAddFollowUp = () => {
         if (!newFollowUp.date || !newFollowUp.description) {
             alert('Date and description are required');
@@ -5566,238 +5596,197 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             </h4>
                                             <span className="w-20" aria-hidden="true" />
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site Name *</label>
-                                                <input
-                                                    type="text"
-                                                    value={newSite.name}
-                                                    onChange={(e) => setNewSite({...newSite, name: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                    placeholder="e.g., Main Mine, North Farm"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site type</label>
-                                                <select
-                                                    value={newSite.siteType === 'client' ? 'client' : 'lead'}
-                                                    onChange={(e) => setNewSite({...newSite, siteType: e.target.value})}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                    title="Lead = show in Pipeline; Client = do not show in Pipeline"
-                                                >
-                                                    <option value="lead">Lead (show in Pipeline)</option>
-                                                    <option value="client">Client (do not show in Pipeline)</option>
-                                                </select>
-                                                <p className="text-xs text-gray-500 mt-0.5">Lead sites appear in the Pipeline until marked as Client.</p>
-                                            </div>
-                                            {!isLead && (
-                                                <>
+                                        {/* Section styling: label and input classes for dark/light */}
+                                        {(() => {
+                                            const labelCls = `block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
+                                            const inputCls = `w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`;
+                                            const hintCls = `text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
+                                            const sectionHeadingCls = `text-sm font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`;
+                                            const sectionWrapCls = `rounded-lg p-3 mb-4 ${isDark ? 'bg-gray-600/50 border border-gray-600' : 'bg-white/60 border border-gray-200'}`;
+                                            return (
+                                        <div className="space-y-1">
+                                            {/* General */}
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>General</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
-                                                        <select
-                                                            value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'}
-                                                            onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
-                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                            title="AIDA stage – matches list AIDA Status column"
-                                                        >
-                                                            <option value="No Engagement">No Engagement</option>
-                                                            <option value="Awareness">Awareness</option>
-                                                            <option value="Interest">Interest</option>
-                                                            <option value="Desire">Desire</option>
-                                                            <option value="Action">Action</option>
-                                                        </select>
-                                                        <p className="text-xs text-gray-500 mt-0.5">AIDA stage – syncs with list.</p>
+                                                        <label className={labelCls}>Site Name *</label>
+                                                        <input type="text" value={newSite.name} onChange={(e) => setNewSite({...newSite, name: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} className={inputCls} placeholder="e.g., Main Mine, North Farm" />
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
-                                                        <select
-                                                            value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
-                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
-                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                            title="Lifecycle status – matches list Engagement Stage column"
-                                                        >
-                                                            <option value="Disinterested">Disinterested</option>
-                                                            <option value="Potential">Potential</option>
-                                                            <option value="Active">Active</option>
-                                                            <option value="Proposal">Proposal</option>
-                                                            <option value="Tender">Tender</option>
+                                                        <label className={labelCls}>Site type</label>
+                                                        <select value={newSite.siteType === 'client' ? 'client' : 'lead'} onChange={(e) => setNewSite({...newSite, siteType: e.target.value})} className={inputCls} title="Lead = show in Pipeline; Client = do not show in Pipeline">
+                                                            <option value="lead">Lead (show in Pipeline)</option>
+                                                            <option value="client">Client (do not show in Pipeline)</option>
                                                         </select>
-                                                        <p className="text-xs text-gray-500 mt-0.5">Lifecycle status – syncs with list.</p>
+                                                        <p className={hintCls}>Lead sites appear in the Pipeline until marked as Client.</p>
                                                     </div>
-                                                </>
-                                            )}
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site Contact</label>
-                                                <input
-                                                    type="text"
-                                                    value={newSite.contactPerson}
-                                                    onChange={(e) => setNewSite({...newSite, contactPerson: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    placeholder="Contact person name"
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Address</label>
-                                                <textarea
-                                                    value={newSite.address}
-                                                    onChange={(e) => setNewSite({...newSite, address: e.target.value})}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                    rows="2"
-                                                    placeholder="Full site address"
-                                                ></textarea>
-                                            </div>
-                                            
-                                            {/* GPS Coordinates Section */}
-                                            <div className="col-span-2">
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">GPS Coordinates</label>
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={newSite.gpsCoordinates}
-                                                        onChange={(e) => {
-                                                            const coords = parseGPSCoordinates(e.target.value);
-                                                            setNewSite({
-                                                                ...newSite, 
-                                                                gpsCoordinates: e.target.value,
-                                                                latitude: coords.latitude,
-                                                                longitude: coords.longitude
-                                                            });
-                                                        }}
-                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                        placeholder="e.g., -26.2041, 28.0473 or -26.2041, 28.0473"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={getCurrentLocation}
-                                                        className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                                        title="Get current location"
-                                                    >
-                                                        <i className="fas fa-location-arrow"></i>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (newSite.latitude && newSite.longitude) {
-                                                                window.open(`https://www.openstreetmap.org/?mlat=${newSite.latitude}&mlon=${newSite.longitude}&zoom=15`, '_blank');
-                                                            } else {
-                                                                alert('Please enter GPS coordinates first');
-                                                            }
-                                                        }}
-                                                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                                                        title="Open in OpenStreetMap"
-                                                    >
-                                                        <i className="fas fa-map"></i>
-                                                    </button>
-                                                </div>
-                                                <div className="flex gap-2 mt-2">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        value={newSite.latitude}
-                                                        onChange={(e) => setNewSite({
-                                                            ...newSite, 
-                                                            latitude: e.target.value,
-                                                            gpsCoordinates: e.target.value && newSite.longitude ? `${e.target.value}, ${newSite.longitude}` : ''
-                                                        })}
-                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                        placeholder="Latitude (-90 to 90)"
-                                                    />
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        value={newSite.longitude}
-                                                        onChange={(e) => setNewSite({
-                                                            ...newSite, 
-                                                            longitude: e.target.value,
-                                                            gpsCoordinates: newSite.latitude && e.target.value ? `${newSite.latitude}, ${e.target.value}` : ''
-                                                        })}
-                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                        placeholder="Longitude (-180 to 180)"
-                                                    />
+                                                    {!isLead && (
+                                                        <>
+                                                            <div>
+                                                                <label className={labelCls}>AIDA Status</label>
+                                                                <select value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'} onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})} className={inputCls} title="AIDA stage – matches list AIDA Status column">
+                                                                    <option value="No Engagement">No Engagement</option>
+                                                                    <option value="Awareness">Awareness</option>
+                                                                    <option value="Interest">Interest</option>
+                                                                    <option value="Desire">Desire</option>
+                                                                    <option value="Action">Action</option>
+                                                                </select>
+                                                                <p className={hintCls}>AIDA stage – syncs with list.</p>
+                                                            </div>
+                                                            <div>
+                                                                <label className={labelCls}>Engagement Stage</label>
+                                                                <select value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'} onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})} className={inputCls} title="Lifecycle status – matches list Engagement Stage column">
+                                                                    <option value="Disinterested">Disinterested</option>
+                                                                    <option value="Potential">Potential</option>
+                                                                    <option value="Active">Active</option>
+                                                                    <option value="Proposal">Proposal</option>
+                                                                    <option value="Tender">Tender</option>
+                                                                </select>
+                                                                <p className={hintCls}>Lifecycle status – syncs with list.</p>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                    <div>
+                                                        <label className={labelCls}>Site Contact</label>
+                                                        <input type="text" value={newSite.contactPerson} onChange={(e) => setNewSite({...newSite, contactPerson: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} placeholder="Contact person name" className={inputCls} />
+                                                    </div>
                                                 </div>
                                             </div>
-                                            
-                                            {/* Map Selection */}
-                                            <div className="col-span-2">
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Location Map</label>
-                                                <window.MapComponent
-                                                    latitude={newSite.latitude}
-                                                    longitude={newSite.longitude}
-                                                    siteName={newSite.name || 'Site Location'}
-                                                    allowSelection={true}
-                                                    onLocationSelect={handleSiteMapLocationSelect}
-                                                />
-                                                <div className="mt-2 text-xs text-gray-500">
-                                                    💡 <strong>Tip:</strong> Click anywhere on the map to drop a pin and automatically fill in the GPS fields, or use the buttons above to pull your current location or open OpenStreetMap.
+
+                                            {/* Location */}
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>Location</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div className="md:col-span-2">
+                                                        <label className={labelCls}>Address</label>
+                                                        <textarea value={newSite.address} onChange={(e) => setNewSite({...newSite, address: e.target.value})} className={inputCls} rows="2" placeholder="Full site address"></textarea>
+                                                    </div>
+                                                    <div className="md:col-span-2">
+                                                        <label className={labelCls}>GPS Coordinates</label>
+                                                        <div className="flex gap-2">
+                                                            <input type="text" value={newSite.gpsCoordinates} onChange={(e) => { const coords = parseGPSCoordinates(e.target.value); setNewSite({...newSite, gpsCoordinates: e.target.value, latitude: coords.latitude, longitude: coords.longitude}); }} className={`flex-1 ${inputCls}`} placeholder="e.g., -26.2041, 28.0473 or -26.2041, 28.0473" />
+                                                            <button type="button" onClick={getCurrentLocation} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" title="Get current location"><i className="fas fa-location-arrow"></i></button>
+                                                            <button type="button" onClick={() => { if (newSite.latitude && newSite.longitude) { window.open(`https://www.openstreetmap.org/?mlat=${newSite.latitude}&mlon=${newSite.longitude}&zoom=15`, '_blank'); } else { alert('Please enter GPS coordinates first'); } }} className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors" title="Open in OpenStreetMap"><i className="fas fa-map"></i></button>
+                                                        </div>
+                                                        <div className="flex gap-2 mt-2">
+                                                            <input type="number" step="any" value={newSite.latitude} onChange={(e) => setNewSite({...newSite, latitude: e.target.value, gpsCoordinates: e.target.value && newSite.longitude ? `${e.target.value}, ${newSite.longitude}` : ''})} className={`flex-1 ${inputCls}`} placeholder="Latitude (-90 to 90)" />
+                                                            <input type="number" step="any" value={newSite.longitude} onChange={(e) => setNewSite({...newSite, longitude: e.target.value, gpsCoordinates: newSite.latitude && e.target.value ? `${newSite.latitude}, ${e.target.value}` : ''})} className={`flex-1 ${inputCls}`} placeholder="Longitude (-180 to 180)" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="md:col-span-2">
+                                                        <label className={labelCls}>Location Map</label>
+                                                        <window.MapComponent latitude={newSite.latitude} longitude={newSite.longitude} siteName={newSite.name || 'Site Location'} allowSelection={true} onLocationSelect={handleSiteMapLocationSelect} />
+                                                        <div className={`mt-2 text-xs ${hintCls}`}>💡 <strong>Tip:</strong> Click anywhere on the map to drop a pin and automatically fill in the GPS fields, or use the buttons above to pull your current location or open OpenStreetMap.</div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
-                                                <input
-                                                    type="tel"
-                                                    value={newSite.phone}
-                                                    onChange={(e) => setNewSite({...newSite, phone: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    placeholder="+27 11 123 4567"
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                />
+
+                                            {/* Communication */}
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>Communication</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className={labelCls}>Phone</label>
+                                                        <input type="tel" value={newSite.phone} onChange={(e) => setNewSite({...newSite, phone: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} placeholder="+27 11 123 4567" className={inputCls} />
+                                                    </div>
+                                                    <div>
+                                                        <label className={labelCls}>Email</label>
+                                                        <input type="email" value={newSite.email} onChange={(e) => setNewSite({...newSite, email: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} placeholder="site@company.com" className={inputCls} />
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-                                                <input
-                                                    type="email"
-                                                    value={newSite.email}
-                                                    onChange={(e) => setNewSite({...newSite, email: e.target.value})}
-                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    placeholder="site@company.com"
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
-                                                <textarea
-                                                    value={newSite.notes}
-                                                    onChange={(e) => setNewSite({...newSite, notes: e.target.value})}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                    rows="2"
-                                                    placeholder="Equipment deployed, special instructions, etc."
-                                                ></textarea>
-                                            </div>
+
+                                            {/* Status & stage (lead only) */}
                                             {isLead && (
-                                                <>
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">AIDA Status</label>
-                                                        <select
-                                                            value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'}
-                                                            onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})}
-                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                        >
-                                                            <option value="No Engagement">No Engagement</option>
-                                                            <option value="Awareness">Awareness</option>
-                                                            <option value="Interest">Interest</option>
-                                                            <option value="Desire">Desire</option>
-                                                            <option value="Action">Action</option>
-                                                        </select>
+                                                <div className={sectionWrapCls}>
+                                                    <h5 className={sectionHeadingCls}>Status & stage</h5>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className={labelCls}>AIDA Status</label>
+                                                            <select value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'} onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})} className={inputCls}>
+                                                                <option value="No Engagement">No Engagement</option>
+                                                                <option value="Awareness">Awareness</option>
+                                                                <option value="Interest">Interest</option>
+                                                                <option value="Desire">Desire</option>
+                                                                <option value="Action">Action</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className={labelCls}>Engagement Stage</label>
+                                                            <select value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'} onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})} className={inputCls}>
+                                                                <option value="Disinterested">Disinterested</option>
+                                                                <option value="Potential">Potential</option>
+                                                                <option value="Active">Active</option>
+                                                                <option value="Proposal">Proposal</option>
+                                                                <option value="Tender">Tender</option>
+                                                            </select>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Engagement Stage</label>
-                                                        <select
-                                                            value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'}
-                                                            onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})}
-                                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                        >
-                                                            <option value="Disinterested">Disinterested</option>
-                                                            <option value="Potential">Potential</option>
-                                                            <option value="Active">Active</option>
-                                                            <option value="Proposal">Proposal</option>
-                                                            <option value="Tender">Tender</option>
-                                                        </select>
-                                                    </div>
-                                                </>
+                                                </div>
+                                            )}
+
+                                            {/* Notes */}
+                                            <div className={sectionWrapCls}>
+                                                <h5 className={sectionHeadingCls}>Notes</h5>
+                                                <textarea value={newSite.notes} onChange={(e) => setNewSite({...newSite, notes: e.target.value})} className={inputCls} rows="2" placeholder="Equipment deployed, special instructions, etc."></textarea>
+                                            </div>
+
+                                            {/* Linked contacts (only when editing an existing site) */}
+                                            {editingSite?.id && (
+                                                <div className={sectionWrapCls}>
+                                                    <h5 className={sectionHeadingCls}>Linked contacts</h5>
+                                                    {(() => {
+                                                        const allContactsForSite = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
+                                                        const linkedToThisSite = allContactsForSite.filter(c => c.siteId === editingSite.id);
+                                                        const availableToLink = allContactsForSite.filter(c => !c.siteId || c.siteId !== editingSite.id);
+                                                        return (
+                                                            <div className="space-y-3">
+                                                                {linkedToThisSite.length > 0 ? (
+                                                                    <ul className={`divide-y ${isDark ? 'divide-gray-600' : 'divide-gray-200'}`}>
+                                                                        {linkedToThisSite.map(c => (
+                                                                            <li key={c.id} className={`py-2 flex items-center justify-between gap-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                                                                <div className="min-w-0">
+                                                                                    <span className="font-medium">{c.name}</span>
+                                                                                    {(c.role || c.phone || c.email) && (
+                                                                                        <div className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                                            {[c.role, c.phone, c.email].filter(Boolean).join(' · ')}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                <button type="button" onClick={() => handleUnlinkContactFromSite(c.id)} className={`shrink-0 px-2 py-1 text-xs rounded ${isDark ? 'text-red-300 hover:bg-gray-600' : 'text-red-600 hover:bg-red-50'}`} title="Unlink from this site">Unlink</button>
+                                                                            </li>
+                                                                        ))}
+                                                                    </ul>
+                                                                ) : (
+                                                                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No contacts linked to this site yet.</p>
+                                                                )}
+                                                                {availableToLink.length > 0 && (
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <label className={labelCls + ' mb-0'} style={{ marginRight: 4 }}>Link contact:</label>
+                                                                        <select
+                                                                            className={`${inputCls} max-w-xs`}
+                                                                            value=""
+                                                                            onChange={(e) => {
+                                                                                const id = e.target.value;
+                                                                                if (id) { handleLinkContactToSite(id); e.target.value = ''; }
+                                                                            }}
+                                                                        >
+                                                                            <option value="">Choose a contact…</option>
+                                                                            {availableToLink.map(c => (
+                                                                                <option key={c.id} value={c.id}>{c.name}{c.role ? ` (${c.role})` : ''}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
                                             )}
                                         </div>
+                                            );
+                                        })()}
                                         <div className="flex justify-end gap-2 mt-3">
                                             <button
                                                 type="button"
@@ -5821,7 +5810,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     });
                                                     if (typeof onInitialSiteOpened === 'function') onInitialSiteOpened();
                                                 }}
-                                                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                                                className={`px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'border-gray-500 hover:bg-gray-600 text-gray-200' : 'border-gray-300 hover:bg-gray-50'}`}
                                             >
                                                 Cancel
                                             </button>
@@ -5853,12 +5842,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 </div>
                                             );
                                         }
+                                        const allContactsForTable = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
+                                        const getSiteContactDisplay = (site) => {
+                                            const linked = allContactsForTable.find(c => c.siteId === site.id);
+                                            if (linked) return linked.name;
+                                            if (site.contactPerson && String(site.contactPerson).trim()) return site.contactPerson;
+                                            return '—';
+                                        };
                                         return (
                                             <table className="min-w-full divide-y divide-gray-200">
                                                 <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                                                     <tr>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Name</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Address</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Contact</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>AIDA Status</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Stage</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-right text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Actions</th>
@@ -5873,6 +5870,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         >
                                                             <td className={`px-4 py-3 text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name || '—'}</td>
                                                             <td className={`px-4 py-3 text-sm max-w-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={site.address}>{site.address || '—'}</td>
+                                                            <td className={`px-4 py-3 text-sm max-w-[10rem] truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={getSiteContactDisplay(site)}>{getSiteContactDisplay(site)}</td>
                                                             <td className="px-4 py-3">
                                                                 {site.aidaStatus ? (
                                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${

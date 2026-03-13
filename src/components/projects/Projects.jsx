@@ -3876,6 +3876,7 @@ const Projects = () => {
         };
         const patchTaskInAllTasks = async (taskId, patch) => {
             if (!taskId || !window.DatabaseAPI?.makeRequest) return;
+            setAllTasksError(null);
             try {
                 const res = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskId)}`, {
                     method: 'PATCH',
@@ -3883,11 +3884,23 @@ const Projects = () => {
                 });
                 const data = res?.data ?? res;
                 const updated = data?.task || data;
-                if (!updated || !updated.id) return;
-                setAllTasksList(prev => prev.map(t => t.id === taskId ? { ...t, ...updated } : t));
-                if (allTasksSelectedTask?.id === taskId) setAllTasksSelectedTask(prev => prev ? { ...prev, ...updated } : null);
+                if (!updated || !updated.id) {
+                    setAllTasksError('Task update did not return updated data. Please refresh and try again.');
+                    return;
+                }
+                // Merge response into list row, preserving project/client (PATCH response does not include project)
+                const mergeInto = (t) => {
+                    const merged = { ...t, ...updated };
+                    if (merged.project === undefined) merged.project = t.project;
+                    return merged;
+                };
+                setAllTasksList(prev => prev.map(t => t.id === taskId ? mergeInto(t) : t));
+                if (allTasksSelectedTask?.id === taskId) setAllTasksSelectedTask(prev => prev ? mergeInto(prev) : null);
+                if (window.DatabaseAPI.invalidateTasksCache) window.DatabaseAPI.invalidateTasksCache();
             } catch (err) {
                 console.warn('All Tasks: patch failed', err);
+                setAllTasksError(err?.message || 'Failed to save change. Please try again.');
+                setTimeout(() => setAllTasksError(prev => (prev && prev.includes('save change') ? null : prev)), 5000);
             }
         };
         const getAllTasksDueDateValue = (task) => {

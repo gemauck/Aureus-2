@@ -153,7 +153,7 @@ async function handler(req, res) {
               // Try to fetch normalized data separately
               try {
                 const contactsResult = await prisma.$queryRaw`
-                  SELECT id, "clientId", name, email, phone, mobile, role, title, "isPrimary", notes, "createdAt"
+                  SELECT id, "clientId", name, email, phone, mobile, role, title, "isPrimary", notes, "siteId", "createdAt"
                   FROM "ClientContact"
                   WHERE "clientId" = ${id}
                   ORDER BY "isPrimary" DESC, "createdAt" ASC
@@ -495,6 +495,7 @@ async function handler(req, res) {
               // Convert contact ID to string for consistency with Prisma (which uses string IDs)
               const contactId = contact.id ? String(contact.id) : null
               
+              const siteIdVal = (contact.siteId && String(contact.siteId).trim()) || null
               const contactData = {
                 clientId: id,
                 name: contact.name || '',
@@ -504,7 +505,8 @@ async function handler(req, res) {
                 role: contact.role || null,
                 title: contact.title || contact.department || null,
                 isPrimary: !!contact.isPrimary,
-                notes: contact.notes || ''
+                notes: contact.notes || '',
+                siteId: siteIdVal
               }
               
               // Use individual create/update to support custom IDs (createMany doesn't support custom IDs)

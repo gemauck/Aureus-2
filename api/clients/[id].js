@@ -102,9 +102,9 @@ async function handler(req, res) {
         let normalizedServices = []
         let clientProjects = []
         try {
-          // Fetch contacts from normalized table
+          // Fetch contacts from normalized table (include siteId for site linking)
           const contactsResult = await prisma.$queryRaw`
-            SELECT id, "clientId", name, email, phone, mobile, role, title, "isPrimary", notes, "createdAt"
+            SELECT id, "clientId", name, email, phone, mobile, role, title, "isPrimary", notes, "siteId", "createdAt"
             FROM "ClientContact"
             WHERE "clientId" = ${id}
             ORDER BY "isPrimary" DESC, "createdAt" ASC
@@ -179,7 +179,7 @@ async function handler(req, res) {
           console.warn(`⚠️ Could not fetch normalized data (may not exist yet):`, normError.message)
         }
         
-        // Add normalized data to client object for parsing
+        // Add normalized data to client object for parsing (include siteId for site linking)
         clientBasic.clientContacts = normalizedContacts.map(c => ({
           id: c.id,
           name: c.name,
@@ -190,6 +190,7 @@ async function handler(req, res) {
           title: c.title,
           isPrimary: c.isPrimary,
           notes: c.notes,
+          siteId: c.siteId && String(c.siteId).trim() !== '' ? c.siteId : null,
           createdAt: c.createdAt
         }))
         clientBasic.clientComments = normalizedComments.map(c => ({
@@ -475,6 +476,7 @@ async function handler(req, res) {
             const contactsToKeep = new Set()
             
             for (const contact of contactsArray) {
+              const siteIdVal = (contact.siteId && String(contact.siteId).trim()) || null
               const contactData = {
                   clientId: id,
                   name: contact.name || '',
@@ -484,7 +486,8 @@ async function handler(req, res) {
                   role: contact.role || null,
                   title: contact.title || contact.department || null,
                   isPrimary: !!contact.isPrimary,
-                  notes: contact.notes || ''
+                  notes: contact.notes || '',
+                  siteId: siteIdVal
               }
               
               // Use upsert to handle both create and update
