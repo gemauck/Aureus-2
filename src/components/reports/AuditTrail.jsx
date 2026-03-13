@@ -739,7 +739,7 @@ const AuditTrail = () => {
             )}
 
             {auditReportTab === 'log' && (
-            {/* Logs Table - Extreme detail */}
+            <>
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[900px]">
@@ -875,6 +875,7 @@ const AuditTrail = () => {
                     </div>
                 )}
             </div>
+            </>
             )}
         </div>
     );
