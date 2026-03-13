@@ -592,7 +592,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
     const selectedCellsRef = useRef(new Set());
-    const handleUpdateNotesRef = useRef(null);
     
     // Keep ref in sync with state
     useEffect(() => {
@@ -941,45 +940,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
         };
     }, []);
-
-    // Allow Space and Enter in Monthly Data Review notes: handle them in capture phase so no other
-    // handler can preventDefault first. Manually insert the character and update state via ref.
-    useEffect(() => {
-        if (!isMonthlyDataReview || typeof document === 'undefined') return;
-        const handler = (e) => {
-            const target = e.target;
-            if (!target || !target.getAttribute || target.getAttribute('data-monthly-notes-input') !== 'true') return;
-            if (e.key === ' ' || e.key === 'Enter') {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                const sectionId = target.getAttribute('data-section-id');
-                const documentId = target.getAttribute('data-document-id');
-                const month = target.getAttribute('data-month');
-                const updateNotes = handleUpdateNotesRef.current;
-                if (sectionId && documentId && month && typeof updateNotes === 'function') {
-                    const start = target.selectionStart;
-                    const end = target.selectionEnd;
-                    const notes = target.value || '';
-                    const ch = e.key === ' ' ? ' ' : '\n';
-                    const newValue = notes.slice(0, start) + ch + notes.slice(end);
-                    updateNotes(sectionId, documentId, month, newValue);
-                    const nextPos = start + 1;
-                    setTimeout(() => {
-                        target.selectionStart = nextPos;
-                        target.selectionEnd = nextPos;
-                    }, 0);
-                }
-            } else {
-                e.stopImmediatePropagation();
-            }
-        };
-        window.addEventListener('keydown', handler, true);
-        document.addEventListener('keydown', handler, true);
-        return () => {
-            window.removeEventListener('keydown', handler, true);
-            document.removeEventListener('keydown', handler, true);
-        };
-    }, [isMonthlyDataReview]);
 
     // Sync selectedYear from URL (docYear) so deep links open with correct year and popup shows comments
     useEffect(() => {
@@ -2454,11 +2414,6 @@ const getAssigneeColor = (identifier, users) => {
         }
         saveToDatabase();
     }, [selectedYear]);
-
-    useEffect(() => {
-        handleUpdateNotesRef.current = handleUpdateNotes;
-        return () => { handleUpdateNotesRef.current = null; };
-    }, [handleUpdateNotes]);
 
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -4058,6 +4013,8 @@ const getAssigneeColor = (identifier, users) => {
         const notes = getDocumentNotes(doc, month);
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
         const cellBg = isWorkingMonth ? 'bg-sky-50' : '';
+        // Uncontrolled textarea: browser handles all key input (space, enter, etc.) natively.
+        // We sync to state on change and save on blur. key resets the field when section/doc/month/year changes.
         return (
             <td
                 className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
@@ -4065,11 +4022,8 @@ const getAssigneeColor = (identifier, users) => {
                 style={{ minWidth: '180px', width: '180px' }}
             >
                 <textarea
-                    data-monthly-notes-input="true"
-                    data-section-id={section.id}
-                    data-document-id={doc.id}
-                    data-month={month}
-                    value={notes}
+                    key={`notes-${section.id}-${doc.id}-${month}-${selectedYear}`}
+                    defaultValue={notes}
                     onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
                     onBlur={() => {
                         lastSavedDataRef.current = null;
