@@ -8662,20 +8662,20 @@ const Clients = React.memo(() => {
 
         const getStageBadgeClasses = (stage) => {
             const lightMap = {
-                'No Engagement': 'bg-slate-100 text-slate-800',
-                Awareness: 'bg-gray-100 text-gray-800',
-                Interest: 'bg-blue-100 text-blue-800',
-                Desire: 'bg-yellow-100 text-yellow-800',
+                'No Engagement': 'bg-white text-gray-800 border border-gray-200',
+                Awareness: 'bg-pink-100 text-pink-800',
+                Interest: 'bg-yellow-100 text-yellow-800',
+                Desire: 'bg-blue-100 text-blue-800',
                 Action: 'bg-green-100 text-green-800'
             };
             const darkMap = {
-                'No Engagement': 'bg-slate-700 text-slate-200',
-                Awareness: 'bg-gray-700 text-gray-200',
-                Interest: 'bg-blue-900 text-blue-200',
-                Desire: 'bg-yellow-900 text-yellow-200',
+                'No Engagement': 'bg-gray-700 text-gray-200 border border-gray-600',
+                Awareness: 'bg-pink-900 text-pink-200',
+                Interest: 'bg-yellow-900 text-yellow-200',
+                Desire: 'bg-blue-900 text-blue-200',
                 Action: 'bg-green-900 text-green-200'
             };
-            return (isDark ? darkMap : lightMap)[stage] || (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800');
+            return (isDark ? darkMap : lightMap)[stage] || (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200');
         };
 
         const typeBadgeClasses = (type) => {
@@ -9024,10 +9024,10 @@ const Clients = React.memo(() => {
                                                 value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((lead.aidaStatus ?? (lead.stage || 'awareness')).toLowerCase())) || 'Awareness'}
                                                 onChange={e => handleUpdateLeadAidaStatus(lead.id, e.target.value)}
                                                 className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'no engagement' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'awareness' ? (isDark ? 'bg-pink-900 text-pink-200' : 'bg-pink-100 text-pink-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'interest' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                    (lead.aidaStatus ?? (lead.stage || '')).toLowerCase() === 'desire' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
                                                     (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                                 }`}
                                             >
@@ -9119,10 +9119,10 @@ const Clients = React.memo(() => {
                                                     value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === ((site.aidaStatus || 'awareness').toLowerCase())) || 'Awareness'}
                                                     onChange={e => handleUpdateSiteAidaStatus(lead, site, siteIdx, e.target.value)}
                                                     className={`w-full min-w-[6.5rem] px-2 py-1 text-xs font-medium rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-offset-0 ${
-                                                        (site.aidaStatus || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
-                                                        (site.aidaStatus || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                                        (site.aidaStatus || '').toLowerCase() === 'interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                                        (site.aidaStatus || '').toLowerCase() === 'desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'no engagement' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'awareness' ? (isDark ? 'bg-pink-900 text-pink-200' : 'bg-pink-100 text-pink-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'interest' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                                        (site.aidaStatus || '').toLowerCase() === 'desire' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
                                                         (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                                     }`}
                                                 >

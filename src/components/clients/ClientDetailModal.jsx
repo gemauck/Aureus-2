@@ -5868,11 +5868,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <td className="px-4 py-3">
                                                                 {site.aidaStatus ? (
                                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                                        site.aidaStatus === 'Action' ? 'bg-green-100 text-green-800' :
-                                                                        site.aidaStatus === 'Desire' ? 'bg-amber-100 text-amber-800' :
+                                                                        site.aidaStatus === 'No Engagement' ? 'bg-white text-gray-800 border border-gray-200' :
+                                                                        site.aidaStatus === 'Awareness' ? 'bg-pink-100 text-pink-800' :
                                                                         site.aidaStatus === 'Interest' ? 'bg-yellow-100 text-yellow-800' :
-                                                                        site.aidaStatus === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
-                                                                        'bg-blue-100 text-blue-800'
+                                                                        site.aidaStatus === 'Desire' ? 'bg-blue-100 text-blue-800' :
+                                                                        site.aidaStatus === 'Action' ? 'bg-green-100 text-green-800' :
+                                                                        'bg-white text-gray-800 border border-gray-200'
                                                                     }`}>{site.aidaStatus}</span>
                                                                 ) : (
                                                                     <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>—</span>
@@ -6021,11 +6022,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             const relatedSite = formData.sites?.find(s => s.id === opportunity.relatedSiteId);
                                             const aidaStatus = opportunity.aidaStatus ?? opportunity.stage;
                                             const stageColor = 
-                                                aidaStatus === 'Awareness' ? 'bg-blue-100 text-blue-700' :
+                                                aidaStatus === 'No Engagement' ? 'bg-white text-gray-700 border border-gray-200' :
+                                                aidaStatus === 'Awareness' ? 'bg-pink-100 text-pink-700' :
                                                 aidaStatus === 'Interest' ? 'bg-yellow-100 text-yellow-700' :
-                                                aidaStatus === 'Desire' ? 'bg-orange-100 text-orange-700' :
+                                                aidaStatus === 'Desire' ? 'bg-blue-100 text-blue-700' :
                                                 aidaStatus === 'Action' ? 'bg-green-100 text-green-700' :
-                                                'bg-gray-100 text-gray-700';
+                                                'bg-white text-gray-700 border border-gray-200';
 
                                             return (
                                                 <div 

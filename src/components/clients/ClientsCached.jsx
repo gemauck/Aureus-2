@@ -929,10 +929,10 @@ opp.status !== 'Closed Lost' &&
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                                            lead.stage === 'No Engagement' ? (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800') :
-                                            lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                            lead.stage === 'Interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                            lead.stage === 'Desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                            lead.stage === 'No Engagement' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
+                                            lead.stage === 'Awareness' ? (isDark ? 'bg-pink-900 text-pink-200' : 'bg-pink-100 text-pink-800') :
+                                            lead.stage === 'Interest' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                            lead.stage === 'Desire' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
                                             (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                         }`}>
                                             {lead.stage || 'Awareness'}

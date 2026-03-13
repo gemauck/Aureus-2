@@ -2832,12 +2832,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             )}
                                                             {groupBy === 'engagementStage' && (
                                                                 <span className={`px-2 py-0.5 text-[10px] rounded-full ${
-                                                                    itemStage === 'No Engagement' ? 'bg-slate-100 text-slate-800' :
-                                                                    itemStage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
-                                                                    itemStage === 'Interest' ? 'bg-blue-100 text-blue-800' :
-                                                                    itemStage === 'Desire' ? 'bg-yellow-100 text-yellow-800' :
+                                                                    itemStage === 'No Engagement' ? 'bg-white text-gray-800 border border-gray-200' :
+                                                                    itemStage === 'Awareness' ? 'bg-pink-100 text-pink-800' :
+                                                                    itemStage === 'Interest' ? 'bg-yellow-100 text-yellow-800' :
+                                                                    itemStage === 'Desire' ? 'bg-blue-100 text-blue-800' :
                                                                     itemStage === 'Action' ? 'bg-green-100 text-green-800' :
-                                                                    'bg-gray-100 text-gray-800'
+                                                                    'bg-white text-gray-800 border border-gray-200'
                                                                 }`}>
                                                                     {itemStage}
                                                                 </span>
@@ -3107,12 +3107,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             value={STAGE_OPTIONS.find(s => s.toLowerCase() === (item.stage || '').toLowerCase()) || ''}
                                                             onChange={e => handlePipelineStageChange(item, e.target.value)}
                                                             className={`min-w-[7rem] w-full max-w-[10rem] px-2 py-1.5 text-xs font-medium rounded-full border border-gray-200 cursor-pointer focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                                                                (item.stage || '').toLowerCase() === 'no engagement' ? 'bg-slate-100 text-slate-800' :
-                                                                (item.stage || '').toLowerCase() === 'awareness' ? 'bg-gray-100 text-gray-800' :
-                                                                (item.stage || '').toLowerCase() === 'interest' ? 'bg-blue-100 text-blue-800' :
-                                                                (item.stage || '').toLowerCase() === 'desire' ? 'bg-yellow-100 text-yellow-800' :
+                                                                (item.stage || '').toLowerCase() === 'no engagement' ? 'bg-white text-gray-800 border border-gray-200' :
+                                                                (item.stage || '').toLowerCase() === 'awareness' ? 'bg-pink-100 text-pink-800' :
+                                                                (item.stage || '').toLowerCase() === 'interest' ? 'bg-yellow-100 text-yellow-800' :
+                                                                (item.stage || '').toLowerCase() === 'desire' ? 'bg-blue-100 text-blue-800' :
                                                                 (item.stage || '').toLowerCase() === 'action' ? 'bg-green-100 text-green-800' :
-                                                                'bg-gray-100 text-gray-800'
+                                                                'bg-white text-gray-800 border border-gray-200'
                                                             }`}
                                                         >
                                                             <option value="">—</option>
