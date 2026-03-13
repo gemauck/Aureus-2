@@ -3065,7 +3065,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 className={`hover:bg-gray-50 cursor-pointer transition ${isNested ? 'bg-gray-50/50' : ''}`}
                                                 onClick={() => openDealDetail(item)}
                                             >
-                                                <td className={`${rowPadding} ${isNested ? 'pl-12 pr-6 border-l-4 border-l-amber-200' : 'px-6'}`}>
+                                                <td className={`${rowPadding} ${(isLead || isClient) && !isNested ? 'px-6 border-l-4 border-l-amber-200' : isNested ? 'pl-12 pr-6' : 'px-6'}`}>
                                                     <div className="flex items-center gap-3">
                                                         {!isNested && (
                                                             <button
@@ -3086,12 +3086,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             </button>
                                                         )}
                                                         {isNested && <span className="w-7 shrink-0" aria-hidden />}
-                                                        {item.thumbnail ? (
-                                                            <img src={item.thumbnail} alt={item.name || ''} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" />
-                                                        ) : (
-                                                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-600 shrink-0" aria-hidden>
-                                                                {(item.name || item.site?.name || '?').toString().charAt(0).toUpperCase()}
-                                                            </div>
+                                                        {!(isSite && isNested) && (
+                                                            item.thumbnail ? (
+                                                                <img src={item.thumbnail} alt={item.name || ''} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" />
+                                                            ) : (
+                                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-600 shrink-0" aria-hidden>
+                                                                    {(item.name || item.site?.name || '?').toString().charAt(0).toUpperCase()}
+                                                                </div>
+                                                            )
                                                         )}
                                                         <div className="min-w-0">
                                                             <span className={`font-medium text-gray-900 block ${isNested ? 'text-xs' : 'text-sm'}`}>
