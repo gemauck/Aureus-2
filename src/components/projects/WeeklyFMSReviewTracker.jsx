@@ -786,13 +786,10 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     throw directErr;
                 }
             }
+            // Always merge into full project so we never replace viewing project with a partial API response
+            // (dedicated endpoint returns only { id, weeklyFMSReviewSections }, which would drop name, client, list, etc.)
             if (!options.skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                const updated = result?.project || result?.data?.project || result?.data;
-                if (updated) {
-                    window.updateViewingProject({ ...updated, weeklyFMSReviewSections: serialized });
-                } else {
-                    window.updateViewingProject({ ...project, weeklyFMSReviewSections: serialized });
-                }
+                window.updateViewingProject({ ...project, weeklyFMSReviewSections: serialized });
             }
             
             // Mark as saved

@@ -2868,38 +2868,34 @@ const Projects = () => {
                         if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                         return false;
                     })(),
-                    // Preserve year-map object so Weekly FMS comments/status persist
-                    weeklyFMSReviewSections: (updatedProject.weeklyFMSReviewSections != null && typeof updatedProject.weeklyFMSReviewSections === 'object') ? updatedProject.weeklyFMSReviewSections : {}
+                    // Preserve year-map object or JSON string so Weekly FMS comments/status persist (tracker sends string after save)
+                    weeklyFMSReviewSections: (updatedProject.weeklyFMSReviewSections != null && (typeof updatedProject.weeklyFMSReviewSections === 'object' || typeof updatedProject.weeklyFMSReviewSections === 'string')) ? updatedProject.weeklyFMSReviewSections : {}
                 };
                 
+                // Never replace full project with a partial object (e.g. API returned only { id, weeklyFMSReviewSections })
+                // so the project never "disappears" from the list or closes when saving comments/status from Weekly FMS.
+                const isPartial = !normalized.id || (normalized.name === undefined && normalized.client === undefined);
+
                 // Use smart comparison to prevent unnecessary re-renders
                 setViewingProject(prev => {
-                    if (!prev || prev.id !== normalized.id) {
-                        return normalized;
-                    }
-                    // Compare important fields to see if anything actually changed (include module flags so tabs persist on navigation)
+                    if (!prev) return normalized;
+                    if (prev.id !== normalized.id) return normalized;
+                    // If update is partial, only merge weeklyFMSReviewSections into current project; never replace with thin object
+                    const effective = isPartial && updatedProject.weeklyFMSReviewSections != null
+                        ? { ...prev, weeklyFMSReviewSections: normalized.weeklyFMSReviewSections }
+                        : normalized;
                     const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
-                        const newValue = normalized[field];
+                        const newValue = effective[field];
                         return JSON.stringify(prevValue) !== JSON.stringify(newValue);
                     });
-                    
-                    if (!hasChanges) {
-                        return prev; // Return previous object to prevent re-render
+                    if (!hasChanges) return prev;
+                    // Only update projects list with a full project object (never with a partial)
+                    if (!isPartial) {
+                        setProjects(prevProjects => prevProjects.map(p => (String(p.id) === String(effective.id) ? effective : p)));
                     }
-                    
-                    // Also update the projects array to keep it in sync
-                    setProjects(prevProjects => {
-                        return prevProjects.map(p => {
-                            if (String(p.id) === String(normalized.id)) {
-                                return normalized;
-                            }
-                            return p;
-                        });
-                    });
-                    
-                    return normalized;
+                    return effective;
                 });
             };
             
@@ -3874,6 +3870,15 @@ const Projects = () => {
                 window.alert('Failed to delete task.');
             }
         };
+        const mergeTaskIntoAllTasksState = (taskId, updated) => {
+            const mergeInto = (t) => {
+                const merged = { ...t, ...updated };
+                if (merged.project === undefined) merged.project = t.project;
+                return merged;
+            };
+            setAllTasksList(prev => prev.map(t => t.id === taskId ? mergeInto(t) : t));
+            if (allTasksSelectedTask?.id === taskId) setAllTasksSelectedTask(prev => prev ? mergeInto(prev) : null);
+        };
         const patchTaskInAllTasks = async (taskId, patch) => {
             if (!taskId || !window.DatabaseAPI?.makeRequest) return;
             setAllTasksError(null);
@@ -3888,19 +3893,52 @@ const Projects = () => {
                     setAllTasksError('Task update did not return updated data. Please refresh and try again.');
                     return;
                 }
-                // Merge response into list row, preserving project/client (PATCH response does not include project)
-                const mergeInto = (t) => {
-                    const merged = { ...t, ...updated };
-                    if (merged.project === undefined) merged.project = t.project;
-                    return merged;
-                };
-                setAllTasksList(prev => prev.map(t => t.id === taskId ? mergeInto(t) : t));
-                if (allTasksSelectedTask?.id === taskId) setAllTasksSelectedTask(prev => prev ? mergeInto(prev) : null);
+                mergeTaskIntoAllTasksState(taskId, updated);
                 if (window.DatabaseAPI.invalidateTasksCache) window.DatabaseAPI.invalidateTasksCache();
             } catch (err) {
                 console.warn('All Tasks: patch failed', err);
                 setAllTasksError(err?.message || 'Failed to save change. Please try again.');
                 setTimeout(() => setAllTasksError(prev => (prev && prev.includes('save change') ? null : prev)), 5000);
+            }
+        };
+        const saveTaskFromAllTasksModal = async (updated) => {
+            if (!updated?.id || !window.DatabaseAPI?.makeRequest) return;
+            setAllTasksError(null);
+            const dueDateVal = updated.dueDate === '' || updated.dueDate === null || updated.dueDate === undefined ? null : updated.dueDate;
+            const patch = {
+                title: updated.title,
+                description: updated.description ?? '',
+                status: updated.status ?? 'todo',
+                priority: updated.priority ?? 'Medium',
+                assigneeId: updated.assigneeId ?? null,
+                assignee: updated.assignee ?? '',
+                dueDate: dueDateVal,
+                listId: updated.listId ?? null,
+                estimatedHours: updated.estimatedHours ?? null,
+                actualHours: updated.actualHours ?? null,
+                blockedBy: updated.blockedBy ?? '',
+                tags: Array.isArray(updated.tags) ? updated.tags : [],
+                attachments: Array.isArray(updated.attachments) ? updated.attachments : [],
+                checklist: Array.isArray(updated.checklist) ? updated.checklist : [],
+                dependencies: Array.isArray(updated.dependencies) ? updated.dependencies : [],
+                subscribers: Array.isArray(updated.subscribers) ? updated.subscribers : [],
+                customFields: updated.customFields && typeof updated.customFields === 'object' ? updated.customFields : {}
+            };
+            try {
+                const res = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(updated.id)}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(patch)
+                });
+                const data = res?.data ?? res;
+                const saved = data?.task || data;
+                if (saved?.id) {
+                    mergeTaskIntoAllTasksState(updated.id, saved);
+                    if (window.DatabaseAPI.invalidateTasksCache) window.DatabaseAPI.invalidateTasksCache();
+                }
+            } catch (err) {
+                console.warn('All Tasks: modal save failed', err);
+                setAllTasksError(err?.message || 'Failed to save task. Please try again.');
+                setTimeout(() => setAllTasksError(prev => (prev && prev.includes('save task') ? null : prev)), 5000);
             }
         };
         const getAllTasksDueDateValue = (task) => {
@@ -4262,8 +4300,7 @@ const Projects = () => {
                         users: [],
                         onClose: closeAllTasksModal,
                         onUpdate: (updated) => {
-                            setAllTasksList(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
-                            setAllTasksSelectedTask(updated);
+                            saveTaskFromAllTasksModal(updated);
                         },
                         onDeleteTask: () => {
                             closeAllTasksModal();
