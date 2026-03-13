@@ -3763,7 +3763,7 @@ const getAssigneeColor = (identifier, users) => {
             <td
                 data-cell-key={cellKey}
                 tabIndex={0}
-                className={`px-3 py-1 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
+                className={`px-3 py-1.5 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
                 onClick={handleCellClick}
                 onMouseEnter={() => setHoveredStatusCell(cellKey)}
                 onMouseLeave={() => setHoveredStatusCell(null)}
@@ -3829,7 +3829,7 @@ const getAssigneeColor = (identifier, users) => {
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full pl-2 pr-20 py-1 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
+                        className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -4017,7 +4017,7 @@ const getAssigneeColor = (identifier, users) => {
         // We sync to state on change and save on blur. key resets the field when section/doc/month/year changes.
         return (
             <td
-                className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
+                className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
                 style={{ minWidth: '180px', width: '180px' }}
             >
@@ -4034,8 +4034,8 @@ const getAssigneeColor = (identifier, users) => {
                         saveToDatabase();
                     }}
                     placeholder="Notes..."
-                    rows={2}
-                    className="w-full min-w-0 px-1.5 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                    rows={3}
+                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                     aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
                 />
             </td>
@@ -7049,7 +7049,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     onDrop={canDrag ? (e) => handleDocumentDrop(e, section.id, docIndex) : undefined}
                                                 >
                                                     <td
-                                                        className={`px-3 py-1 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-8 bg-gray-50' : 'bg-white'}`}
+                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-10 bg-gray-50' : 'bg-white'}`}
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
@@ -7065,7 +7065,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                 <span className="inline-flex flex-shrink-0 w-4" aria-hidden="true"></span>
                                                             )}
                                                             <div className="flex-1 min-w-0">
-                                                            <div className="text-xs font-semibold text-gray-900 leading-tight">{doc.name}</div>
+                                                            <div className="text-sm font-semibold text-gray-900 leading-snug">{doc.name}</div>
                                                             {doc.description && (() => {
                                                                 // Check if description contains ISO date strings and format them
                                                                 let desc = String(doc.description);
@@ -7117,7 +7117,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                 const isExpanded = expandedDescriptionId === doc.id;
                                                                 
                                                                 return (
-                                                                    <div className="mt-1 text-[11px] text-gray-500 flex items-center gap-1 overflow-hidden">
+                                                                    <div className="mt-1.5 text-xs text-gray-500 flex items-center gap-1 overflow-hidden">
                                                                         <span className="truncate flex-1 min-w-0">{truncated}</span>
                                                                         {isLong && (
                                                                             <button
@@ -7135,7 +7135,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             })()}
                                                         </div>
                                                             {/* Assign: compact icon + chips only; dropdown rendered fixed so not covered */}
-                                                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                                                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
                                                                 {(() => {
                                                                     const assigned = normalizeAssignedTo(doc);
                                                                     const openAssign = (e) => {
@@ -7201,7 +7201,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                                         type="button"
                                                                                         title={getAssigneeLabel(uid)}
                                                                                         onClick={openAssign}
-                                                                                        className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold shrink-0"
+                                                                                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
                                                                                         style={(() => {
                                                                                             const color = getAssigneeColor(uid, users);
                                                                                             return { backgroundColor: color.bg, color: color.text, border: `1px solid ${color.ring}` };
@@ -7229,7 +7229,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                                     type="button"
                                                                                     title="Assign User"
                                                                                     onClick={openAssign}
-                                                                                    className="inline-flex items-center justify-center w-5 h-5 text-sky-600 hover:text-sky-700 hover:bg-sky-50 rounded"
+                                                                                    className="inline-flex items-center justify-center w-6 h-6 text-sky-600 hover:text-sky-700 hover:bg-sky-50 rounded"
                                                                                     aria-label="Assign User"
                                                                                 >
                                                                                     <i className="fas fa-user-plus text-xs"></i>
@@ -7245,15 +7245,15 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         isMonthlyDataReview ? (
                                                             months.map((month) => (
                                                                 <React.Fragment key={`${doc.id}-${month}`}>
-                                                                    <td className="px-3 py-1 text-xs border-l-2 border-gray-200 bg-gray-200" role="gridcell" />
-                                                                    <td className="px-2 py-1 text-xs border-l border-gray-200 bg-gray-200" role="gridcell" />
+                                                                    <td className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200" role="gridcell" />
+                                                                    <td className="px-2 py-1.5 text-xs border-l border-gray-200 bg-gray-200" role="gridcell" />
                                                                 </React.Fragment>
                                                             ))
                                                         ) : (
                                                             months.map((month) => (
                                                                 <td
                                                                     key={`${doc.id}-${month}`}
-                                                                    className="px-3 py-1 text-xs border-l-2 border-gray-200 bg-gray-200"
+                                                                    className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200"
                                                                     role="gridcell"
                                                                 />
                                                             ))
@@ -7274,34 +7274,34 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             ))
                                                         )
                                                     )}
-                                                    <td className={`px-3 py-1 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
-                                                        <div className="flex items-center gap-1 justify-center">
+                                                    <td className={`px-4 py-2 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
+                                                        <div className="flex items-center gap-2 justify-center">
                                                             {!doc.parentId && (
                                                                 <button
                                                                     onClick={() => handleAddSubDocument(section.id, doc)}
-                                                                    className="p-1 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors"
+                                                                    className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
                                                                     title="Add sub-document"
                                                                 >
-                                                                    <i className="fas fa-layer-group text-xs"></i>
+                                                                    <i className="fas fa-layer-group text-sm"></i>
                                                                 </button>
                                                             )}
-                                                            <span className={isMasterGreyedOut ? 'opacity-60 pointer-events-none inline-flex items-center gap-1' : 'inline-flex items-center gap-1'}>
+                                                            <span className={isMasterGreyedOut ? 'opacity-60 pointer-events-none inline-flex items-center gap-2' : 'inline-flex items-center gap-2'}>
                                                                 <button
                                                                     onClick={() => handleEditDocument(section, doc)}
-                                                                    className="p-1 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors"
+                                                                    className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
                                                                     title="Edit document"
                                                                     disabled={isMasterGreyedOut}
                                                                 >
-                                                                    <i className="fas fa-edit text-xs"></i>
+                                                                    <i className="fas fa-edit text-sm"></i>
                                                                 </button>
                                                                 <button
                                                                     onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
-                                                                    className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                    className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                                     type="button"
                                                                     title="Delete document"
                                                                     disabled={isMasterGreyedOut}
                                                                 >
-                                                                    <i className="fas fa-trash text-xs"></i>
+                                                                    <i className="fas fa-trash text-sm"></i>
                                                                 </button>
                                                             </span>
                                                         </div>
