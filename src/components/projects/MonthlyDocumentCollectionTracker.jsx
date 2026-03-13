@@ -1718,13 +1718,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // STATUS OPTIONS
     // ============================================================
     
-    const statusOptions = [
+    // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable
+    const documentCollectionStatusOptions = [
+        { value: 'requested', label: 'Requested', color: 'bg-sky-400 text-white font-semibold', cellColor: 'bg-sky-400 border-l-4 border-sky-600 shadow-sm' },
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-300 text-white font-semibold', cellColor: 'bg-red-300 border-l-4 border-red-500 shadow-sm' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-300 text-white font-semibold', cellColor: 'bg-yellow-300 border-l-4 border-yellow-500 shadow-sm' },
+        { value: 'collected', label: 'Collected', color: 'bg-green-400 text-white font-semibold', cellColor: 'bg-green-400 border-l-4 border-green-500 shadow-sm' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-300 text-white font-semibold', cellColor: 'bg-gray-300 border-l-4 border-gray-500 shadow-sm' }
+    ];
+    // Monthly Data Review: Not Done, In Progress, Done, Issue
+    const monthlyDataReviewStatusOptions = [
         { value: 'not-done', label: 'Not Done', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
         { value: 'in-progress', label: 'In Progress', color: 'bg-amber-200 text-slate-700 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
         { value: 'done', label: 'Done', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
         { value: 'issue', label: 'Issue', color: 'bg-orange-200 text-slate-700 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' }
     ];
-    
+    const statusOptions = isMonthlyDataReview ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
+
     const getStatusConfig = (status) => {
         if (!status || status === '' || status === 'Select Status') {
             return null; // Return null for empty/select status to show white background
@@ -4188,7 +4198,8 @@ Abcotronics`;
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [sendPlainTextOnly, setSendPlainTextOnly] = useState(false);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
-        const [scheduleStopStatus, setScheduleStopStatus] = useState('done');
+        const defaultStopWhenStatus = isMonthlyDataReview ? 'done' : 'collected';
+        const [scheduleStopStatus, setScheduleStopStatus] = useState(defaultStopWhenStatus);
         const [sending, setSending] = useState(false);
         const [savingTemplate, setSavingTemplate] = useState(false);
         const [result, setResult] = useState(null);
@@ -4287,7 +4298,8 @@ Abcotronics`;
                 : (fallbackPlainText != null ? fallbackPlainText : false);
             setSendPlainTextOnly(plainTextValue);
             setScheduleFrequency(initialTemplate.schedule.frequency);
-            setScheduleStopStatus(initialTemplate.schedule.stopWhenStatus);
+            const loadedStop = initialTemplate.schedule.stopWhenStatus;
+            setScheduleStopStatus(loadedStop && statusOptions.some(o => o.value === loadedStop) ? loadedStop : defaultStopWhenStatus);
             setNewContact('');
             setNewContactCc('');
             setResult(null);
@@ -4612,7 +4624,7 @@ Abcotronics`;
                     frequency: tpl?.schedule?.frequency === 'weekly' || tpl?.schedule?.frequency === 'monthly'
                         ? tpl.schedule.frequency
                         : 'none',
-                    stopWhenStatus: (tpl?.schedule?.stopWhenStatus || 'done')
+                    stopWhenStatus: (tpl?.schedule?.stopWhenStatus || defaultStopWhenStatus)
                 }
             };
         }
@@ -4648,7 +4660,7 @@ Abcotronics`;
                 sendPlainTextOnly: nextPlainTextOnly,
                 schedule: {
                     frequency: scheduleFrequency === 'none' ? 'none' : scheduleFrequency,
-                    stopWhenStatus: scheduleStopStatus || 'done'
+                    stopWhenStatus: scheduleStopStatus || defaultStopWhenStatus
                 }
             });
         }
@@ -4769,7 +4781,8 @@ Abcotronics`;
                 setRecipientName(normalized.recipientName || '');
                 setSendPlainTextOnly(!!normalized.sendPlainTextOnly);
                 setScheduleFrequency(normalized.schedule.frequency);
-                setScheduleStopStatus(normalized.schedule.stopWhenStatus);
+                const savedStop = normalized.schedule.stopWhenStatus;
+                setScheduleStopStatus(savedStop && statusOptions.some(o => o.value === savedStop) ? savedStop : defaultStopWhenStatus);
                 setLastSavedTemplate(normalized);
                 setResult({ saved: true, message: 'Saved changes', source: 'save' });
                 showSaveNotice({ type: 'success', message: 'Saved changes' });
@@ -4929,7 +4942,8 @@ Abcotronics`;
                             ...section,
                             documents: (section.documents || []).map(doc => {
                                 if (String(doc.id) !== String(ctx.doc.id)) return doc;
-                                const updatedStatus = setStatusForYear(doc.collectionStatus || {}, ctx.month, 'not-done', selectedYear);
+                                const statusAfterSend = isMonthlyDataReview ? 'not-done' : 'requested';
+                                const updatedStatus = setStatusForYear(doc.collectionStatus || {}, ctx.month, statusAfterSend, selectedYear);
                                 return { ...doc, collectionStatus: updatedStatus };
                             })
                         };
