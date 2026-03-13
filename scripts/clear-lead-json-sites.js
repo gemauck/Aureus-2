@@ -51,13 +51,12 @@ async function main() {
     process.exit(1)
   }
 
-  const before = (client.sitesJsonb != null && Array.isArray(client.sitesJsonb))
+  const beforeJson = (client.sitesJsonb != null && Array.isArray(client.sitesJsonb))
     ? client.sitesJsonb.length
     : (typeof client.sites === 'string' ? (JSON.parse(client.sites || '[]').length) : 0)
-  if (before === 0) {
-    console.log('Lead already has no sites in JSON:', client.name, client.id)
-    return
-  }
+
+  const siteRows = await prisma.clientSite.findMany({ where: { clientId: client.id } })
+  const beforeTable = siteRows.length
 
   await prisma.client.update({
     where: { id: client.id },
@@ -66,7 +65,11 @@ async function main() {
       sites: '[]'
     }
   })
-  console.log('Cleared JSON sites for lead:', client.name, 'id:', client.id, '(was', before, 'sites)')
+  if (siteRows.length > 0) {
+    await prisma.clientSite.deleteMany({ where: { clientId: client.id } })
+  }
+  console.log('Cleared lead:', client.name, 'id:', client.id)
+  console.log('  JSON sites:', beforeJson, '-> 0; ClientSite rows:', beforeTable, '-> 0')
 }
 
 main()
