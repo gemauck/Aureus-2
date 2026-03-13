@@ -3086,6 +3086,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             </button>
                                                         )}
                                                         {isNested && <span className="w-7 shrink-0" aria-hidden />}
+                                                        {item.thumbnail ? (
+                                                            <img src={item.thumbnail} alt={item.name || ''} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" />
+                                                        ) : (
+                                                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-600 shrink-0" aria-hidden>
+                                                                {(item.name || item.site?.name || '?').toString().charAt(0).toUpperCase()}
+                                                            </div>
+                                                        )}
                                                         <div className="min-w-0">
                                                             <span className={`font-medium text-gray-900 block ${isNested ? 'text-xs' : 'text-sm'}`}>
                                                                 {isSite && isNested ? (item.site?.name || item.name?.replace?.(`${parentName} · `, '') || item.name) : item.name}
