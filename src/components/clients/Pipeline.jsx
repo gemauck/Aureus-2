@@ -2568,31 +2568,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         handleTouchStart(e, item, itemType);
                                                     }}
                                                     onDragStart={(e) => {
-                                                        console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target, currentTarget: e.currentTarget });
-                                                        
-                                                        // Prevent drag if clicking directly on button
                                                         if (e.target.tagName === 'BUTTON' || (e.target.closest('button') && e.target.closest('button') === e.target)) {
-                                                            console.log('❌ Drag prevented - clicked directly on button');
                                                             e.preventDefault();
                                                             e.stopPropagation();
                                                             return false;
                                                         }
-                                                        
-                                                        // Set dataTransfer data (like working KanbanView)
                                                         e.dataTransfer.setData('pipelineItemId', String(item.id));
                                                         e.dataTransfer.setData('pipelineItemType', String(itemType));
+                                                        e.dataTransfer.setData('text/plain', String(item.id));
                                                         e.dataTransfer.effectAllowed = 'move';
-                                                        
-                                                        console.log('✅ Drag data set', { 
-                                                            itemId: item.id, 
-                                                            itemType,
-                                                            dataTransferTypes: Array.from(e.dataTransfer.types)
-                                                        });
-                                                        
-                                                        // Also call the handler for state management
-                                                        if (onItemDragStart) {
-                                                            onItemDragStart(e, item, itemType);
-                                                        }
+                                                        e.preventDefault(); // Custom mouse/touch only; no native drag
+                                                        if (onItemDragStart) onItemDragStart(e, item, itemType);
                                                     }}
                                                     onDragEnd={(e) => {
                                                         // Clear drag start time
