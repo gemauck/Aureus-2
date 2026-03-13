@@ -1825,6 +1825,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const offsetX = e.clientX - cardRect.left;
         const offsetY = e.clientY - cardRect.top;
         
+        const initialStage = kanbanGroupBy === 'aidaStatus'
+            ? normalizeStageToAida(item.aidaStatus ?? item.stage)
+            : normalizeLifecycleStage(item.engagementStage ?? (item.status || 'Potential'));
         const dragState = {
             item,
             type,
@@ -1835,7 +1838,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             offsetX,
             offsetY,
             cardRect,
-            initialStage: item.stage,
+            initialStage,
             cardElement,
             hasMoved: false,
             targetStage: null,
@@ -1926,22 +1929,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
             state.currentX = moveEvent.clientX;
             state.currentY = moveEvent.clientY;
             
-            // Find which column we're over
+            // Find which column we're over (match touch path: use data-pipeline-stage first)
             const elementBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
             let columnName = null;
-            
             if (elementBelow) {
-                const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
-                if (columnContainer) {
-                    const heading = columnContainer.querySelector('h3');
-                    if (heading) {
-                        columnName = heading.textContent?.trim();
-                    }
+                const pipelineStageEl = elementBelow.closest('[data-pipeline-stage]');
+                if (pipelineStageEl) {
+                    columnName = pipelineStageEl.getAttribute('data-pipeline-stage');
                 }
                 if (!columnName) {
-                    const dataColumn = elementBelow.closest('[data-column-name]');
-                    if (dataColumn) {
-                        columnName = dataColumn.dataset.columnName;
+                    const columnContainer = elementBelow.closest('[class*="flex-shrink"]');
+                    if (columnContainer) {
+                        const heading = columnContainer.querySelector('h3');
+                        if (heading) columnName = heading.textContent?.trim();
                     }
                 }
             }
@@ -2041,6 +2041,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const touch = e.touches[0];
         const cardElement = e.currentTarget;
         const cardRect = cardElement.getBoundingClientRect();
+        const initialStage = kanbanGroupBy === 'aidaStatus'
+            ? normalizeStageToAida(item.aidaStatus ?? item.stage)
+            : normalizeLifecycleStage(item.engagementStage ?? (item.status || 'Potential'));
         
         const dragState = {
             item,
@@ -2050,7 +2053,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             startX: touch.clientX,
             currentX: touch.clientX,
             cardRect,
-            initialStage: item.stage,
+            initialStage,
             cardElement
         };
         
@@ -2113,134 +2116,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
             const deltaY = Math.abs(dragState.currentY - dragState.startY);
             const minDragDistance = 10; // pixels
             
-            if ((deltaX > minDragDistance || deltaY > minDragDistance) && 
-                targetStage && targetStage !== initialStage) {
-                
-                // Perform the drop - call API first, then update local state on success
-                const token = storage.getToken();
-                
-                if (type === 'lead') {
-                    if (token && window.DatabaseAPI) {
-                        try {
-                            await window.DatabaseAPI.updateLead(item.id, { aidaStatus: targetStage });
-                            
-                            // Update local state after successful API call
-                            const updatedLeads = leads.map(lead => 
-                                lead.id === item.id ? { ...lead, stage: targetStage } : lead
-                            );
-                            setLeads(updatedLeads);
-                            storage.setLeads(updatedLeads);
-                            
-                            // Refresh data from API to ensure consistency
-                            setTimeout(() => {
-                                setRefreshKey(k => k + 1);
-                            }, 500);
-                        } catch (error) {
-                            console.error('❌ Pipeline: Failed to update lead stage in API:', error);
-                            alert('Failed to save lead stage change. Please try again.');
+            if ((deltaX > minDragDistance || deltaY > minDragDistance) && targetStage && targetStage !== initialStage) {
+                setJustDragged(true);
+                const fakeEvent = {
+                    preventDefault: () => {},
+                    stopPropagation: () => {},
+                    dataTransfer: {
+                        getData: (key) => {
+                            if (key === 'pipelineItemId') return String(item.id);
+                            if (key === 'pipelineItemType') return String(type);
+                            return '';
                         }
-                    } else {
-                        // No auth - just update local state
-                        const updatedLeads = leads.map(lead => 
-                            lead.id === item.id ? { ...lead, stage: targetStage } : lead
-                        );
-                        setLeads(updatedLeads);
                     }
-                } else if (type === 'opportunity') {
-                    if (token && window.api?.updateOpportunity) {
-                        try {
-                            await window.api.updateOpportunity(item.id, { aidaStatus: targetStage });
-                            
-                            // Update local state after successful API call
-                            const updatedClients = clients.map(client => {
-                                if (client.id === item.clientId) {
-                                    const updatedOpportunities = client.opportunities.map(opp =>
-                                        opp.id === item.id ? { ...opp, stage: targetStage } : opp
-                                    );
-                                    return { ...client, opportunities: updatedOpportunities };
-                                }
-                                return client;
-                            });
-                            setClients(updatedClients);
-                            storage.setClients(updatedClients);
-                            
-                            // Refresh data from API to ensure consistency
-                            setTimeout(() => {
-                                setRefreshKey(k => k + 1);
-                            }, 500);
-                        } catch (error) {
-                            console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
-                            alert('Failed to save opportunity stage change. Please try again.');
-                        }
-                    } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                        try {
-                            await window.DatabaseAPI.updateOpportunity(item.id, { aidaStatus: targetStage });
-                            
-                            // Update local state after successful API call
-                            const updatedClients = clients.map(client => {
-                                if (client.id === item.clientId) {
-                                    const updatedOpportunities = client.opportunities.map(opp =>
-                                        opp.id === item.id ? { ...opp, stage: targetStage } : opp
-                                    );
-                                    return { ...client, opportunities: updatedOpportunities };
-                                }
-                                return client;
-                            });
-                            setClients(updatedClients);
-                            storage.setClients(updatedClients);
-                            
-                            // Refresh data from API to ensure consistency
-                            setTimeout(() => {
-                                setRefreshKey(k => k + 1);
-                            }, 500);
-                        } catch (error) {
-                            console.error('❌ Pipeline: Failed to update opportunity via DatabaseAPI:', error);
-                            alert('Failed to save opportunity stage change. Please try again.');
-                        }
-                    } else if (token && window.DatabaseAPI) {
-                        try {
-                            const updatedClients = clients.map(client => {
-                                if (client.id === item.clientId) {
-                                    const updatedOpportunities = client.opportunities.map(opp =>
-                                        opp.id === item.id ? { ...opp, stage: targetStage } : opp
-                                    );
-                                    return { ...client, opportunities: updatedOpportunities };
-                                }
-                                return client;
-                            });
-                            
-                            const clientToUpdate = updatedClients.find(c => c.id === item.clientId);
-                            if (clientToUpdate) {
-                                await window.DatabaseAPI.updateClient(item.clientId, { 
-                                    opportunities: clientToUpdate.opportunities 
-                                });
-                                
-                                setClients(updatedClients);
-                                storage.setClients(updatedClients);
-                                
-                                // Refresh data from API to ensure consistency
-                                setTimeout(() => {
-                                    setRefreshKey(k => k + 1);
-                                }, 500);
-                            }
-                        } catch (error) {
-                            console.error('❌ Pipeline: Failed to update client opportunities in API:', error);
-                            alert('Failed to save opportunity stage change. Please try again.');
-                        }
-                    } else {
-                        // No auth - just update local state
-                        const updatedClients = clients.map(client => {
-                            if (client.id === item.clientId) {
-                                const updatedOpportunities = client.opportunities.map(opp =>
-                                    opp.id === item.id ? { ...opp, stage: targetStage } : opp
-                                );
-                                return { ...client, opportunities: updatedOpportunities };
-                            }
-                            return client;
-                        });
-                        setClients(updatedClients);
-                    }
-                }
+                };
+                await handleKanbanDrop(fakeEvent, targetStage, kanbanGroupBy, item);
+                setTimeout(() => setJustDragged(false), 300);
             }
             
             // Reset state
@@ -2536,13 +2426,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
         };
 
         const handleDragLeave = (e) => {
-            // Only clear if we're actually leaving the column
             const relatedTarget = e.relatedTarget;
-            if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
-                if (setDraggedOverStage) {
-                    setDraggedOverStage(null);
-                }
+            if (!relatedTarget) {
+                if (setDraggedOverStage) setDraggedOverStage(null);
+                return;
             }
+            if (e.currentTarget.contains(relatedTarget)) return; // Still inside this column
+            const otherColumn = relatedTarget.closest && relatedTarget.closest('[data-pipeline-stage]');
+            if (otherColumn && setDraggedOverStage) {
+                const stage = otherColumn.getAttribute('data-pipeline-stage');
+                if (stage) setDraggedOverStage(stage);
+                return;
+            }
+            if (setDraggedOverStage) setDraggedOverStage(null);
         };
 
         const handleDrop = (e, columnName) => {
@@ -2665,8 +2561,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         if (e.target.closest('button')) {
                                                             return;
                                                         }
-                                                        // Use mouse-based drag as primary method (HTML5 drag as fallback)
                                                         handleMouseDown(e, item, itemType);
+                                                    }}
+                                                    onTouchStart={(e) => {
+                                                        if (e.target.closest('button')) return;
+                                                        handleTouchStart(e, item, itemType);
                                                     }}
                                                     onDragStart={(e) => {
                                                         console.log('🎯 Drag start triggered', { itemId: item.id, target: e.target, currentTarget: e.currentTarget });
@@ -2733,7 +2632,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             ? 'opacity-30'
                                                             : 'opacity-100'
                                                     }`}
-                                                    style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+                                                    style={{ userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none' }}
                                                 >
                                                     {/* Card Header */}
                                                     <div 
@@ -3086,7 +2985,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             </button>
                                                         )}
                                                         {isNested && <span className="w-7 shrink-0" aria-hidden />}
-                                                        {!(isSite && isNested) && (
+                                                        {!(isSite && isNested) && item.type !== 'opportunity' && (
                                                             item.thumbnail ? (
                                                                 <img src={item.thumbnail} alt={item.name || ''} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" />
                                                             ) : (
