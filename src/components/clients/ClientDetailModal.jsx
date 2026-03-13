@@ -5851,8 +5851,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <tr>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Name</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Address</th>
-                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Stage</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>AIDA Status</th>
+                                                        <th scope="col" className={`px-4 py-2.5 text-left text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Stage</th>
                                                         <th scope="col" className={`px-4 py-2.5 text-right text-xs font-medium uppercase ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>Actions</th>
                                                     </tr>
                                                 </thead>
@@ -5865,7 +5865,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         >
                                                             <td className={`px-4 py-3 text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name || '—'}</td>
                                                             <td className={`px-4 py-3 text-sm max-w-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={site.address}>{site.address || '—'}</td>
-                                                            <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{site.stage || '—'}</td>
                                                             <td className="px-4 py-3">
                                                                 {site.aidaStatus ? (
                                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -5879,6 +5878,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>—</span>
                                                                 )}
                                                             </td>
+                                                            <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{site.stage || '—'}</td>
                                                             <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                                                                 <div className="flex justify-end gap-1">
                                                                     <button type="button" onClick={() => handleEditSite(site)} className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors" title="Edit Site"><i className="fas fa-edit"></i></button>

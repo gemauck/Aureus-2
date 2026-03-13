@@ -88,7 +88,7 @@ fi
 
 if [ -f migrate-remove-on-hold-qualified-engagement.sql ]; then
   echo
-  echo "-> Applying migration (set On Hold/Qualified engagement stage to Potential)..."
+  echo "-> Applying migration (set On Hold/Qualified/Inactive engagement stage to Potential)..."
   if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
     psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f migrate-remove-on-hold-qualified-engagement.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
   fi

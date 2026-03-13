@@ -21,7 +21,7 @@ const ClientNewsFeed = () => {
     const [isRefreshingNews, setIsRefreshingNews] = useState(false); // true while fetching new articles from RSS
     const [selectedClient, setSelectedClient] = useState('all');
     const [clients, setClients] = useState([]);
-    const [filterDate, setFilterDate] = useState('month'); // all, today, week, month — default month so old articles (e.g. Dec 2023) don't show
+    const [filterDate, setFilterDate] = useState('all'); // all, today, week, month — default all so feed shows something; user can filter to 30d when we have recent articles
     const [activeTab, setActiveTab] = useState('activities'); // activities, news
     const [lastCheckedAt, setLastCheckedAt] = useState(null); // when we last ran the news search
     const hasAutoRefreshedStaleRef = useRef(false);
@@ -541,22 +541,29 @@ const ClientNewsFeed = () => {
                     {newsArticles.length === 0 ? (
                         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8 text-center shadow-sm`}>
                             <i className={`fas fa-newspaper text-3xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
-                            <p className={`mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No news articles found</p>
+                            <p className={`mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {filterDate !== 'all' ? 'No articles in this date range.' : 'No news articles in the feed yet.'}
+                            </p>
                             <p className={`text-xs mb-4 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                {isLoading ? 'Loading articles...' : 'Showing last 30 days by default. Use Refresh to fetch new articles, or switch Date Range to "All Time" to see older items.'}
+                                {isLoading ? 'Loading...' : 'Click Refresh to fetch news for all clients (last 90 days). If the feed stays empty, the news source may be temporarily unavailable.'}
                             </p>
-                            <button
-                                onClick={() => {
-                                    loadNewsArticles();
-                                }}
-                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 text-sm font-medium"
-                            >
-                                <i className="fas fa-sync-alt mr-2"></i>
-                                Refresh Articles
-                            </button>
-                            <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                                Check browser console (F12) for debug info
-                            </p>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                                <button
+                                    onClick={() => loadNewsArticles()}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-200 text-sm font-medium"
+                                >
+                                    <i className="fas fa-sync-alt mr-2"></i>
+                                    Refresh
+                                </button>
+                                {filterDate !== 'all' && (
+                                    <button
+                                        onClick={() => setFilterDate('all')}
+                                        className={`px-4 py-2 border rounded-lg text-sm font-medium transition-all duration-200 ${isDark ? 'border-gray-600 hover:bg-gray-800 text-gray-200' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                                    >
+                                        Show all time
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     ) : (
                         newsArticles.map((article) => (

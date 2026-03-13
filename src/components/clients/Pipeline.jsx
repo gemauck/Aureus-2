@@ -3270,21 +3270,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         </select>
                     </div>
                     
-                    {/* Engagement Stage Filter */}
-                    <div>
-                        <select
-                            value={filters.engagementStage}
-                            onChange={(e) => setFilters({ ...filters, engagementStage: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
-                        >
-                            <option value="All">All Engagement Stages</option>
-                            {statusOptions.map(status => (
-                                <option key={status} value={status}>{status}</option>
-                            ))}
-                        </select>
-                    </div>
-                    
-                    {/* Aida Status Filter */}
+                    {/* AIDA Status Filter */}
                     <div>
                         <select
                             value={filters.aidaStatus}
@@ -3297,6 +3283,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             <option value="Interest">Interest</option>
                             <option value="Desire">Desire</option>
                             <option value="Action">Action</option>
+                        </select>
+                    </div>
+                    
+                    {/* Engagement Stage Filter */}
+                    <div>
+                        <select
+                            value={filters.engagementStage}
+                            onChange={(e) => setFilters({ ...filters, engagementStage: e.target.value })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                        >
+                            <option value="All">All Engagement Stages</option>
+                            {statusOptions.map(status => (
+                                <option key={status} value={status}>{status}</option>
+                            ))}
                         </select>
                     </div>
                     

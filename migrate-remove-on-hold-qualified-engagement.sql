@@ -1,14 +1,14 @@
--- One-time data migration: set Engagement Stage "On Hold" and "Qualified" to "Potential"
--- so these removed options no longer appear in the DB. Run once then optional to delete this file.
+-- One-time data migration: set removed Engagement Stage options to "Potential"
+-- (On Hold, Qualified, Inactive). Run once then optional to delete this file.
 
 UPDATE "Client"
 SET "engagementStage" = 'Potential'
-WHERE LOWER(TRIM("engagementStage")) IN ('on hold', 'qualified');
+WHERE LOWER(TRIM("engagementStage")) IN ('on hold', 'qualified', 'inactive');
 
 UPDATE "ClientSite"
 SET "engagementStage" = 'Potential'
-WHERE "engagementStage" IS NOT NULL AND LOWER(TRIM("engagementStage")) IN ('on hold', 'qualified');
+WHERE "engagementStage" IS NOT NULL AND LOWER(TRIM("engagementStage")) IN ('on hold', 'qualified', 'inactive');
 
 UPDATE "Opportunity"
 SET "engagementStage" = 'Potential'
-WHERE LOWER(TRIM("engagementStage")) IN ('on hold', 'qualified');
+WHERE LOWER(TRIM("engagementStage")) IN ('on hold', 'qualified', 'inactive');

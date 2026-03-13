@@ -546,12 +546,11 @@ const Clients = React.memo(() => {
             }
             return lead;
         }).filter(lead => 
-            lead.status !== 'Inactive' && lead.status !== 'Disinterested'
+            lead.status !== 'Disinterested'
         );
         
         const activeOpportunities = clientOpportunities.filter(opp => 
-            opp.status !== 'Inactive' && 
-            opp.status !== 'Closed Lost' && 
+opp.status !== 'Closed Lost' && 
             opp.status !== 'Closed Won'
         );
 
@@ -898,8 +897,8 @@ const Clients = React.memo(() => {
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Lead</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Contact</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Industry</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>AIDA Status</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>

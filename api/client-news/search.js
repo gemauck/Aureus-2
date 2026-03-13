@@ -54,54 +54,54 @@ function parseRSS(xmlText) {
   }
 }
 
+// Fetch one RSS URL and parse
+async function fetchRss(rssUrl) {
+  const response = await fetch(rssUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+      'Accept-Language': 'en-US,en;q=0.9'
+    },
+    signal: AbortSignal.timeout(15000)
+  })
+  if (!response.ok) return { articles: [], status: response.status }
+  const xmlText = await response.text()
+  return { articles: parseRSS(xmlText), status: response.status }
+}
+
 // Search news for a client using Google News RSS (no API key required)
 export async function searchNewsForClient(clientName, website) {
   try {
-    
-    // Build search query - use client name and website if available
     let searchQuery = clientName
-    
-    // Remove common company suffixes that might reduce search quality
-    searchQuery = searchQuery
       .replace(/\s+(Pty|Ltd|Inc|LLC|Corp|Corporation)\.?\s*$/i, '')
       .replace(/\s+(Limited|Incorporated)\s*$/i, '')
-    
-    // Add website domain if available (for better results)
+    if (!searchQuery || !searchQuery.trim()) return []
+
+    // Try with client name + optional website first
+    let queryToUse = searchQuery
     if (website) {
       try {
         const url = new URL(website.startsWith('http') ? website : `https://${website}`)
         const domain = url.hostname.replace('www.', '')
-        searchQuery = `${searchQuery} OR ${domain}`
-      } catch (e) {
-        // If website is not a valid URL, ignore it
-      }
+        queryToUse = `${searchQuery} OR ${domain}`
+      } catch (e) { /* ignore */ }
     }
-    
-    // Don't use when:7d — it often returns zero results. Fetch default (recent) results, filter by date when saving.
-    const encodedQuery = encodeURIComponent(searchQuery)
-    const rssUrl = `https://news.google.com/rss/search?q=${encodedQuery}&hl=en&gl=US&ceid=US:en`
 
-    // Fetch RSS feed (browser-like headers to reduce blocking)
-    const response = await fetch(rssUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
-      },
-      signal: AbortSignal.timeout(15000)
-    })
-    
-    if (!response.ok) {
-      console.warn(`   ⚠️ RSS feed returned status ${response.status}`)
-      return []
+    const encodedQuery = encodeURIComponent(queryToUse)
+    const rssUrl = `https://news.google.com/rss/search?q=${encodedQuery}&hl=en&gl=US&ceid=US:en`
+    let { articles } = await fetchRss(rssUrl)
+
+    // If 0 results, retry with name only (sometimes "X OR domain" returns nothing)
+    if (articles.length === 0 && queryToUse !== searchQuery) {
+      const fallbackUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en&gl=US&ceid=US:en`
+      const fallback = await fetchRss(fallbackUrl)
+      articles = fallback.articles
     }
-    
-    const xmlText = await response.text()
-    const articles = parseRSS(xmlText)
+
     if (articles.length === 0) {
-      console.warn(`   ⚠️ RSS returned 0 articles for "${clientName}" (might be blocked or empty feed)`)
+      console.warn(`   ⚠️ RSS returned 0 articles for "${clientName}"`)
     }
-    return articles.slice(0, 15) // Limit to 15 so we have more recent ones to pick from after 30d filter
-    
+    return articles.slice(0, 20)
   } catch (error) {
     console.error(`   ❌ Error searching news for ${clientName}:`, error.message)
     return []
@@ -132,21 +132,18 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
     
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const cutoff30d = new Date(today)
-    cutoff30d.setDate(cutoff30d.getDate() - 30)
+    const cutoff90d = new Date(today)
+    cutoff90d.setDate(cutoff90d.getDate() - 90)
 
     let articlesSaved = 0
 
-    // Only save articles from the last 30 days so we don't repopulate old items (e.g. Dec 2023)
+    // Save articles from the last 90 days so the feed has content (Google often returns recent-ish items)
     for (const article of articles) {
-      if (!article.url || !article.title) {
-        continue
-      }
+      if (!article.url || !article.title) continue
 
-      const publishedDate = new Date(article.publishedAt || Date.now())
-      if (publishedDate < cutoff30d) {
-        continue // skip articles older than 30 days
-      }
+      let publishedDate = new Date(article.publishedAt || Date.now())
+      if (Number.isNaN(publishedDate.getTime())) publishedDate = new Date()
+      if (publishedDate < cutoff90d) continue
       const isNew = publishedDate >= today
       
       // Check if article already exists

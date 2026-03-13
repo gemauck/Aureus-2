@@ -279,7 +279,6 @@ const ClientsMobile = () => {
                         >
                             <option value="All Status">All Status</option>
                             <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
                             <option value="Prospect">Prospect</option>
                         </select>
                     </div>

@@ -576,26 +576,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                     </div>
                                     
                                     <div>
-                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Engagement Stage</label>
-                                        <select
-                                            value={formData.engagementStage ?? (formData.status || 'Potential')}
-                                            onChange={async (e) => {
-                                                const newStatus = e.target.value;
-                                                setFormData({ ...formData, engagementStage: newStatus });
-                                                if (opportunityId) {
-                                                    await window.api.updateOpportunity(opportunityId, { ...formData, engagementStage: newStatus });
-                                                }
-                                            }}
-                                            className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
-                                        >
-                                            <option value="Active">Active</option>
-                                            <option value="Potential">Potential</option>
-                                            <option value="Proposal">Proposal</option>
-                                            <option value="Disinterested">Disinterested</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <div>
                                         <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA Status</label>
                                         <select
                                             value={formData.aidaStatus ?? (formData.stage || 'Awareness')}
@@ -612,6 +592,26 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                             <option value="Interest">Interest</option>
                                             <option value="Desire">Desire</option>
                                             <option value="Action">Action</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Engagement Stage</label>
+                                        <select
+                                            value={formData.engagementStage ?? (formData.status || 'Potential')}
+                                            onChange={async (e) => {
+                                                const newStatus = e.target.value;
+                                                setFormData({ ...formData, engagementStage: newStatus });
+                                                if (opportunityId) {
+                                                    await window.api.updateOpportunity(opportunityId, { ...formData, engagementStage: newStatus });
+                                                }
+                                            }}
+                                            className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                                        >
+                                            <option value="Active">Active</option>
+                                            <option value="Potential">Potential</option>
+                                            <option value="Proposal">Proposal</option>
+                                            <option value="Disinterested">Disinterested</option>
                                         </select>
                                     </div>
                                     
@@ -704,26 +704,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                 </div>
                                 
                                 <div>
-                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Engagement Stage</label>
-                                    <select
-                                        value={formData.engagementStage ?? (formData.status || 'Potential')}
-                                        onChange={async (e) => {
-                                            const newStatus = e.target.value;
-                                            setFormData({ ...formData, engagementStage: newStatus });
-                                            if (opportunityId) {
-                                                await window.api.updateOpportunity(opportunityId, { ...formData, engagementStage: newStatus });
-                                            }
-                                        }}
-                                        className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
-                                    >
-                                        <option value="Active">Active</option>
-                                        <option value="Potential">Potential</option>
-                                        <option value="Proposal">Proposal</option>
-                                        <option value="Disinterested">Disinterested</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
                                     <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA Status</label>
                                     <select
                                         value={formData.aidaStatus ?? (formData.stage || 'Awareness')}
@@ -740,6 +720,26 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                         <option value="Interest">Interest</option>
                                         <option value="Desire">Desire</option>
                                         <option value="Action">Action</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Engagement Stage</label>
+                                    <select
+                                        value={formData.engagementStage ?? (formData.status || 'Potential')}
+                                        onChange={async (e) => {
+                                            const newStatus = e.target.value;
+                                            setFormData({ ...formData, engagementStage: newStatus });
+                                            if (opportunityId) {
+                                                await window.api.updateOpportunity(opportunityId, { ...formData, engagementStage: newStatus });
+                                            }
+                                        }}
+                                        className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                                    >
+                                        <option value="Active">Active</option>
+                                        <option value="Potential">Potential</option>
+                                        <option value="Proposal">Proposal</option>
+                                        <option value="Disinterested">Disinterested</option>
                                     </select>
                                 </div>
                                 

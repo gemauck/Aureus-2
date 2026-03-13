@@ -543,6 +543,7 @@ function processClientData(rawClients, cacheKey) {
         address: c.address || '',
         website: c.website || '',
         notes: c.notes || '',
+        thumbnail: c.thumbnail || '',
         contacts,
         followUps,
         projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
@@ -582,6 +583,7 @@ function processClientData(rawClients, cacheKey) {
                 address: '',
                 website: '',
                 notes: '',
+                thumbnail: c?.thumbnail || '',
                 contacts: [],
                 followUps: [],
                 projectIds: [],
@@ -3148,6 +3150,7 @@ const Clients = React.memo(() => {
                 address: c.address || '',
                 website: c.website || '',
                 notes: c.notes || '',
+                thumbnail: c.thumbnail || '',
                 contacts: parseArrayField(c.contacts, 'contacts'),
                 followUps: parseArrayField(c.followUps, 'followUps'),
                 projectIds: parseArrayField(c.projectIds, 'projectIds'),
@@ -6949,8 +6952,8 @@ const Clients = React.memo(() => {
                                 <tr>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Name</th>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Type</th>
-                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Engagement Stage</th>
                                     <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>AIDA Status</th>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Engagement Stage</th>
                                 </tr>
                             </thead>
                             <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -9686,24 +9689,6 @@ className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                                 ))}
                             </select>
                         </div>
-                        <div>
-                            <select
-                                value={filterEngagementStage}
-                                onChange={(e) => setFilterEngagementStage(e.target.value)}
-className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
-                                        isDark 
-                                            ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
-                                            : 'bg-gray-100 border-gray-200 text-gray-900 focus:bg-white'
-                                }`}
-                            >
-                                <option value="All Engagement Stages">All Engagement Stages</option>
-                                {allEngagementStages.map((stage) => (
-                                    <option key={stage} value={stage}>
-                                        {stage}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
                         {viewMode === 'leads' && (
                             <div>
                                 <select
@@ -9724,6 +9709,24 @@ className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                                 </select>
                             </div>
                         )}
+                        <div>
+                            <select
+                                value={filterEngagementStage}
+                                onChange={(e) => setFilterEngagementStage(e.target.value)}
+className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
+                                            : 'bg-gray-100 border-gray-200 text-gray-900 focus:bg-white'
+                                }`}
+                            >
+                                <option value="All Engagement Stages">All Engagement Stages</option>
+                                {allEngagementStages.map((stage) => (
+                                    <option key={stage} value={stage}>
+                                        {stage}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         {viewMode !== 'leads' && (
                             <div>
                                 <ServicesDropdown
