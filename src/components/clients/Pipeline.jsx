@@ -2499,6 +2499,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 className={`flex-shrink-0 w-72 sm:w-80 ${
                                     isDraggedOver ? 'ring-2 ring-blue-400 ring-opacity-50' : ''
                                 }`}
+                                onDragOver={handleDragOver}
+                                onDrop={(e) => handleDrop(e, column.name)}
                             >
                                 {/* Column Header */}
                                 <div className={`${headerColorClasses} rounded-t-lg px-4 py-3 border-b-2 mb-2`}>
@@ -2549,13 +2551,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 <div
                                                     key={`${itemType}-${item.id}`}
                                                     draggable="true"
-                                                    onMouseDown={(e) => {
-                                                        // Don't interfere with button clicks
-                                                        if (e.target.closest('button')) {
-                                                            return;
-                                                        }
-                                                        handleMouseDown(e, item, itemType);
-                                                    }}
                                                     onTouchStart={(e) => {
                                                         if (e.target.closest('button')) return;
                                                         handleTouchStart(e, item, itemType);
