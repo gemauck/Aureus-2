@@ -7262,20 +7262,24 @@ const Clients = React.memo(() => {
                                                 {(() => {
                                                     const key = `client-${client.id}`;
                                                     const logo = getLogoDisplay(key, client.thumbnail, failedThumbnailIds);
-                                                    if (logo.useImage && logo.url) {
-                                                        return (
-                                                            <img
-                                                                key={`logo-${key}`}
-                                                                src={logo.url}
-                                                                alt={client.name}
-                                                                className="w-8 h-8 rounded-full object-cover border border-gray-200"
-                                                                onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
-                                                            />
-                                                        );
-                                                    }
+                                                    const showImg = !!(logo.useImage && logo.url);
                                                     return (
-                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                                            {(client.name || '?').charAt(0).toUpperCase()}
+                                                        <div className="w-8 h-8 flex-shrink-0 relative rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`absolute inset-0 z-0 w-full h-full rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                                                                aria-hidden={showImg}
+                                                            >
+                                                                {(client.name || '?').charAt(0).toUpperCase()}
+                                                            </div>
+                                                            {logo.url ? (
+                                                                <img
+                                                                    src={logo.url}
+                                                                    alt=""
+                                                                    className="absolute inset-0 z-[1] w-full h-full rounded-full object-cover border border-gray-200"
+                                                                    style={{ opacity: showImg ? 1 : 0, pointerEvents: showImg ? 'auto' : 'none' }}
+                                                                    onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
+                                                                />
+                                                            ) : null}
                                                         </div>
                                                     );
                                                 })()}
@@ -9059,20 +9063,24 @@ const Clients = React.memo(() => {
                                                 {(() => {
                                                     const key = `lead-${lead.id}`;
                                                     const logo = getLogoDisplay(key, lead.thumbnail, failedThumbnailIds);
-                                                    if (logo.useImage && logo.url) {
-                                                        return (
-                                                            <img
-                                                                key={`logo-${key}`}
-                                                                src={logo.url}
-                                                                alt={lead.name}
-                                                                className="w-8 h-8 rounded-full object-cover border border-gray-200"
-                                                                onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
-                                                            />
-                                                        );
-                                                    }
+                                                    const showImg = !!(logo.useImage && logo.url);
                                                     return (
-                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                                            {(lead.name || '?').charAt(0).toUpperCase()}
+                                                        <div className="w-8 h-8 flex-shrink-0 relative rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`absolute inset-0 z-0 w-full h-full rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
+                                                                aria-hidden={showImg}
+                                                            >
+                                                                {(lead.name || '?').charAt(0).toUpperCase()}
+                                                            </div>
+                                                            {logo.url ? (
+                                                                <img
+                                                                    src={logo.url}
+                                                                    alt=""
+                                                                    className="absolute inset-0 z-[1] w-full h-full rounded-full object-cover border border-gray-200"
+                                                                    style={{ opacity: showImg ? 1 : 0, pointerEvents: showImg ? 'auto' : 'none' }}
+                                                                    onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
+                                                                />
+                                                            ) : null}
                                                         </div>
                                                     );
                                                 })()}
