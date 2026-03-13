@@ -873,11 +873,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
         return list.some(site => site && typeof site === 'object' && site.siteType !== 'client');
     };
 
-    // Get all pipeline items (leads without sites + client opportunities + all sites)
+    // Get all pipeline items (leads + client opportunities + sites). List view shows all; Kanban excludes lead tile when lead has sites.
     const getPipelineItems = () => {
-        const leadItems = leads
-            .filter(lead => !leadHasPipelineSites(lead))
-            .map(lead => {
+        const leadItems = leads.map(lead => {
             const normalized = normalizeEntityId(lead, 'lead');
             const normalizedId = String(normalized.id);
 
@@ -3254,7 +3252,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 <ListView />
             ) : (
                 <KanbanView 
-                    items={filteredItems}
+                    items={filteredItems.filter(item => item.type !== 'lead' || !leadHasPipelineSites(item.raw || item))}
                     groupBy={kanbanGroupBy}
                     pipelineStages={pipelineStages}
                     statusOptions={statusOptions}
