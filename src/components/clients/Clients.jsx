@@ -7259,7 +7259,7 @@ const Clients = React.memo(() => {
                                         </td>
                                         <td className="px-6 py-2 whitespace-nowrap">
                                             {(() => {
-                                                const stage = (client.engagementStage ?? client.status || '').toString().toLowerCase();
+                                                const stage = (client.engagementStage ?? (client.status || '')).toString().toLowerCase();
                                                 const stageClass = stage === 'active' ? 'bg-green-100 text-green-800' : stage === 'potential' || !stage ? 'bg-white text-gray-800 border border-gray-200' : stage === 'disinterested' ? 'bg-purple-100 text-purple-800' : (stage === 'proposal' || stage === 'tender') ? 'bg-green-100 text-green-800' : 'bg-white text-gray-800 border border-gray-200';
                                                 const display = (client.engagementStage ?? client.status) === 'active' ? 'Active' : (client.engagementStage ?? client.status) || '—';
                                                 return <span className={`px-2 py-1 text-xs font-medium rounded-full ${stageClass}`}>{display}</span>;
