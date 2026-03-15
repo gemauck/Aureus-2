@@ -939,6 +939,15 @@ const api = {
     return res
   },
 
+  async updateFeedback(feedbackId, data) {
+    if (!feedbackId) throw new Error('feedbackId is required')
+    const res = await request(`/feedback/${feedbackId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    })
+    return res
+  },
+
   // Job Cards
   async getJobCards() {
     const res = await request('/jobcards')

@@ -21,7 +21,8 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     // Prepare email content
     const userName = submittingUser?.name || submittingUser?.email || 'A user'
     const section = feedback.section || 'general'
-    const typeLabel = feedback.type === 'bug' ? '🐛 Bug Report' : 
+    const typeLabel = feedback.type === 'bug' ? '🐛 Bug Report' :
+                     feedback.type === 'development_request' ? '📋 Development Request' :
                      feedback.type === 'idea' ? '💡 Idea' : '💬 Feedback'
     const severityLabel = feedback.severity === 'high' ? '🔴 High' :
                          feedback.severity === 'medium' ? '🟡 Medium' : '🟢 Low'
@@ -347,6 +348,7 @@ async function handler(req, res) {
             message: true,
             type: true,
             severity: true,
+            status: true,
             meta: true,
             createdAt: true
           }
@@ -415,6 +417,39 @@ async function handler(req, res) {
         return created(res, createdItem)
       } catch (e) {
         return serverError(res, 'Failed to create feedback', e.message)
+      }
+    }
+
+    // PATCH /api/feedback/:id -> update type or status (admin only)
+    if (req.method === 'PATCH' && pathSegments.length === 2 && pathSegments[0] === 'feedback') {
+      const feedbackId = pathSegments[1]
+      if (!feedbackId) return badRequest(res, 'feedbackId required')
+      if (!req.user) return unauthorized(res, 'Authentication required')
+      const currentUser = await ensureUserLoaded()
+      if (!isAdminUser(currentUser)) {
+        return forbidden(res, 'Only administrators can update feedback')
+      }
+      let body = req.body
+      if (!body || Object.keys(body).length === 0) body = await parseJsonBody(req)
+      const updates = {}
+      if (body.type !== undefined) {
+        const t = String(body.type).toLowerCase().trim()
+        if (['feedback', 'bug', 'idea', 'development_request'].includes(t)) updates.type = t
+      }
+      if (body.status !== undefined) {
+        const s = String(body.status).toLowerCase().trim()
+        if (['open', 'done'].includes(s)) updates.status = s
+      }
+      if (Object.keys(updates).length === 0) return badRequest(res, 'Provide type and/or status to update')
+      try {
+        const updated = await prisma.feedback.update({
+          where: { id: feedbackId },
+          data: updates
+        })
+        return ok(res, updated)
+      } catch (e) {
+        if (e.code === 'P2025') return notFound(res, 'Feedback not found')
+        return serverError(res, 'Failed to update feedback', e.message)
       }
     }
 

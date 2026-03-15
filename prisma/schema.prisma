@@ -1105,6 +1105,7 @@ model Feedback {
   message   String
   type      String          @default("feedback")
   severity  String          @default("medium")
+  status    String          @default("open")
   meta      String?
   createdAt DateTime        @default(now())
   user      User?           @relation("UserFeedback", fields: [userId], references: [id])
@@ -1114,6 +1115,7 @@ model Feedback {
   @@index([section])
   @@index([userId])
   @@index([createdAt])
+  @@index([status])
 }
 
 model FeedbackReply {

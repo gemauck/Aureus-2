@@ -7,11 +7,13 @@ const FeedbackViewer = () => {
     const [filter, setFilter] = useState({
         type: 'all',
         severity: 'all',
+        status: 'open',
         search: ''
     });
     const [replyInputs, setReplyInputs] = useState({});
     const [submittingReplyId, setSubmittingReplyId] = useState(null);
     const [replyErrors, setReplyErrors] = useState({});
+    const [updatingId, setUpdatingId] = useState(null);
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
@@ -112,9 +114,38 @@ const FeedbackViewer = () => {
         }
     };
 
+    const handleUpdateType = async (feedbackId, type) => {
+        if (updatingId === feedbackId) return;
+        setUpdatingId(feedbackId);
+        try {
+            await window.api.updateFeedback(feedbackId, { type });
+            await loadFeedback();
+        } catch (error) {
+            console.error('❌ Failed to update type:', error);
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
+    const handleUpdateStatus = async (feedbackId, status) => {
+        if (updatingId === feedbackId) return;
+        setUpdatingId(feedbackId);
+        try {
+            await window.api.updateFeedback(feedbackId, { status });
+            await loadFeedback();
+        } catch (error) {
+            console.error('❌ Failed to update status:', error);
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
     const filteredFeedback = feedback.filter(item => {
         if (filter.type !== 'all' && item.type !== filter.type) return false;
         if (filter.severity !== 'all' && item.severity !== filter.severity) return false;
+        const status = item.status ?? 'open';
+        if (filter.status === 'open' && status !== 'open') return false;
+        if (filter.status === 'done' && status !== 'done') return false;
         if (filter.search && !item.message.toLowerCase().includes(filter.search.toLowerCase()) &&
             !item.section?.toLowerCase().includes(filter.search.toLowerCase()) &&
             !item.pageUrl?.toLowerCase().includes(filter.search.toLowerCase())) {
@@ -175,11 +206,17 @@ const FeedbackViewer = () => {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded p-2`}>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total</div>
                         <div className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {feedback.length}
+                        </div>
+                    </div>
+                    <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded p-2`}>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Open</div>
+                        <div className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            {feedback.filter(f => (f.status ?? 'open') === 'open').length}
                         </div>
                     </div>
                     <div className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded p-2`}>
@@ -199,7 +236,7 @@ const FeedbackViewer = () => {
 
             {/* Filters */}
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-lg p-4`}>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                     <div className="md:col-span-2">
                         <input
                             type="text"
@@ -214,6 +251,19 @@ const FeedbackViewer = () => {
                         />
                     </div>
                     <select
+                        value={filter.status}
+                        onChange={(e) => setFilter({...filter, status: e.target.value})}
+                        className={`px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                            isDark
+                                ? 'bg-gray-700 border-gray-600 text-gray-200'
+                                : 'border-gray-300'
+                        }`}
+                    >
+                        <option value="open">Open only</option>
+                        <option value="done">Done only</option>
+                        <option value="all">All statuses</option>
+                    </select>
+                    <select
                         value={filter.type}
                         onChange={(e) => setFilter({...filter, type: e.target.value})}
                         className={`px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
@@ -225,6 +275,7 @@ const FeedbackViewer = () => {
                         <option value="all">All Types</option>
                         <option value="feedback">Feedback</option>
                         <option value="bug">Bug</option>
+                        <option value="development_request">Development Request</option>
                         <option value="idea">Idea</option>
                     </select>
                     <select
@@ -273,17 +324,40 @@ const FeedbackViewer = () => {
                                         <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                             {item.user?.name || 'Anonymous'}
                                         </span>
+                                        <select
+                                            value={item.type || 'feedback'}
+                                            onChange={(e) => handleUpdateType(item.id, e.target.value)}
+                                            disabled={updatingId === item.id}
+                                            className={`px-2 py-0.5 rounded text-xs font-medium border cursor-pointer ${
+                                                (item.type || 'feedback') === 'bug'
+                                                    ? isDark ? 'bg-red-900/40 text-red-300 border-red-700' : 'bg-red-100 text-red-800 border-red-200'
+                                                    : (item.type || 'feedback') === 'development_request'
+                                                    ? isDark ? 'bg-purple-900/40 text-purple-300 border-purple-700' : 'bg-purple-100 text-purple-800 border-purple-200'
+                                                    : isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="feedback">Feedback</option>
+                                            <option value="bug">Bug</option>
+                                            <option value="development_request">Development Request</option>
+                                            <option value="idea">Idea</option>
+                                        </select>
+                                        <select
+                                            value={item.status ?? 'open'}
+                                            onChange={(e) => handleUpdateStatus(item.id, e.target.value)}
+                                            disabled={updatingId === item.id}
+                                            className={`px-2 py-0.5 rounded text-xs font-medium border cursor-pointer ${
+                                                (item.status ?? 'open') === 'done'
+                                                    ? isDark ? 'bg-green-900/40 text-green-300 border-green-700' : 'bg-green-100 text-green-800 border-green-200'
+                                                    : isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="open">Open</option>
+                                            <option value="done">Done</option>
+                                        </select>
                                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                            item.type === 'bug' ? 'bg-red-100 text-red-800' :
-                                            item.type === 'idea' ? 'bg-blue-100 text-blue-800' :
-                                            'bg-green-100 text-green-800'
-                                        }`}>
-                                            {item.type}
-                                        </span>
-                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                            item.severity === 'high' ? 'bg-red-100 text-red-800' :
-                                            item.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-green-100 text-green-800'
+                                            item.severity === 'high' ? (isDark ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-800') :
+                                            item.severity === 'medium' ? (isDark ? 'bg-yellow-900/40 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
+                                            isDark ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-800'
                                         }`}>
                                             {item.severity}
                                         </span>
