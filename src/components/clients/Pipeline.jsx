@@ -1248,7 +1248,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const clientIdsFromSites = new Set(clientSites.map(s => s.clientId).filter(Boolean));
         const clientIdsFromOpps = new Set(opportunities.map(o => o.clientId).filter(Boolean));
         const allClientIds = [...new Set([...clientIdsFromSites, ...clientIdsFromOpps])];
-        const clientBlocks = allClientIds.map(clientId => {
+        let clientBlocks = allClientIds.map(clientId => {
             const sites = clientSites.filter(s => s.clientId === clientId);
             const clientOpps = opportunities
                 .filter(o => String(o.clientId) === String(clientId))
@@ -1282,6 +1282,34 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }));
             return [clientRow, ...siteRows, ...oppRows];
         });
+
+        // When "Starred Only" is on, include starred clients that have no pipeline items in the filtered list
+        // (e.g. client with no sites/opps, or only unstarred opps), so they still appear in the list.
+        if (showStarredOnly && clients && clients.length > 0) {
+            const starredClientIds = new Set(
+                clients.filter(c => c && Boolean(c.isStarred)).map(c => String(c.id)).filter(Boolean)
+            );
+            const alreadyInBlocks = new Set(allClientIds.map(id => String(id)));
+            starredClientIds.forEach(id => {
+                if (alreadyInBlocks.has(id)) return;
+                const client = clients.find(c => c && String(c.id) === id);
+                if (!client) return;
+                const clientRowItem = {
+                    type: 'client',
+                    id: client.id,
+                    name: client.name || 'Client',
+                    stage: client.aidaStatus ?? client.stage ?? 'Awareness',
+                    aidaStatus: client.aidaStatus ?? client.stage ?? 'Awareness',
+                    status: client.engagementStage ?? client.status ?? 'Potential',
+                    engagementStage: client.engagementStage ?? client.status ?? 'Potential',
+                    isStarred: true,
+                    client
+                };
+                const clientRow = { item: clientRowItem, isNested: false, parentName: null, parentLabel: null };
+                clientBlocks.push([clientRow]);
+            });
+        }
+
         clientBlocks.sort((blockA, blockB) => cmp(blockA[0].item, blockB[0].item));
 
         // Merge lead blocks and client blocks; sort by primary row name (alphabetical)
@@ -3274,7 +3302,31 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 <ListView />
             ) : (
                 <KanbanView 
-                    items={filteredItems.filter(item => item.type !== 'lead' || !leadHasPipelineSites(item.raw || item))}
+                    items={(() => {
+                        const base = filteredItems.filter(item => item.type !== 'lead' || !leadHasPipelineSites(item.raw || item));
+                        if (!showStarredOnly || !clients?.length) return base;
+                        const clientIdsInBase = new Set();
+                        base.forEach(i => { if (i.clientId) clientIdsInBase.add(String(i.clientId)); });
+                        const extra = clients
+                            .filter(c => c && Boolean(c.isStarred) && !clientIdsInBase.has(String(c.id)))
+                            .map(c => ({
+                                type: 'client',
+                                id: c.id,
+                                name: c.name || 'Client',
+                                stage: c.aidaStatus ?? c.stage ?? 'Awareness',
+                                aidaStatus: c.aidaStatus ?? c.stage ?? 'Awareness',
+                                status: c.engagementStage ?? c.status ?? 'Potential',
+                                engagementStage: c.engagementStage ?? c.status ?? 'Potential',
+                                isStarred: true,
+                                clientId: c.id,
+                                clientName: c.name,
+                                industry: c.industry || 'Other',
+                                value: 0,
+                                client: c,
+                                raw: { client: c }
+                            }));
+                        return [...base, ...extra];
+                    })()}
                     groupBy={kanbanGroupBy}
                     pipelineStages={pipelineStages}
                     statusOptions={statusOptions}
