@@ -831,9 +831,11 @@ const DatabaseAPI = {
                                 fullError: serverError || { message: serverErrorMessage }
                             });
                         }
-                        // Include "500" in the error message so catch block can recognize it as server error
+                        // Include "500" in the error message and attach status so unhandled-rejection handler can suppress
                         const errorMessage = serverErrorMessage || 'Server error 500: The server encountered an error processing your request.';
-                        throw new Error(errorMessage);
+                        const err = new Error(errorMessage);
+                        err.status = 500;
+                        throw err;
                     }
                     
                     // Handle 502 Bad Gateway errors
@@ -1007,7 +1009,9 @@ const DatabaseAPI = {
                             // Only log non-database errors and non-server errors (server errors are expected when backend is down)
                             // Suppress console.error for server errors (500, 502, 503, 504) to reduce noise
                             // 502 errors are already logged in aggregated form above
-                            if (!isDatabaseError && !isServerError) {
+                            // Suppress for 404 - expected when resource was deleted or URL is stale; UI shows "Lead/Client not found"
+                            const is404 = error?.status === 404;
+                            if (!isDatabaseError && !isServerError && !is404) {
                                 console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
                             }
                             if (isServerError) {
@@ -1044,9 +1048,10 @@ const DatabaseAPI = {
                                                   errorMessage.includes('ECONNREFUSED') ||
                                                   errorMessage.includes('ETIMEDOUT');
                             
-                            // Suppress error logs for server errors and database errors
+                            // Suppress error logs for server errors, database errors, and 404 (expected when resource missing)
                             const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
-                            if (!isDatabaseError && !isServerError) {
+                            const is404 = error?.status === 404;
+                            if (!isDatabaseError && !isServerError && !is404) {
                                 console.error(`❌ Database API request failed (${endpoint}):`, error);
                             }
                             throw error;
