@@ -188,7 +188,7 @@ async function handler(req, res) {
     const isAdminUser = (user) => {
       if (!user) return false
       const role = (user.role || '').toString().trim().toLowerCase()
-      return role === 'admin'
+      return role === 'admin' || role === 'superadmin'
     }
 
     // Parse query parameters safely and get path without query string

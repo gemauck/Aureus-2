@@ -332,6 +332,7 @@ const FeedbackViewer = () => {
                                                 </p>
                                             )}
                                         </div>
+                                        {isAdmin && (
                                         <div>
                                             <textarea
                                                 value={replyInputs[item.id] || ''}
@@ -365,6 +366,7 @@ const FeedbackViewer = () => {
                                                 </button>
                                             </div>
                                         </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
