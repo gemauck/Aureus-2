@@ -913,6 +913,7 @@ const api = {
     if (options.section) params.append('section', options.section)
     if (options.includeUser) params.append('includeUser', 'true')
     if (options.includeReplies) params.append('includeReplies', 'true')
+    if (options.mine) params.append('mine', 'true')
     
     const query = params.toString()
     const res = await request(`/feedback${query ? `?${query}` : ''}`)

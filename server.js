@@ -394,6 +394,23 @@ app.get('/api/inbound/document-request-reply-debug', async (req, res, next) => {
   }
 })
 
+// Feedback reply webhook (Resend email.received). Raw body for signature verification.
+app.all('/api/inbound/feedback-reply', express.text({ type: '*/*', limit: '1mb' }), async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'inbound', 'feedback-reply.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in feedback-reply webhook:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error', message: e.message })
+    }
+    return next(e)
+  }
+})
+
 // Email delivery status webhook (Resend/SendGrid). Must run before express.json() for signature verification.
 app.all('/api/inbound/email-delivery-status', express.text({ type: '*/*', limit: '5mb' }), async (req, res, next) => {
   try {

@@ -1132,6 +1132,16 @@ model FeedbackReply {
   @@index([createdAt])
 }
 
+model FeedbackEmailSent {
+  id         String   @id @default(cuid())
+  messageId  String   // Message-ID used in outbound email; In-Reply-To on reply matches this
+  feedbackId String
+  createdAt  DateTime @default(now())
+
+  @@unique([messageId])
+  @@index([feedbackId])
+}
+
 model Ticket {
   id           String @id @default(cuid())
   ticketNumber String @unique

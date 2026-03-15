@@ -688,7 +688,9 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         notificationType,
         notificationLink,
         notificationMetadata,
-        skipNotificationCreation = false // Set to true if notification is already created elsewhere
+        skipNotificationCreation = false, // Set to true if notification is already created elsewhere
+        customHeaders = null, // e.g. { 'Message-ID': '<feedback-xxx@domain>' } for reply threading
+        replyTo: optionsReplyTo // Override reply-to address (e.g. for feedback reply-by-email)
     } = options;
     
     // If userId is provided and we're not skipping, create in-app notification
@@ -984,9 +986,10 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     
     const mailOptions = {
         from: fromAddress,
-        replyTo: process.env.EMAIL_REPLY_TO || 'garethm@abcotronics.co.za',
+        replyTo: optionsReplyTo || process.env.EMAIL_REPLY_TO || 'garethm@abcotronics.co.za',
         to: to,
         subject: subject,
+        ...(customHeaders && typeof customHeaders === 'object' && Object.keys(customHeaders).length > 0 ? { headers: customHeaders } : {}),
         html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: #007bff; padding: 20px; text-align: center;">

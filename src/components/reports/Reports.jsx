@@ -13,7 +13,10 @@ const Reports = () => {
     const canViewFeedback = isAdmin || canViewAuditTrail; // Admin and Superadmin can see User Feedback
 
     const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
-    const [activeTab, setActiveTab] = useState(canViewAuditTrail ? 'audit' : (canViewFeedback ? 'feedback' : 'restricted'));
+    const [myFeedbackViewerReady, setMyFeedbackViewerReady] = useState(!!window.MyFeedbackViewer);
+    const [activeTab, setActiveTab] = useState(
+      canViewAuditTrail ? 'audit' : (canViewFeedback ? 'feedback' : 'my-queries')
+    );
 
     // When user loads, set correct default tab
     useEffect(() => {
@@ -21,6 +24,8 @@ const Reports = () => {
             setActiveTab('audit');
         } else if (canViewFeedback && !canViewAuditTrail && activeTab === 'restricted') {
             setActiveTab('feedback');
+        } else if (!canViewFeedback && activeTab === 'restricted') {
+            setActiveTab('my-queries');
         }
     }, [canViewAuditTrail, canViewFeedback]);
 
@@ -54,14 +59,18 @@ const Reports = () => {
         };
     }, []); // Only run once on mount
 
-    // Also check when switching to feedback tab
+    // Also check when switching to feedback / my-queries tab
     useEffect(() => {
         if (activeTab === 'feedback' && window.FeedbackViewer && !feedbackViewerReady) {
             setFeedbackViewerReady(true);
         }
-    }, [activeTab, feedbackViewerReady]);
+        if (activeTab === 'my-queries' && window.MyFeedbackViewer && !myFeedbackViewerReady) {
+            setMyFeedbackViewerReady(true);
+        }
+    }, [activeTab, feedbackViewerReady, myFeedbackViewerReady]);
 
     const FeedbackViewer = window.FeedbackViewer;
+    const MyFeedbackViewer = window.MyFeedbackViewer;
 
     return (
         <div className="space-y-3">
@@ -90,6 +99,18 @@ const Reports = () => {
                             Audit Trail
                         </button>
                     )}
+                    <button
+                        onClick={() => setActiveTab('my-queries')}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                            activeTab === 'my-queries'
+                                ? 'border-primary-500 text-primary-600'
+                                : isDark
+                                    ? 'border-transparent text-gray-400 hover:text-gray-300'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        My queries
+                    </button>
                     {canViewFeedback && (
                         <button
                             onClick={() => setActiveTab('feedback')}
@@ -105,7 +126,7 @@ const Reports = () => {
                             <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
                                 isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
                             }`}>
-                                Admin Only
+                                Admin
                             </span>
                         </button>
                     )}
@@ -117,6 +138,18 @@ const Reports = () => {
                 {activeTab === 'audit' && canViewAuditTrail && (
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
                         {AuditTrail ? <AuditTrail /> : <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading...</div>}
+                    </div>
+                )}
+                {activeTab === 'my-queries' && (
+                    <div>
+                        {MyFeedbackViewer && myFeedbackViewerReady ? (
+                            <MyFeedbackViewer />
+                        ) : (
+                            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                <p>Loading...</p>
+                            </div>
+                        )}
                     </div>
                 )}
                 {activeTab === 'restricted' && !canViewAuditTrail && (

@@ -140,18 +140,21 @@ function escapeHtml(text) {
     .replace(/'/g, '&#039;')
 }
 
-// Notify the feedback author when an admin replies (send email to the person who submitted the feedback)
+// Build Message-ID for feedback emails so reply-by-email can match
+function feedbackMessageId(feedbackId) {
+  const domain = (process.env.FEEDBACK_INBOUND_DOMAIN || process.env.EMAIL_FROM || 'feedback').split('@').pop() || 'feedback'
+  return `<feedback-${feedbackId}@${domain}>`
+}
+
+// Notify the feedback author when an admin replies (email + in-app)
 async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
   try {
     const authorEmail = feedback?.user?.email
-    if (!authorEmail || !authorEmail.trim()) {
-      return
-    }
-    // Don't email the replier if they replied to their own feedback
+    const authorId = feedback?.user?.id || feedback?.userId
+    if (!authorEmail || !authorEmail.trim()) return
+
     const replierEmail = (replyingUser?.email || '').trim().toLowerCase()
-    if (replierEmail && authorEmail.trim().toLowerCase() === replierEmail) {
-      return
-    }
+    if (replierEmail && authorEmail.trim().toLowerCase() === replierEmail) return
 
     const authorName = escapeHtml(feedback?.user?.name || feedback?.user?.email || 'there')
     const replierName = escapeHtml(replyingUser?.name || replyingUser?.email || 'An administrator')
@@ -180,8 +183,80 @@ async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
             <p style="color: #333; margin: 8px 0 0; white-space: pre-wrap;">${escapeHtml(replyPreview)}</p>
           </div>
           <p style="color: #666; font-size: 14px;">
-            View all feedback and replies in <strong>Reports</strong> in the ERP.
+            View in ERP: <strong>Reports → My queries</strong>. You can reply to this email to add another comment.
           </p>
+        </div>
+        <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
+          <p style="margin: 0;">© ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
+        </div>
+      </div>
+    `
+
+    const messageId = feedbackMessageId(feedback.id)
+    const customHeaders = { 'Message-ID': messageId }
+    const replyToEmail = process.env.FEEDBACK_REPLY_EMAIL || process.env.EMAIL_REPLY_TO || null
+
+    const { sendNotificationEmail } = await import('./_lib/email.js')
+    await sendNotificationEmail(
+      authorEmail,
+      subject,
+      htmlContent,
+      {
+        userId: authorId || authorEmail,
+        notificationType: 'system',
+        notificationLink: '/reports',
+        notificationMetadata: { feedbackId: feedback.id, source: 'feedback_reply' },
+        customHeaders,
+        replyTo: replyToEmail
+      }
+    )
+
+    const messageIdRaw = messageId.replace(/^<|>$/g, '').trim()
+    await prisma.feedbackEmailSent.upsert({
+      where: { messageId: messageIdRaw },
+      create: { messageId: messageIdRaw, feedbackId: feedback.id },
+      update: {}
+    })
+    console.log(`✅ Feedback reply email and in-app notification sent to ${authorEmail}`)
+  } catch (err) {
+    console.error('❌ Failed to send feedback reply notification:', err?.message || err)
+  }
+}
+
+// Notify the feedback author when type or status changes (email + in-app)
+async function notifyFeedbackAuthorOfChange(feedback, changeType, oldVal, newVal, changedBy) {
+  try {
+    const authorEmail = feedback?.user?.email
+    const authorId = feedback?.user?.id || feedback?.userId
+    if (!authorEmail || !authorEmail.trim()) return
+
+    const appName = process.env.APP_NAME || 'Abcotronics ERP'
+    const changerName = changedBy?.name || changedBy?.email || 'An administrator'
+    let subject = ''
+    let detail = ''
+
+    if (changeType === 'type') {
+      subject = `Your feedback was updated: type set to ${newVal} – ${appName}`
+      detail = `Type changed from "${oldVal}" to "${newVal}".`
+    } else if (changeType === 'status') {
+      subject = `Your feedback was marked as ${newVal} – ${appName}`
+      detail = `Status changed from "${oldVal}" to "${newVal}".`
+    } else return
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">📋 Feedback update</h1>
+        </div>
+        <div style="padding: 30px; background: #f8f9fa;">
+          <p style="color: #333;">Hi ${escapeHtml(feedback?.user?.name || feedback?.user?.email || 'there')},</p>
+          <p style="color: #555;">${changerName} updated your feedback.</p>
+          <p style="color: #333;">${detail}</p>
+          <div style="background: #e9ecef; border-radius: 6px; padding: 12px; margin: 16px 0;">
+            <p style="color: #555; margin: 0; font-size: 13px;"><strong>Your feedback:</strong></p>
+            <p style="color: #333; margin: 8px 0 0; white-space: pre-wrap;">${escapeHtml((feedback?.message || '').slice(0, 300))}${(feedback?.message || '').length > 300 ? '...' : ''}</p>
+          </div>
+          <p style="color: #666; font-size: 14px;">View in ERP: <strong>Reports → My queries</strong>.</p>
         </div>
         <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
           <p style="margin: 0;">© ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
@@ -195,14 +270,16 @@ async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
       subject,
       htmlContent,
       {
-        skipNotificationCreation: true,
-        notificationLink: '/reports'
+        userId: authorId || authorEmail,
+        notificationType: 'system',
+        notificationLink: '/reports',
+        notificationMetadata: { feedbackId: feedback.id, source: 'feedback_change', changeType, oldVal, newVal },
+        customHeaders: { 'Message-ID': feedbackMessageId(feedback.id) }
       }
     )
-    console.log(`✅ Feedback reply email sent to ${authorEmail}`)
+    console.log(`✅ Feedback change notification sent to ${authorEmail}`)
   } catch (err) {
-    console.error('❌ Failed to send feedback reply email:', err?.message || err)
-    // Non-critical; do not throw
+    console.error('❌ Failed to send feedback change notification:', err?.message || err)
   }
 }
 
@@ -297,10 +374,17 @@ async function handler(req, res) {
         const section = queryParams.section
         const includeUser = queryParams.includeUser === 'true'
         const includeReplies = queryParams.includeReplies === 'true'
+        const mine = queryParams.mine === 'true' || queryParams.mine === '1'
 
         const where = {}
         if (pageUrl) where.pageUrl = pageUrl
         if (section) where.section = section
+        if (mine) {
+          if (!req.user) return unauthorized(res, 'Authentication required to view your feedback')
+          const myId = req.user?.id || req.user?.sub
+          if (!myId) return unauthorized(res, 'Authentication required')
+          where.userId = myId
+        }
 
         // Build query options - use include for relations, select for fields
         const queryOptions = {
@@ -442,10 +526,26 @@ async function handler(req, res) {
       }
       if (Object.keys(updates).length === 0) return badRequest(res, 'Provide type and/or status to update')
       try {
+        const existing = await prisma.feedback.findUnique({
+          where: { id: feedbackId },
+          include: { user: { select: { id: true, name: true, email: true } } }
+        })
+        if (!existing) return notFound(res, 'Feedback not found')
+
         const updated = await prisma.feedback.update({
           where: { id: feedbackId },
-          data: updates
+          data: updates,
+          include: { user: { select: { id: true, name: true, email: true } } }
         })
+
+        if (existing.userId) {
+          if (updates.type !== undefined && updates.type !== existing.type) {
+            notifyFeedbackAuthorOfChange(updated, 'type', existing.type, updates.type, currentUser).catch(() => {})
+          }
+          if (updates.status !== undefined && updates.status !== existing.status) {
+            notifyFeedbackAuthorOfChange(updated, 'status', existing.status || 'open', updates.status, currentUser).catch(() => {})
+          }
+        }
         return ok(res, updated)
       } catch (e) {
         if (e.code === 'P2025') return notFound(res, 'Feedback not found')
