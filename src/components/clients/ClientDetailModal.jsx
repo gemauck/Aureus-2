@@ -1741,6 +1741,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     });
     const [calendarFeedUrl, setCalendarFeedUrl] = useState(null);
     const [calendarFeedLoading, setCalendarFeedLoading] = useState(false);
+    const [calendarFeedVerify, setCalendarFeedVerify] = useState(null); // { count } | { error: string } | 'checking'
     
     const [newComment, setNewComment] = useState('');
     const [isCommentSubscribed, setIsCommentSubscribed] = useState(false);
@@ -6156,23 +6157,65 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     {calendarFeedLoading ? (
                                         <p className="text-sm text-gray-500"><i className="fas fa-spinner fa-spin mr-1"></i>Loading feed URL…</p>
                                     ) : calendarFeedUrl ? (
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <input
-                                                type="text"
-                                                readOnly
-                                                value={calendarFeedUrl}
-                                                className="flex-1 min-w-0 text-xs px-2 py-1.5 bg-white border border-gray-300 rounded truncate"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(calendarFeedUrl).then(() => alert('Calendar feed URL copied. Paste it in your calendar app (e.g. Google Calendar → Add calendar → From URL).')).catch(() => {});
-                                                }}
-                                                className="px-2 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 whitespace-nowrap"
-                                            >
-                                                <i className="fas fa-copy mr-1"></i>Copy URL
-                                            </button>
-                                        </div>
+                                        <>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    value={calendarFeedUrl}
+                                                    className="flex-1 min-w-0 text-xs px-2 py-1.5 bg-white border border-gray-300 rounded truncate"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(calendarFeedUrl).then(() => alert('Calendar feed URL copied. Paste it in your calendar app (e.g. Google Calendar → Add calendar → From URL).')).catch(() => {});
+                                                    }}
+                                                    className="px-2 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 whitespace-nowrap"
+                                                >
+                                                    <i className="fas fa-copy mr-1"></i>Copy URL
+                                                </button>
+                                                <a
+                                                    href={calendarFeedUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-2 py-1.5 text-xs bg-gray-200 text-gray-800 rounded hover:bg-gray-300 whitespace-nowrap"
+                                                >
+                                                    <i className="fas fa-external-link-alt mr-1"></i>Open feed
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    disabled={calendarFeedVerify === 'checking'}
+                                                    onClick={async () => {
+                                                        setCalendarFeedVerify('checking');
+                                                        try {
+                                                            const res = await fetch(calendarFeedUrl);
+                                                            const text = await res.text();
+                                                            if (!res.ok) {
+                                                                setCalendarFeedVerify({ error: res.status === 401 ? 'Invalid or expired link' : `HTTP ${res.status}` });
+                                                                return;
+                                                            }
+                                                            const count = (text.match(/BEGIN:VEVENT/g) || []).length;
+                                                            setCalendarFeedVerify({ count });
+                                                        } catch (e) {
+                                                            setCalendarFeedVerify({ error: e.message || 'Network error' });
+                                                        }
+                                                    }}
+                                                    className="px-2 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 whitespace-nowrap disabled:opacity-50"
+                                                >
+                                                    {calendarFeedVerify === 'checking' ? <i className="fas fa-spinner fa-spin mr-1"></i> : <i className="fas fa-check-circle mr-1"></i>}
+                                                    Verify feed
+                                                </button>
+                                            </div>
+                                            {calendarFeedVerify && calendarFeedVerify !== 'checking' && (
+                                                <p className="text-xs mt-2">
+                                                    {calendarFeedVerify.count !== undefined ? (
+                                                        <span className="text-green-700"><i className="fas fa-check mr-1"></i>Feed OK – {calendarFeedVerify.count} event{calendarFeedVerify.count !== 1 ? 's' : ''} in feed. Your calendar app may take several hours to refresh.</span>
+                                                    ) : (
+                                                        <span className="text-red-700"><i className="fas fa-exclamation-triangle mr-1"></i>{calendarFeedVerify.error}</span>
+                                                    )}
+                                                </p>
+                                            )}
+                                        </>
                                     ) : (
                                         <p className="text-sm text-gray-500">Sign in to get your calendar feed URL.</p>
                                     )}
