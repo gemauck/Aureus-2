@@ -113,8 +113,9 @@ const formatDateTime = (dateValue) => {
     try {
         const date = parseDateValue(dateValue);
         if (!date) return '';
-        // Format as: "Jan 23, 2026 6:03 PM" (no timezone, no milliseconds)
-        return date.toLocaleString('en-US', {
+        // Format as: "23 Jan 2026, 18:03" (SAST, en-ZA)
+        return date.toLocaleString('en-ZA', {
+            timeZone: 'Africa/Johannesburg',
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -133,8 +134,9 @@ const formatDateOnly = (dateValue) => {
     try {
         const date = parseDateValue(dateValue);
         if (!date) return '';
-        // Format as: "Jan 23, 2026"
-        return date.toLocaleDateString('en-US', {
+        // Format as: "23 Jan 2026" (SAST, en-ZA)
+        return date.toLocaleDateString('en-ZA', {
+            timeZone: 'Africa/Johannesburg',
             year: 'numeric',
             month: 'short',
             day: 'numeric'
@@ -7095,7 +7097,8 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                             try {
                                                                                 const date = new Date(cleanedMatch);
                                                                                 if (!isNaN(date.getTime())) {
-                                                                                    return date.toLocaleString('en-US', {
+                                                                                    return date.toLocaleString('en-ZA', {
+                                                                                        timeZone: 'Africa/Johannesburg',
                                                                                         year: 'numeric',
                                                                                         month: 'short',
                                                                                         day: 'numeric',

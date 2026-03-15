@@ -1305,7 +1305,7 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
                         {isUrgent && (
                             <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-orange-600'}`}>
                                 <i className="fas fa-calendar text-[10px]"></i>
-                                {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {new Date(task.dueDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
                             </span>
                         )}
                         
@@ -1357,8 +1357,8 @@ const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clie
 
     const due = task.dueDate ? new Date(task.dueDate) : null;
     const isOverdue = due ? (due < new Date() && task.status !== 'completed') : false;
-    const dueLabel = due ? due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
-    const dueTitle = due ? due.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+    const dueLabel = due ? due.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' }) : '—';
+    const dueTitle = due ? due.toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
     const priority = (task.priority || 'medium').toLowerCase();
 
@@ -1505,7 +1505,7 @@ const CalendarView = ({ tasks, isDark, onEdit, onDelete, clients, projects, tags
                     <i className={`fas fa-chevron-left ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
                 </button>
                 <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    {currentMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}
                 </h3>
                 <button
                     onClick={goToNextMonth}

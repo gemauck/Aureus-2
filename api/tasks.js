@@ -7,6 +7,7 @@ import { ok, serverError, badRequest, notFound } from './_lib/response.js';
 import { parseJsonBody } from './_lib/body.js';
 import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
+import { formatInSAST } from './_lib/sastDate.js';
 
 // Helper to safely parse JSON fields from database
 function safeParseJson(value, defaultValue = null) {
@@ -33,7 +34,7 @@ function transformComment(comment) {
     authorId: comment.authorId || null,
     userName: comment.userName || comment.author || '',
     timestamp: comment.createdAt.toISOString(),
-    date: comment.createdAt.toLocaleString(),
+    date: formatInSAST(comment.createdAt),
     createdAt: comment.createdAt.toISOString()
   };
 }

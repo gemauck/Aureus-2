@@ -2473,7 +2473,7 @@ const LeaveCalendarView = ({ applications, view, onViewChange, getLeaveTypeInfo 
                         <i className="fas fa-chevron-left"></i>
                     </button>
                     <span className="px-4 py-1 text-sm font-medium">
-                        {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        {currentDate.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}
                     </span>
                     <button
                         onClick={() => {

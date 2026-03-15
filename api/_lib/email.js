@@ -1,6 +1,7 @@
 // Email service using nodemailer
 import nodemailer from 'nodemailer';
 import { getAppUrl } from './getAppUrl.js';
+import { formatLongDateInSAST } from './sastDate.js';
 
 // Build transporter from environment variables
 // Supported envs:
@@ -873,11 +874,7 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         if (taskDueDate) {
             try {
                 const dueDate = new Date(taskDueDate);
-                formattedDueDate = dueDate.toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                });
+                formattedDueDate = formatLongDateInSAST(dueDate);
             } catch (e) {
                 formattedDueDate = taskDueDate;
             }
@@ -1047,11 +1044,7 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                 if (taskDueDate) {
                     try {
                         const dueDate = new Date(taskDueDate);
-                        const formattedDueDate = dueDate.toLocaleDateString('en-US', { 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                        });
+                        const formattedDueDate = formatLongDateInSAST(dueDate);
                         text += `Due Date: ${formattedDueDate}\n`;
                     } catch (e) {
                         text += `Due Date: ${taskDueDate}\n`;

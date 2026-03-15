@@ -4,6 +4,7 @@ import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { formatInSAST } from '../_lib/sastDate.js'
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -27,7 +28,7 @@ async function handler(req, res) {
                 userId,
                 type: type || 'system',
                 title: title || 'Test Notification',
-                message: message || `This is a test notification created at ${new Date().toLocaleString()}`,
+                message: message || `This is a test notification created at ${formatInSAST(new Date())}`,
                 link: '/settings?tab=notifications',
                 metadata: JSON.stringify({ test: true, createdAt: new Date().toISOString() }),
                 read: false

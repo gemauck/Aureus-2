@@ -122,7 +122,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     // Format date for display
     const formatDateDisplay = (dateString) => {
         const date = new Date(dateString + 'T00:00:00Z');
-        return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        return date.toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     };
 
     // Save note (including handwriting as image) - MUST be defined before useEffects that use it
