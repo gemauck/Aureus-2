@@ -1073,6 +1073,7 @@ const Clients = React.memo(() => {
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
     const [openSiteIdForLead, setOpenSiteIdForLead] = useState(null);
     const [openSiteIdForClient, setOpenSiteIdForClient] = useState(null);
+    const [entityNotFoundId, setEntityNotFoundId] = useState(null); // When URL points to a lead/client that no longer exists (404)
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterEngagementStage, setFilterEngagementStage] = useState('All Engagement Stages');
@@ -1786,6 +1787,7 @@ const Clients = React.memo(() => {
             // CRITICAL: Don't reset detail views if they were opened programmatically (via handleOpenClient/handleOpenLead)
             // Only reset if the viewMode is invalid or if we're navigating away from a detail view via URL
             if (!route.segments || route.segments.length === 0) {
+                setEntityNotFoundId(null); // Clear not-found state when navigating to list
                 const validListViews = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'];
                 const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
                 const isValidView = validListViews.includes(viewMode) || validDetailViews.includes(viewMode);
@@ -1808,9 +1810,30 @@ const Clients = React.memo(() => {
                 return;
             }
             
-            // URL contains an entity ID - open that entity
+            // URL contains an entity ID - open that entity (or show list when segment is just "leads")
             const entityId = route.segments[0];
             if (!entityId) return;
+            
+            // If we already know this entity doesn't exist (404), show not-found state and avoid repeated API calls
+            if (entityId === entityNotFoundId) {
+                setEditingLeadId(null);
+                setEditingClientId(null);
+                selectedClientRef.current = null;
+                selectedLeadRef.current = null;
+                setViewMode('leads');
+                return;
+            }
+            
+            // Show leads list when URL is /clients/leads (single segment "leads")
+            if (route.segments.length === 1 && route.segments[0] === 'leads') {
+                setEntityNotFoundId(null);
+                setViewMode('leads');
+                setEditingLeadId(null);
+                setEditingClientId(null);
+                selectedLeadRef.current = null;
+                selectedClientRef.current = null;
+                return;
+            }
             
             // Handle "new" route for creating new client/lead - don't try to fetch it
             // Check if the first segment is "new" (new client) or if we have ["leads", "new"] (new lead)
@@ -1897,7 +1920,18 @@ const Clients = React.memo(() => {
                             }
                         }
                     } catch (error) {
-                        console.error('Failed to load client/lead from URL:', error);
+                        const is404 = error && (error.status === 404 || (error.message && (String(error.message).includes('404') || String(error.message).toLowerCase().includes('not found'))));
+                        if (is404) {
+                            setEntityNotFoundId(entityId);
+                            setEditingLeadId(null);
+                            setEditingClientId(null);
+                            selectedLeadRef.current = null;
+                            selectedClientRef.current = null;
+                            setViewMode('leads');
+                            // Inline "Lead not found" UI is shown below; no redirect or alert to avoid repeated 404s on re-renders
+                        } else {
+                            console.error('Failed to load client/lead from URL:', error);
+                        }
                     }
                 }
             }
@@ -9908,6 +9942,26 @@ className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                     )}
                 </div>
         )}
+
+            {/* Lead/Client not found (404) - show when URL points to missing entity */}
+            {entityNotFoundId && viewMode === 'leads' && (
+                <div className="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+                    <p className="font-medium">Lead or client not found</p>
+                    <p className="text-sm mt-1 opacity-90">The record may have been deleted or the link is invalid.</p>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setEntityNotFoundId(null);
+                            if (window.RouteState) {
+                                window.RouteState.setPageSubpath('clients', ['leads'], { replace: true, preserveSearch: false, preserveHash: false });
+                            }
+                        }}
+                        className="mt-3 px-3 py-1.5 text-sm font-medium rounded-md bg-amber-200 dark:bg-amber-800 hover:bg-amber-300 dark:hover:bg-amber-700"
+                    >
+                        Back to leads list
+                    </button>
+                </div>
+            )}
 
             {/* Content based on view mode */}
             {viewMode === 'clients' && <ClientsListView />}
