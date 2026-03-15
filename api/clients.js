@@ -839,7 +839,6 @@ async function handler(req, res) {
         name: body.name,
         type: 'client', // Always 'client' for client creation - never allow override
         industry: body.industry || 'Other',
-        status: body.status || 'active',
         revenue: parseFloat(body.revenue) || 0,
         value: parseFloat(body.value) || 0, // Add value field
         probability: parseInt(body.probability) || 0, // Add probability field
@@ -901,7 +900,6 @@ async function handler(req, res) {
             name: clientData.name,
             type: clientData.type, // Always 'client'
             industry: clientData.industry,
-            status: clientData.status,
             revenue: clientData.revenue,
             value: clientData.value,
             probability: clientData.probability,
@@ -1273,7 +1271,8 @@ async function handler(req, res) {
         // Attach duplicate info (if any) so frontend can show a warning
         return created(res, { client: parsedClient, duplicateWarning: duplicateCheck })
       } catch (dbError) {
-        console.error('❌ Database error creating client:', dbError)
+        console.error('❌ Database error creating client:', dbError?.message || dbError)
+        if (dbError?.code) console.error('   Prisma code:', dbError.code, dbError.meta ? 'meta:' : '', dbError.meta)
         return serverError(res, 'Failed to create client', dbError.message)
       }
     }
@@ -1366,7 +1365,6 @@ async function handler(req, res) {
           ...(body.name !== undefined && { name: body.name }),
           ...(body.type !== undefined && { type: body.type || 'client' }), // Default to 'client' to prevent null types
           ...(body.industry !== undefined && { industry: body.industry }),
-          ...(body.status !== undefined && { status: body.status }),
           ...(body.revenue !== undefined && { revenue: body.revenue }),
           ...(body.value !== undefined && { value: body.value }),
           ...(body.probability !== undefined && { probability: body.probability }),
