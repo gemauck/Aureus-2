@@ -128,6 +128,83 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
   }
 }
 
+// Escape HTML for safe inclusion in email body
+function escapeHtml(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// Notify the feedback author when an admin replies (send email to the person who submitted the feedback)
+async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
+  try {
+    const authorEmail = feedback?.user?.email
+    if (!authorEmail || !authorEmail.trim()) {
+      return
+    }
+    // Don't email the replier if they replied to their own feedback
+    const replierEmail = (replyingUser?.email || '').trim().toLowerCase()
+    if (replierEmail && authorEmail.trim().toLowerCase() === replierEmail) {
+      return
+    }
+
+    const authorName = escapeHtml(feedback?.user?.name || feedback?.user?.email || 'there')
+    const replierName = escapeHtml(replyingUser?.name || replyingUser?.email || 'An administrator')
+    const appName = process.env.APP_NAME || 'Abcotronics ERP'
+    const subject = `Re: Your feedback – ${appName}`
+
+    const rawMessage = feedback?.message || ''
+    const messagePreview = rawMessage.length > 200 ? rawMessage.substring(0, 200) + '...' : rawMessage
+    const rawReply = reply?.message || ''
+    const replyPreview = rawReply.length > 500 ? rawReply.substring(0, 500) + '...' : rawReply
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">💬 Reply to your feedback</h1>
+        </div>
+        <div style="padding: 30px; background: #f8f9fa;">
+          <p style="color: #333;">Hi ${authorName},</p>
+          <p style="color: #555;">${replierName} replied to your feedback:</p>
+          <div style="background: #e9ecef; border-radius: 6px; padding: 12px; margin: 16px 0;">
+            <p style="color: #555; margin: 0; font-size: 13px;"><strong>Your feedback:</strong></p>
+            <p style="color: #333; margin: 8px 0 0; white-space: pre-wrap;">${escapeHtml(messagePreview)}</p>
+          </div>
+          <div style="background: white; border-left: 4px solid #667eea; padding: 16px; margin: 16px 0; border-radius: 4px;">
+            <p style="color: #555; margin: 0; font-size: 13px;"><strong>Reply from ${replierName}:</strong></p>
+            <p style="color: #333; margin: 8px 0 0; white-space: pre-wrap;">${escapeHtml(replyPreview)}</p>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            View all feedback and replies in <strong>Reports</strong> in the ERP.
+          </p>
+        </div>
+        <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
+          <p style="margin: 0;">© ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
+        </div>
+      </div>
+    `
+
+    const { sendNotificationEmail } = await import('./_lib/email.js')
+    await sendNotificationEmail(
+      authorEmail,
+      subject,
+      htmlContent,
+      {
+        skipNotificationCreation: true,
+        notificationLink: '/reports'
+      }
+    )
+    console.log(`✅ Feedback reply email sent to ${authorEmail}`)
+  } catch (err) {
+    console.error('❌ Failed to send feedback reply email:', err?.message || err)
+    // Non-critical; do not throw
+  }
+}
+
 async function handler(req, res) {
   try {
     // Allow optional authentication so we can associate feedback with the submitting user
@@ -406,6 +483,21 @@ async function handler(req, res) {
             }
           }
         })
+
+        // Send email to the person who submitted the feedback (non-blocking)
+        prisma.feedback
+          .findUnique({
+            where: { id: feedbackItem.id },
+            include: {
+              user: { select: { id: true, name: true, email: true } }
+            }
+          })
+          .then((feedbackWithAuthor) => {
+            return notifyFeedbackAuthorOfReply(feedbackWithAuthor, reply, currentUser)
+          })
+          .catch((err) => {
+            console.error('❌ Failed to send feedback reply notification:', err?.message || err)
+          })
 
         return created(res, reply)
       } catch (e) {
