@@ -1076,7 +1076,7 @@ app.all('/api/feedback/:id/replies', async (req, res, next) => {
       req.params = req.params || {}
       req.params.id = pathSegments[1]
     }
-    
+
     const handler = await loadHandler(path.join(apiDir, 'feedback.js'))
     if (!handler) {
       console.error('❌ Feedback handler not found')
@@ -1089,6 +1089,33 @@ app.all('/api/feedback/:id/replies', async (req, res, next) => {
     return result
   } catch (e) {
     console.error('❌ Error in feedback reply handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// PATCH /api/feedback/:id (update type/status)
+app.all('/api/feedback/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'feedback.js'))
+    if (!handler) {
+      console.error('❌ Feedback handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in feedback update handler:', e)
     console.error('❌ Error stack:', e.stack)
     if (!res.headersSent) {
       return res.status(500).json({ 
