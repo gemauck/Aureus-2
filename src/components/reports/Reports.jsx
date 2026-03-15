@@ -7,20 +7,22 @@ const Reports = () => {
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
-    const isAdmin = user?.role?.toLowerCase() === 'admin';
-    const canViewAuditTrail = user?.role?.toLowerCase() === 'superadmin';
+    const role = user?.role?.toLowerCase();
+    const isAdmin = role === 'admin';
+    const canViewAuditTrail = role === 'superadmin';
+    const canViewFeedback = isAdmin || canViewAuditTrail; // Admin and Superadmin can see User Feedback
 
     const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
-    const [activeTab, setActiveTab] = useState(canViewAuditTrail ? 'audit' : (isAdmin ? 'feedback' : 'restricted'));
+    const [activeTab, setActiveTab] = useState(canViewAuditTrail ? 'audit' : (canViewFeedback ? 'feedback' : 'restricted'));
 
     // When user loads, set correct default tab
     useEffect(() => {
         if (canViewAuditTrail && activeTab === 'restricted') {
             setActiveTab('audit');
-        } else if (isAdmin && !canViewAuditTrail && activeTab === 'restricted') {
+        } else if (canViewFeedback && !canViewAuditTrail && activeTab === 'restricted') {
             setActiveTab('feedback');
         }
-    }, [canViewAuditTrail, isAdmin]);
+    }, [canViewAuditTrail, canViewFeedback]);
 
     // Wait for FeedbackViewer to load
     useEffect(() => {
@@ -88,7 +90,7 @@ const Reports = () => {
                             Audit Trail
                         </button>
                     )}
-                    {isAdmin && (
+                    {canViewFeedback && (
                         <button
                             onClick={() => setActiveTab('feedback')}
                             className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -128,7 +130,7 @@ const Reports = () => {
                         </p>
                     </div>
                 )}
-                {activeTab === 'feedback' && isAdmin && (
+                {activeTab === 'feedback' && canViewFeedback && (
                     <div>
                         {FeedbackViewer && feedbackViewerReady ? (
                             <FeedbackViewer />

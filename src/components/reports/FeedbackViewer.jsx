@@ -15,8 +15,8 @@ const FeedbackViewer = () => {
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
-    // Check if user is admin
-    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    // Check if user can view feedback (admin or superadmin)
+    const isAdmin = ['admin', 'superadmin'].includes(user?.role?.toLowerCase() || '');
 
     useEffect(() => {
         if (isAdmin) {
