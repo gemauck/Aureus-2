@@ -31,3 +31,26 @@ export function verifyRefreshToken(token) {
   }
 }
 
+const CALENDAR_FEED_EXPIRY = 365 * DAY // 1 year
+
+/** Sign a long-lived token for calendar feed subscription (used in feed URL). */
+export function signCalendarFeedToken(payload) {
+  return jwt.sign(
+    { ...payload, purpose: 'calendar-feed' },
+    process.env.JWT_SECRET,
+    { expiresIn: CALENDAR_FEED_EXPIRY }
+  )
+}
+
+/** Verify calendar feed token; returns payload or null. Caller must check payload.purpose === 'calendar-feed'. */
+export function verifyCalendarFeedToken(token) {
+  try {
+    if (!process.env.JWT_SECRET || !token) return null
+    const payload = jwt.verify(token, process.env.JWT_SECRET)
+    if (payload.purpose !== 'calendar-feed') return null
+    return payload
+  } catch (error) {
+    return null
+  }
+}
+

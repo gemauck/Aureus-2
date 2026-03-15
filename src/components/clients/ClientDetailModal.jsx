@@ -1739,6 +1739,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         description: '',
         completed: false
     });
+    const [calendarFeedUrl, setCalendarFeedUrl] = useState(null);
+    const [calendarFeedLoading, setCalendarFeedLoading] = useState(false);
     
     const [newComment, setNewComment] = useState('');
     const [isCommentSubscribed, setIsCommentSubscribed] = useState(false);
@@ -1769,6 +1771,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         relatedSiteId: null,
         notes: ''
     });
+
+    // Fetch calendar feed URL when user opens Calendar tab (for subscribe-to-calendar)
+    useEffect(() => {
+        if (activeTab !== 'calendar' || calendarFeedUrl != null || calendarFeedLoading) return;
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        setCalendarFeedLoading(true);
+        const base = window.location.origin;
+        fetch(`${base}/api/calendar/feed-token`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((res) => res.json())
+            .then((json) => {
+                const url = json?.data?.feedUrl || json?.feedUrl;
+                if (url) setCalendarFeedUrl(url);
+            })
+            .catch(() => {})
+            .finally(() => setCalendarFeedLoading(false));
+    }, [activeTab, calendarFeedUrl, calendarFeedLoading]);
 
     useEffect(() => {
         // OLD COMPLEX LOGIC REMOVED - replaced with clean solution above
@@ -6123,6 +6142,40 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
                                     <h3 className="text-lg font-semibold text-gray-900">Follow-ups & Meetings</h3>
+                                </div>
+
+                                {/* Subscribe to calendar (iCal feed) */}
+                                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                                    <h4 className="font-medium text-gray-900 mb-2 text-sm flex items-center gap-2">
+                                        <i className="fas fa-calendar-plus text-blue-600"></i>
+                                        Subscribe to calendar
+                                    </h4>
+                                    <p className="text-xs text-gray-600 mb-2">
+                                        Add this feed to Google Calendar, Outlook, or Apple Calendar to see follow-ups in your calendar. Your app will refresh the feed periodically.
+                                    </p>
+                                    {calendarFeedLoading ? (
+                                        <p className="text-sm text-gray-500"><i className="fas fa-spinner fa-spin mr-1"></i>Loading feed URL…</p>
+                                    ) : calendarFeedUrl ? (
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value={calendarFeedUrl}
+                                                className="flex-1 min-w-0 text-xs px-2 py-1.5 bg-white border border-gray-300 rounded truncate"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(calendarFeedUrl).then(() => alert('Calendar feed URL copied. Paste it in your calendar app (e.g. Google Calendar → Add calendar → From URL).')).catch(() => {});
+                                                }}
+                                                className="px-2 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 whitespace-nowrap"
+                                            >
+                                                <i className="fas fa-copy mr-1"></i>Copy URL
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-gray-500">Sign in to get your calendar feed URL.</p>
+                                    )}
                                 </div>
 
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
