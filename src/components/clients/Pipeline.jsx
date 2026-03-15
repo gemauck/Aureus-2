@@ -1632,6 +1632,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
             );
             setLeads(updatedLeads);
             storage.setLeads(updatedLeads);
+        } else if (item.type === 'client') {
+            const updatedClients = clients.map(client =>
+                client.id === item.id ? { ...client, isStarred: newStarredState } : client
+            );
+            setClients(updatedClients);
+            storage.setClients(updatedClients);
         } else if (item.type === 'opportunity') {
             const updatedClients = clients.map(client => {
                 if (client.id !== item.clientId) return client;
@@ -1662,6 +1668,22 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         );
                         setLeads(revertedLeads);
                         storage.setLeads(revertedLeads);
+                    });
+                }
+            } else if (item.type === 'client') {
+                const toggleFn = window.api?.toggleStarClient || window.DatabaseAPI?.toggleStarClient;
+                if (toggleFn && item.id) {
+                    toggleFn(item.id).then(() => {
+                        if (window.DatabaseAPI?.clearCache) {
+                            window.DatabaseAPI.clearCache('/clients');
+                        }
+                    }).catch(error => {
+                        console.error('❌ Pipeline: Failed to toggle star for client', error);
+                        const revertedClients = clients.map(client =>
+                            client.id === item.id ? { ...client, isStarred: currentStarred } : client
+                        );
+                        setClients(revertedClients);
+                        storage.setClients(revertedClients);
                     });
                 }
             } else if (item.type === 'opportunity') {
