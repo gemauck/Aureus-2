@@ -60,11 +60,43 @@ async function handler(req, res) {
   }
 
   try {
-    const followUps = await prisma.clientFollowUp.findMany({
+    let followUps = await prisma.clientFollowUp.findMany({
       where: {},
       include: { client: { select: { name: true } } },
       orderBy: [{ date: 'asc' }, { time: 'asc' }]
     })
+
+    // Fallback: if normalized table is empty, include follow-ups from Client JSON (legacy or when sync hasn't run yet)
+    if (followUps.length === 0) {
+      const clients = await prisma.client.findMany({
+        where: {},
+        select: { id: true, name: true, followUps: true, followUpsJsonb: true }
+      })
+      const fromJson = []
+      for (const c of clients) {
+        let list = c.followUpsJsonb
+        if (!Array.isArray(list) || list.length === 0) {
+          try {
+            const raw = typeof c.followUps === 'string' && c.followUps.trim() ? JSON.parse(c.followUps) : []
+            list = Array.isArray(raw) ? raw : []
+          } catch (_) {
+            list = []
+          }
+        }
+        for (const f of list) {
+          fromJson.push({
+            id: f.id || `${c.id}-${f.date}-${f.time || ''}`,
+            date: f.date || '',
+            time: f.time || '',
+            type: f.type || 'Call',
+            description: f.description || '',
+            client: { name: c.name || 'Client' }
+          })
+        }
+      }
+      fromJson.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.time || '').localeCompare(String(b.time || '')))
+      followUps = fromJson
+    }
 
     const lines = [
       'BEGIN:VCALENDAR',

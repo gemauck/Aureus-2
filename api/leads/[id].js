@@ -936,6 +936,7 @@ async function handler(req, res) {
             const followUpsToKeep = new Set()
             
             for (const followUp of followUpsArray) {
+              const followUpId = followUp.id != null ? String(followUp.id) : null
               const followUpData = {
                 clientId: id,
                 date: followUp.date || '',
@@ -946,30 +947,30 @@ async function handler(req, res) {
                 assignedTo: followUp.assignedTo || null
               }
               
-              if (followUp.id && existingFollowUpIds.has(followUp.id)) {
+              if (followUpId && existingFollowUpIds.has(followUpId)) {
                 await prisma.clientFollowUp.update({
-                  where: { id: followUp.id },
+                  where: { id: followUpId },
                   data: followUpData
                 })
-                followUpsToKeep.add(followUp.id)
-                console.log(`✅ [LEADS ID] Updated followUp ${followUp.id} for lead ${id}`)
-              } else if (followUp.id) {
+                followUpsToKeep.add(followUpId)
+                console.log(`✅ [LEADS ID] Updated followUp ${followUpId} for lead ${id}`)
+              } else if (followUpId) {
                 try {
                   await prisma.clientFollowUp.create({
-                    data: { id: followUp.id, ...followUpData }
+                    data: { id: followUpId, ...followUpData }
                   })
-                  followUpsToKeep.add(followUp.id)
-                  console.log(`✅ [LEADS ID] Created followUp ${followUp.id} for lead ${id}`)
+                  followUpsToKeep.add(followUpId)
+                  console.log(`✅ [LEADS ID] Created followUp ${followUpId} for lead ${id}`)
                 } catch (createError) {
                   if (createError.code === 'P2002') {
                     await prisma.clientFollowUp.update({
-                      where: { id: followUp.id },
+                      where: { id: followUpId },
                       data: followUpData
                     })
-                    followUpsToKeep.add(followUp.id)
-                    console.log(`✅ [LEADS ID] Updated followUp ${followUp.id} after ID conflict for lead ${id}`)
+                    followUpsToKeep.add(followUpId)
+                    console.log(`✅ [LEADS ID] Updated followUp ${followUpId} after ID conflict for lead ${id}`)
                   } else {
-                    console.error(`❌ [LEADS ID] Failed to create followUp ${followUp.id}:`, createError.message)
+                    console.error(`❌ [LEADS ID] Failed to create followUp ${followUpId}:`, createError.message)
                     throw createError
                   }
                 }
