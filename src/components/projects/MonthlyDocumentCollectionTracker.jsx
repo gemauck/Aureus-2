@@ -108,39 +108,40 @@ const parseDateValue = (dateValue) => {
     return date;
 };
 
-// Helper function to format dates as date and time (without timezone info)
+// Use SAST for display (single place for options)
+const SAST_OPTS = { timeZone: 'Africa/Johannesburg' };
+const SAST_DATETIME_OPTS = { ...SAST_OPTS, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true };
+const SAST_DATE_ONLY_OPTS = { ...SAST_OPTS, year: 'numeric', month: 'short', day: 'numeric' };
+
+// For values that are clearly UTC from API (ISO with Z or offset), parse as UTC. Otherwise use parseDateValue (SA wall time).
+function parseDateForDisplay(dateValue) {
+    if (!dateValue) return null;
+    if (dateValue instanceof Date) return isNaN(dateValue.getTime()) ? null : dateValue;
+    const raw = String(dateValue).trim();
+    if (!raw) return null;
+    const hasUtcIndicator = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw);
+    const date = hasUtcIndicator ? new Date(raw) : parseDateValue(dateValue);
+    return date && !isNaN(date.getTime()) ? date : null;
+}
+
+// Helper function to format dates as date and time (SAST)
 const formatDateTime = (dateValue) => {
     try {
-        const date = parseDateValue(dateValue);
+        const date = parseDateForDisplay(dateValue);
         if (!date) return '';
-        // Format as: "23 Jan 2026, 18:03" (SAST, en-ZA)
-        return date.toLocaleString('en-ZA', {
-            timeZone: 'Africa/Johannesburg',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
+        return date.toLocaleString('en-ZA', SAST_DATETIME_OPTS);
     } catch (e) {
         console.warn('Failed to format date:', dateValue, e);
         return '';
     }
 };
 
-// Helper function to format dates as date only (no time)
+// Helper function to format dates as date only (SAST)
 const formatDateOnly = (dateValue) => {
     try {
-        const date = parseDateValue(dateValue);
+        const date = parseDateForDisplay(dateValue);
         if (!date) return '';
-        // Format as: "23 Jan 2026" (SAST, en-ZA)
-        return date.toLocaleDateString('en-ZA', {
-            timeZone: 'Africa/Johannesburg',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
+        return date.toLocaleDateString('en-ZA', SAST_DATE_ONLY_OPTS);
     } catch (e) {
         return '';
     }

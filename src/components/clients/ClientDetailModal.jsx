@@ -6454,7 +6454,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 <div><i className="fas fa-user mr-1.5 w-4"></i>{jobCard.agentName}</div>
                                                             )}
                                                             {jobCard.createdAt && (
-                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(jobCard.createdAt).toLocaleDateString()}</div>
+                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(jobCard.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}</div>
                                                             )}
                                                             {jobCard.diagnosis && (
                                                                 <div className="mt-1 text-xs text-gray-500 italic">{jobCard.diagnosis.substring(0, 100)}{jobCard.diagnosis.length > 100 ? '...' : ''}</div>
@@ -6671,7 +6671,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <div className="flex-1 min-w-0">
                                                                 <h4 className="font-medium text-gray-900 text-sm truncate">{contract.name}</h4>
                                                                 <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
-                                                                    <span><i className="fas fa-calendar mr-1"></i>{new Date(contract.uploadDate).toLocaleDateString()}</span>
+                                                                    <span><i className="fas fa-calendar mr-1"></i>{new Date(contract.uploadDate).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}</span>
                                                                     <span><i className="fas fa-file mr-1"></i>{(contract.size / 1024).toFixed(1)} KB</span>
                                                                 </div>
                                                             </div>
@@ -6789,7 +6789,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             <div className="flex justify-between items-start mb-1">
                                                                 <div className="font-medium text-gray-900 text-sm">{activity.type}</div>
                                                                 <div className="text-xs text-gray-500">
-                                                                    {new Date(activity.timestamp).toLocaleString()}
+                                                                    {new Date(activity.timestamp).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                 </div>
                                                             </div>
                                                             <div className="text-sm text-gray-600">{activity.description}</div>
@@ -6971,7 +6971,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         <div>
                                                             <div className="font-medium text-gray-900 text-sm">{comment.createdBy || comment.author || 'User'}{comment.createdByEmail || comment.authorEmail ? ` (${comment.createdByEmail || comment.authorEmail})` : ''}</div>
                                                             <div className="text-xs text-gray-500">
-                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString()}
+                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                             </div>
                                                         </div>
                                                     </div>

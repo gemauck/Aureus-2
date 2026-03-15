@@ -2445,6 +2445,7 @@ const TaskDetailModal = ({
                                                         <div>
                                                             <div className="font-medium text-gray-800 text-xs">{(comment.author || comment.createdBy || 'User')}{(comment.authorEmail || comment.createdByEmail) ? ` (${comment.authorEmail || comment.createdByEmail})` : ''}</div>
                                                             <div className="text-[10px] text-gray-500">{comment.date || new Date(comment.timestamp || comment.createdAt).toLocaleString('en-ZA', {
+                                                                timeZone: 'Africa/Johannesburg',
                                                                 month: 'short',
                                                                 day: '2-digit',
                                                                 hour: '2-digit',

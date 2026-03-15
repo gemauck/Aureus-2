@@ -842,7 +842,7 @@ const TicketDetailModal = ({
                                                                 {comment.userName || 'Unknown'}
                                                             </span>
                                                             <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                                                {comment.timestamp ? new Date(comment.timestamp).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' }) : ''}
                                                             </span>
                                                         </div>
                                                         <p className="text-gray-700 dark:text-gray-300 mt-1 whitespace-pre-wrap">
@@ -892,7 +892,7 @@ const TicketDetailModal = ({
                                                             {activity.action}
                                                         </span>
                                                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                            {activity.timestamp ? new Date(activity.timestamp).toLocaleString() : ''}
+                                                            {activity.timestamp ? new Date(activity.timestamp).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' }) : ''}
                                                         </span>
                                                     </div>
                                                     {activity.userName && (

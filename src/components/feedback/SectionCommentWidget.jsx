@@ -106,7 +106,7 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
         if (diffMins < 60) return `${diffMins}m ago`;
         if (diffHours < 24) return `${diffHours}h ago`;
         if (diffDays < 7) return `${diffDays}d ago`;
-        return date.toLocaleDateString();
+        return date.toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' });
     };
 
     const getInitials = (name) => {

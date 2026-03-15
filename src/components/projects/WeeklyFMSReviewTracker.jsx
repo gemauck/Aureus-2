@@ -4129,6 +4129,7 @@ const getAssigneeColor = (identifier, users) => {
                                                         const date = new Date(comment.date);
                                                         if (isNaN(date.getTime())) return 'Invalid Date';
                                                         return date.toLocaleString('en-ZA', { 
+                                                            timeZone: 'Africa/Johannesburg',
                                                             month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
                                                         });
                                                     } catch (e) {

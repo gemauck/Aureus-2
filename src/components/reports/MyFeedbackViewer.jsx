@@ -43,7 +43,7 @@ const MyFeedbackViewer = () => {
         return true;
     });
 
-    const formatDate = (d) => d ? new Date(d).toLocaleString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    const formatDate = (d) => d ? new Date(d).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     const getInitials = (name) => !name ? 'U' : name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
 
     if (!user) {

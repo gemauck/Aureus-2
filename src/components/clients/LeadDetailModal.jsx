@@ -4481,7 +4481,7 @@ const LeadDetailModal = ({
                                                         <div>
                                                             <div className="font-medium text-gray-900 text-sm">{comment.createdBy || comment.author || 'User'}{comment.createdByEmail || comment.authorEmail ? ` (${comment.createdByEmail || comment.authorEmail})` : ''}</div>
                                                             <div className="text-xs text-gray-500">
-                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString()}
+                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -4868,7 +4868,7 @@ const LeadDetailModal = ({
                                                                     </h4>
                                                         <div className="text-sm text-gray-600 mt-1">
                                                             <i className="fas fa-calendar mr-1"></i>
-                                                            Created: {new Date(proposal.createdDate).toLocaleDateString()}
+                                                            Created: {new Date(proposal.createdDate).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -5138,7 +5138,7 @@ const LeadDetailModal = ({
                                                                                                             <div className="font-medium text-gray-700">{comment.author || 'Unknown'}</div>
                                                                                                             <div className="mt-1">{renderCommentText(comment.text)}</div>
                                                                                                             <div className="text-[10px] text-gray-400 mt-1">
-                                                                                                                {new Date(comment.timestamp).toLocaleString()}
+                                                                                                                {new Date(comment.timestamp).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                                                             </div>
                                                                                                         </div>
                                                                                                     );
@@ -5305,12 +5305,12 @@ const LeadDetailModal = ({
                                                                                 {/* Status Messages */}
                                                                             {stage.approvedBy && (
                                                                                 <div className="mt-2 text-[11px] text-gray-600">
-                                                                                    <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString()}
+                                                                                    <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                                 </div>
                                                                                 )}
                                                                                 {stage.rejectedBy && (
                                                                                     <div className="mt-2 text-[11px] text-red-600">
-                                                                                        <i className="fas fa-times-circle mr-1"></i>Rejected by {stage.rejectedBy} on {new Date(stage.rejectedAt).toLocaleDateString()}
+                                                                                        <i className="fas fa-times-circle mr-1"></i>Rejected by {stage.rejectedBy} on {new Date(stage.rejectedAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                                         {stage.rejectedReason && (
                                                                                             <div className="mt-1 text-gray-600">Reason: {stage.rejectedReason}</div>
                                                                             )}
@@ -5703,7 +5703,7 @@ const LeadDetailModal = ({
                                                             <div className="flex justify-between items-start mb-1">
                                                                 <div className="font-medium text-gray-900 text-sm">{activity.type}</div>
                                                                 <div className="text-xs text-gray-500">
-                                                                    {new Date(activity.timestamp).toLocaleString()}
+                                                                    {new Date(activity.timestamp).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                 </div>
                                                             </div>
                                                             <div className="text-sm text-gray-600">{activity.description}</div>

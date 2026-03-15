@@ -233,7 +233,7 @@ const AuditTrail = () => {
         const headers = ['Log ID', 'Timestamp', 'User', 'Email', 'Role', 'Action', 'Module', 'Entity ID', 'Details (JSON)', 'IP Address', 'Session ID', 'Success'];
         const rows = filteredLogs.map(log => [
             log.id || '',
-            new Date(log.timestamp).toLocaleString('en-ZA'),
+            new Date(log.timestamp).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' }),
             log.user,
             log.userEmail || '',
             log.userRole,
@@ -315,7 +315,7 @@ const AuditTrail = () => {
         if (dates.length === 0) return null;
         const min = new Date(Math.min(...dates));
         const max = new Date(Math.max(...dates));
-        const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const fmt = d => d.toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', year: 'numeric' });
         return min.getTime() === max.getTime() ? fmt(min) : `${fmt(min)} – ${fmt(max)}`;
     })();
 
@@ -782,6 +782,7 @@ const AuditTrail = () => {
                                         </td>
                                         <td className="px-2 py-2 text-xs text-gray-900 whitespace-nowrap">
                                             {new Date(log.timestamp).toLocaleString('en-ZA', {
+                                                timeZone: 'Africa/Johannesburg',
                                                 year: 'numeric',
                                                 month: 'short',
                                                 day: 'numeric',

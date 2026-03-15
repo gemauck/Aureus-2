@@ -5117,7 +5117,7 @@ const ManagementMeetingNotes = () => {
                                                                                             dangerouslySetInnerHTML={{ __html: displayContent }}
                                                                                         />
                                                                                         <p className={`text-xs mt-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
+                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                                         </p>
                                                                                     </div>
                                                                                     <button

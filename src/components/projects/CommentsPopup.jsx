@@ -189,6 +189,7 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
                                             <div className="flex items-center justify-between">
                                                 <span className="font-medium text-gray-800 text-[10px]">{(comment.author || comment.createdBy || 'User')}{(comment.authorEmail || comment.createdByEmail) ? ` (${comment.authorEmail || comment.createdByEmail})` : ''}</span>
                                                 <span className="text-[9px] text-gray-500">{new Date(comment.timestamp || comment.date || comment.createdAt).toLocaleString('en-ZA', {
+                                                    timeZone: 'Africa/Johannesburg',
                                                     month: 'short',
                                                     day: '2-digit',
                                                     hour: '2-digit',

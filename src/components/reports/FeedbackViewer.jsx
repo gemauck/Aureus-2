@@ -14,6 +14,7 @@ const FeedbackViewer = () => {
     const [submittingReplyId, setSubmittingReplyId] = useState(null);
     const [replyErrors, setReplyErrors] = useState({});
     const [updatingId, setUpdatingId] = useState(null);
+    const [markingOldDone, setMarkingOldDone] = useState(false);
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
@@ -140,6 +141,23 @@ const FeedbackViewer = () => {
         }
     };
 
+    const handleMarkOldDone = async () => {
+        if (markingOldDone) return;
+        if (!confirm('Mark all feedback older than 1 week as Done? This cannot be undone.')) return;
+        setMarkingOldDone(true);
+        try {
+            const res = await window.api.markOldFeedbackDone();
+            const count = res?.updated ?? res?.data?.updated ?? 0;
+            await loadFeedback();
+            if (count > 0) alert(`${count} feedback item(s) marked as Done.`);
+        } catch (error) {
+            console.error('❌ Failed to mark old feedback done:', error);
+            alert(error?.message || 'Failed to mark old feedback as done.');
+        } finally {
+            setMarkingOldDone(false);
+        }
+    };
+
     const filteredFeedback = feedback.filter(item => {
         if (filter.type !== 'all' && item.type !== filter.type) return false;
         if (filter.severity !== 'all' && item.severity !== filter.severity) return false;
@@ -157,6 +175,7 @@ const FeedbackViewer = () => {
     const formatDate = (dateString) => {
         const date = new Date(dateString);
         return date.toLocaleString('en-ZA', {
+            timeZone: 'Africa/Johannesburg',
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -202,6 +221,20 @@ const FeedbackViewer = () => {
                     >
                         <i className="fas fa-sync-alt mr-1.5"></i>
                         Refresh
+                    </button>
+                    <button
+                        onClick={handleMarkOldDone}
+                        disabled={markingOldDone}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            markingOldDone ? 'opacity-60 cursor-not-allowed' : ''
+                        } ${
+                            isDark
+                                ? 'bg-amber-800/50 text-amber-200 hover:bg-amber-700/50'
+                                : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                        }`}
+                    >
+                        {markingOldDone ? <i className="fas fa-spinner fa-spin mr-1.5"></i> : <i className="fas fa-check-double mr-1.5"></i>}
+                        Mark all &gt; 1 week as Done
                     </button>
                 </div>
 
