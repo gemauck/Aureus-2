@@ -706,16 +706,13 @@ function initializeProjectDetail() {
                 }
             });
 
-            // Preload component when document collection section is active or about to be active
+            // Load component only when user actually opens the Document Collection tab (avoids slow project load)
             useEffectSection(() => {
-                // If already ready, no need to load
                 if (trackerReady) return;
-
-                // If section is documentCollection or project has document collection process, load immediately
-                if (activeSection === 'documentCollection' || hasDocumentCollectionProcess) {
+                if (activeSection === 'documentCollection') {
                     loadTrackerComponent();
                 }
-            }, [activeSection, hasDocumentCollectionProcess, trackerReady, loadTrackerComponent]);
+            }, [activeSection, trackerReady, loadTrackerComponent]);
 
 
             // Only render MonthlyDocumentCollectionTracker when activeSection is documentCollection
@@ -938,12 +935,13 @@ function initializeProjectDetail() {
                 return loadPromise;
             }, []);
 
+            // Load only when user opens the Monthly Data Review tab (avoids slow project load)
             useEffectSection(() => {
                 if (trackerReady) return;
-                if (activeSection === 'monthlyDataReview' || hasMonthlyDataReviewProcess) {
+                if (activeSection === 'monthlyDataReview') {
                     loadTrackerComponent();
                 }
-            }, [activeSection, hasMonthlyDataReviewProcess, trackerReady, loadTrackerComponent]);
+            }, [activeSection, trackerReady, loadTrackerComponent]);
 
             if (activeSection !== 'monthlyDataReview') {
                 return null;
@@ -2707,23 +2705,8 @@ function initializeProjectDetail() {
         setHasDocumentCollectionProcess(normalizedValue);
     }, [project.id]); // Re-sync whenever we switch to a different project
     
-    // Preload MonthlyDocumentCollectionTracker when project has document collection process enabled
-    useEffect(() => {
-        if (!hasDocumentCollectionProcess && !forceDocumentCollectionDeepLink) return;
-        
-        // If component is already available, no need to preload
-        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-            return;
-        }
-
-        // Preload the component immediately
-        if (window.loadComponent && typeof window.loadComponent === 'function') {
-            window.loadComponent('./src/components/projects/MonthlyDocumentCollectionTracker.jsx')
-                .catch(() => {
-                    // Silently fail - component will load when needed
-                });
-        }
-    }, [hasDocumentCollectionProcess, forceDocumentCollectionDeepLink, project.id]);
+    // Do NOT preload MonthlyDocumentCollectionTracker on project open - load only when user opens
+    // Document Collection or Monthly Data Review tab (fixes slow project tab loading).
 
     // If the project is opened via a deep-link to the document collection tracker
     // (for example from an email notification), ensure the Document Collection tab
