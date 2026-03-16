@@ -3218,7 +3218,7 @@ const getAssigneeColor = (identifier, users) => {
         
         return (
             <td 
-                className={`px-2 py-0.5 text-xs border-l-2 border-gray-300 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                className={`px-2 py-0.5 text-xs border-l-4 border-gray-400 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
@@ -4772,9 +4772,9 @@ placeholder="Notes..."
                                                     <th
                                                         key={col.key}
                                                         colSpan={2}
-                                                        className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-b-2 border-gray-300 ${
+                                                        className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 ${
                                                             workingWeeks.includes(week.number) && selectedYear === currentYear
-                                                                ? 'bg-primary-100 text-primary-800 border-primary-300'
+                                                                ? 'bg-primary-100 text-primary-800 border-primary-400'
                                                                 : 'text-gray-700'
                                                         }`}
                                                         title={week.dateRange}
@@ -4787,7 +4787,7 @@ placeholder="Notes..."
                                             })}
                                             <th
                                                 rowSpan={2}
-                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300 bg-gradient-to-b from-gray-100 to-gray-50"
+                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-4 border-gray-400 bg-gradient-to-b from-gray-100 to-gray-50"
                                             >
                                                 Actions
                                             </th>
@@ -4799,8 +4799,8 @@ placeholder="Notes..."
                                                 return (
                                                     <React.Fragment key={col.key}>
                                                         <th
-                                                            className={`px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
-                                                                isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
+                                                            className={`px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider border-l-4 border-t-2 border-gray-400 ${
+                                                                isWorking ? 'bg-primary-50 text-primary-800 border-primary-400' : 'text-gray-600'
                                                             }`}
                                                             style={{ minWidth: '180px', width: '180px' }}
                                                         >
@@ -4998,7 +4998,7 @@ placeholder="Notes..."
                                                             {renderNotesCell(section, doc, col.week)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-4 py-2 border-l-2 border-gray-300">
+                                                    <td className="px-4 py-2 border-l-4 border-gray-400">
                                                         <div className="flex items-center gap-2 justify-center">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, doc)}

@@ -4901,7 +4901,7 @@ function initializeProjectDetail() {
                             order: listData.order !== undefined ? listData.order : editingList.order
                         })
                     });
-                    const updated = data?.taskList || data;
+                    const updated = data?.data?.taskList || data?.taskList || data;
                     setTaskLists(prev => prev.map(l => l.id === editingList.id ? normalizeTaskList({ ...l, ...updated, ...listData }) : l));
                 } else {
                     setTaskLists(prev => prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l));
@@ -4917,7 +4917,7 @@ function initializeProjectDetail() {
                         order: nextOrder
                     })
                 });
-                const taskList = data?.taskList || data;
+                const taskList = data?.data?.taskList || data?.taskList || data;
                 if (!taskList) throw new Error('Invalid response');
                 const newList = normalizeTaskList({
                     ...taskList,
@@ -4925,6 +4925,13 @@ function initializeProjectDetail() {
                     color: listData.color ?? taskList.color
                 });
                 setTaskLists(prev => [...prev, newList]);
+            }
+            if (window.DatabaseAPI?._responseCache) {
+                const pid = project?.id;
+                if (pid) {
+                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${pid}`);
+                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${pid}?summary=1`);
+                }
             }
             setShowListModal(false);
             setEditingList(null);
@@ -4986,7 +4993,10 @@ function initializeProjectDetail() {
                 if (listPk && typeof listPk === 'string' && window.DatabaseAPI?.makeRequest) {
                     await window.DatabaseAPI.makeRequest(`/project-task-lists?id=${encodeURIComponent(listPk)}`, { method: 'DELETE' });
                 }
-                
+                if (window.DatabaseAPI?._responseCache && project?.id) {
+                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
+                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}?summary=1`);
+                }
                 // Update local state after successful save — use functional update to avoid stale closure
                 setTasks(prev => (Array.isArray(prev) ? prev : []).map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
                 setTaskLists(prev => prev.filter(l => l.id !== listId));
