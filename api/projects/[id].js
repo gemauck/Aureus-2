@@ -297,37 +297,75 @@ async function handler(req, res) {
           } catch (_) { return false; }
         })();
         if (summaryOnly) {
-          const [projectRow, tasksRows, taskListsRows] = await Promise.all([
-            prisma.project.findUnique({ where: { id } }),
-            prisma.task.findMany({
-              where: { projectId: id, parentTaskId: null },
-              orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-              include: {
-                subtasks: { orderBy: { createdAt: 'asc' } },
-                assigneeUser: { select: { id: true, name: true, email: true } }
-              }
-            }).catch(() => []),
-            prisma.projectTaskList?.findMany
-              ? prisma.projectTaskList.findMany({ where: { projectId: id }, orderBy: { order: 'asc' } }).catch(() => [])
-              : Promise.resolve([])
-          ]);
-          if (!projectRow) return notFound(res);
-          const taskLists = Array.isArray(taskListsRows) ? taskListsRows : [];
-          const projectSummary = {
-            ...projectRow,
-            tasks: tasksRows || [],
-            tasksList: tasksRows || [], // alias so getTasksFromProject finds tasks when summary is used
-            documentSections: {},
-            weeklyFMSReviewSections: {},
-            monthlyFMSReviewSections: {},
-            taskLists,
-            comments: [],
-            documents: [],
-            team: [],
-            customFieldDefinitions: [],
-            activityLog: []
-          };
-          return ok(res, { project: projectSummary });
+          try {
+            // Explicit select so we never request columns that might not exist yet (avoids 500 after schema deploy)
+            const [projectRow, tasksRows, taskListsRows] = await Promise.all([
+              prisma.project.findUnique({
+                where: { id },
+                select: {
+                  id: true,
+                  clientId: true,
+                  name: true,
+                  description: true,
+                  clientName: true,
+                  status: true,
+                  startDate: true,
+                  dueDate: true,
+                  budget: true,
+                  actualCost: true,
+                  progress: true,
+                  priority: true,
+                  type: true,
+                  assignedTo: true,
+                  notes: true,
+                  hasTimeProcess: true,
+                  hasDocumentCollectionProcess: true,
+                  hasWeeklyFMSReviewProcess: true,
+                  hasMonthlyFMSReviewProcess: true,
+                  hasMonthlyDataReviewProcess: true,
+                  ownerId: true,
+                  createdAt: true,
+                  updatedAt: true,
+                  monthlyDataReviewChecklist: true,
+                  monthlyDataReviewSections: true
+                }
+              }),
+              prisma.task.findMany({
+                where: { projectId: id, parentTaskId: null },
+                orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+                include: {
+                  subtasks: { orderBy: { createdAt: 'asc' } },
+                  assigneeUser: { select: { id: true, name: true, email: true } }
+                }
+              }).catch(() => []),
+              prisma.projectTaskList?.findMany
+                ? prisma.projectTaskList.findMany({ where: { projectId: id }, orderBy: { order: 'asc' } }).catch(() => [])
+                : Promise.resolve([])
+            ]);
+            if (!projectRow) return notFound(res);
+            const taskLists = Array.isArray(taskListsRows) ? taskListsRows : [];
+            const projectSummary = {
+              ...projectRow,
+              hasComplianceReviewProcess: projectRow.hasComplianceReviewProcess ?? false,
+              complianceReviewChecklist: projectRow.complianceReviewChecklist ?? '[]',
+              complianceReviewSections: projectRow.complianceReviewSections ?? '{}',
+              tasks: tasksRows || [],
+              tasksList: tasksRows || [], // alias so getTasksFromProject finds tasks when summary is used
+              documentSections: {},
+              weeklyFMSReviewSections: {},
+              monthlyFMSReviewSections: {},
+              taskLists,
+              comments: [],
+              documents: [],
+              team: [],
+              customFieldDefinitions: [],
+              activityLog: []
+            };
+            return ok(res, { project: projectSummary });
+          } catch (summaryErr) {
+            console.error('❌ GET project summary error:', summaryErr?.message || summaryErr, 'projectId:', id);
+            return serverError(res, summaryErr?.message || 'Failed to load project summary', summaryErr?.message);
+          }
         }
 
         // PERFORMANCE OPTIMIZATION: Check query parameters for selective loading
