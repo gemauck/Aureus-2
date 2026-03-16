@@ -93,6 +93,9 @@ const normalizeProject = (project) => {
     const hasMonthlyDataReview = project.hasMonthlyDataReviewProcess === true ||
         project.hasMonthlyDataReviewProcess === 'true' ||
         project.hasMonthlyDataReviewProcess === 1;
+    const hasComplianceReview = project.hasComplianceReviewProcess === true ||
+        project.hasComplianceReviewProcess === 'true' ||
+        project.hasComplianceReviewProcess === 1;
 
     return {
         id: project.id,
@@ -126,6 +129,9 @@ const normalizeProject = (project) => {
         hasMonthlyDataReviewProcess: hasMonthlyDataReview,
         monthlyDataReviewChecklist: project.monthlyDataReviewChecklist != null ? project.monthlyDataReviewChecklist : '[]',
         monthlyDataReviewSections: project.monthlyDataReviewSections != null ? project.monthlyDataReviewSections : '{}',
+        hasComplianceReviewProcess: hasComplianceReview,
+        complianceReviewChecklist: project.complianceReviewChecklist != null ? project.complianceReviewChecklist : '[]',
+        complianceReviewSections: project.complianceReviewSections != null ? project.complianceReviewSections : '{}',
         monthlyProgress: typeof project.monthlyProgress === 'string'
             ? project.monthlyProgress
             : JSON.stringify(project.monthlyProgress || {}),

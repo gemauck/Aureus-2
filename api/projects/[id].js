@@ -78,11 +78,14 @@ async function loadProjectWithRelations(projectId) {
         hasWeeklyFMSReviewProcess: true,
         hasMonthlyFMSReviewProcess: true,
         hasMonthlyDataReviewProcess: true,
+        hasComplianceReviewProcess: true,
         ownerId: true,
         createdAt: true,
         updatedAt: true,
         monthlyDataReviewChecklist: true,
-        monthlyDataReviewSections: true
+        monthlyDataReviewSections: true,
+        complianceReviewChecklist: true,
+        complianceReviewSections: true
         // Exclude: tasksList, documentSections, weeklyFMSReviewSections, monthlyFMSReviewSections,
         // monthlyProgress (loaded from tables or above)
       }
@@ -104,8 +107,11 @@ async function loadProjectWithRelations(projectId) {
         hasWeeklyFMSReviewProcess: false,
         hasMonthlyFMSReviewProcess: false,
         hasMonthlyDataReviewProcess: false,
+        hasComplianceReviewProcess: false,
         monthlyDataReviewChecklist: '[]',
-        monthlyDataReviewSections: '{}'
+        monthlyDataReviewSections: '{}',
+        complianceReviewChecklist: '[]',
+        complianceReviewSections: '{}'
       };
     } catch (rawErr) {
       console.error('❌ Project raw query also failed:', rawErr.message);
@@ -355,12 +361,14 @@ async function handler(req, res) {
           const hasWeeklyFMS = onlyFields.includes('weeklyFMSReviewSections');
           const hasDocumentSections = onlyFields.includes('documentSections');
           const hasMonthlyDataReviewSections = onlyFields.includes('monthlyDataReviewSections');
+          const hasComplianceReviewSections = onlyFields.includes('complianceReviewSections');
           
           // If only requesting one of these specific fields, use optimized endpoint
-          if ((hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections && !hasMonthlyDataReviewSections) ||
-              (hasWeeklyFMS && !hasMonthlyFMS && !hasDocumentSections && !hasMonthlyDataReviewSections) ||
-              (hasDocumentSections && !hasMonthlyFMS && !hasWeeklyFMS && !hasMonthlyDataReviewSections) ||
-              (hasMonthlyDataReviewSections && !hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections)) {
+          if ((hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections && !hasMonthlyDataReviewSections && !hasComplianceReviewSections) ||
+              (hasWeeklyFMS && !hasMonthlyFMS && !hasDocumentSections && !hasMonthlyDataReviewSections && !hasComplianceReviewSections) ||
+              (hasDocumentSections && !hasMonthlyFMS && !hasWeeklyFMS && !hasMonthlyDataReviewSections && !hasComplianceReviewSections) ||
+              (hasMonthlyDataReviewSections && !hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections && !hasComplianceReviewSections) ||
+              (hasComplianceReviewSections && !hasMonthlyFMS && !hasWeeklyFMS && !hasDocumentSections && !hasMonthlyDataReviewSections)) {
             
             // Load only basic project info + the requested field
             const basicProject = await prisma.project.findUnique({
@@ -371,7 +379,8 @@ async function handler(req, res) {
                 monthlyFMSReviewSections: hasMonthlyFMS,
                 weeklyFMSReviewSections: hasWeeklyFMS,
                 documentSections: hasDocumentSections,
-                monthlyDataReviewSections: hasMonthlyDataReviewSections
+                monthlyDataReviewSections: hasMonthlyDataReviewSections,
+                complianceReviewSections: hasComplianceReviewSections
               }
             });
             
@@ -449,6 +458,20 @@ async function handler(req, res) {
               } catch (e) {
                 console.error('❌ Error parsing monthlyDataReviewSections:', e);
                 result.monthlyDataReviewSections = {};
+              }
+            }
+            
+            if (hasComplianceReviewSections) {
+              try {
+                const raw = basicProject.complianceReviewSections;
+                if (raw != null && raw !== '') {
+                  result.complianceReviewSections = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                } else {
+                  result.complianceReviewSections = {};
+                }
+              } catch (e) {
+                console.error('❌ Error parsing complianceReviewSections:', e);
+                result.complianceReviewSections = {};
               }
             }
             
@@ -836,8 +859,11 @@ async function handler(req, res) {
         if (transformedProject.hasWeeklyFMSReviewProcess === undefined) transformedProject.hasWeeklyFMSReviewProcess = false;
         if (transformedProject.hasMonthlyFMSReviewProcess === undefined) transformedProject.hasMonthlyFMSReviewProcess = false;
         if (transformedProject.hasMonthlyDataReviewProcess === undefined) transformedProject.hasMonthlyDataReviewProcess = false;
+        if (transformedProject.hasComplianceReviewProcess === undefined) transformedProject.hasComplianceReviewProcess = false;
         if (transformedProject.monthlyDataReviewChecklist === undefined) transformedProject.monthlyDataReviewChecklist = '[]';
         if (transformedProject.monthlyDataReviewSections === undefined) transformedProject.monthlyDataReviewSections = '{}';
+        if (transformedProject.complianceReviewChecklist === undefined) transformedProject.complianceReviewChecklist = '[]';
+        if (transformedProject.complianceReviewSections === undefined) transformedProject.complianceReviewSections = '{}';
 
         // Prevent caching so section deletes and edits always show after refresh
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
@@ -872,7 +898,10 @@ async function handler(req, res) {
         ['hasMonthlyFMSReviewProcess', 'BOOLEAN DEFAULT false'],
         ['hasMonthlyDataReviewProcess', 'BOOLEAN DEFAULT false'],
         ['monthlyDataReviewChecklist', "TEXT DEFAULT '[]'"],
-        ['monthlyDataReviewSections', "TEXT DEFAULT '{}'"]
+        ['monthlyDataReviewSections', "TEXT DEFAULT '{}'"],
+        ['hasComplianceReviewProcess', 'BOOLEAN DEFAULT false'],
+        ['complianceReviewChecklist', "TEXT DEFAULT '[]'"],
+        ['complianceReviewSections', "TEXT DEFAULT '{}'"]
       ];
       for (const [col, def] of optionalColumns) {
         try {
@@ -1166,6 +1195,49 @@ async function handler(req, res) {
         } catch (e) {
           console.warn('Invalid monthlyDataReviewSections:', e);
           updateData.monthlyDataReviewSections = '{}';
+        }
+      }
+
+      // Handle hasComplianceReviewProcess separately if provided - normalize to boolean
+      if (body.hasComplianceReviewProcess !== undefined && body.hasComplianceReviewProcess !== null) {
+        updateData.hasComplianceReviewProcess = typeof body.hasComplianceReviewProcess === 'boolean'
+          ? body.hasComplianceReviewProcess
+          : Boolean(body.hasComplianceReviewProcess === true || body.hasComplianceReviewProcess === 'true' || body.hasComplianceReviewProcess === 1);
+      }
+
+      // Handle complianceReviewChecklist separately if provided - JSON string
+      if (body.complianceReviewChecklist !== undefined && body.complianceReviewChecklist !== null) {
+        try {
+          const val = body.complianceReviewChecklist;
+          if (typeof val === 'string') {
+            const trimmed = val.trim();
+            updateData.complianceReviewChecklist = trimmed === '' ? '[]' : trimmed;
+          } else if (Array.isArray(val) || typeof val === 'object') {
+            updateData.complianceReviewChecklist = JSON.stringify(val);
+          } else {
+            updateData.complianceReviewChecklist = JSON.stringify([]);
+          }
+        } catch (e) {
+          console.warn('Invalid complianceReviewChecklist:', e);
+          updateData.complianceReviewChecklist = '[]';
+        }
+      }
+
+      // Handle complianceReviewSections separately if provided - same shape as documentSections (year -> sections)
+      if (body.complianceReviewSections !== undefined && body.complianceReviewSections !== null) {
+        try {
+          const val = body.complianceReviewSections;
+          if (typeof val === 'string') {
+            const trimmed = val.trim();
+            updateData.complianceReviewSections = trimmed === '' ? '{}' : trimmed;
+          } else if (typeof val === 'object') {
+            updateData.complianceReviewSections = JSON.stringify(val);
+          } else {
+            updateData.complianceReviewSections = '{}';
+          }
+        } catch (e) {
+          console.warn('Invalid complianceReviewSections:', e);
+          updateData.complianceReviewSections = '{}';
         }
       }
       

@@ -158,8 +158,15 @@ const truncateDescription = (text, maxLength = 60) => {
 };
 
 const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'documentCollection' }) => {
-    // dataSource: 'documentCollection' | 'monthlyDataReview' - same UI, different storage (documentSections vs monthlyDataReviewSections)
+    // dataSource: 'documentCollection' | 'monthlyDataReview' | 'complianceReview' - same UI, different storage
     const isMonthlyDataReview = dataSource === 'monthlyDataReview';
+    const isComplianceReview = dataSource === 'complianceReview';
+    const isJsonOnlyTracker = isMonthlyDataReview || isComplianceReview;
+    const getProjectSectionsField = (proj) => {
+        if (dataSource === 'monthlyDataReview') return proj?.monthlyDataReviewSections;
+        if (dataSource === 'complianceReview') return proj?.complianceReviewSections;
+        return proj?.documentSections;
+    };
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
@@ -187,7 +194,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const userSelectedYearRef = useRef(false); // Track manual year selection to avoid auto-switching
     
     const getSnapshotKey = (projectId) => projectId
-        ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
+        ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : isComplianceReview ? `complianceReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
         : null;
 
     const months = [
@@ -197,7 +204,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
 
     // Year selection with persistence
-    const YEAR_STORAGE_PREFIX = isMonthlyDataReview ? 'monthlyDataReviewSelectedYear_' : 'documentCollectionSelectedYear_';
+    const YEAR_STORAGE_PREFIX = isMonthlyDataReview ? 'monthlyDataReviewSelectedYear_' : isComplianceReview ? 'complianceReviewSelectedYear_' : 'documentCollectionSelectedYear_';
     const MIN_YEAR = 2015;
     const FUTURE_YEAR_BUFFER = 5;
     const isValidYear = (value) => {
@@ -714,8 +721,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return;
         }
 
-        // Quick path: if project already has documentSections/monthlyDataReviewSections (e.g. from full project load), show immediately
-        const propSectionsFirst = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
+        // Quick path: if project already has sections (e.g. from full project load), show immediately
+        const propSectionsFirst = getProjectSectionsField(project);
         let urlYearForNormalize = null;
         if (typeof window !== 'undefined') {
             const hash = window.location.hash || '';
@@ -767,7 +774,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
             const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
             const authHeaders = { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-            if (!isMonthlyDataReview) {
+            if (!isJsonOnlyTracker) {
                 const endpointV2 = `/api/projects/${project.id}/document-sections-v2?_=${Date.now()}`;
                 const endpointV1 = `/api/projects/${project.id}/document-sections?_=${Date.now()}`;
                 try {
@@ -801,7 +808,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     }
                 }
             } else {
-                const endpoint = `/api/projects/${project.id}?_=${Date.now()}`;
+                const endpoint = isComplianceReview
+                    ? `/api/projects/${project.id}?fields=complianceReviewSections&_=${Date.now()}`
+                    : `/api/projects/${project.id}?_=${Date.now()}`;
                 try {
                     const res = await fetch(base + endpoint, {
                         method: 'GET',
@@ -812,7 +821,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     if (res.ok) {
                         const json = await res.json();
                         const freshProject = json?.data?.project || json?.project || json?.data;
-                        sectionsField = freshProject?.monthlyDataReviewSections;
+                        sectionsField = getProjectSectionsField(freshProject);
                     }
                 } catch (fetchErr) {
                     console.warn('📥 project fetch failed, trying fallbacks:', fetchErr?.message);
@@ -823,7 +832,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             if (sectionsField == null && apiRef.current) {
                 console.log('📥 Loading from fetchProject...', { projectId: project.id });
                 const freshProject = await apiRef.current.fetchProject(project.id);
-                sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
+                sectionsField = getProjectSectionsField(freshProject);
             }
 
             // 3) Fallback: DatabaseAPI fetch if available
@@ -831,7 +840,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 try {
                     const fresh = await window.DatabaseAPI.getProject(project.id);
                     const freshProject = fresh?.data?.project || fresh?.project || fresh?.data;
-                    sectionsField = isMonthlyDataReview ? freshProject?.monthlyDataReviewSections : freshProject?.documentSections;
+                    sectionsField = getProjectSectionsField(freshProject);
                 } catch (fetchErr) {
                     console.warn('📥 DatabaseAPI.getProject failed:', fetchErr?.message);
                 }
@@ -877,7 +886,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
             
             // 4) Fallback to prop data
-            const propSections = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
+            const propSections = getProjectSectionsField(project);
             if (propSections) {
                 let normalized = normalizeSectionsByYear(propSections, urlYearForNormalize);
                 if (urlYearForNormalize != null && (normalized[String(urlYearForNormalize)] == null || (Array.isArray(normalized[String(urlYearForNormalize)]) && normalized[String(urlYearForNormalize)].length === 0))) {
@@ -896,7 +905,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 sectionsRef.current = {};
                 lastSavedDataRef.current = JSON.stringify({});
                 // Document Collection only: retry load once after a short delay (fixes "empty in this tab, works in new incognito")
-                if (!isMonthlyDataReview) {
+                if (!isJsonOnlyTracker) {
                     if (loadRetryTimeoutRef.current) {
                         clearTimeout(loadRetryTimeoutRef.current);
                         loadRetryTimeoutRef.current = null;
@@ -934,7 +943,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, project?.documentSections, project?.monthlyDataReviewSections, selectedYear, isMonthlyDataReview, dataSource]);
+    }, [project?.id, project?.documentSections, project?.monthlyDataReviewSections, project?.complianceReviewSections, selectedYear, isJsonOnlyTracker, dataSource]);
     
     // Load data on mount and when project/year changes
     useEffect(() => {
@@ -945,7 +954,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     // Restore from last browser backup (e.g. after a failed save that cleared the server)
     const handleRestoreFromBackup = useCallback(() => {
-        if (isMonthlyDataReview || !project?.id) return;
+        if (isJsonOnlyTracker || !project?.id) return;
         const key = getSnapshotKey(project.id);
         if (!key || typeof window === 'undefined' || !window.localStorage) return;
         const raw = window.localStorage.getItem(key);
@@ -968,20 +977,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             console.warn('Restore from backup failed:', e);
             alert('Backup data is invalid or corrupted.');
         }
-    }, [project?.id, selectedYear, isMonthlyDataReview]);
+    }, [project?.id, selectedYear, isJsonOnlyTracker]);
 
     // When tab becomes visible and we have no sections, refetch (fixes "empty in this tab, works in new incognito")
     useEffect(() => {
         if (typeof document === 'undefined') return;
         const onVisibility = () => {
-            if (document.visibilityState !== 'visible' || !project?.id || isMonthlyDataReview) return;
+            if (document.visibilityState !== 'visible' || !project?.id || isJsonOnlyTracker) return;
             const years = sectionsByYear && typeof sectionsByYear === 'object' ? Object.keys(sectionsByYear) : [];
             const hasAny = years.some((y) => Array.isArray(sectionsByYear[y]) && sectionsByYear[y].length > 0);
             if (!hasAny) loadData();
         };
         document.addEventListener('visibilitychange', onVisibility);
         return () => document.removeEventListener('visibilitychange', onVisibility);
-    }, [project?.id, sectionsByYear, isMonthlyDataReview, loadData]);
+    }, [project?.id, sectionsByYear, isJsonOnlyTracker, loadData]);
 
     // Clear retry timeout on unmount
     useEffect(() => {
@@ -1181,13 +1190,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         
         try {
             let result;
-            if (isMonthlyDataReview) {
-                // Monthly Data Review: save to JSON field only (no DocumentSection table)
+            if (isJsonOnlyTracker) {
+                // Monthly Data Review / Compliance Review: save to JSON field only (no DocumentSection table)
+                const payloadKey = isComplianceReview ? 'complianceReviewSections' : 'monthlyDataReviewSections';
                 if (window.DatabaseAPI?.updateProject) {
-                    result = await window.DatabaseAPI.updateProject(project.id, {
-                        monthlyDataReviewSections: serialized
-                    });
-                    console.log('✅ Saved monthlyDataReviewSections via DatabaseAPI:', result);
+                    result = await window.DatabaseAPI.updateProject(project.id, { [payloadKey]: serialized });
+                    console.log('✅ Saved', payloadKey, 'via DatabaseAPI:', result);
                 } else {
                     throw new Error('DatabaseAPI.updateProject not available');
                 }
@@ -1220,13 +1228,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 }
             }
 
-            // Keep parent project state in sync for Monthly Data Review
-            if (isMonthlyDataReview && typeof window !== 'undefined') {
+            // Keep parent project state in sync for JSON-only trackers (Monthly Data Review / Compliance Review)
+            if (isJsonOnlyTracker && typeof window !== 'undefined') {
                 if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    window.updateViewingProject({
-                        ...project,
-                        monthlyDataReviewSections: serialized
-                    });
+                    const payloadKey = isComplianceReview ? 'complianceReviewSections' : 'monthlyDataReviewSections';
+                    window.updateViewingProject({ ...project, [payloadKey]: serialized });
                 }
                 if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
                     const keysToDelete = [];
@@ -1767,7 +1773,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         { value: 'done', label: 'Done', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
         { value: 'issue', label: 'Issue', color: 'bg-orange-200 text-orange-800 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' }
     ];
-    const statusOptions = isMonthlyDataReview ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
+    const statusOptions = isJsonOnlyTracker ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
 
     const getStatusConfig = (status) => {
         if (!status || status === '' || status === 'Select Status') {
@@ -1911,10 +1917,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             try {
                 const payload = sectionsRef.current || {};
                 
-                if (isMonthlyDataReview) {
+                if (isJsonOnlyTracker) {
+                    const payloadKey = isComplianceReview ? 'complianceReviewSections' : 'monthlyDataReviewSections';
                     if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                         await window.DatabaseAPI.updateProject(project.id, {
-                            monthlyDataReviewSections: serializeSections(payload)
+                            [payloadKey]: serializeSections(payload)
                         });
                     } else {
                         throw new Error('DatabaseAPI.updateProject not available');
@@ -3811,7 +3818,7 @@ const getAssigneeColor = (identifier, users) => {
             }
         };
         
-        const monthSeparatorClass = isMonthlyDataReview ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200';
+        const monthSeparatorClass = isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200';
         return (
             <td
                 data-cell-key={cellKey}
@@ -3828,7 +3835,7 @@ const getAssigneeColor = (identifier, users) => {
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
                 role="gridcell"
             >
-                <div className={`relative ${isMonthlyDataReview ? 'min-w-[180px] w-[180px]' : 'min-w-[180px]'}`}>
+                <div className={`relative ${isJsonOnlyTracker ? 'min-w-[180px] w-[180px]' : 'min-w-[180px]'}`}>
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -3895,7 +3902,7 @@ const getAssigneeColor = (identifier, users) => {
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex items-center gap-1.5">
                         {showCellActions ? (
                             <>
-                                {!isMonthlyDataReview && (() => {
+                                {!isJsonOnlyTracker && (() => {
                                     const monthNum = months.indexOf(month) + 1;
                                     const docMonthKey = buildDocMonthKey(doc.id, monthNum);
                                     const receivedMeta = receivedMetaByCell[docMonthKey] || {};
@@ -4044,9 +4051,9 @@ const getAssigneeColor = (identifier, users) => {
                             const monthNum = months.indexOf(month) + 1;
                             const receivedMeta = receivedMetaByCell[buildDocMonthKey(doc.id, monthNum)] || {};
                             const receivedCount = receivedMeta.count || 0;
-                            const hasActivity = hasComments || (!isMonthlyDataReview && receivedCount > 0);
+                            const hasActivity = hasComments || (!isJsonOnlyTracker && receivedCount > 0);
                             if (!hasActivity) return null;
-                            const total = (hasComments ? comments.length : 0) + (!isMonthlyDataReview ? receivedCount : 0);
+                            const total = (hasComments ? comments.length : 0) + (!isJsonOnlyTracker ? receivedCount : 0);
                             return (
                                 <span
                                     className="text-[10px] text-gray-400 tabular-nums"
@@ -4216,7 +4223,7 @@ Abcotronics`;
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [sendPlainTextOnly, setSendPlainTextOnly] = useState(false);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
-        const defaultStopWhenStatus = isMonthlyDataReview ? 'done' : 'collected';
+        const defaultStopWhenStatus = isJsonOnlyTracker ? 'done' : 'collected';
         const [scheduleStopStatus, setScheduleStopStatus] = useState(defaultStopWhenStatus);
         const [sending, setSending] = useState(false);
         const [savingTemplate, setSavingTemplate] = useState(false);
@@ -4960,7 +4967,7 @@ Abcotronics`;
                             ...section,
                             documents: (section.documents || []).map(doc => {
                                 if (String(doc.id) !== String(ctx.doc.id)) return doc;
-                                const statusAfterSend = isMonthlyDataReview ? 'not-done' : 'requested';
+                                const statusAfterSend = isJsonOnlyTracker ? 'not-done' : 'requested';
                                 const updatedStatus = setStatusForYear(doc.collectionStatus || {}, ctx.month, statusAfterSend, selectedYear);
                                 return { ...doc, collectionStatus: updatedStatus };
                             })
@@ -6665,12 +6672,12 @@ Abcotronics`;
                             </button>
                             <div className="min-w-0">
                                 <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">
-                                    {isMonthlyDataReview ? 'Monthly Data Review' : 'Document Collection Tracker'}
+                                    {isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document Collection Tracker'}
                                 </h1>
                                 <p className="text-xs text-gray-500 truncate">
                                     {project?.name}
                                     {project?.client && ` • ${project.client}`}
-                                    {!isMonthlyDataReview && getFacilitiesLabel(project) && ` • ${getFacilitiesLabel(project)}`}
+                                    {!isJsonOnlyTracker && getFacilitiesLabel(project) && ` • ${getFacilitiesLabel(project)}`}
                                 </p>
                             </div>
                         </div>
@@ -6878,7 +6885,7 @@ Abcotronics`;
                                 >
                                     {isLoading ? 'Loading…' : 'Retry load'}
                                 </button>
-                                {!isMonthlyDataReview && (
+                                {!isJsonOnlyTracker && (
                                     <button
                                         type="button"
                                         onClick={handleRestoreFromBackup}
@@ -6973,7 +6980,7 @@ Abcotronics`;
                             <div data-scroll-sync className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
-                                        {isMonthlyDataReview ? (
+                                        {isJsonOnlyTracker ? (
                                             <>
                                                 <tr>
                                                     <th
@@ -7069,7 +7076,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                     >
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={isMonthlyDataReview ? 1 + months.length * 2 + 1 : 14} className="px-8 py-12 text-center">
+                                                <td colSpan={isJsonOnlyTracker ? 1 + months.length * 2 + 1 : 14} className="px-8 py-12 text-center">
                                                     <div className="flex flex-col items-center gap-3">
                                                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
                                                             <i className="fas fa-file-alt text-2xl text-gray-400"></i>
@@ -7298,7 +7305,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             </div>
                                                     </td>
                                                     {isMasterGreyedOut ? (
-                                                        isMonthlyDataReview ? (
+                                                        isJsonOnlyTracker ? (
                                                             months.map((month) => (
                                                                 <React.Fragment key={`${doc.id}-${month}`}>
                                                                     <td className="px-3 py-1.5 text-xs border-l-4 border-gray-400 bg-gray-200" role="gridcell" />
@@ -7315,7 +7322,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             ))
                                                         )
                                                     ) : (
-                                                        isMonthlyDataReview ? (
+                                                        isJsonOnlyTracker ? (
                                                             months.map((month) => (
                                                                 <React.Fragment key={`${doc.id}-${month}`}>
                                                                     {renderStatusCell(section, doc, month)}
@@ -7330,7 +7337,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             ))
                                                         )
                                                     )}
-                                                    <td className={`px-4 py-2 ${isMonthlyDataReview ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200'} ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
+                                                    <td className={`px-4 py-2 ${isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200'} ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
                                                         <div className="flex items-center gap-2 justify-center">
                                                             {!doc.parentId && (
                                                                 <button

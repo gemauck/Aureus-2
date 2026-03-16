@@ -984,6 +984,210 @@ function initializeProjectDetail() {
             return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual;
         });
     })();
+
+    // Extract ComplianceReviewProcessSection to handle loading and avoid remounts
+    const ComplianceReviewProcessSection = (() => {
+        const { useState: useStateSection, useEffect: useEffectSection, memo } = window.React;
+
+        const ComplianceReviewProcessSectionInner = ({
+            project,
+            hasComplianceReviewProcess,
+            activeSection,
+            onBack
+        }) => {
+            useEffectSection(() => {
+                return () => {
+                };
+            }, []);
+
+            const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
+            const { useCallback: useCallbackSection } = window.React;
+
+            const [trackerReady, setTrackerReady] = useStateSection(() => {
+                return !!(window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function');
+            });
+            const [isLoading, setIsLoading] = useStateSection(false);
+
+            useEffectSection(() => {
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    if (!trackerReady) {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                    }
+                    return;
+                }
+
+                if (trackerReady) {
+                    setTrackerReady(false);
+                }
+
+                setIsLoading(true);
+                let checkAttempts = 0;
+                const maxCheckAttempts = 50;
+                const checkInterval = setInterval(() => {
+                    checkAttempts++;
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        clearInterval(checkInterval);
+                    } else if (checkAttempts >= maxCheckAttempts) {
+                        clearInterval(checkInterval);
+                        setIsLoading(false);
+                    }
+                }, 100);
+
+                const handleViteReady = () => {
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        clearInterval(checkInterval);
+                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                    }
+                };
+                window.addEventListener('viteProjectsReady', handleViteReady);
+
+                return () => {
+                    clearInterval(checkInterval);
+                    window.removeEventListener('viteProjectsReady', handleViteReady);
+                };
+            }, []);
+
+            const loadTrackerComponent = useCallbackSection(() => {
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    setTrackerReady(true);
+                    return Promise.resolve(true);
+                }
+
+                if (window._complianceTrackerLoadPromise) {
+                    return window._complianceTrackerLoadPromise;
+                }
+
+                setIsLoading(true);
+
+                const loadPromise = new Promise((resolve) => {
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        setTrackerReady(true);
+                        setIsLoading(false);
+                        window._complianceTrackerLoadPromise = null;
+                        resolve(true);
+                        return;
+                    }
+
+                    const handleViteReady = () => {
+                        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                            setTrackerReady(true);
+                            setIsLoading(false);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                            window._complianceTrackerLoadPromise = null;
+                            resolve(true);
+                        }
+                    };
+                    window.addEventListener('viteProjectsReady', handleViteReady);
+
+                    if (window.loadComponent && typeof window.loadComponent === 'function') {
+                        window.loadComponent('./src/components/projects/MonthlyDocumentCollectionTracker.jsx')
+                            .then(() => {
+                                let checkAttempts = 0;
+                                const maxCheckAttempts = 10;
+                                const checkInterval = setInterval(() => {
+                                    checkAttempts++;
+                                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                                        setTrackerReady(true);
+                                        setIsLoading(false);
+                                        clearInterval(checkInterval);
+                                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                                        window._complianceTrackerLoadPromise = null;
+                                        resolve(true);
+                                    } else if (checkAttempts >= maxCheckAttempts) {
+                                        clearInterval(checkInterval);
+                                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                                        setIsLoading(false);
+                                        window._complianceTrackerLoadPromise = null;
+                                        resolve(false);
+                                    }
+                                }, 100);
+                            })
+                            .catch(() => {
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                setIsLoading(false);
+                                window._complianceTrackerLoadPromise = null;
+                                resolve(false);
+                            });
+                    } else {
+                        let checkAttempts = 0;
+                        const maxCheckAttempts = 20;
+                        const checkInterval = setInterval(() => {
+                            checkAttempts++;
+                            if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                                setTrackerReady(true);
+                                setIsLoading(false);
+                                clearInterval(checkInterval);
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                window._complianceTrackerLoadPromise = null;
+                                resolve(true);
+                            } else if (checkAttempts >= maxCheckAttempts) {
+                                clearInterval(checkInterval);
+                                window.removeEventListener('viteProjectsReady', handleViteReady);
+                                setIsLoading(false);
+                                window._complianceTrackerLoadPromise = null;
+                                resolve(false);
+                            }
+                        }, 100);
+                    }
+                });
+
+                window._complianceTrackerLoadPromise = loadPromise;
+                return loadPromise;
+            }, []);
+
+            useEffectSection(() => {
+                if (trackerReady) return;
+                if (activeSection === 'complianceReview') {
+                    loadTrackerComponent();
+                }
+            }, [activeSection, trackerReady, loadTrackerComponent]);
+
+            if (activeSection !== 'complianceReview') {
+                return null;
+            }
+
+            const currentTracker = window.MonthlyDocumentCollectionTracker;
+            const isComponentAvailable = currentTracker && typeof currentTracker === 'function';
+            const isComponentReady = trackerReady || isComponentAvailable;
+
+            if (!isComponentReady) {
+                return (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            {isLoading
+                                ? 'The Compliance Review tracker is loading...'
+                                : 'The component is being prepared...'}
+                        </p>
+                    </div>
+                );
+            }
+
+            const TrackerComponent = window.MonthlyDocumentCollectionTracker;
+            return (
+                <TrackerComponent
+                    key={`compliance-review-${project?.id || 'default'}`}
+                    project={project}
+                    onBack={handleBackToOverview}
+                    dataSource="complianceReview"
+                />
+            );
+        };
+
+        return memo(ComplianceReviewProcessSectionInner, (prevProps, nextProps) => {
+            const projectIdEqual = prevProps.project?.id === nextProps.project?.id;
+            const hasProcessEqual = prevProps.hasComplianceReviewProcess === nextProps.hasComplianceReviewProcess;
+            const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
+            const onBackEqual = prevProps.onBack === nextProps.onBack;
+            return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual;
+        });
+    })();
     
     // Extract MonthlyFMSReviewProcessSection outside ProjectDetail to prevent recreation on every render
     const MonthlyFMSReviewProcessSection = (() => {
@@ -1630,7 +1834,7 @@ function initializeProjectDetail() {
         
         const tabFromUrl = params ? (() => {
             const t = params.get('tab');
-            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview'].includes(t) ? t : null;
+            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview'].includes(t) ? t : null;
         })() : null;
         const hasDocWeek = params ? !!params.get('docWeek') : false;
         const hasWeeklySectionId = params ? !!params.get('weeklySectionId') : false;
@@ -2401,7 +2605,7 @@ function initializeProjectDetail() {
         }
         if (!params && search) params = new URLSearchParams(search);
         const tabFromUrl = params?.get('tab');
-        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview'];
+        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview'];
         if (tabFromUrl && validTabs.includes(tabFromUrl)) {
             if (tabFromUrl === 'time' && !normalizeHasTimeProcess(project.hasTimeProcess)) {
                 hasTimeProcessChangedRef.current = true;
@@ -2650,6 +2854,30 @@ function initializeProjectDetail() {
         const normalizedValue = normalizeHasMonthlyDataReviewProcess(project.hasMonthlyDataReviewProcess);
         setHasMonthlyDataReviewProcess(normalizedValue);
         hasMonthlyDataReviewProcessChangedRef.current = false;
+    }, [project.id]);
+
+    // Track if Compliance Review module is enabled (add via + Module)
+    const normalizeHasComplianceReviewProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    const [hasComplianceReviewProcess, setHasComplianceReviewProcess] = useState(() =>
+        normalizeHasComplianceReviewProcess(project.hasComplianceReviewProcess)
+    );
+    const hasComplianceReviewProcessChangedRef = useRef(false);
+    useEffect(() => {
+        const normalizedValue = normalizeHasComplianceReviewProcess(project.hasComplianceReviewProcess);
+        if (normalizedValue !== hasComplianceReviewProcess && !hasComplianceReviewProcessChangedRef.current) {
+            setHasComplianceReviewProcess(normalizedValue);
+        } else if (hasComplianceReviewProcessChangedRef.current) {
+            // keep local state until persist completes
+        }
+    }, [project.hasComplianceReviewProcess, project.id, hasComplianceReviewProcess]);
+    useEffect(() => {
+        const normalizedValue = normalizeHasComplianceReviewProcess(project.hasComplianceReviewProcess);
+        setHasComplianceReviewProcess(normalizedValue);
+        hasComplianceReviewProcessChangedRef.current = false;
     }, [project.id]);
 
     // Track if Time module is enabled (new projects: false; add via + Module)
@@ -3486,11 +3714,13 @@ function initializeProjectDetail() {
         nextHasWeeklyFMSReviewProcess,
         nextHasMonthlyFMSReviewProcess,
         nextHasMonthlyDataReviewProcess,
+        nextHasComplianceReviewProcess,
         excludeHasTimeProcess = false,
         excludeHasDocumentCollectionProcess = false,
         excludeHasWeeklyFMSReviewProcess = false,
         excludeHasMonthlyFMSReviewProcess = false,
         excludeHasMonthlyDataReviewProcess = false,
+        excludeHasComplianceReviewProcess = false,
         excludeDocumentSections = true,  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
         excludeWeeklyFMSReviewSections = true,  // Default to true: don't overwrite weeklyFMSReviewSections managed by WeeklyFMSReviewTracker
         excludeMonthlyFMSReviewSections = true  // Default to true: don't overwrite monthlyFMSReviewSections managed by MonthlyFMSReviewTracker
@@ -3505,6 +3735,7 @@ function initializeProjectDetail() {
         const hasWeeklyFMSReviewProcessToSave = nextHasWeeklyFMSReviewProcess !== undefined ? nextHasWeeklyFMSReviewProcess : hasWeeklyFMSReviewProcess;
         const hasMonthlyFMSReviewProcessToSave = nextHasMonthlyFMSReviewProcess !== undefined ? nextHasMonthlyFMSReviewProcess : hasMonthlyFMSReviewProcess;
         const hasMonthlyDataReviewProcessToSave = nextHasMonthlyDataReviewProcess !== undefined ? nextHasMonthlyDataReviewProcess : hasMonthlyDataReviewProcess;
+        const hasComplianceReviewProcessToSave = nextHasComplianceReviewProcess !== undefined ? nextHasComplianceReviewProcess : hasComplianceReviewProcess;
         
         try {
             // tasksList JSON writes removed - tasks are now stored in Task table
@@ -3548,6 +3779,10 @@ function initializeProjectDetail() {
             // Only include hasMonthlyDataReviewProcess if not excluded
             if (!excludeHasMonthlyDataReviewProcess) {
                 updatePayload.hasMonthlyDataReviewProcess = hasMonthlyDataReviewProcessToSave;
+            }
+            // Only include hasComplianceReviewProcess if not excluded
+            if (!excludeHasComplianceReviewProcess) {
+                updatePayload.hasComplianceReviewProcess = hasComplianceReviewProcessToSave;
             }
             
             // tasksList JSON writes removed - tasks are now stored in Task table
@@ -3600,6 +3835,7 @@ function initializeProjectDetail() {
                             hasWeeklyFMSReviewProcess: hasWeeklyFMSReviewProcessToSave,
                             hasMonthlyFMSReviewProcess: hasMonthlyFMSReviewProcessToSave,
                             hasMonthlyDataReviewProcess: hasMonthlyDataReviewProcessToSave,
+                            hasComplianceReviewProcess: hasComplianceReviewProcessToSave,
                             documentSections: normalizedSections
                         };
                     });
@@ -3866,6 +4102,34 @@ function initializeProjectDetail() {
             }
         };
     }, [taskLists, customFieldDefinitions, documents, hasMonthlyDataReviewProcess, project.hasMonthlyDataReviewProcess, persistProjectData, project]);
+
+    // Save hasComplianceReviewProcess back to project whenever it changes
+    useEffect(() => {
+        if (skipNextSaveRef.current) return;
+        const projectHasProcess = project.hasComplianceReviewProcess === true ||
+                                  project.hasComplianceReviewProcess === 'true' ||
+                                  project.hasComplianceReviewProcess === 1 ||
+                                  (typeof project.hasComplianceReviewProcess === 'string' && project.hasComplianceReviewProcess.toLowerCase() === 'true');
+        const shouldIncludeHasProcess = hasComplianceReviewProcessChangedRef.current ||
+                                       (hasComplianceReviewProcess !== projectHasProcess);
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+            if (shouldIncludeHasProcess && hasComplianceReviewProcessChangedRef.current) {
+                persistProjectData({ nextHasComplianceReviewProcess: hasComplianceReviewProcess }).catch(() => {});
+                hasComplianceReviewProcessChangedRef.current = false;
+            } else if (!shouldIncludeHasProcess) {
+                persistProjectData({ excludeHasComplianceReviewProcess: true }).catch(() => {});
+            } else {
+                persistProjectData({ excludeHasComplianceReviewProcess: true }).catch(() => {});
+            }
+        }, 1500);
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+        };
+    }, [taskLists, customFieldDefinitions, documents, hasComplianceReviewProcess, project.hasComplianceReviewProcess, persistProjectData, project]);
 
     // Get document status color
     const getDocumentStatusColor = (status) => {
@@ -6525,6 +6789,47 @@ function initializeProjectDetail() {
             skipNextSaveRef.current = false;
         }
     };
+
+    const handleAddComplianceReviewProcess = async () => {
+        try {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            skipNextSaveRef.current = true;
+            hasComplianceReviewProcessChangedRef.current = true;
+            setHasComplianceReviewProcess(true);
+            switchSection('complianceReview');
+            setShowDocumentProcessDropdown(false);
+            const updatePayload = {
+                hasComplianceReviewProcess: true,
+                complianceReviewSections: '{}'
+            };
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            if (!apiResponse) throw new Error('API returned no response');
+            if (apiResponse.error || (apiResponse.data && apiResponse.data.error)) {
+                const msg = apiResponse.error || (apiResponse.data && apiResponse.data.error) || 'Unknown error';
+                throw new Error(typeof msg === 'string' ? msg : msg.message || 'API error');
+            }
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, hasComplianceReviewProcess: true, complianceReviewSections: '{}' });
+            }
+            if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
+                const keysToDelete = [];
+                window.DatabaseAPI._responseCache.forEach((_, key) => {
+                    if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) keysToDelete.push(key);
+                });
+                keysToDelete.forEach(k => window.DatabaseAPI._responseCache.delete(k));
+            }
+        } catch (error) {
+            console.error('Error adding Compliance Review process:', error);
+            alert('Failed to add Compliance Review: ' + (error.message || 'Unknown error'));
+            hasComplianceReviewProcessChangedRef.current = false;
+            setHasComplianceReviewProcess(false);
+        } finally {
+            skipNextSaveRef.current = false;
+        }
+    };
     
     const handleAddMonthlyFMSReviewProcess = async () => {
         console.log('🟢 ProjectDetail: Adding Monthly FMS Review process', {
@@ -7910,6 +8215,20 @@ function initializeProjectDetail() {
                             Monthly Data Review
                         </button>
                     )}
+                    {hasComplianceReviewProcess && (
+                        <button
+                            type="button"
+                            onClick={() => requestAnimationFrame(() => switchSection('complianceReview'))}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'complianceReview'
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-clipboard-list mr-1.5"></i>
+                            Compliance Review
+                        </button>
+                    )}
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
@@ -7967,6 +8286,19 @@ function initializeProjectDetail() {
                                             <div>
                                                 <div className="font-medium">Monthly Data Review</div>
                                                 <div className="text-[10px] text-gray-500">Checklist for monthly data review</div>
+                                            </div>
+                                        </button>
+                                    )}
+                                    {!hasComplianceReviewProcess && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddComplianceReviewProcess}
+                                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                        >
+                                            <i className="fas fa-clipboard-list text-primary-600 w-4"></i>
+                                            <div>
+                                                <div className="font-medium">Compliance Review</div>
+                                                <div className="text-[10px] text-gray-500">Checklist for compliance review</div>
                                             </div>
                                         </button>
                                     )}
@@ -8192,6 +8524,17 @@ function initializeProjectDetail() {
                     key={`monthly-data-review-${project?.id || 'default'}`}
                     project={project}
                     hasMonthlyDataReviewProcess={hasMonthlyDataReviewProcess}
+                    activeSection={activeSection}
+                    onBack={handleBackToOverview}
+                />
+            )}
+
+            {/* Compliance Review tab - same tracker as Monthly Data Review, separate data */}
+            {hasComplianceReviewProcess && (
+                <ComplianceReviewProcessSection
+                    key={`compliance-review-${project?.id || 'default'}`}
+                    project={project}
+                    hasComplianceReviewProcess={hasComplianceReviewProcess}
                     activeSection={activeSection}
                     onBack={handleBackToOverview}
                 />

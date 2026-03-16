@@ -272,7 +272,8 @@ async function testProjectDefaultsAndShape() {
     'hasDocumentCollectionProcess',
     'hasWeeklyFMSReviewProcess',
     'hasMonthlyFMSReviewProcess',
-    'hasMonthlyDataReviewProcess'
+    'hasMonthlyDataReviewProcess',
+    'hasComplianceReviewProcess'
   ]
   const flagsOk = flags.every((flag) => typeof proj?.[flag] === 'boolean')
   const sectionsOk =
