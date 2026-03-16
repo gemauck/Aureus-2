@@ -316,7 +316,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             (section.documents || []).forEach(doc => {
                 const keys = [
                     ...Object.keys(doc.collectionStatus || {}),
-                    ...Object.keys(doc.comments || {})
+                    ...Object.keys(doc.comments || {}),
+                    ...Object.keys(doc.notesByWeek || {})
                 ];
                 keys.forEach(key => {
                     if (!key) return;
@@ -1064,7 +1065,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 name: doc.name,
                 description: doc.description || '',
                 collectionStatus: {},
-                comments: {}
+                comments: {},
+                notesByWeek: {}
             })) : []
         }));
         
@@ -1376,6 +1378,28 @@ const gridColumns = React.useMemo(() => (
         newCommentsObj[weekKey] = newComments;
         
         return newCommentsObj;
+    };
+    
+    // Get notes (free text) for a specific week in the selected year only
+    const getNotesForYear = (notesByWeek, week, year = selectedYear) => {
+        if (!notesByWeek || typeof notesByWeek !== 'object') return '';
+        const weekKey = getWeekKey(week, year);
+        if (!weekKey) return '';
+        const v = notesByWeek[weekKey];
+        return typeof v === 'string' ? v : (v != null ? String(v) : '');
+    };
+    
+    // Set notes for a specific week in the selected year only
+    const setNotesForYear = (notesByWeek, week, text, year = selectedYear) => {
+        const weekKey = getWeekKey(week, year);
+        if (!weekKey || !weekKey.includes('-W')) return notesByWeek || {};
+        const next = { ...(notesByWeek && typeof notesByWeek === 'object' ? notesByWeek : {}) };
+        if (text == null || String(text).trim() === '') {
+            delete next[weekKey];
+        } else {
+            next[weekKey] = String(text).trim();
+        }
+        return next;
     };
     
     // ============================================================
@@ -1795,8 +1819,8 @@ const gridColumns = React.useMemo(() => (
                     return {
                         ...section,
                         documents: section.documents.map(doc => 
-                            doc.id === editingDocument.id 
-                                ? { ...doc, ...documentData }
+doc.id === editingDocument.id
+                                ? { ...doc, ...documentData, notesByWeek: documentData.notesByWeek ?? doc.notesByWeek ?? {} }
                                 : doc
                         )
                     };
@@ -1807,6 +1831,7 @@ const gridColumns = React.useMemo(() => (
                         ...documentData,
                         collectionStatus: documentData.collectionStatus || {},
                         comments: documentData.comments || {},
+                        notesByWeek: documentData.notesByWeek || {},
                         assignedTo: documentData.assignedTo ?? []
                     };
                     return {
@@ -2131,6 +2156,27 @@ const getAssigneeColor = (identifier, users) => {
         }
     }, [selectedYear, sectionsByYear]);
     
+    const handleUpdateNotes = useCallback((sectionId, documentId, week, text) => {
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
+            ? sectionsByYear
+            : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: section.documents.map(doc => {
+                    if (String(doc.id) !== String(documentId)) return doc;
+                    const nextNotes = setNotesForYear(doc.notesByWeek || {}, week, text, selectedYear);
+                    return { ...doc, notesByWeek: nextNotes };
+                })
+            };
+        });
+        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+    }, [selectedYear, sectionsByYear]);
+    
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
         const folder = 'weekly-fms-comments';
@@ -2402,6 +2448,10 @@ const getAssigneeColor = (identifier, users) => {
     
     const getDocumentComments = (doc, week) => {
         return getCommentsForYear(doc.comments, week, selectedYear);
+    };
+    
+    const getDocumentNotes = (doc, week) => {
+        return getNotesForYear(doc.notesByWeek, week, selectedYear);
     };
     
     // ============================================================
@@ -3132,7 +3182,7 @@ const getAssigneeColor = (identifier, users) => {
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
-                <div className="min-w-[160px] relative">
+                <div className="min-w-[180px] w-[180px] relative">
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -3286,6 +3336,40 @@ const getAssigneeColor = (identifier, users) => {
                         </button>
                     </div>
                 </div>
+            </td>
+        );
+    };
+    
+    const renderNotesCell = (section, doc, week) => {
+        const notes = getDocumentNotes(doc, week);
+        const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.match(/Week\s+(\d+)/i)?.[1] || week.match(/\d+/)?.[0] || '0') : week);
+        const weekLabel = typeof week === 'object' ? week.label : week;
+        const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
+        const cellBg = isWorkingWeek ? 'bg-primary-50' : '';
+        // Match Monthly Data Review: same column width, border, textarea size and focus ring
+        return (
+            <td
+                className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
+                role="gridcell"
+                style={{ minWidth: '180px', width: '180px' }}
+            >
+                <textarea
+                    key={`notes-${section.id}-${doc.id}-W${String(weekNumber).padStart(2, '0')}-${selectedYear}`}
+                    defaultValue={notes}
+                    onChange={(e) => handleUpdateNotes(section.id, doc.id, week, e.target.value)}
+                    onBlur={() => {
+                        lastSavedDataRef.current = null;
+                        if (saveTimeoutRef.current) {
+                            clearTimeout(saveTimeoutRef.current);
+                            saveTimeoutRef.current = null;
+                        }
+                        saveToDatabase();
+                    }}
+                    placeholder="Notes..."
+                    rows={3}
+                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                    aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
+                />
             </td>
         );
     };
@@ -4595,9 +4679,10 @@ const getAssigneeColor = (identifier, users) => {
                                     <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
                                         <tr>
                                             <th
+                                                rowSpan={2}
                                                 className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
-style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
-                                                >
+                                                style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
+                                            >
                                                 Document / Data
                                             </th>
                                             {gridColumns.map((col) => {
@@ -4605,7 +4690,8 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 return (
                                                     <th
                                                         key={col.key}
-                                                        className={`px-3 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                        colSpan={2}
+                                                        className={`px-2 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-b-2 border-gray-300 ${
                                                             workingWeeks.includes(week.number) && selectedYear === currentYear
                                                                 ? 'bg-primary-100 text-primary-800 border-primary-300'
                                                                 : 'text-gray-700'
@@ -4618,9 +4704,38 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     </th>
                                                 );
                                             })}
-                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
+                                            <th
+                                                rowSpan={2}
+                                                className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300 bg-gradient-to-b from-gray-100 to-gray-50"
+                                            >
                                                 Actions
                                             </th>
+                                        </tr>
+                                        <tr>
+                                            {gridColumns.map((col) => {
+                                                const week = col.week;
+                                                const isWorking = workingWeeks.includes(week.number) && selectedYear === currentYear;
+                                                return (
+                                                    <React.Fragment key={col.key}>
+                                                        <th
+                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
+                                                                isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
+                                                            }`}
+                                                            style={{ minWidth: '180px', width: '180px' }}
+                                                        >
+                                                            Status
+                                                        </th>
+                                                        <th
+                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
+                                                                isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
+                                                            }`}
+                                                            style={{ minWidth: '180px', width: '180px' }}
+                                                        >
+                                                            Notes
+                                                        </th>
+                                                    </React.Fragment>
+                                                );
+                                            })}
                                         </tr>
                                     </thead>
                                     <tbody
@@ -4629,7 +4744,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                     >
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={gridColumns.length + 2} className="px-8 py-12 text-center">
+                                                <td colSpan={gridColumns.length * 2 + 2} className="px-8 py-12 text-center">
                                                     <div className="flex flex-col items-center gap-3">
                                                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
                                                             <i className="fas fa-file-alt text-2xl text-gray-400"></i>
@@ -4799,6 +4914,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     {gridColumns.map((col) => (
                                                         <React.Fragment key={`${doc.id}-${col.key}`}>
                                                             {renderStatusCell(section, doc, col.week)}
+                                                            {renderNotesCell(section, doc, col.week)}
                                                         </React.Fragment>
                                                     ))}
                                                     <td className="px-4 py-3 border-l-2 border-gray-200">
