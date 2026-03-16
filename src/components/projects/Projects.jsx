@@ -2624,16 +2624,13 @@ const Projects = () => {
         if (project?.id && viewingProject?.id === project.id && projectDetailAvailable) {
             return;
         }
-        
-        console.log('🔵 handleViewProject called with project:', project?.id, project?.name);
-        
+
         // Prevent duplicate calls for the same project within 500ms
         const now = Date.now();
         const projectId = project?.id;
-        if (projectId && 
-            lastHandleViewProjectCallRef.current.projectId === projectId && 
+        if (projectId &&
+            lastHandleViewProjectCallRef.current.projectId === projectId &&
             now - lastHandleViewProjectCallRef.current.timestamp < 500) {
-            console.log('⚠️ handleViewProject: Ignoring duplicate call for project:', projectId);
             return;
         }
         lastHandleViewProjectCallRef.current = { projectId, timestamp: now };
@@ -4934,35 +4931,20 @@ const Projects = () => {
                                         }, 100);
                                     }}
                                     onClick={(e) => {
-                                        console.log('🟢 Project card clicked:', project?.id, project?.name);
-                                        console.log('🟢 draggedProject:', draggedProject);
-                                        console.log('🟢 mouseDownRef:', mouseDownRef.current);
-                                        
                                         // Only handle click if we didn't drag
-                                        // If draggedProject is set, we just finished a drag, so ignore click
-                                        if (draggedProject !== null) {
-                                            console.log('⚠️ Click ignored - drag in progress');
-                                            return;
-                                        }
-                                        
+                                        if (draggedProject !== null) return;
+
                                         // Check if mouse moved significantly (indicates drag, not click)
                                         if (mouseDownRef.current) {
                                             const deltaX = Math.abs(e.clientX - mouseDownRef.current.x);
                                             const deltaY = Math.abs(e.clientY - mouseDownRef.current.y);
                                             const deltaTime = Date.now() - mouseDownRef.current.time;
-                                            
-                                            console.log('🟢 Mouse movement check:', { deltaX, deltaY, deltaTime });
-                                            
-                                            // If mouse moved more than 5px or took longer than 200ms, it was likely a drag attempt
                                             if (deltaX > 5 || deltaY > 5 || deltaTime > 200) {
-                                                console.log('⚠️ Click ignored - mouse moved too much or took too long');
                                                 mouseDownRef.current = null;
                                                 return;
                                             }
                                         }
-                                        
-                                        // It's a click - open the project
-                                        console.log('✅ Calling handleViewProject for project:', project?.id);
+
                                         try {
                                             handleViewProject(project);
                                         } catch (error) {

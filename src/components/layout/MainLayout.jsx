@@ -767,28 +767,46 @@ const MainLayout = () => {
     const [projectsComponentReady, setProjectsComponentReady] = React.useState(false);
     
     React.useEffect(() => {
+        let intervalId = null;
+        const fastChecksRef = [];
+
         const checkProjects = () => {
-            // Prefer window.Projects (main component), then ProjectsDatabaseFirst, then ProjectsSimple
             const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
-            const finalComponent = ProjectsComponent;
-            
-            if (finalComponent && typeof finalComponent === 'function' && !projectsComponentReady) {
+            if (ProjectsComponent && typeof ProjectsComponent === 'function') {
                 setProjectsComponentReady(true);
+                if (intervalId) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                }
+                fastChecksRef.forEach(clearTimeout);
+                fastChecksRef.length = 0;
+                return true;
             }
+            return false;
         };
-        
-        checkProjects();
-        // Aggressive polling in first 500ms so Projects section appears as soon as script registers
-        const fastChecks = [0, 25, 50, 100, 200, 350, 500].map(t => setTimeout(checkProjects, t));
-        const interval = setInterval(checkProjects, 500);
-        const timeout = setTimeout(() => clearInterval(interval), 10000);
-        
+
+        if (checkProjects()) return;
+
+        fastChecksRef.push(...[0, 25, 50, 100, 200, 350, 500].map(t => setTimeout(checkProjects, t)));
+        intervalId = setInterval(() => {
+            if (checkProjects() && intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+        }, 500);
+        const timeout = setTimeout(() => {
+            if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+        }, 10000);
+
         return () => {
-            fastChecks.forEach(clearTimeout);
-            clearInterval(interval);
+            fastChecksRef.forEach(clearTimeout);
+            if (intervalId) clearInterval(intervalId);
             clearTimeout(timeout);
         };
-    }, [projectsComponentReady]);
+    }, []);
     
     const Projects = React.useMemo(() => {
         // Prefer window.Projects (main component), then ProjectsDatabaseFirst, then ProjectsSimple
