@@ -1508,66 +1508,6 @@ const gridColumns = React.useMemo(() => (
         setEditingSection(null);
     };
 
-    // Restore sections from browser localStorage backup (e.g. after server was cleared by mistake)
-    const [isRestoringFromBackup, setIsRestoringFromBackup] = useState(false);
-    const restoreFromLocalBackup = useCallback(async () => {
-        if (!project?.id || isRestoringFromBackup) return;
-        const key = getSnapshotKey(project.id);
-        if (!key || !window.localStorage) return;
-        const stored = window.localStorage.getItem(key);
-        if (!stored || !stored.trim() || stored === '{}' || stored === 'null') {
-            alert('No local backup found for this project.');
-            return;
-        }
-        let parsed;
-        try {
-            parsed = JSON.parse(stored);
-        } catch (e) {
-            alert('Local backup is invalid or corrupted.');
-            return;
-        }
-        if (!parsed || typeof parsed !== 'object') {
-            alert('No valid backup data.');
-            return;
-        }
-        if (!confirm('Restore sections from this device\'s backup? This will overwrite the current server data.')) {
-            return;
-        }
-        setIsRestoringFromBackup(true);
-        try {
-            const serialized = JSON.stringify(parsed);
-            try {
-                await saveWeeklyFMSToDedicatedEndpoint(project.id, serialized);
-            } catch (e) {
-                if (window.DatabaseAPI?.updateProjectWeeklyFMSSections) {
-                    await window.DatabaseAPI.updateProjectWeeklyFMSSections(project.id, serialized);
-                } else if (apiRef.current?.saveWeeklyFMSReviewSections) {
-                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, parsed, false);
-                } else if (window.DatabaseAPI?.updateProject) {
-                    await window.DatabaseAPI.updateProject(project.id, { weeklyFMSReviewSections: serialized });
-                } else {
-                    throw e;
-                }
-            }
-            const normalized = normalizeSectionsByYear(parsed);
-            sectionsRef.current = normalized;
-            setSectionsByYear(normalized);
-            lastSavedDataRef.current = serialized;
-            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                window.updateViewingProject({ ...project, weeklyFMSReviewSections: serialized });
-            }
-            if (window.showToast && typeof window.showToast === 'function') {
-                window.showToast('Restored from local backup.');
-            } else {
-                alert('Restored from local backup.');
-            }
-        } catch (err) {
-            console.error('Restore from backup failed:', err);
-            alert(err.message || 'Restore failed. Check console.');
-        } finally {
-            setIsRestoringFromBackup(false);
-        }
-    }, [project?.id, project, isRestoringFromBackup]);
     const handleUpdateReviewer = (sectionId, reviewerId) => {
         const currentState = sectionsRef.current || {};
         const currentSections = currentState[selectedYear] || [];
@@ -4547,32 +4487,6 @@ placeholder="Notes..."
                             <i className="fas fa-plus"></i><span>Add Section</span>
                         </button>
 
-                        {project?.id && (() => {
-                            try {
-                                const k = getSnapshotKey(project.id);
-                                if (!k || !window.localStorage) return null;
-                                const s = window.localStorage.getItem(k);
-                                if (!s || !s.trim() || s === '{}' || s === 'null') return null;
-                                return (
-                                    <button
-                                        type="button"
-                                        onClick={restoreFromLocalBackup}
-                                        disabled={isRestoringFromBackup}
-                                        className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5 disabled:opacity-50"
-                                        title="Restore sections from this device's saved backup"
-                                    >
-                                        {isRestoringFromBackup ? (
-                                            <><i className="fas fa-spinner fa-spin"></i><span>Restoring...</span></>
-                                        ) : (
-                                            <><i className="fas fa-undo"></i><span>Restore from local backup</span></>
-                                        )}
-                                    </button>
-                                );
-                            } catch {
-                                return null;
-                            }
-                        })()}
-                        
                         <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
