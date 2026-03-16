@@ -35,11 +35,15 @@ const DatabaseAPI = {
         '/clients': 90000,        // 90s - list can be large/slow
         '/leads': 90000,          // 90s - list can be large/slow
     },
+    // Path prefix -> timeout (ms); GET /projects/:id can be slow for large projects
+    _endpointTimeoutPrefix: {
+        '/projects/': 90000,     // 90s - single project fetch (document sections, FMS, etc.)
+    },
 
-    // Request throttling / rate limiting safeguards
-    _maxConcurrentRequests: 2, // Reduced from 4 to prevent overwhelming the server
+    // Request throttling / rate limiting safeguards (relaxed for general snappiness; tighten if server returns 502)
+    _maxConcurrentRequests: 6, // Allow parallel loads (e.g. project + tasks + user) without serializing
     _currentRequests: 0,
-    _minRequestInterval: 500, // 500ms to match RateLimitManager and reduce request frequency
+    _minRequestInterval: 150, // 150ms between starting requests to avoid bursts without adding large delay
     _lastRequestTimestamp: 0,
     _rateLimitResumeAt: 0,
     _rateLimitCount: 0, // Track consecutive rate limit errors
@@ -461,7 +465,16 @@ const DatabaseAPI = {
                 // Add timeout handling using AbortController
                 // Use per-endpoint timeout for light endpoints so we fail fast when server is slow
                 const pathOnly = (endpoint || '').split('?')[0];
-                const timeoutMs = options.timeout ?? this._endpointTimeout?.[pathOnly] ?? 30000;
+                let timeoutMs = options.timeout ?? this._endpointTimeout?.[pathOnly];
+                if (timeoutMs == null && this._endpointTimeoutPrefix) {
+                    for (const [prefix, t] of Object.entries(this._endpointTimeoutPrefix)) {
+                        if (pathOnly.startsWith(prefix) && pathOnly.length > prefix.length) {
+                            timeoutMs = t;
+                            break;
+                        }
+                    }
+                }
+                if (timeoutMs == null) timeoutMs = 30000;
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => {
                     controller.abort();
@@ -597,12 +610,12 @@ const DatabaseAPI = {
                         // Gradually restore normal limits after successful requests
                         if (this._rateLimitCount > 3) {
                             // After many rate limits, restore slowly
-                            this._maxConcurrentRequests = 1;
-                            this._minRequestInterval = 750;
+                            this._maxConcurrentRequests = 2;
+                            this._minRequestInterval = 400;
                         } else {
                             // Restore to normal after a few successful requests
-                            this._maxConcurrentRequests = 2;
-                            this._minRequestInterval = 500;
+                            this._maxConcurrentRequests = 6;
+                            this._minRequestInterval = 150;
                         }
                     }
                     this._rateLimitCount = 0;

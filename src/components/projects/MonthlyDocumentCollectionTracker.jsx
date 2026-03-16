@@ -478,6 +478,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     };
 
     const [isLoading, setIsLoading] = useState(true);
+    const [loadingSlow, setLoadingSlow] = useState(false);
+    
+    // Show "taking longer than usual" after 15s so user knows the app is still working
+    useEffect(() => {
+        if (!isLoading) {
+            setLoadingSlow(false);
+            return;
+        }
+        const t = setTimeout(() => setLoadingSlow(true), 15000);
+        return () => clearTimeout(t);
+    }, [isLoading]);
     
     // Keep refs in sync with latest state
     useEffect(() => {
@@ -6314,6 +6325,9 @@ Abcotronics`;
                 <div className="text-center">
                     <i className="fas fa-spinner fa-spin text-3xl text-sky-600 mb-3"></i>
                     <p className="text-sm text-gray-600">Loading document collection tracker...</p>
+                    {loadingSlow && (
+                        <p className="text-xs text-amber-600 mt-2">Taking longer than usual — still loading. You can retry by refreshing the page.</p>
+                    )}
                 </div>
             </div>
         );

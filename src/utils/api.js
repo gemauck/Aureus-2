@@ -11,7 +11,7 @@ const RateLimitManager = {
   _requestQueue: [],
   _processingQueue: false,
   _lastRequestTime: 0,
-  _minRequestInterval: 500, // Minimum 500ms between requests to prevent bursts (increased from 300ms)
+  _minRequestInterval: 200, // Minimum 200ms between requests to prevent bursts while keeping UI responsive
   _pendingBatches: new Map(), // Track pending batched requests
   _batchDelay: 50, // Wait 50ms to batch similar requests together
   

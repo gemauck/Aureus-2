@@ -64,7 +64,7 @@ const ServiceAndMaintenance = () => {
     checkJobCards();
 
     if (!jobCardsReady) {
-      const interval = setInterval(checkJobCards, 150);
+      const interval = setInterval(checkJobCards, 500);
       return () => {
         cancelled = true;
         clearInterval(interval);
@@ -96,7 +96,7 @@ const ServiceAndMaintenance = () => {
     checkFormsManager();
 
     if (!formsManagerReady) {
-      const interval = setInterval(checkFormsManager, 200);
+      const interval = setInterval(checkFormsManager, 500);
       return () => {
         cancelled = true;
         clearInterval(interval);
