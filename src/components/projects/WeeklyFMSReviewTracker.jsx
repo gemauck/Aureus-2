@@ -569,8 +569,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // Skip only on full page refresh so we don't override user's scroll position after refresh.
     useEffect(() => {
         if (sections.length === 0 || selectedYear !== currentYear || workingWeeks.length === 0) return;
-        const nav = typeof performance !== 'undefined' && performance.getEntriesByType?.('navigation')?.[0];
-        const isReload = nav?.type === 'reload';
+        // Detect reload: Navigation Timing Level 2 and legacy performance.navigation (type 1 = reload)
+        let isReload = false;
+        if (typeof performance !== 'undefined') {
+            const nav = performance.getEntriesByType?.('navigation')?.[0];
+            if (nav?.type === 'reload') isReload = true;
+            if (!isReload && typeof performance.navigation !== 'undefined' && performance.navigation.type === 1) isReload = true;
+        }
         if (isReload) return;
         const workingWeekIndex = weeks.findIndex(w => workingWeeks.includes(w.number));
         if (workingWeekIndex < 0) return;
@@ -584,8 +589,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             if (containers.length === 0) return;
             containers.forEach(el => { el.scrollLeft = targetScrollLeft; });
         };
-        const id = requestAnimationFrame(() => requestAnimationFrame(run));
-        return () => cancelAnimationFrame(id);
+        // Wait for layout then run (rAF + short delay so table/scroll containers are in DOM)
+        let timeoutId = null;
+        const rafId = requestAnimationFrame(() => {
+            timeoutId = setTimeout(run, 150);
+        });
+        return () => {
+            cancelAnimationFrame(rafId);
+            if (timeoutId != null) clearTimeout(timeoutId);
+        };
     }, [sections.length, selectedYear, currentYear, workingWeeks, weeks]);
     
     // When creating a template from the current year's sections, we pre‑seed
