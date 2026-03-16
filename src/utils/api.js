@@ -949,6 +949,11 @@ const api = {
     return res
   },
 
+  async markOldFeedbackDone() {
+    const res = await request('/feedback/mark-old-done', { method: 'POST' })
+    return res
+  },
+
   // Job Cards
   async getJobCards() {
     const res = await request('/jobcards')

@@ -504,6 +504,26 @@ async function handler(req, res) {
       }
     }
 
+    // POST /api/feedback/mark-old-done -> mark all feedback older than 1 week as done (admin only)
+    if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[0] === 'feedback' && pathSegments[1] === 'mark-old-done') {
+      if (!req.user) return unauthorized(res, 'Authentication required')
+      const currentUser = await ensureUserLoaded()
+      if (!isAdminUser(currentUser)) return forbidden(res, 'Only administrators can mark old feedback as done')
+      try {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        const result = await prisma.feedback.updateMany({
+          where: {
+            createdAt: { lt: sevenDaysAgo },
+            status: 'open'
+          },
+          data: { status: 'done' }
+        })
+        return ok(res, { updated: result.count })
+      } catch (e) {
+        return serverError(res, 'Failed to mark old feedback as done', e.message)
+      }
+    }
+
     // PATCH /api/feedback/:id -> update type or status (admin only)
     if (req.method === 'PATCH' && pathSegments.length === 2 && pathSegments[0] === 'feedback') {
       const feedbackId = pathSegments[1]

@@ -817,7 +817,9 @@
                 
                 // Check for server errors (5xx) - Bad Gateway, Service Unavailable, Gateway Timeout, etc.
                 // These are server-side issues that the client can't fix, so suppress them
+                const hasStatus500 = error && typeof error === 'object' && (error.status === 500 || error.code === 500);
                 const isServerError = 
+                    hasStatus500 ||
                     allErrorText.includes('502') ||
                     allErrorText.includes('503') ||
                     allErrorText.includes('504') ||
