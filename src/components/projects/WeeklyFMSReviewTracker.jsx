@@ -565,6 +565,28 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         };
     }, [sections.length]);
     
+    // On initial navigation to Weekly FMS (not on refresh): scroll to the working week column.
+    // Use sessionStorage so we only do this once per session; refresh keeps the flag so we don't scroll again.
+    useEffect(() => {
+        if (sections.length === 0 || selectedYear !== currentYear || workingWeeks.length === 0) return;
+        if (typeof sessionStorage === 'undefined' || sessionStorage.getItem('weeklyFMS_initialScrollDone')) return;
+        const workingWeekIndex = weeks.findIndex(w => workingWeeks.includes(w.number));
+        if (workingWeekIndex < 0) return;
+        const STICKY_WIDTH = 300;
+        const WEEK_COLUMN_WIDTH = 360; // Status + Notes per week (2 * 180px)
+        const targetScrollLeft = Math.max(0, STICKY_WIDTH + workingWeekIndex * WEEK_COLUMN_WIDTH - 80);
+        const run = () => {
+            const root = scrollSyncRootRef.current;
+            if (!root) return;
+            const containers = root.querySelectorAll('[data-scroll-sync]');
+            if (containers.length === 0) return;
+            containers.forEach(el => { el.scrollLeft = targetScrollLeft; });
+            try { sessionStorage.setItem('weeklyFMS_initialScrollDone', '1'); } catch (_) {}
+        };
+        const id = requestAnimationFrame(() => requestAnimationFrame(run));
+        return () => cancelAnimationFrame(id);
+    }, [sections.length, selectedYear, currentYear, workingWeeks, weeks]);
+    
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
     // (POST) instead of trying to update an existing template.
