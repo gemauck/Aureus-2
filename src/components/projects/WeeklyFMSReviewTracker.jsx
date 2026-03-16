@@ -3403,13 +3403,15 @@ const getAssigneeColor = (identifier, users) => {
     
     const renderNotesCell = (section, doc, week) => {
         const notes = getDocumentNotes(doc, week);
+        const status = getDocumentStatus(doc, week);
+        const statusConfig = status ? getStatusConfig(status) : null;
         const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.match(/Week\s+(\d+)/i)?.[1] || week.match(/\d+/)?.[0] || '0') : week);
         const weekLabel = typeof week === 'object' ? week.label : week;
         const weekKey = getWeekKey(week, selectedYear);
         const cellKey = weekKey ? `${section.id}-${doc.id}-${weekKey}` : `${section.id}-${doc.id}-W${String(weekNumber).padStart(2, '0')}`;
         const isEditing = editingNotesCell === cellKey;
         const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
-        const cellBg = isWorkingWeek ? 'bg-primary-50' : '';
+        const cellBg = statusConfig?.cellColor || (isWorkingWeek ? 'bg-primary-50' : '');
         return (
             <td
                 className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
@@ -3433,7 +3435,7 @@ const getAssigneeColor = (identifier, users) => {
                         }}
 placeholder="Notes..."
                     rows={2}
-                    className="w-full min-w-0 px-2 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                    className="w-full min-w-0 px-2 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
                         aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
                         onClick={(e) => e.stopPropagation()}
                     />
