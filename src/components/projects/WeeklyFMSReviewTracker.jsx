@@ -450,12 +450,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [sectionsByYear]);
     
     useEffect(() => {
-        if (editingNotesCell && notesInputRef.current) {
-            notesInputRef.current.focus();
-        }
-    }, [editingNotesCell]);
-    
-    useEffect(() => {
         // Always prefer singleton instance created by DocumentCollectionAPI service
         if (window.DocumentCollectionAPI) {
             apiRef.current = window.DocumentCollectionAPI;
@@ -485,6 +479,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
     const [editingNotesCell, setEditingNotesCell] = useState(null);
     const notesInputRef = useRef(null);
+    useEffect(() => {
+        if (editingNotesCell && notesInputRef.current) {
+            notesInputRef.current.focus();
+        }
+    }, [editingNotesCell]);
     const [showTemplateList, setShowTemplateList] = useState(true);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
