@@ -29,18 +29,22 @@ async function handler(req, res) {
   res.setHeader('Expires', '0')
 
   try {
-    let documentSections = await documentSectionsToJson(id, { skipComments: false })
-
-    // Fetch blob for merge (or as primary source when table is empty)
-    let blob = null
-    try {
-      const project = await prisma.project.findUnique({
+    // Fetch table data and blob in parallel to reduce latency
+    const [documentSectionsRaw, projectRow] = await Promise.all([
+      documentSectionsToJson(id, { skipComments: false }),
+      prisma.project.findUnique({
         where: { id },
         select: { documentSections: true }
       })
-      if (project?.documentSections) {
-        blob = typeof project.documentSections === 'string'
-          ? JSON.parse(project.documentSections) : project.documentSections
+    ])
+    let documentSections = documentSectionsRaw
+
+    // Parse blob for merge (or as primary source when table is empty)
+    let blob = null
+    try {
+      if (projectRow?.documentSections) {
+        blob = typeof projectRow.documentSections === 'string'
+          ? JSON.parse(projectRow.documentSections) : projectRow.documentSections
       }
     } catch (blobErr) {
       console.warn('⚠️ document-sections-v2: failed to parse blob:', blobErr.message)

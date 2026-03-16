@@ -183,6 +183,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
     const loadRetryTimeoutRef = useRef(null); // Timeout for single retry when load returns empty
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
+    const showedPropDataRef = useRef(false); // True when we showed prop data so background fetch failure doesn't clear it
     const userSelectedYearRef = useRef(false); // Track manual year selection to avoid auto-switching
     
     const getSnapshotKey = (projectId) => projectId
@@ -712,8 +713,53 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             console.log('⏸️ Load skipped: save in progress');
             return;
         }
-        
-        setIsLoading(true);
+
+        // Quick path: if project already has documentSections/monthlyDataReviewSections (e.g. from full project load), show immediately
+        const propSectionsFirst = isMonthlyDataReview ? project?.monthlyDataReviewSections : project?.documentSections;
+        let urlYearForNormalize = null;
+        if (typeof window !== 'undefined') {
+            const hash = window.location.hash || '';
+            const search = window.location.search || '';
+            let urlYear = null;
+            if (hash.includes('?')) {
+                const p = new URLSearchParams(hash.split('?')[1] || '');
+                urlYear = p.get('docYear') || p.get('year');
+            }
+            if (!urlYear && search) {
+                const p = new URLSearchParams(search);
+                urlYear = p.get('docYear') || p.get('year');
+            }
+            if (urlYear) {
+                const y = parseInt(String(urlYear).trim(), 10);
+                if (!Number.isNaN(y) && y > 1900 && y < 3000) urlYearForNormalize = y;
+            }
+        }
+        const hasPropData = propSectionsFirst != null && typeof propSectionsFirst === 'object' &&
+            Object.keys(propSectionsFirst).some((k) => {
+                const v = propSectionsFirst[k];
+                return Array.isArray(v) && v.length > 0;
+            });
+        if (hasPropData) {
+            showedPropDataRef.current = true;
+            let normalized = normalizeSectionsByYear(propSectionsFirst, urlYearForNormalize);
+            if (urlYearForNormalize != null && (normalized[String(urlYearForNormalize)] == null || (Array.isArray(normalized[String(urlYearForNormalize)]) && normalized[String(urlYearForNormalize)].length === 0))) {
+                const otherYears = Object.keys(normalized).filter(y => Array.isArray(normalized[y]) && normalized[y].length > 0);
+                if (otherYears.length > 0) {
+                    const sourceYear = otherYears[0];
+                    const cloned = cloneSectionsArray(normalized[sourceYear]);
+                    normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
+                }
+            }
+            setSectionsByYear(normalized);
+            sectionsRef.current = normalized;
+            lastSavedDataRef.current = JSON.stringify(normalized);
+            setIsLoading(false);
+            // Still fetch from API in background to get latest (and emailRequestByMonth from blob), then update
+            // Fall through to run the fetch below without blocking the UI
+        } else {
+            showedPropDataRef.current = false;
+            setIsLoading(true);
+        }
         
         try {
             // 1) Prefer uncached endpoint fetches
@@ -880,8 +926,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
         } catch (error) {
             console.error('❌ Error loading data:', error);
-            setSectionsByYear({});
-            sectionsRef.current = {};
+            // Don't clear state if we already showed prop data (background fetch failed)
+            if (!showedPropDataRef.current) {
+                setSectionsByYear({});
+                sectionsRef.current = {};
+            }
         } finally {
             setIsLoading(false);
         }
