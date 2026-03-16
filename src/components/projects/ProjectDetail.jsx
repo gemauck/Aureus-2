@@ -1968,6 +1968,9 @@ function initializeProjectDetail() {
         list: 'all',
         includeSubtasks: true
     });
+    // Task list table sort: default newest first (createdAt desc)
+    const [taskListSortBy, setTaskListSortBy] = useState('createdAt');
+    const [taskListSortDir, setTaskListSortDir] = useState('desc');
     
     // Load tasks from Task API (new approach) or fallback to JSON (backward compatibility)
     const loadTasksFromAPI = useCallback(async (projectId) => {
@@ -4603,13 +4606,38 @@ function initializeProjectDetail() {
                     })
                     .filter(Boolean);
 
-                // Sort by order then createdAt so reordering is respected
-                tasksForList.sort((a, b) => {
-                    const oa = a.task.order ?? 999999;
-                    const ob = b.task.order ?? 999999;
-                    if (oa !== ob) return oa - ob;
-                    return new Date(a.task.createdAt || 0).getTime() - new Date(b.task.createdAt || 0).getTime();
-                });
+                // Sort by current column (default: newest first = createdAt desc)
+                const cmp = (aa, bb) => {
+                    const a = aa.task;
+                    const b = bb.task;
+                    let diff = 0;
+                    if (taskListSortBy === 'order') {
+                        const oa = a.order ?? 999999;
+                        const ob = b.order ?? 999999;
+                        diff = oa - ob;
+                    } else if (taskListSortBy === 'title') {
+                        diff = (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'status') {
+                        diff = (a.status || '').localeCompare(b.status || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'assignee') {
+                        diff = (a.assignee || '').localeCompare(b.assignee || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'priority') {
+                        diff = (a.priority || '').localeCompare(b.priority || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'dueDate') {
+                        const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                        const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                        diff = ta - tb;
+                    } else if (taskListSortBy === 'comments') {
+                        const ca = (a.comments || []).length;
+                        const cb = (b.comments || []).length;
+                        diff = ca - cb;
+                    } else {
+                        // createdAt (default)
+                        diff = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+                    }
+                    return taskListSortDir === 'asc' ? diff : -diff;
+                };
+                tasksForList.sort(cmp);
 
                 return {
                     ...list,
@@ -4651,12 +4679,32 @@ function initializeProjectDetail() {
             
             if (unmatchedTasksForList.length > 0) {
                 const merged = [...targetList.tasks, ...unmatchedTasksForList];
-                merged.sort((a, b) => {
-                    const oa = a.task.order ?? 999999;
-                    const ob = b.task.order ?? 999999;
-                    if (oa !== ob) return oa - ob;
-                    return new Date(a.task.createdAt || 0).getTime() - new Date(b.task.createdAt || 0).getTime();
-                });
+                const cmp = (aa, bb) => {
+                    const a = aa.task;
+                    const b = bb.task;
+                    let diff = 0;
+                    if (taskListSortBy === 'order') {
+                        diff = (a.order ?? 999999) - (b.order ?? 999999);
+                    } else if (taskListSortBy === 'title') {
+                        diff = (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'status') {
+                        diff = (a.status || '').localeCompare(b.status || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'assignee') {
+                        diff = (a.assignee || '').localeCompare(b.assignee || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'priority') {
+                        diff = (a.priority || '').localeCompare(b.priority || '', undefined, { sensitivity: 'base' });
+                    } else if (taskListSortBy === 'dueDate') {
+                        const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                        const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                        diff = ta - tb;
+                    } else if (taskListSortBy === 'comments') {
+                        diff = (a.comments || []).length - (b.comments || []).length;
+                    } else {
+                        diff = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+                    }
+                    return taskListSortDir === 'asc' ? diff : -diff;
+                };
+                merged.sort(cmp);
                 result[targetListIndex] = {
                     ...targetList,
                     tasks: merged
@@ -4666,7 +4714,7 @@ function initializeProjectDetail() {
         }
 
         return result;
-    }, [taskLists, tasks, taskFilters, matchesTaskFilters]);
+    }, [taskLists, tasks, taskFilters, matchesTaskFilters, taskListSortBy, taskListSortDir]);
 
     const filteredTaskIdSet = useMemo(() => {
         const ids = new Set();
@@ -4735,6 +4783,17 @@ function initializeProjectDetail() {
             priority: 'all',
             list: 'all',
             includeSubtasks: true
+        });
+    }, []);
+
+    const handleTaskListSort = useCallback((column) => {
+        setTaskListSortBy(prev => {
+            if (prev === column) {
+                setTaskListSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                return prev;
+            }
+            setTaskListSortDir(column === 'createdAt' || column === 'dueDate' ? 'desc' : 'asc');
+            return column;
         });
     }, []);
 
@@ -7235,13 +7294,76 @@ function initializeProjectDetail() {
                                             {list.tasks.length > 0 && (
                                                 <thead className="bg-gray-50">
                                                     <tr>
-                                                        <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Order</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comments</th>
+                                                        <th
+                                                            className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20 cursor-pointer select-none hover:bg-gray-100"
+                                                            onClick={() => handleTaskListSort('order')}
+                                                            title="Sort by order"
+                                                        >
+                                                            <span className="inline-flex items-center justify-center gap-1">
+                                                                Order
+                                                                {taskListSortBy === 'order' ? (taskListSortDir === 'asc' ? <i className="fas fa-sort-up text-primary-500" /> : <i className="fas fa-sort-down text-primary-500" />) : <i className="fas fa-sort text-gray-300" />}
+                                                            </span>
+                                                        </th>
+                                                        <th
+                                                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                                                            onClick={() => handleTaskListSort('title')}
+                                                            title="Sort by task name"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1">
+                                                                Task
+                                                                {taskListSortBy === 'title' ? (taskListSortDir === 'asc' ? <i className="fas fa-sort-up text-primary-500" /> : <i className="fas fa-sort-down text-primary-500" />) : <i className="fas fa-sort text-gray-300" />}
+                                                            </span>
+                                                        </th>
+                                                        <th
+                                                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                                                            onClick={() => handleTaskListSort('status')}
+                                                            title="Sort by status"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1">
+                                                                Status
+                                                                {taskListSortBy === 'status' ? (taskListSortDir === 'asc' ? <i className="fas fa-sort-up text-primary-500" /> : <i className="fas fa-sort-down text-primary-500" />) : <i className="fas fa-sort text-gray-300" />}
+                                                            </span>
+                                                        </th>
+                                                        <th
+                                                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                                                            onClick={() => handleTaskListSort('assignee')}
+                                                            title="Sort by assignee"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1">
+                                                                Assignee
+                                                                {taskListSortBy === 'assignee' ? (taskListSortDir === 'asc' ? <i className="fas fa-sort-up text-primary-500" /> : <i className="fas fa-sort-down text-primary-500" />) : <i className="fas fa-sort text-gray-300" />}
+                                                            </span>
+                                                        </th>
+                                                        <th
+                                                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                                                            onClick={() => handleTaskListSort('priority')}
+                                                            title="Sort by priority"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1">
+                                                                Priority
+                                                                {taskListSortBy === 'priority' ? (taskListSortDir === 'asc' ? <i className="fas fa-sort-up text-primary-500" /> : <i className="fas fa-sort-down text-primary-500" />) : <i className="fas fa-sort text-gray-300" />}
+                                                            </span>
+                                                        </th>
+                                                        <th
+                                                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                                                            onClick={() => handleTaskListSort('dueDate')}
+                                                            title="Sort by due date"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1">
+                                                                Due Date
+                                                                {taskListSortBy === 'dueDate' ? (taskListSortDir === 'asc' ? <i className="fas fa-sort-up text-primary-500" /> : <i className="fas fa-sort-down text-primary-500" />) : <i className="fas fa-sort text-gray-300" />}
+                                                            </span>
+                                                        </th>
+                                                        <th
+                                                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                                                            onClick={() => handleTaskListSort('comments')}
+                                                            title="Sort by comment count"
+                                                        >
+                                                            <span className="inline-flex items-center gap-1">
+                                                                Comments
+                                                                {taskListSortBy === 'comments' ? (taskListSortDir === 'asc' ? <i className="fas fa-sort-up text-primary-500" /> : <i className="fas fa-sort-down text-primary-500" />) : <i className="fas fa-sort text-gray-300" />}
+                                                            </span>
+                                                        </th>
                                                         <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                                     </tr>
                                                 </thead>

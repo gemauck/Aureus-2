@@ -3762,11 +3762,12 @@ const getAssigneeColor = (identifier, users) => {
             }
         };
         
+        const monthSeparatorClass = isMonthlyDataReview ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200';
         return (
             <td
                 data-cell-key={cellKey}
                 tabIndex={0}
-                className={`px-3 py-1.5 text-xs border-l-2 border-gray-200 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
+                className={`px-3 py-1.5 text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
                 onClick={handleCellClick}
                 onMouseEnter={() => setHoveredStatusCell(cellKey)}
                 onMouseLeave={() => setHoveredStatusCell(null)}
@@ -4014,8 +4015,10 @@ const getAssigneeColor = (identifier, users) => {
 
     const renderNotesCell = (section, doc, month) => {
         const notes = getDocumentNotes(doc, month);
+        const status = getDocumentStatus(doc, month);
+        const statusConfig = status ? getStatusConfig(status) : null;
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
-        const cellBg = isWorkingMonth ? 'bg-sky-50' : '';
+        const cellBg = statusConfig?.cellColor || (isWorkingMonth ? 'bg-sky-50' : '');
         // Uncontrolled textarea: browser handles all key input (space, enter, etc.) natively.
         // We sync to state on change and save on blur. key resets the field when section/doc/month/year changes.
         return (
@@ -4038,7 +4041,7 @@ const getAssigneeColor = (identifier, users) => {
                     }}
                     placeholder="Notes..."
                     rows={3}
-                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
                     aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
                 />
             </td>
@@ -6935,9 +6938,9 @@ Abcotronics`;
                                                         <th
                                                             key={month}
                                                             colSpan={2}
-                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-b-2 border-gray-300 ${
+                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 ${
                                                                 isOneMonthArrears(selectedYear, idx)
-                                                                    ? 'bg-sky-100 text-sky-800 border-sky-300'
+                                                                    ? 'bg-sky-100 text-sky-800 border-sky-400'
                                                                     : 'text-gray-700'
                                                             }`}
                                                         >
@@ -6949,7 +6952,7 @@ Abcotronics`;
                                                     ))}
                                                     <th
                                                         rowSpan={2}
-                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300 bg-gradient-to-b from-gray-100 to-gray-50"
+                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-4 border-gray-400 bg-gradient-to-b from-gray-100 to-gray-50"
                                                     >
                                                         Actions
                                                     </th>
@@ -6958,9 +6961,9 @@ Abcotronics`;
                                                     {months.map((month, idx) => (
                                                         <React.Fragment key={month}>
                                                             <th
-                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-4 border-t border-gray-400 ${
                                                                     isOneMonthArrears(selectedYear, idx)
-                                                                        ? 'bg-sky-50 text-sky-800 border-sky-200'
+                                                                        ? 'bg-sky-50 text-sky-800 border-sky-400'
                                                                         : 'text-gray-600'
                                                                 }`}
                                                                 style={{ minWidth: '180px', width: '180px' }}
@@ -7249,8 +7252,8 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         isMonthlyDataReview ? (
                                                             months.map((month) => (
                                                                 <React.Fragment key={`${doc.id}-${month}`}>
-                                                                    <td className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200" role="gridcell" />
-                                                                    <td className="px-2 py-1.5 text-xs border-l border-gray-200 bg-gray-200" role="gridcell" />
+                                                                    <td className="px-3 py-1.5 text-xs border-l-4 border-gray-400 bg-gray-200" role="gridcell" />
+                                                                    <td className="px-2 py-1.5 text-xs border-l-2 border-gray-300 bg-gray-200" role="gridcell" />
                                                                 </React.Fragment>
                                                             ))
                                                         ) : (
@@ -7278,7 +7281,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                             ))
                                                         )
                                                     )}
-                                                    <td className={`px-4 py-2 border-l-2 border-gray-200 ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
+                                                    <td className={`px-4 py-2 ${isMonthlyDataReview ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200'} ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
                                                         <div className="flex items-center gap-2 justify-center">
                                                             {!doc.parentId && (
                                                                 <button
