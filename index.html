@@ -1264,14 +1264,14 @@
                 
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
-                // CACHE BUST VERSION: bump when deploying new Vite projects bundle
-                const VITE_PROJECTS_VERSION = '20260115-status-update-v3-' + Date.now();
+                // Fixed version for cacheability - bump when deploying new Vite projects bundle (e.g. projects-module-v5)
+                const VITE_PROJECTS_VERSION = 'projects-module-v4';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
                     console.log('🔍 Existing script found:', src);
-                    // Remove scripts with timestamp cache busting (old version) OR wrong version
-                    if (src.includes('projects-module.js') && (/v=\d{13}/.test(src) || !src.includes(VITE_PROJECTS_VERSION))) {
+                    // Remove scripts with timestamp/random cache busting (old pattern) OR wrong version
+                    if (src.includes('projects-module.js') && (/v=\d{13}/.test(src) || /\?.*[&_]t=/.test(src) || /_[a-z0-9]{7}$/.test(src) || !src.includes(VITE_PROJECTS_VERSION))) {
                         console.log('🗑️ Removing old/wrong version script:', src);
                         oldScript.remove();
                     }
@@ -1332,10 +1332,9 @@
                 
                 const script = document.createElement('script');
                 script.type = 'module';
-                // Cache busting with version - update this when deploying new changes
-                // IMPORTANT: This version must match the one used above
+                // Fixed version for cacheability - bump VITE_PROJECTS_VERSION above when deploying new bundle
                 // NOTE: The Vite projects bundle is served from the /vite-projects static path on the server
-                script.src = '/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION + '&t=' + Date.now() + '&_=' + Math.random().toString(36).substring(7);
+                script.src = '/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION;
                 console.log('📦 Loading vite projects module from /vite-projects with version:', VITE_PROJECTS_VERSION);
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');

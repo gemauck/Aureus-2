@@ -420,16 +420,26 @@ const DatabaseAPI = {
     },
 
     // Project operations
-    async getProjects() {
+    async getProjects(options = {}) {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching projects from database...');
-        return this.makeRequest('/projects');
+        const { limit = 100, page = 1, includeCount = false, includeTaskCount = false } = options;
+        const params = new URLSearchParams();
+        if (limit != null) params.set('limit', String(limit));
+        if (page > 1) params.set('page', String(page));
+        if (includeCount) params.set('includeCount', 'true');
+        if (includeTaskCount) params.set('includeTaskCount', 'true');
+        const qs = params.toString();
+        const endpoint = qs ? `/projects?${qs}` : '/projects';
+        return this.makeRequest(endpoint);
     },
 
-    async getProject(id) {
+    async getProject(id, options = {}) {
         const log = window.debug?.log || (() => {});
         log(`📡 Fetching project ${id} from database...`);
-        return this.makeRequest(`/projects/${id}`);
+        const summaryOnly = options.summary === true || options.summary === 1;
+        const endpoint = summaryOnly ? `/projects/${id}?summary=1` : `/projects/${id}`;
+        return this.makeRequest(endpoint);
     },
 
     async createProject(projectData) {

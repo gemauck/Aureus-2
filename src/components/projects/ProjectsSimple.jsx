@@ -213,3 +213,6 @@ const ProjectsSimple = () => {
 
 // Make available globally
 window.ProjectsSimple = ProjectsSimple;
+if (typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('projectsComponentReady'));
+}

@@ -762,9 +762,17 @@ const api = {
     return res
   },
 
-  async getProjects() {
-    const res = await request('/projects')
-    return res
+  async getProjects(options = {}) {
+    const { limit = 100, page = 1, includeCount = false, includeTaskCount = false } = options;
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', String(limit));
+    if (page > 1) params.set('page', String(page));
+    if (includeCount) params.set('includeCount', 'true');
+    if (includeTaskCount) params.set('includeTaskCount', 'true');
+    const qs = params.toString();
+    const path = qs ? `/projects?${qs}` : '/projects';
+    const res = await request(path);
+    return res;
   },
 
   async createProject(projectData) {
@@ -782,9 +790,11 @@ const api = {
     return res
   },
 
-  async getProject(id) {
-    const res = await request(`/projects/${id}`)
-    return res
+  async getProject(id, options = {}) {
+    const summaryOnly = options.summary === true || options.summary === 1;
+    const path = summaryOnly ? `/projects/${id}?summary=1` : `/projects/${id}`;
+    const res = await request(path);
+    return res;
   },
 
   // Employees

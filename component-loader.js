@@ -90,6 +90,10 @@
         'components/common/DataContext.jsx',
         'components/common/AdvancedSearch.jsx',
         
+        // Projects shell (early so Projects list can render before heavy modals/trackers)
+        'components/projects/ProjectsSimple.jsx',
+        'components/projects/ProjectsDatabaseFirst.jsx',
+        
         // Theme
         'components/theme/ThemeProvider.jsx',
         
@@ -122,8 +126,7 @@
         'components/clients/BulkOperations.jsx',
         'components/clients/Pipeline.jsx',
         
-        // Projects
-        'components/projects/ProjectsSimple.jsx',
+        // Projects (modals and detail - shell loaded earlier)
         'components/projects/CustomFieldModal.jsx',
         'components/projects/TaskDetailModal.jsx',
         'components/projects/StatusManagementModal.jsx',
@@ -135,7 +138,6 @@
         'components/projects/DocumentCollectionModal.jsx',
         'components/projects/ProjectDetail.jsx',
         'components/projects/Projects.jsx',
-        'components/projects/ProjectsDatabaseFirst.jsx',
         
         // Time Tracking
         'components/time/TimeModal.jsx',

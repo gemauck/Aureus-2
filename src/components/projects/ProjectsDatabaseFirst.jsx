@@ -1,6 +1,11 @@
 // Database-First Projects Component - No localStorage dependency
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
+// Guard for hot-path logs; set window.__APP_DEBUG_PROJECTS__ = true to enable
+const debugLog = (...args) => {
+    try { if (typeof window !== 'undefined' && window.__APP_DEBUG_PROJECTS__) console.log(...args); } catch (_) {}
+};
+
 const DEFAULT_TASK_LISTS = [
     { id: 1, name: 'To Do', color: 'blue' }
 ];
@@ -216,60 +221,70 @@ const ProjectsDatabaseFirst = () => {
         if (projectId) {
             console.log('✅ ProjectsDatabaseFirst: IMMEDIATE - Found project in URL:', { projectId, taskId });
             
-            // Fetch and open project immediately
+            // Fetch and open project immediately (summary first for fast paint, then full in background)
             const fetchAndOpen = async () => {
-                if (window.DatabaseAPI?.getProject) {
-                    try {
-                        console.log('📡 ProjectsDatabaseFirst: IMMEDIATE - Fetching project:', projectId);
-                        const response = await window.DatabaseAPI.getProject(projectId);
-                        const projectData = response?.data?.project || response?.project || response?.data;
-                        
-                        if (projectData) {
-                            const fetchedProject = normalizeProject(projectData);
-                            console.log('✅ ProjectsDatabaseFirst: IMMEDIATE - Opening project:', fetchedProject.name);
-                            
-                            // Add to projects array
-                            setProjects(prev => {
-                                const exists = prev.find(p => String(p.id) === String(projectId));
-                                return exists ? prev : [...prev, fetchedProject];
-                            });
-                            
-                            // Open immediately
-                            setSelectedProject(fetchedProject);
-                            setShowModal(false);
-                            
-                            // Update URL if RouteState is available
-                            if (taskId && window.RouteState) {
-                                try {
-                                    window.RouteState.navigate({
-                                        page: 'projects',
-                                        segments: [projectId],
-                                        search: `?task=${encodeURIComponent(taskId)}`,
-                                        preserveSearch: false,
-                                        preserveHash: false
-                                    });
-                                } catch (e) {
-                                    console.warn('⚠️ ProjectsDatabaseFirst: Failed to update URL:', e);
-                                }
-                            }
-                            
-                            // Open task with retry
-                            if (taskId) {
-                                console.log('📋 ProjectsDatabaseFirst: IMMEDIATE - Opening task:', taskId);
-                                const dispatchTask = (attempt = 1) => {
-                                    window.dispatchEvent(new CustomEvent('openTask', {
-                                        detail: { taskId: taskId, tab: 'details' }
-                                    }));
-                                    if (attempt < 5) {
-                                        setTimeout(() => dispatchTask(attempt + 1), 1000 * attempt);
-                                    }
-                                };
-                                setTimeout(() => dispatchTask(1), 1000);
+                const api = window.DatabaseAPI || window.api;
+                const getProject = api?.getProject;
+                if (!getProject) return;
+                try {
+                    console.log('📡 ProjectsDatabaseFirst: IMMEDIATE - Fetching project (summary):', projectId);
+                    const response = await getProject(projectId, { summary: true });
+                    const projectData = response?.data?.project || response?.project || response?.data;
+
+                    if (projectData) {
+                        const fetchedProject = normalizeProject(projectData);
+                        console.log('✅ ProjectsDatabaseFirst: IMMEDIATE - Opening project:', fetchedProject.name);
+
+                        setProjects(prev => {
+                            const exists = prev.find(p => String(p.id) === String(projectId));
+                            return exists ? prev : [...prev, fetchedProject];
+                        });
+
+                        setSelectedProject(fetchedProject);
+                        setShowModal(false);
+
+                        if (taskId && window.RouteState) {
+                            try {
+                                window.RouteState.navigate({
+                                    page: 'projects',
+                                    segments: [projectId],
+                                    search: `?task=${encodeURIComponent(taskId)}`,
+                                    preserveSearch: false,
+                                    preserveHash: false
+                                });
+                            } catch (e) {
+                                console.warn('⚠️ ProjectsDatabaseFirst: Failed to update URL:', e);
                             }
                         }
-                    } catch (error) {
-                        console.error('❌ ProjectsDatabaseFirst: IMMEDIATE - Failed to fetch:', error);
+
+                        if (taskId) {
+                            console.log('📋 ProjectsDatabaseFirst: IMMEDIATE - Opening task:', taskId);
+                            const dispatchTask = (attempt = 1) => {
+                                window.dispatchEvent(new CustomEvent('openTask', {
+                                    detail: { taskId: taskId, tab: 'details' }
+                                }));
+                                if (attempt < 5) {
+                                    setTimeout(() => dispatchTask(attempt + 1), 1000 * attempt);
+                                }
+                            };
+                            setTimeout(() => dispatchTask(1), 1000);
+                        }
+
+                        // Load full project in background for tabs that need documentSections, etc.
+                        (async () => {
+                            try {
+                                const fullRes = await getProject(projectId);
+                                const fullData = fullRes?.data?.project || fullRes?.project || fullRes?.data;
+                                if (fullData) {
+                                    const fullProject = normalizeProject(fullData);
+                                    setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? fullProject : p));
+                                    setSelectedProject(prev => (prev && String(prev.id) === String(projectId)) ? fullProject : prev);
+                                }
+                            } catch (_) { /* non-critical */ }
+                        })();
                     }
+                } catch (error) {
+                    console.error('❌ ProjectsDatabaseFirst: IMMEDIATE - Failed to fetch:', error);
                 }
             };
             
@@ -446,7 +461,7 @@ const ProjectsDatabaseFirst = () => {
         });
 
         try {
-            console.log('🔄 Loading projects from database...', { retryCount });
+            debugLog('🔄 Loading projects from database...', { retryCount });
             
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -467,15 +482,16 @@ const ProjectsDatabaseFirst = () => {
                 return [];
             }
 
-            console.log('📡 Making API request to get projects...');
+            debugLog('📡 Making API request to get projects...');
             
-            // Race between the actual request and timeout
+            // Lean list: bounded limit, no task count for faster load
+            const listOptions = { limit: 100, includeTaskCount: false };
             const response = await Promise.race([
-                window.api.getProjects(),
+                window.api.getProjects(listOptions),
                 timeoutPromise
             ]);
             
-            console.log('✅ Received response from API:', {
+            debugLog('✅ Received response from API:', {
                 hasData: !!response?.data,
                 hasProjects: !!response?.data?.projects,
                 responseKeys: response ? Object.keys(response) : []
@@ -498,7 +514,7 @@ const ProjectsDatabaseFirst = () => {
                 apiProjects = [];
             }
             
-            console.log(`✅ Loaded ${apiProjects.length} projects from database`);
+            debugLog(`✅ Loaded ${apiProjects.length} projects from database`);
             
             const processedProjects = apiProjects
                 .map(normalizeProject)
@@ -527,14 +543,14 @@ const ProjectsDatabaseFirst = () => {
             } else if (error?.message?.includes?.('timeout') || error?.message?.includes?.('Request timeout')) {
                 // Retry once on timeout
                 if (retryCount < 1) {
-                    console.log('🔄 Retrying after timeout...');
+                    debugLog('🔄 Retrying after timeout...');
                     return loadProjects(retryCount + 1);
                 }
                 alert('Request timed out. Please check your connection and try again.');
             } else if (error?.code === 'DATABASE_CONNECTION_ERROR' || error?.isDatabaseError) {
                 // Retry once on database connection error
                 if (retryCount < 1) {
-                    console.log('🔄 Retrying after database connection error...');
+                    debugLog('🔄 Retrying after database connection error...');
                     setTimeout(() => loadProjects(retryCount + 1), 2000);
                     return [];
                 }
@@ -553,6 +569,41 @@ const ProjectsDatabaseFirst = () => {
             return [];
         }
     };
+
+    // Open project from list/grid: fetch summary first for fast paint, then full in background
+    const openProject = useCallback(async (project) => {
+        const api = window.DatabaseAPI || window.api;
+        const getProject = api?.getProject;
+        if (!getProject) {
+            setSelectedProject(project);
+            return;
+        }
+        const projectId = project.id;
+        try {
+            const response = await getProject(projectId, { summary: true });
+            const projectData = response?.data?.project || response?.project || response?.data;
+            if (projectData) {
+                const fetched = normalizeProject(projectData);
+                setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? fetched : p));
+                setSelectedProject(fetched);
+                (async () => {
+                    try {
+                        const fullRes = await getProject(projectId);
+                        const fullData = fullRes?.data?.project || fullRes?.project || fullRes?.data;
+                        if (fullData) {
+                            const fullProject = normalizeProject(fullData);
+                            setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? fullProject : p));
+                            setSelectedProject(prev => (prev && String(prev.id) === String(projectId)) ? fullProject : prev);
+                        }
+                    } catch (_) { /* non-critical */ }
+                })();
+            } else {
+                setSelectedProject(project);
+            }
+        } catch (_) {
+            setSelectedProject(project);
+        }
+    }, []);
 
     // Save project to database
     const handleSaveProject = async (projectData) => {
@@ -798,15 +849,15 @@ const ProjectsDatabaseFirst = () => {
 
     // Handle column sorting
     const handleSort = useCallback((column) => {
-        console.log('🖱️ Sort clicked:', { column, currentSortColumn: sortColumn, currentDirection: sortDirection });
+        debugLog('🖱️ Sort clicked:', { column, currentSortColumn: sortColumn, currentDirection: sortDirection });
         if (sortColumn === column) {
             // Toggle direction if clicking the same column
             const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-            console.log('🔄 Toggling sort direction:', newDirection);
+            debugLog('🔄 Toggling sort direction:', newDirection);
             setSortDirection(newDirection);
         } else {
             // Set new column and default to ascending
-            console.log('🔄 Setting new sort column:', column);
+            debugLog('🔄 Setting new sort column:', column);
             setSortColumn(column);
             setSortDirection('asc');
         }
@@ -880,11 +931,7 @@ const ProjectsDatabaseFirst = () => {
         // Create a new array to avoid mutating the original
         const sorted = [...filtered].sort(sortProjects);
         
-        // Debug: Log first few sorted items to verify sorting
-        if (sorted.length > 0 && sortColumn === 'name' && sortDirection === 'asc') {
-            console.log('✅ Projects sorted alphabetically:', sorted.slice(0, 3).map(p => p.name));
-        }
-        
+        debugLog('✅ Projects sorted alphabetically:', sorted.length > 0 && sortColumn === 'name' && sortDirection === 'asc' ? sorted.slice(0, 3).map(p => p.name) : '');
         return sorted;
     }, [projects, searchTerm, filterStatus, filterType, sortProjects]);
 
@@ -893,9 +940,8 @@ const ProjectsDatabaseFirst = () => {
         loadProjects();
     }, []);
     
-    // Debug: Log when sorting changes
     useEffect(() => {
-        console.log('🔄 Sort state changed:', { sortColumn, sortDirection, projectsCount: projects.length });
+        debugLog('🔄 Sort state changed:', { sortColumn, sortDirection, projectsCount: projects.length });
     }, [sortColumn, sortDirection, projects.length]);
 
     // Auto-refresh data every 2 minutes (only when page is visible)
@@ -1372,7 +1418,7 @@ const ProjectsDatabaseFirst = () => {
                                             }`}
                                             onClick={() => {
                                                 if (!showBulkActions) {
-                                                    setSelectedProject(project);
+                                                    openProject(project);
                                                 }
                                             }}
                                         >
@@ -1459,7 +1505,7 @@ const ProjectsDatabaseFirst = () => {
                                 }`}
                                 onClick={() => {
                                     if (!showBulkActions) {
-                                        setSelectedProject(project);
+                                        openProject(project);
                                     }
                                 }}
                             >
@@ -1561,3 +1607,6 @@ const ProjectsDatabaseFirst = () => {
 
 // Make available globally
 window.ProjectsDatabaseFirst = ProjectsDatabaseFirst;
+if (typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('projectsComponentReady'));
+}

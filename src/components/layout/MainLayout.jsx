@@ -765,21 +765,12 @@ const MainLayout = () => {
     }, []);
     
     const [projectsComponentReady, setProjectsComponentReady] = React.useState(false);
-    
-    React.useEffect(() => {
-        let intervalId = null;
-        const fastChecksRef = [];
 
+    React.useEffect(() => {
         const checkProjects = () => {
             const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
             if (ProjectsComponent && typeof ProjectsComponent === 'function') {
                 setProjectsComponentReady(true);
-                if (intervalId) {
-                    clearInterval(intervalId);
-                    intervalId = null;
-                }
-                fastChecksRef.forEach(clearTimeout);
-                fastChecksRef.length = 0;
                 return true;
             }
             return false;
@@ -787,24 +778,33 @@ const MainLayout = () => {
 
         if (checkProjects()) return;
 
-        fastChecksRef.push(...[0, 25, 50, 100, 200, 350, 500].map(t => setTimeout(checkProjects, t)));
+        const handleReady = () => {
+            if (checkProjects()) {
+                window.removeEventListener('projectsComponentReady', handleReady);
+            }
+        };
+        window.addEventListener('projectsComponentReady', handleReady);
+
+        let intervalId = null;
+        const maxAttempts = 20;
+        let attempts = 0;
         intervalId = setInterval(() => {
-            if (checkProjects() && intervalId) {
+            attempts++;
+            if (checkProjects() || attempts >= maxAttempts) {
                 clearInterval(intervalId);
-                intervalId = null;
+                window.removeEventListener('projectsComponentReady', handleReady);
             }
-        }, 500);
+        }, 1000);
+
         const timeout = setTimeout(() => {
-            if (intervalId) {
-                clearInterval(intervalId);
-                intervalId = null;
-            }
-        }, 10000);
+            if (intervalId) clearInterval(intervalId);
+            window.removeEventListener('projectsComponentReady', handleReady);
+        }, 21000);
 
         return () => {
-            fastChecksRef.forEach(clearTimeout);
             if (intervalId) clearInterval(intervalId);
             clearTimeout(timeout);
+            window.removeEventListener('projectsComponentReady', handleReady);
         };
     }, []);
     
