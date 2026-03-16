@@ -68,7 +68,8 @@
     "import:stock-count": "node scripts/import-stock-count-excel.js",
     "reimport:stock-count": "node scripts/reimport-stock-count-excel.js",
     "delete-site-site1": "node scripts/delete-site-site1.js",
-    "delete-sites-test": "node scripts/delete-sites-named-test.js"
+    "delete-sites-test": "node scripts/delete-sites-named-test.js",
+    "import:compliance-review": "node scripts/import-compliance-review-excel.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

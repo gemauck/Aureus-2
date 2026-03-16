@@ -576,6 +576,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [dragOverDocumentSectionId, setDragOverDocumentSectionId] = useState(null);
     const documentDragRef = useRef(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [isImportingExcel, setIsImportingExcel] = useState(false);
+    const complianceImportFileInputRef = useRef(null);
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
@@ -1495,6 +1497,63 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setShowApplyTemplateModal(false);
         
         // Save will happen automatically via useEffect
+    };
+    
+    const handleImportFromExcelClick = () => {
+        if (complianceImportFileInputRef.current) complianceImportFileInputRef.current.click();
+    };
+    
+    const handleComplianceImportFileChange = async (e) => {
+        const file = e.target?.files?.[0];
+        if (!file || !project?.id || !isComplianceReview) return;
+        e.target.value = '';
+        const ext = (file.name || '').toLowerCase();
+        if (!ext.endsWith('.xlsx')) {
+            alert('Please upload an Excel file (.xlsx).');
+            return;
+        }
+        setIsImportingExcel(true);
+        try {
+            const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+            const formData = new FormData();
+            formData.append('file', file);
+            const base = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : '';
+            const res = await fetch(`${base}/api/projects/${project.id}/compliance-review-import`, {
+                method: 'POST',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                body: formData
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error?.message || err?.message || `Import failed (${res.status})`);
+            }
+            const json = await res.json();
+            const rawSections = (json?.data?.sections ?? json?.sections) || [];
+            if (!Array.isArray(rawSections) || rawSections.length === 0) {
+                alert('No sections found in the file. Ensure the Excel has rows like "File 1: ..." in column A and descriptions in column B.');
+                return;
+            }
+            const newSections = rawSections.map(section => ({
+                id: Date.now() + Math.random(),
+                name: section.name,
+                description: section.description || '',
+                documents: Array.isArray(section.documents) ? section.documents.map(doc => ({
+                    id: Date.now() + Math.random(),
+                    name: doc.name,
+                    description: doc.description || '',
+                    collectionStatus: doc.collectionStatus || {},
+                    comments: doc.comments || {},
+                    notesByMonth: doc.notesByMonth || {},
+                    emailRequestByMonth: doc.emailRequestByMonth || {}
+                })) : []
+            }));
+            setSections(prev => [...prev, ...newSections]);
+        } catch (err) {
+            console.error('Compliance import error:', err);
+            alert('Import failed: ' + (err.message || 'Unknown error'));
+        } finally {
+            setIsImportingExcel(false);
+        }
     };
     
     // ============================================================
@@ -6712,6 +6771,27 @@ Abcotronics`;
                             >
                                 <i className="fas fa-plus"></i><span>Add Section</span>
                             </button>
+                            {isComplianceReview && (
+                                <>
+                                    <input
+                                        type="file"
+                                        ref={complianceImportFileInputRef}
+                                        accept=".xlsx"
+                                        className="hidden"
+                                        onChange={handleComplianceImportFileChange}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleImportFromExcelClick}
+                                        disabled={isImportingExcel}
+                                        className="px-3 py-1.5 bg-amber-200 text-amber-800 rounded-lg hover:bg-amber-300 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                        title="Import sections from Compliance Monthly Assessment Excel (.xlsx)"
+                                    >
+                                        {isImportingExcel ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-import"></i>}
+                                        <span>{isImportingExcel ? 'Importing…' : 'Import from Excel'}</span>
+                                    </button>
+                                </>
+                            )}
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
                                     onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
