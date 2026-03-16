@@ -1846,11 +1846,17 @@ function initializeProjectDetail() {
         }
     }, [project]);
     
+    // Normalize list from API: use listId as id for task grouping (task.listId === list.id), keep _pk for API calls
+    const normalizeTaskList = (l) => ({
+        ...l,
+        id: l.listId != null ? l.listId : l.id,
+        ...(l.id && typeof l.id === 'string' && l.listId != null ? { _pk: l.id } : {})
+    });
     // Initialize taskLists with project-specific data
     // CRITICAL: If project.taskLists is empty array, use default lists to ensure tasks can be displayed
     const [taskLists, setTaskLists] = useState(
         (project.taskLists && Array.isArray(project.taskLists) && project.taskLists.length > 0)
-            ? project.taskLists
+            ? project.taskLists.map(normalizeTaskList)
             : [
                 { id: 1, name: 'To Do', color: 'blue', description: '' }
             ]
@@ -2054,8 +2060,8 @@ function initializeProjectDetail() {
                 console.log('✅ ProjectDetail: Initializing default taskLists for project:', project.id);
                 setTaskLists(defaultLists);
             } else {
-                // Project has taskLists, use them
-                setTaskLists(project.taskLists);
+                // Project has taskLists, normalize so list.id matches task.listId for grouping
+                setTaskLists(project.taskLists.map(normalizeTaskList));
             }
         } else {
             // Same project, but project.taskLists might have changed
@@ -2064,10 +2070,11 @@ function initializeProjectDetail() {
             if (hasTaskLists) {
                 // Check if current state differs from project.taskLists
                 setTaskLists(prev => {
+                    const normalized = project.taskLists.map(normalizeTaskList);
                     const prevIds = prev?.map(l => l.id).sort().join(',') || '';
-                    const projectIds = project.taskLists.map(l => l.id).sort().join(',');
+                    const projectIds = normalized.map(l => l.id).sort().join(',');
                     if (prevIds !== projectIds) {
-                        return project.taskLists;
+                        return normalized;
                     }
                     return prev;
                 });
@@ -4865,19 +4872,71 @@ function initializeProjectDetail() {
         setShowListModal(true);
     }, [ensureListModalLoaded]);
 
-    const handleSaveList = (listData) => {
-        if (editingList) {
-            setTaskLists(taskLists.map(l => l.id === editingList.id ? { ...l, ...listData } : l));
-        } else {
-            const newList = {
-                id: Math.max(0, ...taskLists.map(l => l.id)) + 1,
-                ...listData
-            };
-            setTaskLists([...taskLists, newList]);
+    const handleSaveList = useCallback(async (listData) => {
+        const projectId = project?.id;
+        if (!projectId || !window.DatabaseAPI?.makeRequest) {
+            // Fallback to local-only when API not available
+            if (editingList) {
+                setTaskLists(prev => prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l));
+            } else {
+                const newList = {
+                    id: Math.max(0, ...taskLists.map(l => Number(l.id) || 0)) + 1,
+                    ...listData
+                };
+                setTaskLists(prev => [...prev, newList]);
+            }
+            setShowListModal(false);
+            setEditingList(null);
+            return;
         }
-        setShowListModal(false);
-        setEditingList(null);
-    };
+        try {
+            if (editingList) {
+                const listPk = editingList._pk || editingList.id;
+                if (listPk && typeof listPk === 'string') {
+                    const res = await window.DatabaseAPI.makeRequest(`/project-task-lists?id=${encodeURIComponent(listPk)}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            name: listData.name || editingList.name,
+                            color: listData.color ?? editingList.color,
+                            order: listData.order !== undefined ? listData.order : editingList.order
+                        })
+                    });
+                    if (!res.ok) throw new Error(res.statusText || 'Update failed');
+                    const data = await res.json().catch(() => ({}));
+                    const updated = data.taskList || data;
+                    setTaskLists(prev => prev.map(l => l.id === editingList.id ? normalizeTaskList({ ...l, ...updated, ...listData }) : l));
+                } else {
+                    setTaskLists(prev => prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l));
+                }
+            } else {
+                const nextOrder = taskLists.length;
+                const res = await window.DatabaseAPI.makeRequest('/project-task-lists', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        projectId,
+                        name: listData.name || 'New list',
+                        color: listData.color || 'blue',
+                        order: nextOrder
+                    })
+                });
+                if (!res.ok) throw new Error(res.statusText || 'Create failed');
+                const data = await res.json().catch(() => ({}));
+                const taskList = data.taskList || data;
+                if (!taskList) throw new Error('Invalid response');
+                const newList = normalizeTaskList({
+                    ...taskList,
+                    name: listData.name || taskList.name,
+                    color: listData.color ?? taskList.color
+                });
+                setTaskLists(prev => [...prev, newList]);
+            }
+            setShowListModal(false);
+            setEditingList(null);
+        } catch (err) {
+            console.error('❌ Error saving list:', err);
+            alert('Failed to save list: ' + (err.message || 'Please try again.'));
+        }
+    }, [project?.id, editingList, taskLists]);
 
     const handleAddCustomField = (fieldData) => {
         setCustomFieldDefinitions([...customFieldDefinitions, fieldData]);
@@ -4926,9 +4985,15 @@ function initializeProjectDetail() {
                     await Promise.all(savePromises);
                 }
                 
+                // Persist list deletion when list was saved to DB (_pk = table primary key)
+                const listPk = listToDelete._pk;
+                if (listPk && typeof listPk === 'string' && window.DatabaseAPI?.makeRequest) {
+                    await window.DatabaseAPI.makeRequest(`/project-task-lists?id=${encodeURIComponent(listPk)}`, { method: 'DELETE' });
+                }
+                
                 // Update local state after successful save — use functional update to avoid stale closure
                 setTasks(prev => (Array.isArray(prev) ? prev : []).map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
-                setTaskLists(taskLists.filter(l => l.id !== listId));
+                setTaskLists(prev => prev.filter(l => l.id !== listId));
             } catch (error) {
                 console.error('❌ Error deleting list:', error);
                 alert('Failed to delete list: ' + error.message);
