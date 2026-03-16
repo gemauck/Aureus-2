@@ -6485,20 +6485,6 @@ function initializeProjectDetail() {
         }
     };
 
-    const handleAddMonthlyDataProcess = () => {
-        // Pre-populate with monthly data process defaults
-        setEditingDocument({
-            name: 'Monthly Data Report',
-            category: 'Reports',
-            description: 'Monthly data collection and reporting',
-            priority: 'High',
-            dueDate: '',
-            requiredFrom: ''
-        });
-        setShowDocumentModal(true);
-        setShowDocumentProcessDropdown(false);
-    };
-
     const handleAddMonthlyDataReviewProcess = async () => {
         try {
             if (saveTimeoutRef.current) {
@@ -7971,16 +7957,6 @@ function initializeProjectDetail() {
                                             </div>
                                         </button>
                                     )}
-                                    <button
-                                        onClick={handleAddMonthlyDataProcess}
-                                        className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
-                                    >
-                                        <i className="fas fa-calendar-alt text-primary-600 w-4"></i>
-                                        <div>
-                                            <div className="font-medium">Monthly Data Process</div>
-                                            <div className="text-[10px] text-gray-500">Recurring monthly data collection</div>
-                                        </div>
-                                    </button>
                                     {!hasMonthlyDataReviewProcess && (
                                         <button
                                             type="button"
