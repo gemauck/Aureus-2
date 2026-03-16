@@ -565,18 +565,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         };
     }, [sections.length]);
     
-    // When navigating to Weekly FMS (including after switching away and back): scroll to the working week.
-    // Skip only on full page refresh so we don't override user's scroll position after refresh.
+    // When opening or returning to Weekly FMS (navigation, refresh, hard refresh): scroll to the working week.
     useEffect(() => {
         if (sections.length === 0 || selectedYear !== currentYear || workingWeeks.length === 0) return;
-        // Detect reload: Navigation Timing Level 2 and legacy performance.navigation (type 1 = reload)
-        let isReload = false;
-        if (typeof performance !== 'undefined') {
-            const nav = performance.getEntriesByType?.('navigation')?.[0];
-            if (nav?.type === 'reload') isReload = true;
-            if (!isReload && typeof performance.navigation !== 'undefined' && performance.navigation.type === 1) isReload = true;
-        }
-        if (isReload) return;
         const workingWeekIndex = weeks.findIndex(w => workingWeeks.includes(w.number));
         if (workingWeekIndex < 0) return;
         const STICKY_WIDTH = 300;
@@ -584,19 +575,26 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const targetScrollLeft = Math.max(0, STICKY_WIDTH + workingWeekIndex * WEEK_COLUMN_WIDTH - 80);
         const run = () => {
             const root = scrollSyncRootRef.current;
-            if (!root) return;
+            if (!root) return false;
             const containers = root.querySelectorAll('[data-scroll-sync]');
-            if (containers.length === 0) return;
+            if (containers.length === 0) return false;
             containers.forEach(el => { el.scrollLeft = targetScrollLeft; });
+            return true;
         };
-        // Wait for layout then run (rAF + short delay so table/scroll containers are in DOM)
-        let timeoutId = null;
+        // Retry at several delays so we catch the DOM after layout (works on navigation, refresh, hard refresh).
+        const delays = [100, 350, 700];
+        const timeouts = [];
         const rafId = requestAnimationFrame(() => {
-            timeoutId = setTimeout(run, 150);
+            delays.forEach((delay) => {
+                const id = setTimeout(() => {
+                    run();
+                }, delay);
+                timeouts.push(id);
+            });
         });
         return () => {
             cancelAnimationFrame(rafId);
-            if (timeoutId != null) clearTimeout(timeoutId);
+            timeouts.forEach((id) => clearTimeout(id));
         };
     }, [sections.length, selectedYear, currentYear, workingWeeks, weeks]);
     
