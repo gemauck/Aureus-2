@@ -1747,6 +1747,28 @@ app.all('/api/projects/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for project task lists (GET by projectId, POST create, PUT/DELETE by id) – used by Add List in project tasks
+app.all('/api/project-task-lists', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'project-task-lists.js'))
+    if (!handler) {
+      console.error('❌ Project task lists handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project-task-lists handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for time-entries (GET list / POST create, and GET/PUT/DELETE by id) – connected to DB
 app.all('/api/time-entries', async (req, res, next) => {
   try {

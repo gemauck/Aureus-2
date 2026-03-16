@@ -4893,7 +4893,7 @@ function initializeProjectDetail() {
             if (editingList) {
                 const listPk = editingList._pk || editingList.id;
                 if (listPk && typeof listPk === 'string') {
-                    const res = await window.DatabaseAPI.makeRequest(`/project-task-lists?id=${encodeURIComponent(listPk)}`, {
+                    const data = await window.DatabaseAPI.makeRequest(`/project-task-lists?id=${encodeURIComponent(listPk)}`, {
                         method: 'PUT',
                         body: JSON.stringify({
                             name: listData.name || editingList.name,
@@ -4901,16 +4901,14 @@ function initializeProjectDetail() {
                             order: listData.order !== undefined ? listData.order : editingList.order
                         })
                     });
-                    if (!res.ok) throw new Error(res.statusText || 'Update failed');
-                    const data = await res.json().catch(() => ({}));
-                    const updated = data.taskList || data;
+                    const updated = data?.taskList || data;
                     setTaskLists(prev => prev.map(l => l.id === editingList.id ? normalizeTaskList({ ...l, ...updated, ...listData }) : l));
                 } else {
                     setTaskLists(prev => prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l));
                 }
             } else {
                 const nextOrder = taskLists.length;
-                const res = await window.DatabaseAPI.makeRequest('/project-task-lists', {
+                const data = await window.DatabaseAPI.makeRequest('/project-task-lists', {
                     method: 'POST',
                     body: JSON.stringify({
                         projectId,
@@ -4919,9 +4917,7 @@ function initializeProjectDetail() {
                         order: nextOrder
                     })
                 });
-                if (!res.ok) throw new Error(res.statusText || 'Create failed');
-                const data = await res.json().catch(() => ({}));
-                const taskList = data.taskList || data;
+                const taskList = data?.taskList || data;
                 if (!taskList) throw new Error('Invalid response');
                 const newList = normalizeTaskList({
                     ...taskList,
