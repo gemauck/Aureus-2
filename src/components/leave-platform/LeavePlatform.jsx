@@ -826,6 +826,8 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             getLeaveTypeInfo={getLeaveTypeInfo}
                             getStatusLabel={getStatusLabel}
                             onRefresh={() => loadData()}
+                            onOpenApprovers={() => setCurrentTab('approvers')}
+                            onOpenEmployees={() => setCurrentTab('employees')}
                         />
                     );
                 case 'employees':
@@ -1219,7 +1221,9 @@ const OverviewView = ({
     isAdmin,
     getLeaveTypeInfo,
     getStatusLabel,
-    onRefresh
+    onRefresh,
+    onOpenApprovers,
+    onOpenEmployees
 }) => {
     const myApplications = useMemo(() => applications.filter(app => matchUserRecord(app, user)), [applications, user]);
     const myPending = useMemo(() => myApplications.filter(app => app.status === 'pending').length, [myApplications]);
@@ -1272,6 +1276,48 @@ const OverviewView = ({
                     Refresh
                 </button>
             </div>
+
+            {isAdmin && (onOpenApprovers || onOpenEmployees) && (
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-primary-900 mb-2 flex items-center gap-2">
+                        <i className="fas fa-cog"></i>
+                        Manage users & leave approvers
+                    </h4>
+                    <p className="text-sm text-primary-800 mb-3">
+                        Add or edit staff in <strong>Users</strong> (sidebar). Assign who approves leave per department in <strong>Approvers</strong>.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={() => window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'users' } }))}
+                            className="px-3 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
+                        >
+                            <i className="fas fa-user-cog mr-1.5"></i>
+                            Manage users
+                        </button>
+                        {onOpenApprovers && (
+                            <button
+                                type="button"
+                                onClick={onOpenApprovers}
+                                className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+                            >
+                                <i className="fas fa-user-shield mr-1.5"></i>
+                                Manage leave approvers
+                            </button>
+                        )}
+                        {onOpenEmployees && (
+                            <button
+                                type="button"
+                                onClick={onOpenEmployees}
+                                className="px-3 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
+                            >
+                                <i className="fas fa-users mr-1.5"></i>
+                                View employees
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-white border border-gray-200 rounded-lg p-4">

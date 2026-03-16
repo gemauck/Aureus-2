@@ -13,7 +13,8 @@ export function parseComplianceExcel(input) {
       ? XLSX.readFile(input)
       : XLSX.read(input, { type: 'buffer' });
 
-  const SECTION_HEADER_PATTERN = /^File \d+:/i;
+  // Section headers: "File 1:", "ファイル 1:", "ファイル1:" etc. (file headings = sections)
+  const SECTION_HEADER_PATTERN = /^(?:File|ファイル)\s*\d+\s*:/i;
   const sheetName =
     wb.SheetNames.find((n) => n === 'Compliance Team Checking Sheet') ||
     wb.SheetNames[0];
@@ -27,9 +28,12 @@ export function parseComplianceExcel(input) {
 
   const sectionRowIndices = [];
   for (let i = 0; i < data.length; i++) {
-    const a = trimCell(data[i][0]);
+    const row = data[i] || [];
+    const a = trimCell(row[0]);
+    const b = trimCell(row[1]);
     if (SECTION_HEADER_PATTERN.test(a)) {
-      sectionRowIndices.push({ index: i, title: a });
+      const title = b ? `${a} ${b}`.trim() : a;
+      sectionRowIndices.push({ index: i, title });
     }
   }
 
