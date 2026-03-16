@@ -565,11 +565,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         };
     }, [sections.length]);
     
-    // On initial navigation to Weekly FMS (not on refresh): scroll to the working week column.
-    // Use sessionStorage so we only do this once per session; refresh keeps the flag so we don't scroll again.
+    // When navigating to Weekly FMS (including after switching away and back): scroll to the working week.
+    // Skip only on full page refresh so we don't override user's scroll position after refresh.
     useEffect(() => {
         if (sections.length === 0 || selectedYear !== currentYear || workingWeeks.length === 0) return;
-        if (typeof sessionStorage === 'undefined' || sessionStorage.getItem('weeklyFMS_initialScrollDone')) return;
+        const nav = typeof performance !== 'undefined' && performance.getEntriesByType?.('navigation')?.[0];
+        const isReload = nav?.type === 'reload';
+        if (isReload) return;
         const workingWeekIndex = weeks.findIndex(w => workingWeeks.includes(w.number));
         if (workingWeekIndex < 0) return;
         const STICKY_WIDTH = 300;
@@ -581,7 +583,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             const containers = root.querySelectorAll('[data-scroll-sync]');
             if (containers.length === 0) return;
             containers.forEach(el => { el.scrollLeft = targetScrollLeft; });
-            try { sessionStorage.setItem('weeklyFMS_initialScrollDone', '1'); } catch (_) {}
         };
         const id = requestAnimationFrame(() => requestAnimationFrame(run));
         return () => cancelAnimationFrame(id);
