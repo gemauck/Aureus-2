@@ -450,6 +450,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [sectionsByYear]);
     
     useEffect(() => {
+        if (editingNotesCell && notesInputRef.current) {
+            notesInputRef.current.focus();
+        }
+    }, [editingNotesCell]);
+    
+    useEffect(() => {
         // Always prefer singleton instance created by DocumentCollectionAPI service
         if (window.DocumentCollectionAPI) {
             apiRef.current = window.DocumentCollectionAPI;
@@ -477,6 +483,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
     const templateDropdownRef = useRef(null);
     const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
+    const [editingNotesCell, setEditingNotesCell] = useState(null);
+    const notesInputRef = useRef(null);
     const [showTemplateList, setShowTemplateList] = useState(true);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
@@ -3178,7 +3186,7 @@ const getAssigneeColor = (identifier, users) => {
         
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
@@ -3340,36 +3348,75 @@ const getAssigneeColor = (identifier, users) => {
         );
     };
     
+    // Turn URLs in plain text into clickable links (for notes display)
+    const linkifyNotes = (text) => {
+        if (!text || typeof text !== 'string') return [];
+        const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s]*)?)/gi;
+        const parts = text.split(urlRegex);
+        return parts.map((part, i) => {
+            if (!part) return null;
+            // Odd-indexed segments from split() are the captured URL matches
+            const isUrl = i % 2 === 1;
+            if (isUrl) {
+                const href = part.startsWith('http') ? part : `https://${part.replace(/^www\./i, '')}`;
+                return (
+                    <a key={i} href={href} target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:text-sky-800 underline break-all" onClick={(e) => e.stopPropagation()}>
+                        {part}
+                    </a>
+                );
+            }
+            return part;
+        });
+    };
+    
     const renderNotesCell = (section, doc, week) => {
         const notes = getDocumentNotes(doc, week);
         const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.match(/Week\s+(\d+)/i)?.[1] || week.match(/\d+/)?.[0] || '0') : week);
         const weekLabel = typeof week === 'object' ? week.label : week;
+        const weekKey = getWeekKey(week, selectedYear);
+        const cellKey = weekKey ? `${section.id}-${doc.id}-${weekKey}` : `${section.id}-${doc.id}-W${String(weekNumber).padStart(2, '0')}`;
+        const isEditing = editingNotesCell === cellKey;
         const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
         const cellBg = isWorkingWeek ? 'bg-primary-50' : '';
-        // Match Monthly Data Review: same column width, border, textarea size and focus ring
         return (
             <td
                 className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
                 style={{ minWidth: '180px', width: '180px' }}
             >
-                <textarea
-                    key={`notes-${section.id}-${doc.id}-W${String(weekNumber).padStart(2, '0')}-${selectedYear}`}
-                    defaultValue={notes}
-                    onChange={(e) => handleUpdateNotes(section.id, doc.id, week, e.target.value)}
-                    onBlur={() => {
-                        lastSavedDataRef.current = null;
-                        if (saveTimeoutRef.current) {
-                            clearTimeout(saveTimeoutRef.current);
-                            saveTimeoutRef.current = null;
-                        }
-                        saveToDatabase();
-                    }}
-                    placeholder="Notes..."
-                    rows={3}
-                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
-                    aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
-                />
+                {isEditing ? (
+                    <textarea
+                        ref={notesInputRef}
+                        key={`notes-edit-${cellKey}`}
+                        defaultValue={notes}
+                        onChange={(e) => handleUpdateNotes(section.id, doc.id, week, e.target.value)}
+                        onBlur={() => {
+                            setEditingNotesCell(null);
+                            lastSavedDataRef.current = null;
+                            if (saveTimeoutRef.current) {
+                                clearTimeout(saveTimeoutRef.current);
+                                saveTimeoutRef.current = null;
+                            }
+                            saveToDatabase();
+                        }}
+                        placeholder="Notes..."
+                        rows={3}
+                        className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                        aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                ) : (
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); setEditingNotesCell(cellKey); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingNotesCell(cellKey); } }}
+                        className={`min-h-[4.5rem] w-full min-w-0 px-2 py-1.5 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
+                        title="Click to edit"
+                    >
+                        {notes ? linkifyNotes(notes) : 'Notes...'}
+                    </div>
+                )}
             </td>
         );
     };
@@ -4718,7 +4765,7 @@ const getAssigneeColor = (identifier, users) => {
                                                 return (
                                                     <React.Fragment key={col.key}>
                                                         <th
-                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
+                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
                                                                 isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
                                                             }`}
                                                             style={{ minWidth: '180px', width: '180px' }}
@@ -4726,7 +4773,7 @@ const getAssigneeColor = (identifier, users) => {
                                                             Status
                                                         </th>
                                                         <th
-                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
+                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
                                                                 isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
                                                             }`}
                                                             style={{ minWidth: '180px', width: '180px' }}
@@ -4739,7 +4786,7 @@ const getAssigneeColor = (identifier, users) => {
                                         </tr>
                                     </thead>
                                     <tbody
-                                        className="bg-white divide-y divide-gray-200"
+                                        className="bg-white divide-y-2 divide-gray-300"
                                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                     >
                                         {section.documents.length === 0 ? (
@@ -4766,7 +4813,7 @@ const getAssigneeColor = (identifier, users) => {
                                             section.documents.map((doc, docIndex) => (
                                                 <tr
                                                     key={doc.id}
-                                                    className={`transition-colors border-b border-gray-100 cursor-grab active:cursor-grabbing ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'}`}
+                                                    className={`transition-colors border-b-2 border-gray-300 cursor-grab active:cursor-grabbing ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'}`}
                                                     draggable
                                                     onDragStart={(e) => handleDocumentDragStart(section.id, docIndex, e)}
                                                     onDragEnd={handleDocumentDragEnd}
@@ -4917,7 +4964,7 @@ const getAssigneeColor = (identifier, users) => {
                                                             {renderNotesCell(section, doc, col.week)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-4 py-3 border-l-2 border-gray-200">
+                                                    <td className="px-4 py-3 border-l-2 border-gray-300">
                                                         <div className="flex items-center gap-2 justify-center">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, doc)}
