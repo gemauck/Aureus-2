@@ -3220,7 +3220,7 @@ const getAssigneeColor = (identifier, users) => {
         
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                className={`px-2 py-0.5 text-xs border-l-2 border-gray-300 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
                 onClick={handleCellClick}
                 title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             >
@@ -3414,7 +3414,7 @@ const getAssigneeColor = (identifier, users) => {
         const cellBg = isWorkingWeek ? 'bg-primary-50' : '';
         return (
             <td
-                className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
+                className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
                 style={{ minWidth: '180px', width: '180px' }}
             >
@@ -3433,9 +3433,9 @@ const getAssigneeColor = (identifier, users) => {
                             }
                             saveToDatabase();
                         }}
-                        placeholder="Notes..."
-                        rows={3}
-                        className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+placeholder="Notes..."
+                    rows={2}
+                    className="w-full min-w-0 px-2 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                         aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
                         onClick={(e) => e.stopPropagation()}
                     />
@@ -3445,7 +3445,7 @@ const getAssigneeColor = (identifier, users) => {
                         tabIndex={0}
                         onClick={(e) => { e.stopPropagation(); setEditingNotesCell(cellKey); }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingNotesCell(cellKey); } }}
-                        className={`min-h-[4.5rem] w-full min-w-0 px-2 py-1.5 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
+                        className={`min-h-[3rem] w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
                         title="Click to edit"
                     >
                         {notes ? linkifyNotes(notes) : 'Notes...'}
@@ -4761,7 +4761,7 @@ const getAssigneeColor = (identifier, users) => {
                                         <tr>
                                             <th
                                                 rowSpan={2}
-                                                className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
+                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
                                                 style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                             >
                                                 Document / Data
@@ -4772,7 +4772,7 @@ const getAssigneeColor = (identifier, users) => {
                                                     <th
                                                         key={col.key}
                                                         colSpan={2}
-                                                        className={`px-2 py-3 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-b-2 border-gray-300 ${
+                                                        className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-b-2 border-gray-300 ${
                                                             workingWeeks.includes(week.number) && selectedYear === currentYear
                                                                 ? 'bg-primary-100 text-primary-800 border-primary-300'
                                                                 : 'text-gray-700'
@@ -4787,7 +4787,7 @@ const getAssigneeColor = (identifier, users) => {
                                             })}
                                             <th
                                                 rowSpan={2}
-                                                className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300 bg-gradient-to-b from-gray-100 to-gray-50"
+                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300 bg-gradient-to-b from-gray-100 to-gray-50"
                                             >
                                                 Actions
                                             </th>
@@ -4799,7 +4799,7 @@ const getAssigneeColor = (identifier, users) => {
                                                 return (
                                                     <React.Fragment key={col.key}>
                                                         <th
-                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
+                                                            className={`px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
                                                                 isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
                                                             }`}
                                                             style={{ minWidth: '180px', width: '180px' }}
@@ -4807,7 +4807,7 @@ const getAssigneeColor = (identifier, users) => {
                                                             Status
                                                         </th>
                                                         <th
-                                                            className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
+                                                            className={`px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
                                                                 isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
                                                             }`}
                                                             style={{ minWidth: '180px', width: '180px' }}
@@ -4856,7 +4856,7 @@ const getAssigneeColor = (identifier, users) => {
                                                     onDrop={(e) => handleDocumentDrop(e, section.id, docIndex)}
                                                 >
                                                     <td
-                                                        className="px-4 py-3 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
+                                                        className="px-4 py-2 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
@@ -4864,7 +4864,7 @@ const getAssigneeColor = (identifier, users) => {
                                                                 <i className="fas fa-grip-vertical text-[10px]"></i>
                                                             </span>
                                                             <div className="flex-1 min-w-0">
-                                                            <div className="text-sm font-semibold text-gray-900 mb-1">{doc.name}</div>
+                                                            <div className="text-sm font-semibold text-gray-900 mb-0.5">{doc.name}</div>
                                                             {doc.description && (() => {
                                                                 const { truncated, isLong } = truncateDescription(String(doc.description));
                                                                 return (
@@ -4886,7 +4886,7 @@ const getAssigneeColor = (identifier, users) => {
                                                             })()}
                                                         </div>
                                                             {/* Assign: compact icon + chips; dropdown fixed so not covered */}
-                                                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                                                            <div className="mt-1 flex flex-wrap items-center gap-1">
                                                                 {(() => {
                                                                     const assigned = normalizeAssignedTo(doc);
                                                                     const openAssign = (e) => {
@@ -4998,7 +4998,7 @@ const getAssigneeColor = (identifier, users) => {
                                                             {renderNotesCell(section, doc, col.week)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-4 py-3 border-l-2 border-gray-300">
+                                                    <td className="px-4 py-2 border-l-2 border-gray-300">
                                                         <div className="flex items-center gap-2 justify-center">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, doc)}
