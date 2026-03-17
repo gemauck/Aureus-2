@@ -1339,6 +1339,42 @@ model DiscussionChecklist {
   @@index([discussionId])
 }
 
+// SARS website monitoring: public notices, legislation, news
+model SarsWebsiteChange {
+  id          String    @id @default(cuid())
+  url         String
+  pageTitle   String    @default("")
+  changeType  String    @default("new")
+  title       String
+  description String    @default("")
+  publishedAt DateTime?
+  isNew       Boolean   @default(true)
+  isRead      Boolean   @default(false)
+  priority    String    @default("Normal")
+  category    String    @default("General")
+  metadata    String    @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([url])
+  @@index([publishedAt])
+  @@index([isNew])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// Last SARS monitoring run (for "Last checked" in UI)
+model SarsMonitoringRun {
+  id            String   @id @default(cuid())
+  ranAt         DateTime @default(now())
+  success       Boolean  @default(true)
+  newCount      Int      @default(0)
+  errorMessage  String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([ranAt])
+}
+
 model WorkflowExecution {
   id             String        @id @default(cuid())
   workflowId     String?       // Optional: may reference a TeamWorkflow or be standalone

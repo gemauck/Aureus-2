@@ -1,19 +1,22 @@
 // SARS Website Monitoring API
-// Checks for changes on the SARS website and stores them in the database
+// Checks for changes on the SARS website (public notices, legislation, news) and stores them in the database
 import { authRequired } from '../_lib/authRequired.js'
 import { prisma } from '../_lib/prisma.js'
 import { ok, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { sendSarsSummaryEmail } from './sendSummaryEmail.js'
 
-// SARS website URLs to monitor
-const SARS_URLS = {
-  main: 'https://www.sars.gov.za',
-  news: 'https://www.sars.gov.za/news-and-media/',
-  announcements: 'https://www.sars.gov.za/news-and-media/announcements/',
-  taxUpdates: 'https://www.sars.gov.za/tax-types/',
-  vatUpdates: 'https://www.sars.gov.za/tax-types/value-added-tax/'
-}
+// All key sections to monitor (public notices, legislation, news)
+const SARS_SECTIONS = [
+  { url: 'https://www.sars.gov.za/news-and-media/announcements/', label: 'Announcements' },
+  { url: 'https://www.sars.gov.za/news-and-media/', label: 'News & Media' },
+  { url: 'https://www.sars.gov.za/latest-news/', label: 'Latest News' },
+  { url: 'https://www.sars.gov.za/whats-new-at-sars/', label: "What's New" },
+  { url: 'https://www.sars.gov.za/legal-counsel/secondary-legislation/public-notices/', label: 'Public Notices' },
+  { url: 'https://www.sars.gov.za/legal-counsel/secondary-legislation/', label: 'Secondary Legislation' },
+  { url: 'https://www.sars.gov.za/media/media-releases/', label: 'Media Releases' }
+]
 
 // Function to fetch and parse SARS website content
 async function fetchSarsPage(url) {
@@ -146,7 +149,7 @@ function calculateHash(content) {
   return hash.toString()
 }
 
-// Main function to check SARS website for changes
+// Main function to check SARS website for changes (all key sections)
 async function checkSarsWebsite() {
   const results = {
     checked: [],
@@ -154,114 +157,111 @@ async function checkSarsWebsite() {
     errors: []
   }
 
-  try {
-    // Check announcements page (most likely to have updates)
-    const announcementsHtml = await fetchSarsPage(SARS_URLS.announcements)
-    const announcements = extractAnnouncements(announcementsHtml, SARS_URLS.announcements)
-    
-    results.checked.push({
-      url: SARS_URLS.announcements,
-      found: announcements.length
-    })
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const delayMs = 1500
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+  for (const section of SARS_SECTIONS) {
+    try {
+      await new Promise((r) => setTimeout(r, delayMs))
+      const html = await fetchSarsPage(section.url)
+      const announcements = extractAnnouncements(html, section.url)
+      results.checked.push({ url: section.url, found: announcements.length })
 
-    // Process each announcement
-    for (const announcement of announcements) {
-      try {
-        // Check if this change already exists
-        const existing = await prisma.sarsWebsiteChange.findFirst({
-          where: {
-            url: announcement.url,
-            title: announcement.title
-          }
-        })
-
-        if (!existing) {
-          // Determine priority based on keywords
-          let priority = 'Normal'
-          const titleLower = announcement.title.toLowerCase()
-          if (titleLower.includes('urgent') || titleLower.includes('critical') || titleLower.includes('immediate')) {
-            priority = 'Critical'
-          } else if (titleLower.includes('important') || titleLower.includes('deadline')) {
-            priority = 'High'
-          } else if (titleLower.includes('update') || titleLower.includes('change')) {
-            priority = 'Medium'
-          }
-
-          // Determine category
-          let category = 'General'
-          const descLower = (announcement.description || '').toLowerCase()
-          if (titleLower.includes('vat') || descLower.includes('vat')) {
-            category = 'VAT'
-          } else if (titleLower.includes('tax') || descLower.includes('tax')) {
-            category = 'Tax'
-          } else if (titleLower.includes('compliance') || descLower.includes('compliance')) {
-            category = 'Compliance'
-          }
-
-          // Check if it's new (published today or recently)
-          const publishedDate = new Date(announcement.publishedAt)
-          const isNew = publishedDate >= today
-
-          // Create new change record
-          const change = await prisma.sarsWebsiteChange.create({
-            data: {
+      for (const announcement of announcements) {
+        try {
+          const existing = await prisma.sarsWebsiteChange.findFirst({
+            where: {
               url: announcement.url,
-              pageTitle: announcement.pageTitle,
-              changeType: 'new',
-              title: announcement.title,
-              description: announcement.description,
-              publishedAt: publishedDate,
-              isNew: isNew,
-              isRead: false,
-              priority: priority,
-              category: category,
-              metadata: JSON.stringify({
-                sourceUrl: SARS_URLS.announcements,
-                checkedAt: new Date().toISOString()
-              })
+              title: announcement.title
             }
           })
 
-          results.newChanges.push({
-            id: change.id,
-            title: change.title,
-            url: change.url,
-            priority: change.priority
-          })
+          if (!existing) {
+            const titleLower = (announcement.title || '').toLowerCase()
+            const descLower = (announcement.description || '').toLowerCase()
 
+            let priority = 'Normal'
+            if (titleLower.includes('urgent') || titleLower.includes('critical') || titleLower.includes('immediate')) {
+              priority = 'Critical'
+            } else if (titleLower.includes('important') || titleLower.includes('deadline')) {
+              priority = 'High'
+            } else if (titleLower.includes('update') || titleLower.includes('change')) {
+              priority = 'Medium'
+            }
+
+            let category = 'General'
+            if (titleLower.includes('vat') || descLower.includes('vat')) category = 'VAT'
+            else if (titleLower.includes('tax') || descLower.includes('tax')) category = 'Tax'
+            else if (titleLower.includes('compliance') || descLower.includes('compliance')) category = 'Compliance'
+            else if (section.label === 'Public Notices' || section.label === 'Secondary Legislation') category = 'Compliance'
+
+            const publishedDate = new Date(announcement.publishedAt)
+            const isNew = publishedDate >= today
+
+            const change = await prisma.sarsWebsiteChange.create({
+              data: {
+                url: announcement.url,
+                pageTitle: announcement.pageTitle,
+                changeType: 'new',
+                title: announcement.title,
+                description: announcement.description,
+                publishedAt: publishedDate,
+                isNew,
+                isRead: false,
+                priority,
+                category,
+                metadata: JSON.stringify({
+                  sourceUrl: section.url,
+                  sourceLabel: section.label,
+                  checkedAt: new Date().toISOString()
+                })
+              }
+            })
+
+            results.newChanges.push({
+              id: change.id,
+              title: change.title,
+              url: change.url,
+              priority: change.priority,
+              category: change.category,
+              publishedAt: change.publishedAt
+            })
+          }
+        } catch (err) {
+          console.error(`Error processing item: ${announcement.title}`, err)
+          results.errors.push({ title: announcement.title, error: err.message })
         }
-      } catch (error) {
-        console.error(`Error processing announcement: ${announcement.title}`, error)
-        results.errors.push({
-          title: announcement.title,
-          error: error.message
-        })
       }
+    } catch (error) {
+      console.error(`Error fetching ${section.url}:`, error.message)
+      results.errors.push({ url: section.url, error: error.message })
     }
+  }
 
-    // Mark old changes as not new
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  await prisma.sarsWebsiteChange.updateMany({
+    where: { publishedAt: { lt: yesterday }, isNew: true },
+    data: { isNew: false }
+  })
 
-    await prisma.sarsWebsiteChange.updateMany({
-      where: {
-        publishedAt: { lt: yesterday },
-        isNew: true
-      },
+  if (results.newChanges.length > 0) {
+    sendSarsSummaryEmail(results.newChanges, { skipFirstRun: true }).catch((e) =>
+      console.error('SARS summary email failed:', e.message)
+    )
+  }
+
+  try {
+    await prisma.sarsMonitoringRun.create({
       data: {
-        isNew: false
+        success: results.errors.length === 0,
+        newCount: results.newChanges.length,
+        errorMessage: results.errors.length > 0 ? results.errors.map((e) => e.error).join('; ').slice(0, 500) : null
       }
     })
-
-  } catch (error) {
-    console.error('Error checking SARS website:', error)
-    results.errors.push({
-      url: 'general',
-      error: error.message
-    })
+  } catch (_) {
+    // Table may not exist yet (migration not run)
   }
 
   return results
@@ -273,9 +273,14 @@ async function handler(req, res) {
     const { action = 'check' } = req.query
 
     if (action === 'check') {
-      // Manual check trigger
       const results = await checkSarsWebsite()
-      
+      let lastRun = null
+      try {
+        lastRun = await prisma.sarsMonitoringRun.findFirst({
+          orderBy: { ranAt: 'desc' },
+          take: 1
+        })
+      } catch (_) {}
       return ok(res, {
         success: true,
         message: 'SARS website check completed',
@@ -284,7 +289,20 @@ async function handler(req, res) {
           newChanges: results.newChanges.length,
           errors: results.errors.length,
           changes: results.newChanges
-        }
+        },
+        lastRun: lastRun ? { ranAt: lastRun.ranAt, success: lastRun.success, newCount: lastRun.newCount, errorMessage: lastRun.errorMessage } : null
+      })
+    } else if (action === 'last-run') {
+      let lastRun = null
+      try {
+        lastRun = await prisma.sarsMonitoringRun.findFirst({
+          orderBy: { ranAt: 'desc' },
+          take: 1
+        })
+      } catch (_) {}
+      return ok(res, {
+        success: true,
+        data: lastRun ? { ranAt: lastRun.ranAt, success: lastRun.success, newCount: lastRun.newCount, errorMessage: lastRun.errorMessage } : null
       })
     } else if (action === 'list') {
       // Get list of changes

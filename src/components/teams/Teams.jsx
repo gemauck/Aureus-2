@@ -245,7 +245,7 @@ const Teams = () => {
         const tab = urlParams.get('tab') || 'overview';
         // Map legacy tabs to discussions
         if (['documents', 'workflows', 'checklists', 'notices'].includes(tab)) return 'discussions';
-        if (['overview', 'discussions', 'meeting-notes', 'poa-review', 'members'].includes(tab)) return tab;
+        if (['overview', 'discussions', 'meeting-notes', 'poa-review', 'sars-monitoring', 'members'].includes(tab)) return tab;
         return 'overview';
     };
     
@@ -835,6 +835,20 @@ const Teams = () => {
                                     <span className="sm:hidden">POA</span>
                                 </button>
                             )}
+                            {(selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (
+                                <button
+                                    onClick={() => setActiveTab('sars-monitoring')}
+                                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                        activeTab === 'sars-monitoring'
+                                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <i className="fas fa-globe mr-1.5"></i>
+                                    <span className="hidden sm:inline">SARS Monitoring</span>
+                                    <span className="sm:hidden">SARS</span>
+                                </button>
+                            )}
                             {isAdminUser && selectedTeam && (
                                 <button
                                     onClick={() => setActiveTab('members')}
@@ -945,6 +959,18 @@ const Teams = () => {
                             return (
                                 <TeamDiscussionsComponent team={selectedTeam} isDark={isDark} searchTerm={searchTerm} initialDiscussionId={getSearchParams().get('discussion') || undefined} />
                             );
+                        })()}
+                        {activeTab === 'sars-monitoring' && (selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (() => {
+                            const SarsMonitoringComponent = window.SarsMonitoring;
+                            if (!SarsMonitoringComponent) {
+                                return (
+                                    <div className={`flex items-center justify-center py-16 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <span className="animate-spin mr-2 inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full"></span>
+                                        <span className="text-sm">Loading SARS Monitoring…</span>
+                                    </div>
+                                );
+                            }
+                            return <SarsMonitoringComponent />;
                         })()}
                         {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && (() => {
                             const ComponentToRender = window.ManagementMeetingNotes || ManagementMeetingNotes;

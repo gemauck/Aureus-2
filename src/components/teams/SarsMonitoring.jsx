@@ -16,6 +16,7 @@ const SarsMonitoring = () => {
         category: '',
         priority: ''
     });
+    const [lastRun, setLastRun] = useState(null);
 
     // Get theme state
     let themeResult = { isDark: false };
@@ -99,6 +100,23 @@ const SarsMonitoring = () => {
         }
     };
 
+    // Load last run (for "Last checked" display)
+    const loadLastRun = async () => {
+        try {
+            const token = localStorage.getItem('abcotronics_token') || localStorage.getItem('token');
+            if (!token) return;
+            const response = await fetch('/api/sars-monitoring/check?action=last-run', {
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data) setLastRun(data.data);
+            }
+        } catch (e) {
+            console.error('Error loading last run:', e);
+        }
+    };
+
     // Trigger manual check
     const handleCheckNow = async () => {
         setChecking(true);
@@ -123,8 +141,8 @@ const SarsMonitoring = () => {
 
             const data = await response.json();
             if (data.success) {
-                alert(`Check completed! Found ${data.results?.newChanges || 0} new changes.`);
-                // Reload changes and stats
+                if (data.lastRun) setLastRun(data.lastRun);
+                alert(`Check completed! Found ${data.results?.newChanges || 0} new changes.${data.results?.newChanges > 0 ? ' A summary email has been sent to the Compliance team.' : ''}`);
                 await Promise.all([loadChanges(), loadStats()]);
             } else {
                 alert('Error checking SARS website: ' + (data.message || 'Unknown error'));
@@ -165,10 +183,10 @@ const SarsMonitoring = () => {
         }
     };
 
-    // Load on mount and when filter changes
     useEffect(() => {
         loadChanges();
         loadStats();
+        loadLastRun();
     }, [filter]);
 
     const getPriorityColor = (priority) => {
@@ -199,8 +217,16 @@ const SarsMonitoring = () => {
                             SARS Website Monitoring
                         </h3>
                         <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                            Monitor SARS website for regulatory updates and announcements
+                            Public notices, legislation, news and announcements. Summary emails sent to Compliance team when changes are found.
                         </p>
+                        {lastRun && (
+                            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                                Last checked: {lastRun.ranAt ? new Date(lastRun.ranAt).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                                {lastRun.errorMessage && (
+                                    <span className={isDark ? 'text-amber-400' : 'text-amber-600'}> · Last error: {String(lastRun.errorMessage).slice(0, 60)}{String(lastRun.errorMessage).length > 60 ? '…' : ''}</span>
+                                )}
+                            </p>
+                        )}
                     </div>
                     <button
                         onClick={handleCheckNow}

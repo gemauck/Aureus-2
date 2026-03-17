@@ -2,17 +2,19 @@
 
 ## Overview
 
-The SARS Website Monitoring feature automatically tracks changes, announcements, and regulatory updates from the South African Revenue Service (SARS) website. This helps the Compliance team stay informed about tax regulations, VAT updates, and compliance requirements.
+The SARS Website Monitoring feature automatically tracks changes across the SARS website: **public notices**, **legislation**, **news** and announcements. It checks multiple key sections (not just one page) and sends a **summary email to the Compliance team** when new changes are found. This helps the Compliance team stay informed about tax regulations, VAT updates, and compliance requirements.
 
 ## Features
 
-- **Automatic Monitoring**: Checks SARS website for new announcements and updates
-- **Change Detection**: Identifies new content and tracks changes over time
-- **Priority Classification**: Automatically categorizes updates by priority (Critical, High, Medium, Normal, Low)
-- **Category Filtering**: Organizes changes by category (Tax, VAT, Compliance, General)
-- **Read/Unread Status**: Tracks which updates have been reviewed
-- **Direct Links**: Provides direct links to SARS website for each change
-- **Statistics Dashboard**: Shows total changes, new changes, and unread count
+- **Multi-section monitoring**: Announcements, News & Media, Latest News, What's New, Public Notices, Secondary Legislation, Media Releases
+- **Automatic monitoring**: Scheduled run (e.g. daily cron) plus manual "Check Now" from the Teams → Compliance → SARS Monitoring tab
+- **Summary email**: When new changes are found, a summary email is sent to all members of the Compliance team (configurable via `SARS_MONITORING_TEAM_ID`, default `compliance`)
+- **Change detection**: Identifies new content and tracks changes over time
+- **Priority classification**: Critical, High, Medium, Normal, Low
+- **Category filtering**: Tax, VAT, Compliance, General
+- **Read/Unread status**: Tracks which updates have been reviewed
+- **Last checked**: UI shows last run time and any error message
+- **First-run guard**: Summary email is not sent on the very first run (to avoid flooding with historical items)
 
 ## Access
 
@@ -85,6 +87,12 @@ Retrieves a list of changes with optional filters.
 - `category` (string): Filter by category
 - `priority` (string): Filter by priority
 
+### Last run (for "Last checked" in UI)
+```
+GET /api/sars-monitoring/check?action=last-run
+```
+Returns the most recent run: `ranAt`, `success`, `newCount`, `errorMessage`.
+
 ### Get Statistics
 ```
 GET /api/sars-monitoring/check?action=stats
@@ -118,32 +126,29 @@ Marks a specific change as read.
 
 ## Automated Monitoring
 
-### Cron Job Setup
+### Cron job
 
-To automatically check the SARS website daily, set up a cron job:
+The script checks all monitored sections and, when new changes are found, sends a summary email to the Compliance team. Run it daily (e.g. 9 AM):
 
 ```bash
-# Edit crontab
 crontab -e
-
-# Add this line to run daily at 9 AM
-0 9 * * * /usr/bin/node /path/to/abcotronics-erp-modular/scripts/sars-website-monitor.js >> /var/log/sars-monitoring.log 2>&1
+# Run from repo root so the script can import the email helper
+0 9 * * * cd /path/to/abcotronics-erp-modular && node scripts/sars-website-monitor.js >> /var/log/sars-monitoring.log 2>&1
 ```
 
-### Manual Script Execution
-
-Run the monitoring script manually:
+### Manual run
 
 ```bash
+cd /path/to/abcotronics-erp-modular
 node scripts/sars-website-monitor.js
 ```
 
 The script will:
-1. Fetch the latest announcements from SARS website
-2. Extract new changes
-3. Store them in the database
-4. Mark old changes as not new
-5. Output results to console
+1. Check each monitored section (with a short delay between requests)
+2. Store new changes in the database
+3. If any new changes were found, send a summary email to Compliance team members
+4. Record the run for "Last checked" in the UI
+5. Output results to the console
 
 ## Database Schema
 
@@ -176,6 +181,20 @@ model SarsWebsiteChange {
 }
 ```
 
+### SarsMonitoringRun model (last run for UI)
+
+```prisma
+model SarsMonitoringRun {
+  id            String   @id @default(cuid())
+  ranAt         DateTime @default(now())
+  success       Boolean  @default(true)
+  newCount      Int      @default(0)
+  errorMessage  String?  @db.Text
+  createdAt     DateTime @default(now())
+  @@index([ranAt])
+}
+```
+
 ## Priority Classification
 
 The system automatically classifies changes by priority based on keywords:
@@ -194,23 +213,33 @@ Changes are automatically categorized:
 - **Compliance**: Contains "compliance" in title or description
 - **General**: Default category
 
-## Monitored URLs
+## Monitored sections
 
-The system currently monitors:
-- Main SARS website: `https://www.sars.gov.za`
-- News & Media: `https://www.sars.gov.za/news-and-media/`
+The system checks these sections (public notices, legislation, news):
+
 - Announcements: `https://www.sars.gov.za/news-and-media/announcements/`
-- Tax Types: `https://www.sars.gov.za/tax-types/`
-- VAT Updates: `https://www.sars.gov.za/tax-types/value-added-tax/`
+- News & Media: `https://www.sars.gov.za/news-and-media/`
+- Latest News: `https://www.sars.gov.za/latest-news/`
+- What's New: `https://www.sars.gov.za/whats-new-at-sars/`
+- Public Notices: `https://www.sars.gov.za/legal-counsel/secondary-legislation/public-notices/`
+- Secondary Legislation: `https://www.sars.gov.za/legal-counsel/secondary-legislation/`
+- Media Releases: `https://www.sars.gov.za/media/media-releases/`
+
+## Configuration
+
+- **SARS_MONITORING_TEAM_ID**: Team id used to resolve Compliance team members for the summary email (default: `compliance`). Ensure this matches your Teams API team id or the team name is "Compliance".
+- **APP_URL**: Base URL for links in the summary email (e.g. `https://erp.abcotronics.co.za`).
+- Email is sent using existing app config (Resend / SendGrid / SMTP).
 
 ## Troubleshooting
 
 ### Changes Not Appearing
 
-1. Check that the database migration has been run:
+1. Ensure the database has the required tables. If `SarsWebsiteChange` or `SarsMonitoringRun` are missing, apply migrations or run:
    ```bash
    npx prisma migrate deploy
    ```
+   (or `npx prisma db push` for dev). The schema is in `prisma/schema.prisma`.
 
 2. Verify the API endpoint is accessible:
    ```bash

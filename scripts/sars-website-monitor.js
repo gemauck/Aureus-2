@@ -1,26 +1,34 @@
 /**
  * SARS Website Monitoring Script
- * 
- * This script monitors the SARS website for changes, announcements, and updates.
- * It can be run manually or scheduled via cron.
- * 
+ *
+ * Monitors SARS website (public notices, legislation, news). Run manually or via cron.
+ * Sends summary email to Compliance team when new changes are found.
+ *
  * Usage:
- * - Cron: 0 9 * * * /usr/bin/node /path/to/scripts/sars-website-monitor.js
- * - Manual: node scripts/sars-website-monitor.js
+ *   Cron: 0 9 * * * cd /path/to/repo && node scripts/sars-website-monitor.js
+ *   Manual: node scripts/sars-website-monitor.js
  */
 
 import 'dotenv/config'
-import { PrismaClient } from '@prisma/client'
+import { createRequire } from 'module'
+import { pathToFileURL } from 'url'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const require = createRequire(import.meta.url)
+const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
-// SARS website URLs to monitor
-const SARS_URLS = {
-  main: 'https://www.sars.gov.za',
-  news: 'https://www.sars.gov.za/news-and-media/',
-  announcements: 'https://www.sars.gov.za/news-and-media/announcements/',
-  taxUpdates: 'https://www.sars.gov.za/tax-types/',
-  vatUpdates: 'https://www.sars.gov.za/tax-types/value-added-tax/'
-}
+const SARS_SECTIONS = [
+  { url: 'https://www.sars.gov.za/news-and-media/announcements/', label: 'Announcements' },
+  { url: 'https://www.sars.gov.za/news-and-media/', label: 'News & Media' },
+  { url: 'https://www.sars.gov.za/latest-news/', label: 'Latest News' },
+  { url: 'https://www.sars.gov.za/whats-new-at-sars/', label: "What's New" },
+  { url: 'https://www.sars.gov.za/legal-counsel/secondary-legislation/public-notices/', label: 'Public Notices' },
+  { url: 'https://www.sars.gov.za/legal-counsel/secondary-legislation/', label: 'Secondary Legislation' },
+  { url: 'https://www.sars.gov.za/media/media-releases/', label: 'Media Releases' }
+]
 
 // Function to fetch and parse SARS website content
 async function fetchSarsPage(url) {
@@ -141,125 +149,90 @@ function extractAnnouncements(html, url) {
   return announcements
 }
 
-// Main function to check SARS website for changes
 async function checkSarsWebsite() {
-  const results = {
-    checked: [],
-    newChanges: [],
-    errors: []
+  const results = { checked: [], newChanges: [], errors: [] }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const delayMs = 1500
+
+  for (const section of SARS_SECTIONS) {
+    try {
+      await new Promise((r) => setTimeout(r, delayMs))
+      console.log('🔍 Checking', section.label, '...')
+      const html = await fetchSarsPage(section.url)
+      const announcements = extractAnnouncements(html, section.url)
+      results.checked.push({ url: section.url, found: announcements.length })
+
+      for (const announcement of announcements) {
+        try {
+          const existing = await prisma.sarsWebsiteChange.findFirst({
+            where: { url: announcement.url, title: announcement.title }
+          })
+          if (!existing) {
+            const titleLower = (announcement.title || '').toLowerCase()
+            const descLower = (announcement.description || '').toLowerCase()
+            let priority = 'Normal'
+            if (titleLower.includes('urgent') || titleLower.includes('critical') || titleLower.includes('immediate')) priority = 'Critical'
+            else if (titleLower.includes('important') || titleLower.includes('deadline')) priority = 'High'
+            else if (titleLower.includes('update') || titleLower.includes('change')) priority = 'Medium'
+            let category = 'General'
+            if (titleLower.includes('vat') || descLower.includes('vat')) category = 'VAT'
+            else if (titleLower.includes('tax') || descLower.includes('tax')) category = 'Tax'
+            else if (titleLower.includes('compliance') || descLower.includes('compliance')) category = 'Compliance'
+            else if (section.label === 'Public Notices' || section.label === 'Secondary Legislation') category = 'Compliance'
+            const publishedDate = new Date(announcement.publishedAt)
+            const isNew = publishedDate >= today
+            const change = await prisma.sarsWebsiteChange.create({
+              data: {
+                url: announcement.url,
+                pageTitle: announcement.pageTitle,
+                changeType: 'new',
+                title: announcement.title,
+                description: announcement.description,
+                publishedAt: publishedDate,
+                isNew,
+                isRead: false,
+                priority,
+                category,
+                metadata: JSON.stringify({ sourceUrl: section.url, sourceLabel: section.label, checkedAt: new Date().toISOString() })
+              }
+            })
+            results.newChanges.push({
+              id: change.id,
+              title: change.title,
+              url: change.url,
+              priority: change.priority,
+              category: change.category,
+              publishedAt: change.publishedAt
+            })
+            console.log(`✅ New change: ${announcement.title}`)
+          }
+        } catch (err) {
+          results.errors.push({ title: announcement.title, error: err.message })
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching ${section.url}:`, error.message)
+      results.errors.push({ url: section.url, error: error.message })
+    }
   }
+
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  await prisma.sarsWebsiteChange.updateMany({
+    where: { publishedAt: { lt: yesterday }, isNew: true },
+    data: { isNew: false }
+  })
 
   try {
-    // Check announcements page (most likely to have updates)
-    console.log('🔍 Checking SARS announcements page...')
-    const announcementsHtml = await fetchSarsPage(SARS_URLS.announcements)
-    const announcements = extractAnnouncements(announcementsHtml, SARS_URLS.announcements)
-    
-    results.checked.push({
-      url: SARS_URLS.announcements,
-      found: announcements.length
-    })
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    // Process each announcement
-    for (const announcement of announcements) {
-      try {
-        // Check if this change already exists
-        const existing = await prisma.sarsWebsiteChange.findFirst({
-          where: {
-            url: announcement.url,
-            title: announcement.title
-          }
-        })
-
-        if (!existing) {
-          // Determine priority based on keywords
-          let priority = 'Normal'
-          const titleLower = announcement.title.toLowerCase()
-          if (titleLower.includes('urgent') || titleLower.includes('critical') || titleLower.includes('immediate')) {
-            priority = 'Critical'
-          } else if (titleLower.includes('important') || titleLower.includes('deadline')) {
-            priority = 'High'
-          } else if (titleLower.includes('update') || titleLower.includes('change')) {
-            priority = 'Medium'
-          }
-
-          // Determine category
-          let category = 'General'
-          const descLower = (announcement.description || '').toLowerCase()
-          if (titleLower.includes('vat') || descLower.includes('vat')) {
-            category = 'VAT'
-          } else if (titleLower.includes('tax') || descLower.includes('tax')) {
-            category = 'Tax'
-          } else if (titleLower.includes('compliance') || descLower.includes('compliance')) {
-            category = 'Compliance'
-          }
-
-          // Check if it's new (published today or recently)
-          const publishedDate = new Date(announcement.publishedAt)
-          const isNew = publishedDate >= today
-
-          // Create new change record
-          const change = await prisma.sarsWebsiteChange.create({
-            data: {
-              url: announcement.url,
-              pageTitle: announcement.pageTitle,
-              changeType: 'new',
-              title: announcement.title,
-              description: announcement.description,
-              publishedAt: publishedDate,
-              isNew: isNew,
-              isRead: false,
-              priority: priority,
-              category: category,
-              metadata: JSON.stringify({
-                sourceUrl: SARS_URLS.announcements,
-                checkedAt: new Date().toISOString()
-              })
-            }
-          })
-
-          results.newChanges.push({
-            id: change.id,
-            title: change.title,
-            url: change.url,
-            priority: change.priority
-          })
-
-          console.log(`✅ New change detected: ${announcement.title}`)
-        }
-      } catch (error) {
-        console.error(`Error processing announcement: ${announcement.title}`, error)
-        results.errors.push({
-          title: announcement.title,
-          error: error.message
-        })
-      }
-    }
-
-    // Mark old changes as not new
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-
-    await prisma.sarsWebsiteChange.updateMany({
-      where: {
-        publishedAt: { lt: yesterday },
-        isNew: true
-      },
+    await prisma.sarsMonitoringRun.create({
       data: {
-        isNew: false
+        success: results.errors.length === 0,
+        newCount: results.newChanges.length,
+        errorMessage: results.errors.length > 0 ? results.errors.map((e) => e.error).join('; ').slice(0, 500) : null
       }
     })
-
-  } catch (error) {
-    console.error('Error checking SARS website:', error)
-    results.errors.push({
-      url: 'general',
-      error: error.message
-    })
-  }
+  } catch (_) {}
 
   return results
 }
@@ -271,25 +244,31 @@ async function runSarsMonitoring() {
   try {
     const results = await checkSarsWebsite()
 
+    if (results.newChanges.length > 0) {
+      try {
+        const sendModule = await import(pathToFileURL(join(__dirname, '..', 'api', 'sars-monitoring', 'sendSummaryEmail.js')).href)
+        await sendModule.sendSarsSummaryEmail(results.newChanges, { skipFirstRun: true })
+      } catch (e) {
+        console.error('📧 Summary email failed:', e.message)
+      }
+    }
+
     const duration = ((Date.now() - startTime) / 1000).toFixed(2)
     console.log(`\n✅ SARS monitoring completed in ${duration}s`)
     console.log(`   Pages checked: ${results.checked.length}`)
     console.log(`   New changes found: ${results.newChanges.length}`)
     console.log(`   Errors: ${results.errors.length}`)
-    
     if (results.newChanges.length > 0) {
       console.log('\n📋 New changes:')
-      results.newChanges.forEach(change => {
-        console.log(`   - [${change.priority}] ${change.title}`)
-      })
+      results.newChanges.forEach((change) => console.log(`   - [${change.priority}] ${change.title}`))
     }
-    
+
     return {
       success: true,
       checked: results.checked.length,
       newChanges: results.newChanges.length,
       errors: results.errors.length,
-      duration: duration
+      duration
     }
   } catch (error) {
     console.error('❌ Fatal error in SARS monitoring:', error)
