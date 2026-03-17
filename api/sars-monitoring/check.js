@@ -273,7 +273,18 @@ async function handler(req, res) {
     const { action = 'check' } = req.query
 
     if (action === 'check') {
-      const results = await checkSarsWebsite()
+      let results
+      try {
+        results = await checkSarsWebsite()
+      } catch (err) {
+        console.error('SARS monitoring check error:', err.message)
+        return ok(res, {
+          success: true,
+          message: 'SARS check temporarily unavailable (database may not be ready).',
+          results: { checked: 0, newChanges: 0, errors: 1, changes: [] },
+          lastRun: null
+        })
+      }
       let lastRun = null
       try {
         lastRun = await prisma.sarsMonitoringRun.findFirst({
@@ -305,68 +316,56 @@ async function handler(req, res) {
         data: lastRun ? { ranAt: lastRun.ranAt, success: lastRun.success, newCount: lastRun.newCount, errorMessage: lastRun.errorMessage } : null
       })
     } else if (action === 'list') {
-      // Get list of changes
       const { limit = 50, isNew, isRead, category, priority } = req.query
-      
       const where = {}
       if (isNew !== undefined) where.isNew = isNew === 'true'
       if (isRead !== undefined) where.isRead = isRead === 'true'
       if (category) where.category = category
       if (priority) where.priority = priority
-
-      const changes = await prisma.sarsWebsiteChange.findMany({
-        where,
-        orderBy: { publishedAt: 'desc' },
-        take: parseInt(limit)
-      })
-
-      return ok(res, {
-        success: true,
-        data: { changes }
-      })
-    } else if (action === 'mark-read') {
-      // Mark change as read
-      const { id } = req.body
-      
-      if (!id) {
-        return res.status(400).json({ error: 'Change ID is required' })
-      }
-
-      const change = await prisma.sarsWebsiteChange.update({
-        where: { id },
-        data: { isRead: true }
-      })
-
-      return ok(res, {
-        success: true,
-        data: { change }
-      })
-    } else if (action === 'stats') {
-      // Get statistics
-      const [total, newCount, unreadCount, byCategory, byPriority] = await Promise.all([
-        prisma.sarsWebsiteChange.count(),
-        prisma.sarsWebsiteChange.count({ where: { isNew: true } }),
-        prisma.sarsWebsiteChange.count({ where: { isRead: false } }),
-        prisma.sarsWebsiteChange.groupBy({
-          by: ['category'],
-          _count: true
-        }),
-        prisma.sarsWebsiteChange.groupBy({
-          by: ['priority'],
-          _count: true
+      try {
+        const changes = await prisma.sarsWebsiteChange.findMany({
+          where,
+          orderBy: { publishedAt: 'desc' },
+          take: parseInt(limit)
         })
-      ])
-
-      return ok(res, {
-        success: true,
-        data: {
-          total,
-          new: newCount,
-          unread: unreadCount,
-          byCategory,
-          byPriority
-        }
-      })
+        return ok(res, { success: true, data: { changes } })
+      } catch (err) {
+        console.error('SARS monitoring list error:', err.message)
+        return ok(res, { success: true, data: { changes: [] } })
+      }
+    } else if (action === 'mark-read') {
+      const { id } = req.body
+      if (!id) return res.status(400).json({ error: 'Change ID is required' })
+      try {
+        const change = await prisma.sarsWebsiteChange.update({
+          where: { id },
+          data: { isRead: true }
+        })
+        return ok(res, { success: true, data: { change } })
+      } catch (err) {
+        console.error('SARS monitoring mark-read error:', err.message)
+        return res.status(503).json({ error: 'SARS monitoring temporarily unavailable' })
+      }
+    } else if (action === 'stats') {
+      try {
+        const [total, newCount, unreadCount, byCategory, byPriority] = await Promise.all([
+          prisma.sarsWebsiteChange.count(),
+          prisma.sarsWebsiteChange.count({ where: { isNew: true } }),
+          prisma.sarsWebsiteChange.count({ where: { isRead: false } }),
+          prisma.sarsWebsiteChange.groupBy({ by: ['category'], _count: true }),
+          prisma.sarsWebsiteChange.groupBy({ by: ['priority'], _count: true })
+        ])
+        return ok(res, {
+          success: true,
+          data: { total, new: newCount, unread: unreadCount, byCategory, byPriority }
+        })
+      } catch (err) {
+        console.error('SARS monitoring stats error:', err.message)
+        return ok(res, {
+          success: true,
+          data: { total: 0, new: 0, unread: 0, byCategory: [], byPriority: [] }
+        })
+      }
     }
 
     return res.status(400).json({ error: 'Invalid action' })
