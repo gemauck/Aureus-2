@@ -107,34 +107,34 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     let isAdmin = false;
     
     try {
-        // Treat admin/superadmin/super administrator as admin for Leave & HR management
-        const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'system_admin'];
-        const isAdminRole = (r) => r && adminRoles.includes(String(r).toLowerCase().replace(/\s+/g, '_'));
-        // Only use useAuth if we're in a proper React component context
+        // Same source as sidebar: useAuth or storage
         if (typeof window !== 'undefined' && window.useAuth && typeof window.useAuth === 'function') {
             try {
                 const authResult = window.useAuth();
                 user = authResult?.user || authResult || null;
-                isAdmin = isAdminRole(user?.role) || false;
             } catch (e) {
-                console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
                 if (window.storage?.getUser) {
-                    try {
-                        user = window.storage.getUser();
-                        isAdmin = isAdminRole(user?.role) || false;
-                    } catch (storageError) {
-                        console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
-                    }
+                    try { user = window.storage.getUser(); } catch (err) {}
                 }
             }
-        } else {
-            if (window.storage?.getUser) {
+        }
+        if (!user && window.storage?.getUser) {
+            try { user = window.storage.getUser(); } catch (err) {}
+        }
+        // Admin for Leave & HR: use same rule as sidebar (Users link) – PermissionChecker.ACCESS_USERS, else role list
+        if (user && typeof window !== 'undefined') {
+            if (window.PermissionChecker && window.PERMISSIONS && window.PERMISSIONS.ACCESS_USERS) {
                 try {
-                    user = window.storage.getUser();
-                    isAdmin = isAdminRole(user?.role) || false;
-                } catch (storageError) {
-                    console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
+                    const checker = new window.PermissionChecker(user);
+                    isAdmin = checker.hasPermission(window.PERMISSIONS.ACCESS_USERS) === true;
+                } catch (e) {
+                    isAdmin = false;
                 }
+            }
+            if (!isAdmin) {
+                const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'system_admin'];
+                const r = user?.role && String(user.role).toLowerCase().replace(/\s+/g, '_');
+                isAdmin = !!r && adminRoles.includes(r);
             }
         }
     } catch (e) {
