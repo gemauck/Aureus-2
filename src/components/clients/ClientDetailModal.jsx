@@ -1739,6 +1739,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         description: '',
         completed: false
     });
+    const [editingFollowUp, setEditingFollowUp] = useState(null);
     const [calendarFeedUrl, setCalendarFeedUrl] = useState(null);
     const [calendarFeedLoading, setCalendarFeedLoading] = useState(false);
     const [calendarFeedVerify, setCalendarFeedVerify] = useState(null); // { count } | { error: string } | 'checking'
@@ -3059,6 +3060,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 followUps: formData.followUps.filter(f => f.id !== followUpId)
             };
             setFormData(updatedFormData);
+            if (editingFollowUp && editingFollowUp.id === followUpId) {
+                setEditingFollowUp(null);
+            }
             
             // Log activity and get updated formData with activity log, then save everything
             const finalFormData = logActivity('Follow-up Deleted', `Deleted follow-up: ${followUp?.description || followUp?.type || 'Unknown'}`, null, false, updatedFormData);
@@ -3078,6 +3082,46 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
             });
         }
+    };
+
+    const handleEditFollowUp = (followUp) => {
+        setEditingFollowUp({
+            id: followUp.id,
+            date: followUp.date || '',
+            time: followUp.time || '',
+            type: followUp.type || 'Call',
+            description: followUp.description || '',
+            completed: followUp.completed
+        });
+    };
+
+    const handleSaveFollowUpEdit = () => {
+        if (!editingFollowUp) return;
+        if (!editingFollowUp.date || !editingFollowUp.description) {
+            alert('Date and description are required');
+            return;
+        }
+        const updatedFollowUps = formData.followUps.map(f =>
+            f.id === editingFollowUp.id
+                ? { ...f, date: editingFollowUp.date, time: editingFollowUp.time, type: editingFollowUp.type, description: editingFollowUp.description }
+                : f
+        );
+        const updatedFormData = { ...formData, followUps: updatedFollowUps };
+        setFormData(updatedFormData);
+        setEditingFollowUp(null);
+        const finalFormData = logActivity('Follow-up Updated', `Updated ${editingFollowUp.type} for ${editingFollowUp.date}`, null, false, updatedFormData);
+        const dataToSave = { ...finalFormData, followUps: updatedFormData.followUps };
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        Promise.resolve().then(() => onSave(dataToSave, true)).then(() => {
+            setTimeout(() => { handleTabChange('calendar'); }, 0);
+        }).finally(() => {
+            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+        });
+    };
+
+    const handleCancelFollowUpEdit = () => {
+        setEditingFollowUp(null);
     };
 
 
@@ -6292,40 +6336,113 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     ) : (
                                         upcomingFollowUps.map(followUp => (
                                             <div key={followUp.id} className="bg-white border border-gray-200 rounded-lg p-3">
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex items-start gap-3 flex-1">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={followUp.completed}
-                                                            onChange={() => handleToggleFollowUp(followUp.id)}
-                                                            className="mt-1"
-                                                        />
-                                                        <div className="flex-1">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <span className={`px-2 py-0.5 text-xs rounded font-medium ${
-                                                                    followUp.type === 'Call' ? 'bg-blue-100 text-blue-700' :
-                                                                    followUp.type === 'Meeting' ? 'bg-purple-100 text-purple-700' :
-                                                                    followUp.type === 'Email' ? 'bg-green-100 text-green-700' :
-                                                                    'bg-gray-100 text-gray-700'
-                                                                }`}>
-                                                                    {followUp.type}
-                                                                </span>
-                                                                <span className="text-sm font-medium text-gray-900">
-                                                                    {followUp.date} {followUp.time && `at ${followUp.time}`}
-                                                                </span>
+                                                {editingFollowUp && editingFollowUp.id === followUp.id ? (
+                                                    <div className="space-y-3">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
+                                                                <input
+                                                                    type="date"
+                                                                    value={editingFollowUp.date}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, date: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                />
                                                             </div>
-                                                            <p className="text-sm text-gray-600">{followUp.description}</p>
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={editingFollowUp.time}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, time: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                                                                <select
+                                                                    value={editingFollowUp.type}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, type: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                >
+                                                                    <option>Call</option>
+                                                                    <option>Meeting</option>
+                                                                    <option>Email</option>
+                                                                    <option>Visit</option>
+                                                                </select>
+                                                            </div>
+                                                            <div className="col-span-2">
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Description *</label>
+                                                                <textarea
+                                                                    value={editingFollowUp.description}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, description: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                    rows="2"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleCancelFollowUpEdit}
+                                                                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleSaveFollowUpEdit}
+                                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                                            >
+                                                                Save
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteFollowUp(followUp.id)}
-                                                        className="text-red-600 hover:text-red-700 p-1"
-                                                        title="Delete"
-                                                    >
-                                                        <i className="fas fa-trash"></i>
-                                                    </button>
-                                                </div>
+                                                ) : (
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="flex items-start gap-3 flex-1">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={followUp.completed}
+                                                                onChange={() => handleToggleFollowUp(followUp.id)}
+                                                                className="mt-1"
+                                                            />
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                                                        followUp.type === 'Call' ? 'bg-blue-100 text-blue-700' :
+                                                                        followUp.type === 'Meeting' ? 'bg-purple-100 text-purple-700' :
+                                                                        followUp.type === 'Email' ? 'bg-green-100 text-green-700' :
+                                                                        'bg-gray-100 text-gray-700'
+                                                                    }`}>
+                                                                        {followUp.type}
+                                                                    </span>
+                                                                    <span className="text-sm font-medium text-gray-900">
+                                                                        {followUp.date} {followUp.time && `at ${followUp.time}`}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-sm text-gray-600">{followUp.description}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditFollowUp(followUp)}
+                                                                className="text-gray-600 hover:text-gray-800 p-1"
+                                                                title="Edit"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteFollowUp(followUp.id)}
+                                                                className="text-red-600 hover:text-red-700 p-1"
+                                                                title="Delete"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))
                                     )}
@@ -6336,35 +6453,108 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <h4 className="font-medium text-gray-900 text-sm">Completed Follow-ups</h4>
                                         {formData.followUps.filter(f => f.completed).map(followUp => (
                                             <div key={followUp.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 opacity-60">
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex items-start gap-3 flex-1">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={true}
-                                                            onChange={() => handleToggleFollowUp(followUp.id)}
-                                                            className="mt-1"
-                                                        />
-                                                        <div className="flex-1">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <span className="px-2 py-0.5 text-xs rounded font-medium bg-gray-200 text-gray-700">
-                                                                    {followUp.type}
-                                                                </span>
-                                                                <span className="text-sm font-medium text-gray-900 line-through">
-                                                                    {followUp.date} {followUp.time && `at ${followUp.time}`}
-                                                                </span>
+                                                {editingFollowUp && editingFollowUp.id === followUp.id ? (
+                                                    <div className="space-y-3">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
+                                                                <input
+                                                                    type="date"
+                                                                    value={editingFollowUp.date}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, date: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                />
                                                             </div>
-                                                            <p className="text-sm text-gray-600 line-through">{followUp.description}</p>
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={editingFollowUp.time}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, time: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                                                                <select
+                                                                    value={editingFollowUp.type}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, type: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                >
+                                                                    <option>Call</option>
+                                                                    <option>Meeting</option>
+                                                                    <option>Email</option>
+                                                                    <option>Visit</option>
+                                                                </select>
+                                                            </div>
+                                                            <div className="col-span-2">
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Description *</label>
+                                                                <textarea
+                                                                    value={editingFollowUp.description}
+                                                                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, description: e.target.value })}
+                                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                                    rows="2"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleCancelFollowUpEdit}
+                                                                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleSaveFollowUpEdit}
+                                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                                            >
+                                                                Save
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteFollowUp(followUp.id)}
-                                                        className="text-red-600 hover:text-red-700 p-1"
-                                                        title="Delete"
-                                                    >
-                                                        <i className="fas fa-trash"></i>
-                                                    </button>
-                                                </div>
+                                                ) : (
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="flex items-start gap-3 flex-1">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={true}
+                                                                onChange={() => handleToggleFollowUp(followUp.id)}
+                                                                className="mt-1"
+                                                            />
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className="px-2 py-0.5 text-xs rounded font-medium bg-gray-200 text-gray-700">
+                                                                        {followUp.type}
+                                                                    </span>
+                                                                    <span className="text-sm font-medium text-gray-900 line-through">
+                                                                        {followUp.date} {followUp.time && `at ${followUp.time}`}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-sm text-gray-600 line-through">{followUp.description}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditFollowUp(followUp)}
+                                                                className="text-gray-600 hover:text-gray-800 p-1"
+                                                                title="Edit"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteFollowUp(followUp.id)}
+                                                                className="text-red-600 hover:text-red-700 p-1"
+                                                                title="Delete"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
