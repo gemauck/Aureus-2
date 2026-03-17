@@ -3,7 +3,7 @@ if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
 
-const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
+const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'notifications'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 
 const MainLayout = () => {
@@ -1179,6 +1179,7 @@ const MainLayout = () => {
         { id: 'helpdesk', label: 'Helpdesk', icon: 'fa-headset', permission: 'ACCESS_HELPDESK' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
+        { id: 'notifications', label: 'Notifications', icon: 'fa-bell', permission: null },
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
         { id: 'my-tasks', label: 'My Tasks', icon: 'fa-check-square', permission: null },
         { id: 'my-notes', label: 'My Notes', icon: 'fa-sticky-note', permission: null },
@@ -1374,6 +1375,10 @@ const MainLayout = () => {
                     return <ErrorBoundary key="tools"><Tools /></ErrorBoundary>;
                 case 'reports': 
                     return <ErrorBoundary key="reports"><Reports /></ErrorBoundary>;
+                case 'notifications': {
+                    const NotificationsPageComponent = window.NotificationsPage;
+                    return <ErrorBoundary key="notifications">{NotificationsPageComponent ? <NotificationsPageComponent /> : <div key="notifications-loading" className="p-8 text-center text-gray-500">Loading notifications...</div>}</ErrorBoundary>;
+                }
                 case 'my-tasks':
                     return <ErrorBoundary key="my-tasks"><TaskManagementComponent /></ErrorBoundary>;
                 case 'my-notes':

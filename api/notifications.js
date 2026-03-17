@@ -350,7 +350,8 @@ async function handler(req, res) {
 
         if (req.method === 'DELETE') {
             try {
-                const { notificationIds } = req.body;
+                const body = req.body || await parseJsonBody(req);
+                const { notificationIds } = body || {};
 
                 if (!notificationIds || !Array.isArray(notificationIds)) {
                     return badRequest(res, 'Missing required field: notificationIds (array)');

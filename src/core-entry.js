@@ -66,6 +66,7 @@ import './components/clients/PipelineIntegration.js';
 import './components/settings/NotificationSettings.jsx';
 import './utils/leaveUtils.js';
 import './components/leave-platform/LeavePlatform.jsx';
+import './components/notifications/NotificationsPage.jsx';
 import './components/layout/MainLayout.jsx';
 
 // Public access modules

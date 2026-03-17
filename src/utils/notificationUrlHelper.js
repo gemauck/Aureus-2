@@ -359,6 +359,46 @@
         return { ...COMPONENT_URL_MAP };
     };
 
+    /**
+     * Navigate to the target of a notification (project, client, comment, etc.).
+     * Uses getUrlFromNotification then either EntityUrl (for simple entity links) or
+     * direct hash navigation (for tracker deep-links with docSectionId, docWeek, etc.).
+     * @param {Object} notification - Notification object with link and metadata
+     */
+    const navigateToNotification = (notification) => {
+        if (!notification) return;
+        const rawUrl = getUrlFromNotification(notification);
+        if (!rawUrl || rawUrl === '/dashboard') {
+            window.location.hash = '#/dashboard';
+            return;
+        }
+        // Normalize to hash for in-app routing
+        let normalizedHash = rawUrl;
+        if (!normalizedHash.startsWith('#')) {
+            normalizedHash = normalizedHash.startsWith('/') ? '#' + normalizedHash : '#/' + normalizedHash;
+        }
+        const pathForEntity = normalizedHash.startsWith('#') ? normalizedHash.substring(1) : normalizedHash;
+        const hasTrackerParams = pathForEntity.includes('docSectionId=') || pathForEntity.includes('docWeek=') ||
+            pathForEntity.includes('commentId=') || pathForEntity.includes('weeklySectionId=') || pathForEntity.includes('docMonth=');
+        let navigationSuccessful = false;
+        if (!hasTrackerParams && window.EntityUrl && pathForEntity) {
+            try {
+                const parsed = window.EntityUrl.parseEntityUrl(pathForEntity);
+                if (parsed && window.EntityUrl.navigateToEntity) {
+                    window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options || {});
+                    navigationSuccessful = true;
+                }
+            } catch (e) {
+                // fall through to hash
+            }
+        }
+        if (!navigationSuccessful) {
+            window.location.hash = normalizedHash;
+        } else if (window.location.hash !== normalizedHash) {
+            window.location.hash = normalizedHash;
+        }
+    };
+
     // Export to window
     if (!window.NotificationUrlHelper) {
         window.NotificationUrlHelper = {
@@ -368,6 +408,7 @@
             getUrlFromNotification,
             isValidUrl,
             getAllComponentUrls,
+            navigateToNotification,
             COMPONENT_URL_MAP
         };
     }
