@@ -382,7 +382,12 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                     </div>
                                 </div>
                                 {detail.body && (
-                                    <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert mt-3 ${isDark ? 'prose-p:text-gray-200' : ''}`} dangerouslySetInnerHTML={{ __html: detail.body }} />
+                                    <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert mt-3 ${isDark ? 'prose-p:text-gray-200' : ''}`}>
+                                        {(detail.body || '').includes('<') && (detail.body || '').includes('>')
+                                            ? <div dangerouslySetInnerHTML={{ __html: detail.body }} />
+                                            : <div className="whitespace-pre-wrap break-words">{(detail.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</div>
+                                        }
+                                    </div>
                                 )}
                             </div>
 
