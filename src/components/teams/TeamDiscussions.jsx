@@ -44,21 +44,43 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
         loadDiscussions();
     }, [loadDiscussions]);
 
-    const loadDetail = useCallback(async (id) => {
+    const loadDetail = useCallback(async (id, { silent = false } = {}) => {
         if (!id || !ds?.getDiscussion) return;
-        setDetailLoading(true);
-        setDetail(null);
-        setDetailError(null);
+        if (!silent) {
+            setDetailLoading(true);
+            setDetail(null);
+            setDetailError(null);
+        }
         try {
             const d = await ds.getDiscussion(id);
-            setDetail(d);
-            if (d == null) setDetailError('Discussion not found or empty.');
+            if (d == null) {
+                setDetailError('Discussion not found or empty.');
+                setDetail(null);
+            } else if (silent) {
+                // Only append new replies so just the new comment(s) appear – no full re-render
+                setDetail((prev) => {
+                    if (!prev || prev.id !== d.id) return d;
+                    const existingIds = new Set((prev.replies || []).map((r) => r.id));
+                    const merged = [...(prev.replies || [])];
+                    for (const r of d.replies || []) {
+                        if (!existingIds.has(r.id)) {
+                            merged.push(r);
+                            existingIds.add(r.id);
+                        }
+                    }
+                    return { ...d, replies: merged };
+                });
+            } else {
+                setDetail(d);
+            }
         } catch (e) {
             console.error('TeamDiscussions detail:', e);
-            setDetail(null);
-            setDetailError(e?.message || 'Could not load discussion.');
+            if (!silent) {
+                setDetail(null);
+                setDetailError(e?.message || 'Could not load discussion.');
+            }
         } finally {
-            setDetailLoading(false);
+            if (!silent) setDetailLoading(false);
         }
     }, []);
 
@@ -67,11 +89,11 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
         else { setDetail(null); setDetailError(null); }
     }, [selected, loadDetail]);
 
-    // Live refresh: poll for new replies while viewing a discussion
+    // Live refresh: poll for new replies while viewing a discussion (silent = no loading state, no flash)
     const POLL_INTERVAL_MS = 12000;
     useEffect(() => {
         if (!selected) return;
-        const id = setInterval(() => loadDetail(selected), POLL_INTERVAL_MS);
+        const id = setInterval(() => loadDetail(selected, { silent: true }), POLL_INTERVAL_MS);
         return () => clearInterval(id);
     }, [selected, loadDetail]);
 
