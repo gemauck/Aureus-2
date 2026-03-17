@@ -275,13 +275,15 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
         const bodyTrim = (replyBody || '').trim();
         if (!selected || (!bodyTrim && replyAttachments.length === 0) || !ds?.addDiscussionReply) return;
         const user = window.storage?.getUser?.() || {};
+        const userInfo = window.storage?.getUserInfo?.() || {};
+        const authorName = user.name || user.fullName || user.email || userInfo.name || userInfo.email || 'Unknown';
         setReplySubmitting(true);
         try {
             await ds.addDiscussionReply(
                 selected,
                 (replyBody || '').trim(),
-                user.id || user.userId || '',
-                user.name || user.email || 'User',
+                user.id || user.userId || userInfo.id || '',
+                authorName,
                 replyAttachments
             );
             setReplyBody('');

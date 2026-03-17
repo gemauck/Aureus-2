@@ -107,31 +107,31 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     let isAdmin = false;
     
     try {
+        // Treat admin/superadmin/super administrator as admin for Leave & HR management
+        const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'system_admin'];
+        const isAdminRole = (r) => r && adminRoles.includes(String(r).toLowerCase().replace(/\s+/g, '_'));
         // Only use useAuth if we're in a proper React component context
-        // Check if React is available and if we can safely use hooks
         if (typeof window !== 'undefined' && window.useAuth && typeof window.useAuth === 'function') {
             try {
                 const authResult = window.useAuth();
                 user = authResult?.user || authResult || null;
-                isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                isAdmin = isAdminRole(user?.role) || false;
             } catch (e) {
                 console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
-                // Fallback: try to get user from storage
                 if (window.storage?.getUser) {
                     try {
                         user = window.storage.getUser();
-                        isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                        isAdmin = isAdminRole(user?.role) || false;
                     } catch (storageError) {
                         console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
                     }
                 }
             }
         } else {
-            // Fallback: try to get user from storage
             if (window.storage?.getUser) {
                 try {
                     user = window.storage.getUser();
-                    isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                    isAdmin = isAdminRole(user?.role) || false;
                 } catch (storageError) {
                     console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
                 }

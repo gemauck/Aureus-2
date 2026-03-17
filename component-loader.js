@@ -157,6 +157,7 @@
         'components/teams/DiscussionModal.jsx',
         'components/teams/TeamDiscussions.jsx',
         'components/teams/ManagementMeetingNotes.jsx',
+        'components/teams/SarsMonitoring.jsx',
         'components/teams/POAReview.jsx',
         'components/teams/TeamModals.jsx',
         'components/teams/TeamsEnhanced.jsx',

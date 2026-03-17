@@ -82,6 +82,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/teams/DiscussionModal.jsx',
         './src/components/teams/TeamDiscussions.jsx',
         './src/components/teams/ManagementMeetingNotes.jsx',
+        './src/components/teams/SarsMonitoring.jsx',
         './src/components/teams/POAReview.jsx',
         './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
