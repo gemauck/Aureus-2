@@ -350,33 +350,60 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                         </div>
                     ) : (
                         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-                            <div className="flex items-start justify-between gap-2">
-                                <div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <h4 className={`text-lg font-semibold ${text}`}>{detail.title}</h4>
-                                        {detail.pinned && <i className="fas fa-thumbtack text-amber-500" title="Pinned"></i>}
-                                        <span className={`px-2 py-0.5 text-xs rounded ${detail.type === 'notice' ? (isDark ? 'bg-orange-900/50 text-orange-300' : 'bg-orange-100 text-orange-700') : (isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600')}`}>
-                                            {detail.type === 'notice' ? 'Notice' : 'Discussion'}
-                                        </span>
+                            {/* Original message / Notice - distinct card */}
+                            <div
+                                className={`rounded-xl border-2 p-4 ${
+                                    detail.type === 'notice'
+                                        ? isDark ? 'bg-orange-950/30 border-orange-700/60' : 'bg-orange-50 border-orange-200'
+                                        : isDark ? 'bg-gray-800/60 border-gray-700' : 'bg-gray-50 border-gray-200'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className={`text-xs font-semibold uppercase tracking-wide ${
+                                        detail.type === 'notice' ? (isDark ? 'text-orange-400' : 'text-orange-600') : (isDark ? 'text-gray-400' : 'text-gray-500')
+                                    }`}>
+                                        {detail.type === 'notice' ? 'Original notice' : 'Original post'}
+                                    </span>
+                                    {detail.pinned && <i className="fas fa-thumbtack text-amber-500" title="Pinned"></i>}
+                                </div>
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h4 className={`text-lg font-semibold ${text}`}>{detail.title}</h4>
+                                            <span className={`px-2 py-0.5 text-xs rounded ${detail.type === 'notice' ? (isDark ? 'bg-orange-900/50 text-orange-300' : 'bg-orange-200 text-orange-800') : (isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600')}`}>
+                                                {detail.type === 'notice' ? 'Notice' : 'Discussion'}
+                                            </span>
+                                        </div>
+                                        <p className={`text-sm mt-1 ${textMuted}`}>{detail.authorName} · {detail.createdAt ? new Date(detail.createdAt).toLocaleString('en-ZA') : ''}</p>
                                     </div>
-                                    <p className={`text-sm mt-1 ${textMuted}`}>{detail.authorName} · {detail.createdAt ? new Date(detail.createdAt).toLocaleString('en-ZA') : ''}</p>
+                                    <div className="flex gap-1">
+                                        <button type="button" onClick={() => { setEditingDiscussion(detail); setShowModal(true); }} className={`p-2 rounded-lg ${textMuted} hover:bg-gray-800`} title="Edit"><i className="fas fa-edit"></i></button>
+                                        <button type="button" onClick={() => handleDeleteDiscussion(detail.id)} className="p-2 rounded-lg text-red-500 hover:bg-red-900/20" title="Delete"><i className="fas fa-trash"></i></button>
+                                    </div>
                                 </div>
-                                <div className="flex gap-1">
-                                    <button type="button" onClick={() => { setEditingDiscussion(detail); setShowModal(true); }} className={`p-2 rounded-lg ${textMuted} hover:bg-gray-800`} title="Edit"><i className="fas fa-edit"></i></button>
-                                    <button type="button" onClick={() => handleDeleteDiscussion(detail.id)} className="p-2 rounded-lg text-red-500 hover:bg-red-900/20" title="Delete"><i className="fas fa-trash"></i></button>
-                                </div>
+                                {detail.body && (
+                                    <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert mt-3 ${isDark ? 'prose-p:text-gray-200' : ''}`} dangerouslySetInnerHTML={{ __html: detail.body }} />
+                                )}
                             </div>
-                            {detail.body && (
-                                <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert ${isDark ? 'prose-p:text-gray-200' : ''}`} dangerouslySetInnerHTML={{ __html: detail.body }} />
-                            )}
 
-                            {/* Replies */}
-                            <section>
-                                <h5 className={`text-sm font-semibold ${text} mb-2`}>Replies</h5>
+                            {/* Replies - clear section with card per reply */}
+                            <section className="pt-2 border-t-2 border-dashed border-gray-300 dark:border-gray-700">
+                                <h5 className={`text-sm font-semibold ${text} mb-3 flex items-center gap-2`}>
+                                    <i className="fas fa-comments text-blue-500"></i>
+                                    Replies {(detail.replies || []).length > 0 && <span className={`text-xs font-normal ${textMuted}`}>{(detail.replies || []).length}</span>}
+                                </h5>
                                 <div className="space-y-3">
                                     {(detail.replies || []).map(r => (
-                                        <div key={r.id} className={`pl-3 border-l-2 ${isDark ? 'border-gray-700' : 'border-gray-200'} py-1`}>
-                                            <p className={`text-xs ${textMuted}`}>{r.authorName} · {r.createdAt ? new Date(r.createdAt).toLocaleString('en-ZA') : ''}</p>
+                                        <div
+                                            key={r.id}
+                                            className={`rounded-lg border p-3 ${
+                                                isDark ? 'bg-gray-800/50 border-gray-700 border-l-4 border-l-blue-600' : 'bg-gray-100/80 border-gray-200 border-l-4 border-l-blue-500'
+                                            }`}
+                                        >
+                                            <p className={`text-xs font-medium ${textMuted} mb-1.5`}>
+                                                <i className="fas fa-reply text-blue-500 mr-1 opacity-70"></i>
+                                                {r.authorName} · {r.createdAt ? new Date(r.createdAt).toLocaleString('en-ZA') : ''}
+                                            </p>
                                             <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert ${isDark ? 'prose-p:text-gray-200' : ''}`}>
                                                 {(r.body || '').includes('<') && (r.body || '').includes('>')
                                                     ? <div dangerouslySetInnerHTML={{ __html: r.body || '' }} />
