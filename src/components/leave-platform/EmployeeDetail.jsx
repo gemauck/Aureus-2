@@ -273,15 +273,6 @@ const EmployeeDetail = (props) => {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {isAdmin && (
-                            <button
-                                onClick={() => setEditing(!editing)}
-                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                            >
-                                <i className={`fas ${editing ? 'fa-times' : 'fa-edit'} mr-2`}></i>
-                                {editing ? 'Cancel' : 'Edit'}
-                            </button>
-                        )}
                         {onBack && (
                             <button
                                 onClick={onBack}
@@ -732,23 +723,49 @@ const EmployeeDetail = (props) => {
 
     return (
         <div className="space-y-6">
-            {/* Section Navigation */}
+            {/* Section Navigation + Edit (visible on all tabs) */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <div className="flex flex-wrap gap-2">
-                    {sections.map(section => (
-                        <button
-                            key={section.id}
-                            onClick={() => setActiveSection(section.id)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                activeSection === section.id
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                        >
-                            <i className={`fas ${section.icon} mr-2`}></i>
-                            {section.label}
-                        </button>
-                    ))}
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap gap-2">
+                        {sections.map(section => (
+                            <button
+                                key={section.id}
+                                onClick={() => setActiveSection(section.id)}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                    activeSection === section.id
+                                        ? 'bg-primary-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className={`fas ${section.icon} mr-2`}></i>
+                                {section.label}
+                            </button>
+                        ))}
+                    </div>
+                    {isAdmin && (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setEditing(!editing)}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                    editing
+                                        ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        : 'bg-primary-600 text-white hover:bg-primary-700'
+                                }`}
+                            >
+                                <i className={`fas ${editing ? 'fa-times' : 'fa-edit'} mr-2`}></i>
+                                {editing ? 'Cancel' : 'Edit'}
+                            </button>
+                            {editing && (
+                                <button
+                                    onClick={handleSave}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                                >
+                                    <i className="fas fa-save mr-2"></i>
+                                    Save
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
