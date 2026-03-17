@@ -67,6 +67,14 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
         else { setDetail(null); setDetailError(null); }
     }, [selected, loadDetail]);
 
+    // Live refresh: poll for new replies while viewing a discussion
+    const POLL_INTERVAL_MS = 12000;
+    useEffect(() => {
+        if (!selected) return;
+        const id = setInterval(() => loadDetail(selected), POLL_INTERVAL_MS);
+        return () => clearInterval(id);
+    }, [selected, loadDetail]);
+
     // Open discussion from notification link (e.g. ?discussion=id)
     useEffect(() => {
         if (!team?.id || !initialDiscussionId || hasAppliedInitialRef.current) return;
@@ -385,7 +393,7 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                     <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert mt-3 ${isDark ? 'prose-p:text-gray-200' : ''}`}>
                                         {(detail.body || '').includes('<') && (detail.body || '').includes('>')
                                             ? <div dangerouslySetInnerHTML={{ __html: detail.body }} />
-                                            : <div className="whitespace-pre-wrap break-words">{(detail.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</div>
+                                            : <div className="whitespace-pre-wrap break-words">{(detail.body || '').replace(/&quot;/g, '"').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                                         }
                                     </div>
                                 )}
@@ -412,7 +420,7 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                             <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert ${isDark ? 'prose-p:text-gray-200' : ''}`}>
                                                 {(r.body || '').includes('<') && (r.body || '').includes('>')
                                                     ? <div dangerouslySetInnerHTML={{ __html: r.body || '' }} />
-                                                    : <div className="whitespace-pre-wrap break-words">{(r.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</div>
+                                                    : <div className="whitespace-pre-wrap break-words">{(r.body || '').replace(/&quot;/g, '"').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                                                 }
                                             </div>
                                             {(r.attachments || []).length > 0 && (
