@@ -1101,6 +1101,8 @@ const Clients = React.memo(() => {
     const [leadSortField, setLeadSortField] = useState('name');
     const [leadSortDirection, setLeadSortDirection] = useState('asc');
     const [failedThumbnailIds, setFailedThumbnailIds] = useState(() => new Set());
+    // Track which logo images have actually loaded (key|url) so we only show them after onLoad - prevents flash
+    const [loadedLogoKeys, setLoadedLogoKeys] = useState(() => new Set());
     const [showSitesInLeadsList, setShowSitesInLeadsList] = useState(() => {
         try {
             const v = localStorage.getItem('clients.leads.showSitesInList');
@@ -7297,11 +7299,14 @@ const Clients = React.memo(() => {
                                                     const key = `client-${client.id}`;
                                                     const logo = getLogoDisplay(key, client.thumbnail, failedThumbnailIds);
                                                     const showImg = !!(logo.useImage && logo.url);
+                                                    const loadedKey = logo.url ? `${key}|${logo.url}` : '';
+                                                    const isLoaded = loadedKey && loadedLogoKeys.has(loadedKey);
+                                                    const showLoadedImg = showImg && isLoaded;
                                                     return (
                                                         <div className="w-8 h-8 flex-shrink-0 relative rounded-full overflow-hidden">
                                                             <div
                                                                 className={`absolute inset-0 z-0 w-full h-full rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
-                                                                aria-hidden={showImg}
+                                                                aria-hidden={showLoadedImg}
                                                             >
                                                                 {(client.name || '?').charAt(0).toUpperCase()}
                                                             </div>
@@ -7310,7 +7315,8 @@ const Clients = React.memo(() => {
                                                                     src={logo.url}
                                                                     alt=""
                                                                     className="absolute inset-0 z-[1] w-full h-full rounded-full object-cover border border-gray-200"
-                                                                    style={{ opacity: showImg ? 1 : 0, pointerEvents: showImg ? 'auto' : 'none' }}
+                                                                    style={{ opacity: showLoadedImg ? 1 : 0, pointerEvents: showLoadedImg ? 'auto' : 'none' }}
+                                                                    onLoad={() => loadedKey && setLoadedLogoKeys(prev => (prev.has(loadedKey) ? prev : new Set(prev).add(loadedKey)))}
                                                                     onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
                                                                 />
                                                             ) : null}
@@ -9098,11 +9104,14 @@ const Clients = React.memo(() => {
                                                     const key = `lead-${lead.id}`;
                                                     const logo = getLogoDisplay(key, lead.thumbnail, failedThumbnailIds);
                                                     const showImg = !!(logo.useImage && logo.url);
+                                                    const loadedKey = logo.url ? `${key}|${logo.url}` : '';
+                                                    const isLoaded = loadedKey && loadedLogoKeys.has(loadedKey);
+                                                    const showLoadedImg = showImg && isLoaded;
                                                     return (
                                                         <div className="w-8 h-8 flex-shrink-0 relative rounded-full overflow-hidden">
                                                             <div
                                                                 className={`absolute inset-0 z-0 w-full h-full rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}
-                                                                aria-hidden={showImg}
+                                                                aria-hidden={showLoadedImg}
                                                             >
                                                                 {(lead.name || '?').charAt(0).toUpperCase()}
                                                             </div>
@@ -9111,7 +9120,8 @@ const Clients = React.memo(() => {
                                                                     src={logo.url}
                                                                     alt=""
                                                                     className="absolute inset-0 z-[1] w-full h-full rounded-full object-cover border border-gray-200"
-                                                                    style={{ opacity: showImg ? 1 : 0, pointerEvents: showImg ? 'auto' : 'none' }}
+                                                                    style={{ opacity: showLoadedImg ? 1 : 0, pointerEvents: showLoadedImg ? 'auto' : 'none' }}
+                                                                    onLoad={() => loadedKey && setLoadedLogoKeys(prev => (prev.has(loadedKey) ? prev : new Set(prev).add(loadedKey)))}
                                                                     onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
                                                                 />
                                                             ) : null}
