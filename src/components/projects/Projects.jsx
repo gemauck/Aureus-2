@@ -527,10 +527,11 @@ const Projects = () => {
                         if (projectData) {
                             project = projectData;
                             console.log('✅ Projects: Fetched project from API:', project.name);
-                            // Add to projects array if not already there
-                            if (!projects.find(p => String(p.id) === String(entityId))) {
-                                setProjects(prev => [...prev, project]);
-                            }
+                            // Add to projects array if not already there (use prev to avoid stale closure duplicates)
+                            setProjects(prev => {
+                                if (prev.some(p => String(p.id) === String(entityId))) return prev;
+                                return [...prev, { ...project, client: project.clientName || project.client || '' }];
+                            });
                         }
                     } catch (error) {
                         console.error('❌ Projects: Failed to fetch project:', error);
@@ -562,9 +563,10 @@ const Projects = () => {
                                     const full = { ...projectData, client: projectData.clientName || projectData.client || '' };
                                     setSelectedProject(full);
                                     setViewingProject(full);
-                                    if (!projects.find(p => String(p.id) === String(entityId))) {
-                                        setProjects(prev => [...prev, full]);
-                                    }
+                                    setProjects(prev => {
+                                        if (prev.some(p => String(p.id) === String(entityId))) return prev;
+                                        return [...prev, full];
+                                    });
                                 }
                             })
                             .catch(() => {});
@@ -860,9 +862,10 @@ const Projects = () => {
                                         setSelectedProject(full);
                                         setViewingProject(full);
                                         setShowModal(false);
-                                        if (!projects.find(p => String(p.id) === String(projectId))) {
-                                            setProjects(prev => [...prev, full]);
-                                        }
+                                        setProjects(prev => {
+                                            if (prev.some(p => String(p.id) === String(projectId))) return prev;
+                                            return [...prev, full];
+                                        });
                                         if (taskId) {
                                             const dispatchOpenTask = (attempt = 1) => {
                                                 window.dispatchEvent(new CustomEvent('openTask', {
@@ -924,12 +927,11 @@ const Projects = () => {
                                         setSelectedProject(projectData);
                                         setViewingProject(projectData);
                                         setShowModal(false);
-                                        
-                                        // Add to projects array if not already there
-                                        if (!projects.find(p => String(p.id) === String(projectId))) {
-                                            setProjects(prev => [...prev, projectData]);
-                                        }
-                                        
+                                        const full = { ...projectData, client: projectData.clientName || projectData.client || '' };
+                                        setProjects(prev => {
+                                            if (prev.some(p => String(p.id) === String(projectId))) return prev;
+                                            return [...prev, full];
+                                        });
                                         // Check if there's a task parameter in the URL to open
                                         if (taskId) {
                                             console.log('📋 Projects: Task parameter found, will open task with retry logic:', taskId);
@@ -3187,7 +3189,7 @@ const Projects = () => {
                         client: savedProject.clientName || savedProject.client || ''
                     };
                     console.log('✅ Projects: Project created successfully:', normalizedProject.name);
-                    setProjects([...projects, normalizedProject]);
+                    setProjects(prev => prev.some(p => String(p.id) === String(normalizedProject.id)) ? prev : [...prev, normalizedProject]);
                     
                     // Update client's projectIds for new project
                     if (projectData.client) {
@@ -3414,15 +3416,22 @@ const Projects = () => {
     }, [searchTerm]);
 
     // Filter projects by selected client, search term, status and sort alphabetically by project name - memoized
+    // Dedupe by id so the same project never appears twice (e.g. after opening from URL/cache)
     const filteredProjects = useMemo(() => {
+        const byId = new Map();
+        projects.forEach(p => {
+            const id = p?.id != null ? String(p.id) : null;
+            if (id && !byId.has(id)) byId.set(id, p);
+        });
+        const unique = byId.size ? Array.from(byId.values()) : projects;
         const lowerSearchTerm = debouncedSearchTerm.toLowerCase();
-        return projects.filter(p => {
+        return unique.filter(p => {
             const matchesClient = selectedClient === 'all' || p.client === selectedClient;
-            const matchesSearch = debouncedSearchTerm === '' || 
-                p.name.toLowerCase().includes(lowerSearchTerm) ||
+            const matchesSearch = debouncedSearchTerm === '' ||
+                (p.name || '').toLowerCase().includes(lowerSearchTerm) ||
                 (p.client || '').toLowerCase().includes(lowerSearchTerm) ||
-                p.type.toLowerCase().includes(lowerSearchTerm) ||
-                p.assignedTo?.toLowerCase().includes(lowerSearchTerm);
+                (p.type || '').toLowerCase().includes(lowerSearchTerm) ||
+                (p.assignedTo || '').toLowerCase().includes(lowerSearchTerm);
             const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
             return matchesClient && matchesSearch && matchesStatus;
         }).sort((a, b) => {
