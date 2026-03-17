@@ -91,9 +91,11 @@
                 .then(function(r) { return r.ok ? r.json() : null; })
                 .then(function(data) {
                     if (data && data.version && String(data.version) !== String(embedVersion)) {
-                        var q = location.search || '';
-                        var sep = q.indexOf('?') >= 0 ? '&' : '?';
-                        location.replace(location.pathname + q + sep + '_purge=' + Date.now() + (location.hash || ''));
+                        var params = new URLSearchParams(location.search || '');
+                        params.delete('_purge');
+                        params.set('_purge', String(Date.now()));
+                        var q = params.toString();
+                        location.replace(location.pathname + (q ? '?' + q : '') + (location.hash || ''));
                     }
                 })
                 .catch(function() {});

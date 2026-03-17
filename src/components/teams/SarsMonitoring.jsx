@@ -58,15 +58,22 @@ const SarsMonitoring = () => {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                setChanges([]);
+                if (response.status >= 500) {
+                    console.warn('SARS monitoring API unavailable (server error). Check back later.');
+                }
+                return;
             }
 
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
             if (data.success && data.data?.changes) {
                 setChanges(data.data.changes);
+            } else {
+                setChanges([]);
             }
         } catch (error) {
             console.error('Error loading SARS changes:', error);
+            setChanges([]);
         } finally {
             setLoading(false);
         }
@@ -136,10 +143,15 @@ const SarsMonitoring = () => {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const msg = response.status >= 500
+                    ? 'SARS check is temporarily unavailable (server error). Try again later.'
+                    : `Error: ${response.status} ${response.statusText}`;
+                alert(msg);
+                setChecking(false);
+                return;
             }
 
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
             if (data.success) {
                 if (data.lastRun) setLastRun(data.lastRun);
                 alert(`Check completed! Found ${data.results?.newChanges || 0} new changes.${data.results?.newChanges > 0 ? ' A summary email has been sent to the Compliance team.' : ''}`);
@@ -149,7 +161,7 @@ const SarsMonitoring = () => {
             }
         } catch (error) {
             console.error('Error checking SARS website:', error);
-            alert('Error checking SARS website: ' + error.message);
+            alert('Error checking SARS website: ' + (error.message || 'Try again later.'));
         } finally {
             setChecking(false);
         }
