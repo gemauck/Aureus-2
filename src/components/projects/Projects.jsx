@@ -4041,6 +4041,7 @@ const Projects = () => {
                                     <option value="in_progress">In Progress (alt)</option>
                                     <option value="completed">Completed</option>
                                     <option value="done">Done</option>
+                                    <option value="archived">Archived</option>
                                 </select>
                                 <select
                                     value={allTasksFilterProject}
@@ -4141,6 +4142,7 @@ const Projects = () => {
                                                         <option value="in_progress">In Progress (alt)</option>
                                                         <option value="completed">Completed</option>
                                                         <option value="done">Done</option>
+                                                        <option value="archived">Archived</option>
                                                     </select>
                                                 </td>
                                                 <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>

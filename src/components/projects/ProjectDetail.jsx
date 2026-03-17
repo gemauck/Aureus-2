@@ -2168,7 +2168,8 @@ function initializeProjectDetail() {
         assignee: 'all',
         priority: 'all',
         list: 'all',
-        includeSubtasks: true
+        includeSubtasks: true,
+        showArchived: false
     });
     // Task list table sort: default newest first (createdAt desc)
     const [taskListSortBy, setTaskListSortBy] = useState('createdAt');
@@ -4689,7 +4690,7 @@ function initializeProjectDetail() {
             }
         };
 
-        ['To Do', 'In Progress', 'Done', 'Blocked', 'Review'].forEach(addStatus);
+        ['To Do', 'In Progress', 'Done', 'Blocked', 'Review', 'Archived'].forEach(addStatus);
 
         // CRITICAL: Ensure tasks is always an array
         const safeTasks = Array.isArray(tasks) ? tasks : [];
@@ -4769,6 +4770,14 @@ function initializeProjectDetail() {
 
     const matchesTaskFilters = useCallback((task, fallbackListId = null) => {
         if (!task) return false;
+
+        const normalizedTaskStatus = String(task.status || 'To Do').toLowerCase().replace(/\s+/g, '');
+        const isArchived = normalizedTaskStatus === 'archived';
+
+        // When "Show archived" is off, hide archived tasks
+        if (isArchived && !taskFilters.showArchived) {
+            return false;
+        }
 
         const searchTerm = taskFilters.search.trim().toLowerCase();
         const effectiveListId = task.listId ?? fallbackListId;
@@ -4893,8 +4902,9 @@ function initializeProjectDetail() {
             });
 
         // Find tasks that don't have a matching listId and assign them to the first available list
-        // Prefer "To Do" list if it exists, otherwise use the first list
-        const unmatchedTasks = safeTasks.filter(task => !assignedTaskIds.has(task.id));
+        // Prefer "To Do" list if it exists, otherwise use the first list. Exclude archived tasks (they get their own section).
+        const isArchivedTask = (t) => String(t.status || '').toLowerCase().replace(/\s+/g, '') === 'archived';
+        const unmatchedTasks = safeTasks.filter(task => !assignedTaskIds.has(task.id) && !isArchivedTask(task));
         
         if (unmatchedTasks.length > 0 && result.length > 0) {
             // Find "To Do" list or use the first list as fallback
@@ -4960,6 +4970,40 @@ function initializeProjectDetail() {
             }
         }
 
+        // When "Show archived" is on, append an Archived section for tasks with status Archived
+        if (taskFilters.showArchived) {
+            const archivedTasks = safeTasks.filter(t => {
+                if (String(t.status || '').toLowerCase().replace(/\s+/g, '') !== 'archived') return false;
+                return matchesTaskFilters(t, null);
+            });
+            if (archivedTasks.length > 0) {
+                const archivedListId = 'archived';
+                const existingArchivedList = taskLists.find(l => String(l.name || '').toLowerCase() === 'archived');
+                const archivedList = existingArchivedList || { id: archivedListId, name: 'Archived', statuses: [{ value: 'archived', label: 'Archived' }] };
+                const archivedItems = archivedTasks.map(task => {
+                    const matchingSubtasks = (task.subtasks || []).filter(st => matchesTaskFilters(st, null));
+                    const taskMatches = matchesTaskFilters(task, archivedList.id);
+                    const shouldInclude = taskMatches || (taskFilters.includeSubtasks && matchingSubtasks.length > 0);
+                    if (!shouldInclude) return null;
+                    return {
+                        task,
+                        matchingSubtasks: taskFilters.includeSubtasks ? matchingSubtasks : [],
+                        matchedBySubtasks: taskFilters.includeSubtasks && !taskMatches && matchingSubtasks.length > 0
+                    };
+                }).filter(Boolean);
+                const cmp = (aa, bb) => {
+                    const a = aa.task;
+                    const b = bb.task;
+                    let diff = (a.order ?? 999999) - (b.order ?? 999999);
+                    if (diff !== 0) return taskListSortDir === 'asc' ? diff : -diff;
+                    diff = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+                    return taskListSortDir === 'asc' ? diff : -diff;
+                };
+                archivedItems.sort(cmp);
+                result.push({ ...archivedList, id: existingArchivedList?.id ?? archivedListId, tasks: archivedItems });
+            }
+        }
+
         return result;
     }, [taskLists, tasks, taskFilters, matchesTaskFilters, taskListSortBy, taskListSortDir]);
 
@@ -4981,7 +5025,8 @@ function initializeProjectDetail() {
             taskFilters.status !== 'all' ||
             taskFilters.assignee !== 'all' ||
             taskFilters.priority !== 'all' ||
-            taskFilters.list !== 'all'
+            taskFilters.list !== 'all' ||
+            taskFilters.showArchived
         );
     }, [taskFilters]);
 
@@ -5014,7 +5059,11 @@ function initializeProjectDetail() {
     }, [filteredTaskLists]);
 
     const visibleTaskCount = filteredTopLevelTasks.length;
-    const totalTaskCount = Array.isArray(tasks) ? tasks.length : 0;
+    const totalTaskCount = useMemo(() => {
+        const safe = Array.isArray(tasks) ? tasks : [];
+        if (taskFilters.showArchived) return safe.length;
+        return safe.filter(t => String(t.status || '').toLowerCase().replace(/\s+/g, '') !== 'archived').length;
+    }, [tasks, taskFilters.showArchived]);
 
     // Tasks to show in Kanban: optionally filtered by selected list (status columns stay the same)
     const kanbanTasks = useMemo(() => {
@@ -5029,7 +5078,8 @@ function initializeProjectDetail() {
             assignee: 'all',
             priority: 'all',
             list: 'all',
-            includeSubtasks: true
+            includeSubtasks: true,
+            showArchived: false
         });
     }, []);
 
@@ -7147,6 +7197,7 @@ function initializeProjectDetail() {
             case 'In Progress': return 'bg-blue-100 text-blue-800 border-blue-500';
             case 'Review': return 'bg-purple-100 text-purple-800 border-purple-500';
             case 'Blocked': return 'bg-red-100 text-red-800 border-red-500';
+            case 'Archived': return 'bg-gray-200 text-gray-600 border-gray-400';
             case 'To Do': return 'bg-gray-100 text-gray-800 border-gray-500';
             default: return 'bg-gray-100 text-gray-800 border-gray-500';
         }
@@ -7229,6 +7280,11 @@ function initializeProjectDetail() {
             alert('Failed to save task status. Please try again.');
         }
     }, [taskLists, project?.id]);
+
+    const handleArchiveTask = useCallback(async (taskId) => {
+        const normalized = 'Archived';
+        await handleUpdateTaskStatus(taskId, normalized);
+    }, [handleUpdateTaskStatus]);
 
     // Reorder tasks within a list (swap order with previous/next task)
     const handleMoveTaskUp = useCallback(async (list, taskIndex) => {
@@ -7449,7 +7505,7 @@ function initializeProjectDetail() {
                                 ))}
                             </select>
                         </div>
-                        <div className="md:col-span-2 xl:col-span-1 flex items-end justify-between gap-3">
+                        <div className="md:col-span-2 xl:col-span-1 flex items-end justify-between gap-3 flex-wrap">
                             <label className="flex items-center gap-2 text-xs text-gray-600 font-medium">
                                 <input
                                     type="checkbox"
@@ -7458,6 +7514,15 @@ function initializeProjectDetail() {
                                     onChange={(e) => setTaskFilters(prev => ({ ...prev, includeSubtasks: e.target.checked }))}
                                 />
                                 Include subtasks
+                            </label>
+                            <label className="flex items-center gap-2 text-xs text-gray-600 font-medium" title="Show tasks that are no longer relevant">
+                                <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    checked={taskFilters.showArchived}
+                                    onChange={(e) => setTaskFilters(prev => ({ ...prev, showArchived: e.target.checked }))}
+                                />
+                                Show archived
                             </label>
                             {hasActiveTaskFilters && (
                                 <button
@@ -7875,6 +7940,27 @@ function initializeProjectDetail() {
                                                                             >
                                                                                 View
                                                                             </button>
+                                                                            {String(task.status || '').toLowerCase().replace(/\s+/g, '') !== 'archived' && (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        if (typeof handleArchiveTask === 'function') {
+                                                                                            const result = handleArchiveTask(task.id);
+                                                                                            if (result && typeof result.catch === 'function') {
+                                                                                                result.catch(err => {
+                                                                                                    console.error('Failed to archive task:', err);
+                                                                                                    alert('Failed to archive task: ' + (err?.message || 'Unknown error'));
+                                                                                                });
+                                                                                            }
+                                                                                        }
+                                                                                    }}
+                                                                                    className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-all font-medium"
+                                                                                    title="Archive task (no longer relevant)"
+                                                                                >
+                                                                                    <i className="fas fa-archive text-[9px]"></i>
+                                                                                </button>
+                                                                            )}
                                                                             <button
                                                                                 onClick={(e) => {
                                                                                     try {
@@ -8031,7 +8117,7 @@ function initializeProjectDetail() {
                 </div>
             </div>
             );
-    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, handleUpdateTaskStatus, handleTaskDragStart, handleTaskDragEnd, handleTaskDragOver, handleTaskDragLeave, handleTaskDrop, dragOverTask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
+    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleArchiveTask, handleAddSubtask, handleUpdateTaskStatus, handleTaskDragStart, handleTaskDragEnd, handleTaskDragOver, handleTaskDragLeave, handleTaskDrop, dragOverTask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta, formatChecklistProgress]);
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);

@@ -19,7 +19,8 @@ const KanbanView = ({
         { value: 'in progress', label: 'In Progress' },
         { value: 'review', label: 'Review' },
         { value: 'blocked', label: 'Blocked' },
-        { value: 'done', label: 'Done' }
+        { value: 'done', label: 'Done' },
+        { value: 'archived', label: 'Archived' }
     ];
     
     const columns = statusColumns.length > 0 ? statusColumns : defaultStatusColumns;
@@ -27,6 +28,7 @@ const KanbanView = ({
     // Default color mapping
     const getDefaultStatusColor = (statusLabel) => {
         const statusLower = String(statusLabel || '').toLowerCase();
+        if (statusLower.includes('archived')) return 'bg-gray-200 text-gray-600 border-gray-400';
         if (statusLower.includes('done') || statusLower.includes('complete')) return 'bg-green-100 text-green-800 border-green-500';
         if (statusLower.includes('progress')) return 'bg-blue-100 text-blue-800 border-blue-500';
         if (statusLower.includes('review')) return 'bg-purple-100 text-purple-800 border-purple-500';
@@ -232,10 +234,12 @@ const KanbanView = ({
                                             {/* Task Title */}
                                             <div className="text-sm font-medium text-gray-900 mb-1.5">{task.title || 'Untitled'}</div>
 
-                                            {/* Task Description (truncated) */}
+                                            {/* Task Description (truncated; strip HTML so pasted images don't show raw markup) */}
                                             {task.description && (
                                                 <p className="text-xs text-gray-600 mb-2 line-clamp-2">
-                                                    {task.description}
+                                                    {typeof task.description === 'string' && task.description.includes('<')
+                                                        ? task.description.replace(/<[^>]*>/g, '').trim() || null
+                                                        : task.description}
                                                 </p>
                                             )}
 

@@ -177,6 +177,7 @@ const TaskDetailModal = ({
     const commentTextareaRef = useRef(null);
     const titleInputRef = useRef(null);
     const descriptionTextareaRef = useRef(null);
+    const descriptionEditOriginRef = useRef('external'); // 'external' | 'user' - avoid overwriting user input when syncing from task
     const mentionSuggestionsRef = useRef(null);
     const checklistInputRef = useRef(null);
     const lastFocusRequestRef = useRef(null);
@@ -733,6 +734,13 @@ const TaskDetailModal = ({
             }));
         }
     }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.dueDate, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
+
+    // Sync description div content when task changes (contentEditable source of truth when focused)
+    useEffect(() => {
+        if (!descriptionTextareaRef.current) return;
+        descriptionEditOriginRef.current = 'external';
+        descriptionTextareaRef.current.innerHTML = (task?.description ?? '') || '';
+    }, [task?.id]);
 
     // Update users if prop changes
     useEffect(() => {
@@ -1723,6 +1731,7 @@ const TaskDetailModal = ({
         switch(status) {
             case 'Done': return 'bg-green-100 text-green-800';
             case 'In Progress': return 'bg-blue-100 text-blue-800';
+            case 'Archived': return 'bg-gray-200 text-gray-600';
             case 'To Do': return 'bg-gray-100 text-gray-800';
             default: return 'bg-gray-100 text-gray-800';
         }
@@ -1890,26 +1899,69 @@ const TaskDetailModal = ({
                         {/* Tab Content */}
                         {activeTab === 'details' && (
                             <div className="space-y-4">
-                                {/* Description */}
+                                {/* Description (contentEditable to allow pasting images) */}
                                 <div>
                                     <label className="block text-xs font-medium text-gray-700 mb-1.5">
                                         <i className="fas fa-align-left mr-1.5 text-gray-400"></i>
                                         Description
                                     </label>
-                                    <textarea
+                                    <div
                                         ref={descriptionTextareaRef}
-                                        value={editedTask.description || ''}
-                                        onChange={(e) => {
-                                            const newValue = e.target.value;
-                                            updateFieldWithCursorPreservation(
-                                                e.target,
-                                                newValue,
-                                                (value) => setEditedTask({...editedTask, description: value})
-                                            );
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        onInput={(e) => {
+                                            const el = e.currentTarget;
+                                            const html = el.innerHTML || '';
+                                            descriptionEditOriginRef.current = 'user';
+                                            setEditedTask(prev => ({ ...prev, description: html }));
                                         }}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg min-h-[120px] focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        placeholder="Add a detailed description..."
-                                    ></textarea>
+                                        onPaste={(e) => {
+                                            const items = e.clipboardData?.items;
+                                            if (!items) return;
+                                            const imageItem = Array.from(items).find(item => item.type.indexOf('image/') === 0);
+                                            if (!imageItem) return; // allow default text paste
+                                            e.preventDefault();
+                                            const file = imageItem.getAsFile();
+                                            if (!file) return;
+                                            const reader = new FileReader();
+                                            reader.onload = (ev) => {
+                                                const dataUrl = ev.target?.result;
+                                                if (!dataUrl || !descriptionTextareaRef.current) return;
+                                                const sel = window.getSelection();
+                                                const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+                                                const el = descriptionTextareaRef.current;
+                                                if (!el.contains(document.activeElement) && document.activeElement !== el) el.focus();
+                                                const img = document.createElement('img');
+                                                img.src = dataUrl;
+                                                img.style.maxWidth = '100%';
+                                                img.style.height = 'auto';
+                                                img.style.display = 'block';
+                                                img.setAttribute('data-pasted', '1');
+                                                if (range && el.contains(range.commonAncestorContainer)) {
+                                                    range.deleteContents();
+                                                    range.insertNode(img);
+                                                    range.setStartAfter(img);
+                                                    range.collapse(true);
+                                                    sel.removeAllRanges();
+                                                    sel.addRange(range);
+                                                } else {
+                                                    el.appendChild(img);
+                                                }
+                                                descriptionEditOriginRef.current = 'user';
+                                                setEditedTask(prev => ({ ...prev, description: el.innerHTML }));
+                                            };
+                                            reader.readAsDataURL(file);
+                                        }}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg min-h-[120px] focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none [&>img]:max-w-full [&>img]:h-auto [&>img]:block"
+                                        data-placeholder="Add a detailed description..."
+                                        style={{ minHeight: '120px' }}
+                                    />
+                                    <style>{`
+                                        [data-placeholder]:empty:before {
+                                            content: attr(data-placeholder);
+                                            color: #9ca3af;
+                                        }
+                                    `}</style>
                                 </div>
 
                                 {/* Custom Fields */}
@@ -2618,6 +2670,7 @@ const TaskDetailModal = ({
                                                         <option>To Do</option>
                                                         <option>In Progress</option>
                                                         <option>Done</option>
+                                                        <option>Archived</option>
                                                     </select>
                                                 </div>
 
