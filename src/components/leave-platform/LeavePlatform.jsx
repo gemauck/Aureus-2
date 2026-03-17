@@ -132,7 +132,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 }
             }
             if (!isAdmin) {
-                const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'system_admin'];
+                const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'super_user', 'system_admin'];
                 const r = user?.role && String(user.role).toLowerCase().replace(/\s+/g, '_');
                 isAdmin = !!r && adminRoles.includes(r);
             }
@@ -140,6 +140,9 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     } catch (e) {
         console.warn('⚠️ LeavePlatform: Error initializing auth:', e);
     }
+    // Keep isAdmin in state so we can update when PermissionChecker loads after this component (e.g. lazy scripts)
+    const [resolvedAdmin, setResolvedAdmin] = useState(isAdmin);
+    if (isAdmin && !resolvedAdmin) setResolvedAdmin(true);
     
     const [currentTab, setCurrentTab] = useState(initialTab);
     const [loading, setLoading] = useState(false);
@@ -161,6 +164,29 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         useEffect(() => {
             setCurrentTab(initialTab);
         }, [initialTab]);
+
+        // Re-check admin when PermissionChecker may have loaded after this component (e.g. lazy scripts)
+        useEffect(() => {
+            const u = user || (typeof window !== 'undefined' && window.storage?.getUser && window.storage.getUser()) || null;
+            if (!u) return;
+            const check = () => {
+                let admin = false;
+                if (typeof window !== 'undefined' && window.PermissionChecker && window.PERMISSIONS?.ACCESS_USERS) {
+                    try {
+                        admin = new window.PermissionChecker(u).hasPermission(window.PERMISSIONS.ACCESS_USERS);
+                    } catch (e) {}
+                }
+                if (!admin && u?.role) {
+                    const roles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'super_user', 'system_admin'];
+                    const r = String(u.role).toLowerCase().replace(/\s+/g, '_');
+                    admin = roles.includes(r);
+                }
+                setResolvedAdmin(prev => admin || prev);
+            };
+            check();
+            const t = setTimeout(check, 1500);
+            return () => clearTimeout(t);
+        }, [user?.id, user?.role]);
 
         useEffect(() => {
             const handleTabEvent = (event) => {
@@ -712,7 +738,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 { id: 'rules-policies', label: 'Rules & Policies', icon: 'fa-file-contract' }
             ];
 
-            if (isAdmin) {
+            if (resolvedAdmin) {
                 sharedTabs.splice(1, 0, { id: 'employees', label: 'Employees', icon: 'fa-users' });
                 sharedTabs.splice(3, 0, { id: 'team', label: 'Team Leave', icon: 'fa-people-arrows' });
                 sharedTabs.push(
@@ -723,7 +749,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             }
 
             return sharedTabs;
-        }, [isAdmin]);
+        }, [resolvedAdmin]);
 
         // Employee filtering and sorting - moved to top level (hooks must be at component level)
         const filteredAndSortedEmployees = useMemo(() => {
@@ -822,7 +848,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             birthdays={birthdays}
                             leaveTypes={leaveTypes}
                             calculateWorkingDays={calculateWorkingDays}
-                            isAdmin={isAdmin}
+                            isAdmin={resolvedAdmin || isAdmin}
                             getLeaveTypeInfo={getLeaveTypeInfo}
                             getStatusLabel={getStatusLabel}
                             onRefresh={() => loadData()}
@@ -831,7 +857,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         />
                     );
                 case 'employees':
-                    if (!isAdmin) {
+                    if (!resolvedAdmin && !isAdmin) {
                         return <AccessNotice />;
                     }
                     // Show employee detail view if an employee is selected
@@ -1009,7 +1035,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         </div>
                     );
                 case 'team':
-                    return isAdmin ? (
+                    return (resolvedAdmin || isAdmin) ? (
                         <TeamLeaveView
                             applications={leaveApplications}
                             employees={employees}
@@ -1080,7 +1106,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         />
                     );
             case 'approvals':
-                    return isAdmin ? (
+                    return (resolvedAdmin || isAdmin) ? (
                         <ApprovalsView
                     applications={leaveApplications}
                     user={user}
@@ -1092,7 +1118,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         <AccessNotice />
                     );
             case 'approvers':
-                    return isAdmin ? (
+                    return (resolvedAdmin || isAdmin) ? (
                         <ApproversView
                     approvers={leaveApprovers}
                     departments={departments}
@@ -1110,7 +1136,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         />
                     );
             case 'import':
-                    return isAdmin ? (
+                    return (resolvedAdmin || isAdmin) ? (
                         <ImportBalancesView
                             onImport={() => loadData()}
                         />
