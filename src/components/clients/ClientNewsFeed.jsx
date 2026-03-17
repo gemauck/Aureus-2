@@ -56,8 +56,9 @@ const ClientNewsFeed = () => {
         }
     };
 
-    const loadActivities = async () => {
-        setIsLoading(true);
+    const loadActivities = async (opts = {}) => {
+        const silent = opts?.silent === true;
+        if (!silent) setIsLoading(true);
         try {
             
             // Fetch activities from all clients' and leads' activityLogs
@@ -167,7 +168,7 @@ const ClientNewsFeed = () => {
         } catch (error) {
             console.error('Failed to load activities:', error);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     };
 
@@ -327,7 +328,7 @@ const ClientNewsFeed = () => {
             if (!searchRes.ok) {
                 console.warn('News search request failed:', searchRes.status);
             }
-            await Promise.all([loadActivities(), loadNewsArticles()]);
+            await Promise.all([loadActivities({ silent: true }), loadNewsArticles()]);
             setLastCheckedAt(new Date());
             if (searchRes.ok && (articlesFound > 0 || clientsProcessed > 0)) {
                 const msg = articlesFound > 0
@@ -337,7 +338,7 @@ const ClientNewsFeed = () => {
             }
         } catch (err) {
             console.error('Failed to refresh news:', err);
-            await Promise.all([loadActivities(), loadNewsArticles()]);
+            await Promise.all([loadActivities({ silent: true }), loadNewsArticles()]);
             setLastCheckedAt(new Date());
             if (window.toast) window.toast('Could not fetch new articles; showing latest saved news.'); else alert('Could not fetch new articles; showing latest saved news.');
         } finally {

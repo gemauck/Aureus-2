@@ -30,16 +30,17 @@ const FeedbackViewer = () => {
     // Also reload when component becomes visible (in case feedback was submitted)
     useEffect(() => {
         if (isAdmin) {
-            // Small delay to ensure tab is fully visible
+            // Small delay to ensure tab is fully visible; silent = no loading flash
             const timer = setTimeout(() => {
-                loadFeedback();
+                loadFeedback({ silent: true });
             }, 100);
             return () => clearTimeout(timer);
         }
     }, []);
 
-    const loadFeedback = async () => {
-        setLoading(true);
+    const loadFeedback = async (opts = {}) => {
+        const silent = opts?.silent === true;
+        if (!silent) setLoading(true);
         try {
             console.log('📊 Loading feedback...');
             const response = await window.api.getFeedback({
@@ -74,7 +75,7 @@ const FeedbackViewer = () => {
             console.error('❌ Error details:', error.message, error.stack);
             setFeedback([]);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -103,7 +104,7 @@ const FeedbackViewer = () => {
                 ...prev,
                 [feedbackId]: ''
             }));
-            await loadFeedback();
+            await loadFeedback({ silent: true });
         } catch (error) {
             console.error('❌ Failed to submit reply:', error);
             setReplyErrors(prev => ({
@@ -120,7 +121,7 @@ const FeedbackViewer = () => {
         setUpdatingId(feedbackId);
         try {
             await window.api.updateFeedback(feedbackId, { type });
-            await loadFeedback();
+            await loadFeedback({ silent: true });
         } catch (error) {
             console.error('❌ Failed to update type:', error);
         } finally {
@@ -133,7 +134,7 @@ const FeedbackViewer = () => {
         setUpdatingId(feedbackId);
         try {
             await window.api.updateFeedback(feedbackId, { status });
-            await loadFeedback();
+            await loadFeedback({ silent: true });
         } catch (error) {
             console.error('❌ Failed to update status:', error);
         } finally {
@@ -148,7 +149,7 @@ const FeedbackViewer = () => {
         try {
             const res = await window.api.markOldFeedbackDone();
             const count = res?.updated ?? res?.data?.updated ?? 0;
-            await loadFeedback();
+            await loadFeedback({ silent: true });
             if (count > 0) alert(`${count} feedback item(s) marked as Done.`);
         } catch (error) {
             console.error('❌ Failed to mark old feedback done:', error);

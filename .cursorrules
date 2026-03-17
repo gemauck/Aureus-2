@@ -35,6 +35,15 @@ Before editing, verify:
 2. File is referenced in the build process or loaded by the server
 3. Changes appear when testing with `npm run dev:backend`
 
+## Live updates and background refresh (list/detail views)
+
+For list or detail views that poll or refetch (discussions, notifications, task comments, etc.):
+
+- **Silent refresh**: When refreshing in the background (e.g. setInterval poll), do not set loading state or clear existing content. Pass a `silent: true` (or similar) option to the load function so the UI does not flash.
+- **Append-only when possible**: For appendable lists (replies, comments, notifications), merge new items by ID instead of replacing the whole list: only append items that are not already in state so only new items appear and the rest of the screen does not re-render.
+- **Reference equality**: When updating state after a silent fetch, avoid replacing the list/array if the data is unchanged (e.g. compare by id list) so React can avoid unnecessary re-renders.
+
+Examples: `TeamDiscussions.jsx` (loadDetail with silent + reply merge), `NotificationCenter.jsx` (loadNotifications({ silent: true }) and only update list when ids changed).
 
 
 

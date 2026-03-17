@@ -43,8 +43,9 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
         return [];
     };
 
-    const loadComments = async () => {
-        setLoading(true);
+    const loadComments = async (opts = {}) => {
+        const silent = opts?.silent === true;
+        if (!silent) setLoading(true);
         try {
             const response = await window.api.getFeedback({
                 pageUrl: pageUrl,
@@ -57,7 +58,7 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
             console.error('Failed to load comments:', error);
             setComments([]);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -85,7 +86,7 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
 
             setMessage('');
             setShowForm(false);
-            await loadComments(); // Refresh comments
+            await loadComments({ silent: true }); // Refresh comments without loading flash
         } catch (error) {
             console.error('Failed to submit comment:', error);
             alert('Could not submit comment. Please try again.');

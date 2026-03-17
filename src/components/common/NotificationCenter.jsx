@@ -81,9 +81,10 @@ const NotificationCenter = () => {
         return response;
     };
     
-    const loadNotifications = async () => {
-        // Prevent concurrent requests - if already loading, skip
-        if (loading) {
+    const loadNotifications = async (opts = {}) => {
+        const silent = opts?.silent === true;
+        // Prevent concurrent requests - if already loading, skip (unless silent background refresh)
+        if (loading && !silent) {
             return;
         }
         
@@ -104,7 +105,7 @@ const NotificationCenter = () => {
         }
         
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             
             // Use DatabaseAPI.makeRequest() which handles authentication and token refresh automatically
             if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
@@ -134,8 +135,19 @@ const NotificationCenter = () => {
                 
                 // DatabaseAPI.makeRequest returns { data: {...} } structure
                 const responseData = response?.data || response;
-                setNotifications(responseData?.notifications || []);
-                setUnreadCount(responseData?.unreadCount || 0);
+                const fromServer = responseData?.notifications || [];
+                const newUnread = responseData?.unreadCount ?? 0;
+                setUnreadCount(newUnread);
+                // Silent poll: only update list if it changed, to avoid full re-render/flash
+                if (silent) {
+                    setNotifications((prev) => {
+                        if (prev.length === fromServer.length && fromServer.every((n, i) => prev[i]?.id === n?.id))
+                            return prev;
+                        return fromServer;
+                    });
+                } else {
+                    setNotifications(fromServer);
+                }
                 
                 // Track successful load time for focus throttling
                 lastLoadTimestampRef.current = Date.now();
@@ -222,7 +234,7 @@ const NotificationCenter = () => {
                 console.warn('⏸️ NotificationCenter: Pausing polling due to repeated errors');
             }
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
     
@@ -243,7 +255,7 @@ const NotificationCenter = () => {
                             console.warn(`⏸️ NotificationCenter: Rate limit active, skipping poll. Waiting ${waitMinutes} minute(s)...`);
                             return;
                         }
-                        loadNotifications();
+                        loadNotifications({ silent: true });
                     }
                 }, pollingDelayRef.current);
             }
@@ -262,7 +274,7 @@ const NotificationCenter = () => {
             if (isPollingPausedRef.current) return;
             const now = Date.now();
             if (now - lastLoadTimestampRef.current < FOCUS_LOAD_MIN_INTERVAL_MS) return;
-            loadNotifications();
+            loadNotifications({ silent: true });
         };
         window.addEventListener('focus', handleFocus);
         
