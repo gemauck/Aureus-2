@@ -66,6 +66,13 @@ echo
 echo "-> Building application..."
 npm run build
 
+# Ensure Vite projects bundle exists (avoids 502 on /vite-projects/projects-module.js)
+if [ ! -f "${APP_DIR}/dist/vite-projects/projects-module.js" ]; then
+  echo "ERROR: dist/vite-projects/projects-module.js missing after build. Run: npm run build:vite-projects"
+  exit 1
+fi
+echo "  ✓ Vite projects bundle present"
+
 echo
 echo "-> Applying database schema updates (if any)..."
 if [ -f scripts/safe-db-migration.sh ]; then
