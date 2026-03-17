@@ -1836,12 +1836,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm' },
         { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm' }
     ];
-    // Monthly Data Review: Not Done, In Progress, Done, Issue (pastel)
+    // Monthly Data Review: Not Started, Started, Complete (Complete = stored as 'done' for backward compatibility)
     const monthlyDataReviewStatusOptions = [
-        { value: 'not-done', label: 'Not Done', color: 'bg-rose-200 text-rose-800 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
-        { value: 'in-progress', label: 'In Progress', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
-        { value: 'done', label: 'Done', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
-        { value: 'issue', label: 'Issue', color: 'bg-orange-200 text-orange-800 font-semibold', cellColor: 'bg-orange-200 border-l-4 border-orange-300 shadow-sm' }
+        { value: 'not-done', label: 'Not Started', color: 'bg-rose-200 text-rose-800 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
+        { value: 'in-progress', label: 'Started', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
+        { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' }
     ];
     const statusOptions = isJsonOnlyTracker ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
 
