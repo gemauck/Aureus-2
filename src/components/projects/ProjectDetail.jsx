@@ -6170,12 +6170,10 @@ function initializeProjectDetail() {
             });
             
             // CRITICAL: Ensure all tasks have valid comments arrays before saving
+            let tasksNormalizedCount = 0;
             const validatedTasksForSave = updatedTasks.map(t => {
                 if (!Array.isArray(t.comments)) {
-                    console.warn('⚠️ Fixing task with invalid comments array before save:', {
-                        taskId: t.id,
-                        taskTitle: t.title
-                    });
+                    tasksNormalizedCount++;
                     t.comments = [];
                 }
                 // Validate subtasks too
@@ -6189,6 +6187,9 @@ function initializeProjectDetail() {
                 }
                 return t;
             });
+            if (tasksNormalizedCount > 0) {
+                console.warn('⚠️ Normalized comments array for', tasksNormalizedCount, 'task(s) before save (invalid or missing).');
+            }
             
             // NEW: Save task via Task API (preferred method) — use taskIdForLookup so new tasks are found by our temp id
             const taskToSave = validatedTasksForSave.find(t => t.id === taskIdForLookup) || 
@@ -6197,6 +6198,14 @@ function initializeProjectDetail() {
             if (taskToSave && window.DatabaseAPI?.makeRequest) {
                 try {
                     const isSubtask = viewingTaskParent && taskToSave.id === taskIdForLookup;
+                    // Slim attachments for PUT: omit dataUrl/base64 to avoid huge payloads and timeouts
+                    const rawAttachments = taskToSave.attachments || [];
+                    const slimAttachments = rawAttachments.map(att => {
+                        if (!att || typeof att !== 'object') return att;
+                        const { dataUrl, ...rest } = att;
+                        return rest;
+                    });
+
                     const taskPayload = {
                         projectId: project.id,
                         title: taskToSave.title || '',
@@ -6213,7 +6222,7 @@ function initializeProjectDetail() {
                         actualHours: taskToSave.actualHours || null,
                         blockedBy: taskToSave.blockedBy || '',
                         tags: taskToSave.tags || [],
-                        attachments: taskToSave.attachments || [],
+                        attachments: slimAttachments,
                         checklist: taskToSave.checklist || [],
                         dependencies: taskToSave.dependencies || [],
                         subscribers: taskToSave.subscribers || [],
