@@ -8530,14 +8530,17 @@ function initializeProjectDetail() {
                                 const fieldLabel = meta.field ? String(meta.field).replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim() : null;
                                 const hasTaskLink = taskId && project?.id;
                                 const docCollectionType = entityType === 'document_section';
+                                const weeklyFmsType = entityType === 'weekly_fms';
                                 const monthlyFmsType = entityType === 'monthly_fms';
                                 const monthlyDataReviewType = entityType === 'monthly_data_review';
                                 const complianceType = entityType === 'compliance_review';
-                                const hasDocLink = (docCollectionType || monthlyFmsType || monthlyDataReviewType || complianceType) && project?.id;
+                                const hasDocLink = (docCollectionType || weeklyFmsType || monthlyFmsType || monthlyDataReviewType || complianceType) && project?.id;
                                 const isNotesChange = /_notes_change$/.test(log.type || '');
+                                const statusKey = meta.statusKey || null;
                                 const summaryLine = (() => {
                                     if (taskTitle && entityType === 'task') return `Task: ${taskTitle}`;
                                     if (isNotesChange && documentName && yearMonth) return `Notes: ${documentName} (${yearMonth})`;
+                                    if (documentName && statusKey) return `${documentName} (${statusKey})`;
                                     if (documentName && yearMonth) return `${documentName} (${yearMonth})`;
                                     if (documentName) return documentName;
                                     if (entityType === 'project' && fieldLabel) return `Project: ${fieldLabel}`;
@@ -8594,6 +8597,15 @@ function initializeProjectDetail() {
                                                     className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
                                                 >
                                                     <i className="fas fa-folder-open mr-1"></i> Document Collection
+                                                </button>
+                                            )}
+                                            {hasDocLink && weeklyFmsType && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => switchSection('weeklyFMSReview')}
+                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                >
+                                                    <i className="fas fa-calendar-week mr-1"></i> Weekly FMS Review
                                                 </button>
                                             )}
                                             {hasDocLink && monthlyFmsType && (

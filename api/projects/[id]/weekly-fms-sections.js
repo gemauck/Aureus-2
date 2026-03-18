@@ -7,6 +7,8 @@ import { authRequired } from '../../_lib/authRequired.js'
 import { prisma } from '../../_lib/prisma.js'
 import { ok, badRequest, notFound, serverError } from '../../_lib/response.js'
 import { parseJsonBody } from '../../_lib/body.js'
+import { logProjectActivity, getActivityUserFromRequest } from '../../_lib/projectActivityLog.js'
+import { buildWeeklyFMSStatusMap } from '../../projects.js'
 
 async function handler(req, res) {
   if (req.method !== 'PUT' && req.method !== 'PATCH') {
@@ -52,6 +54,37 @@ async function handler(req, res) {
   console.log('[weekly-fms-sections] PUT', id, 'payload length', payload.length, 'section count', sectionCount)
 
   try {
+    const existing = await prisma.project.findUnique({
+      where: { id },
+      select: { weeklyFMSReviewSections: true }
+    })
+    if (existing) {
+      try {
+        const oldJson = existing.weeklyFMSReviewSections
+        const oldParsed = (typeof oldJson === 'string' && oldJson) ? JSON.parse(oldJson) : (oldJson && typeof oldJson === 'object' ? oldJson : {})
+        const newParsed = typeof payload === 'string' ? JSON.parse(payload) : payload
+        const oldMap = buildWeeklyFMSStatusMap(oldParsed)
+        const newMap = buildWeeklyFMSStatusMap(newParsed)
+        const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req)
+        for (const [entryKey, newEntry] of newMap) {
+          const oldEntry = oldMap.get(entryKey)
+          const oldStatus = oldEntry ? oldEntry.status : null
+          if (oldStatus !== newEntry.status) {
+            await logProjectActivity(prisma, {
+              projectId: id,
+              userId: activityUserId,
+              userName: activityUserName,
+              type: 'weekly_fms_status_change',
+              description: `Weekly FMS "${newEntry.docName}" (${newEntry.statusKey}): ${oldStatus || 'pending'} → ${newEntry.status}`,
+              metadata: { entityType: 'weekly_fms', entityId: newEntry.docId, documentName: newEntry.docName, year: newEntry.year, statusKey: newEntry.statusKey, oldValue: oldStatus, newValue: newEntry.status }
+            })
+          }
+        }
+      } catch (logErr) {
+        console.warn('[weekly-fms-sections] Activity log diff failed (non-fatal):', logErr?.message)
+      }
+    }
+
     const project = await prisma.project.update({
       where: { id },
       data: { weeklyFMSReviewSections: payload }

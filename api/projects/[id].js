@@ -4,7 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildDocumentNotesMap } from '../projects.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap } from '../projects.js'
 import { logProjectActivity, getActivityUserFromRequest } from '../_lib/projectActivityLog.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
@@ -1360,6 +1360,8 @@ async function handler(req, res) {
           hasMonthlyDataReviewProcess: true,
           hasComplianceReviewProcess: true,
           documentSections: true,
+          weeklyFMSReviewSections: true,
+          monthlyFMSReviewSections: true,
           monthlyDataReviewSections: true,
           complianceReviewSections: true
         }
@@ -1581,6 +1583,22 @@ async function handler(req, res) {
             const oldJson = existingProject.documentSections;
             const oldParsed = (typeof oldJson === 'string' && oldJson) ? JSON.parse(oldJson) : (oldJson && typeof oldJson === 'object' ? oldJson : {});
             const newParsed = typeof body.documentSections === 'string' ? JSON.parse(body.documentSections) : body.documentSections;
+            const oldStatusMap = buildDocumentStatusMap(oldParsed);
+            const newStatusMap = buildDocumentStatusMap(newParsed);
+            for (const [entryKey, newEntry] of newStatusMap) {
+              const oldEntry = oldStatusMap.get(entryKey);
+              const oldStatus = oldEntry ? oldEntry.status : null;
+              if (oldStatus !== newEntry.status) {
+                await logProjectActivity(prisma, {
+                  projectId: id,
+                  userId: activityUserId,
+                  userName: activityUserName,
+                  type: 'document_section_status_change',
+                  description: `Document Collection "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')}): ${oldStatus || 'pending'} → ${newEntry.status}`,
+                  metadata: { entityType: 'document_section', entityId: newEntry.docId, documentName: newEntry.docName, year: newEntry.year, month: newEntry.month, oldValue: oldStatus, newValue: newEntry.status }
+                });
+              }
+            }
             const oldNotesMap = buildDocumentNotesMap(oldParsed);
             const newNotesMap = buildDocumentNotesMap(newParsed);
             const noteSnippet = (text, maxLen = 120) => (text && text.length > maxLen ? text.slice(0, maxLen) + '…' : (text || ''));
@@ -1608,7 +1626,33 @@ async function handler(req, res) {
               }
             }
           } catch (e) {
-            console.warn('Activity log documentSections notes diff failed (non-fatal):', e?.message);
+            console.warn('Activity log documentSections diff failed (non-fatal):', e?.message);
+          }
+        }
+
+        if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
+          try {
+            const oldJson = existingProject.weeklyFMSReviewSections;
+            const oldParsed = (typeof oldJson === 'string' && oldJson) ? JSON.parse(oldJson) : (oldJson && typeof oldJson === 'object' ? oldJson : {});
+            const newParsed = typeof body.weeklyFMSReviewSections === 'string' ? JSON.parse(body.weeklyFMSReviewSections) : body.weeklyFMSReviewSections;
+            const oldMap = buildWeeklyFMSStatusMap(oldParsed);
+            const newMap = buildWeeklyFMSStatusMap(newParsed);
+            for (const [entryKey, newEntry] of newMap) {
+              const oldEntry = oldMap.get(entryKey);
+              const oldStatus = oldEntry ? oldEntry.status : null;
+              if (oldStatus !== newEntry.status) {
+                await logProjectActivity(prisma, {
+                  projectId: id,
+                  userId: activityUserId,
+                  userName: activityUserName,
+                  type: 'weekly_fms_status_change',
+                  description: `Weekly FMS "${newEntry.docName}" (${newEntry.statusKey}): ${oldStatus || 'pending'} → ${newEntry.status}`,
+                  metadata: { entityType: 'weekly_fms', entityId: newEntry.docId, documentName: newEntry.docName, year: newEntry.year, statusKey: newEntry.statusKey, oldValue: oldStatus, newValue: newEntry.status }
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Activity log weeklyFMSReviewSections diff failed (non-fatal):', e?.message);
           }
         }
 
