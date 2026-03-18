@@ -132,11 +132,12 @@ const EmployeeDetail = (props) => {
             if (formData.name !== undefined) updateData.name = formData.name;
             if (formData.phone !== undefined) updateData.phone = formData.phone;
             
-            // Employment info
+            // Employment info (including role – API allows admins to update)
             if (formData.employeeNumber !== undefined) updateData.employeeNumber = formData.employeeNumber;
             if (formData.position !== undefined) updateData.position = formData.position;
             if (formData.jobTitle !== undefined) updateData.jobTitle = formData.jobTitle;
             if (formData.department !== undefined) updateData.department = formData.department;
+            if (formData.role !== undefined) updateData.role = formData.role;
             if (formData.employmentStatus !== undefined) updateData.employmentStatus = formData.employmentStatus;
             
             // Employment date - convert to proper format if provided
@@ -442,6 +443,25 @@ const EmployeeDetail = (props) => {
                         />
                     ) : (
                         <p className="text-sm text-gray-900">{employee.department || 'N/A'}</p>
+                    )}
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Role
+                    </label>
+                    {editing ? (
+                        <select
+                            value={formData.role || employee.role || 'user'}
+                            onChange={(e) => setFormData({...formData, role: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        >
+                            <option value="user">User</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                            <option value="superadmin">Super Administrator</option>
+                        </select>
+                    ) : (
+                        <p className="text-sm text-gray-900 capitalize">{employee.role || 'N/A'}</p>
                     )}
                 </div>
                 <div>

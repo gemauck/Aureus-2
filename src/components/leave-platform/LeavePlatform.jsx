@@ -903,7 +903,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                     employeeId={viewingEmployeeId}
                                     onBack={handleBackFromEmployeeDetail}
                                     user={user || null}
-                                    isAdmin={isAdmin || false}
+                                    isAdmin={resolvedAdmin || isAdmin}
                                 />
                             );
                         } catch (err) {
