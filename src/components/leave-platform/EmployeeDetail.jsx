@@ -272,7 +272,27 @@ const EmployeeDetail = (props) => {
                             </p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2 items-center">
+                        {isAdmin && (
+                            <button
+                                onClick={() => setEditing(!editing)}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                                    editing ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-primary-600 text-white hover:bg-primary-700'
+                                }`}
+                            >
+                                <i className={`fas ${editing ? 'fa-times' : 'fa-edit'} mr-2`}></i>
+                                {editing ? 'Cancel' : 'Edit'}
+                            </button>
+                        )}
+                        {isAdmin && editing && (
+                            <button
+                                onClick={handleSave}
+                                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                            >
+                                <i className="fas fa-save mr-2"></i>
+                                Save
+                            </button>
+                        )}
                         {onBack && (
                             <button
                                 onClick={onBack}
@@ -726,7 +746,7 @@ const EmployeeDetail = (props) => {
             {/* Section Navigation + Edit (visible on all tabs) */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 min-w-0">
                         {sections.map(section => (
                             <button
                                 key={section.id}
@@ -743,7 +763,7 @@ const EmployeeDetail = (props) => {
                         ))}
                     </div>
                     {isAdmin && (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                             <button
                                 onClick={() => setEditing(!editing)}
                                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
