@@ -8235,7 +8235,19 @@ function initializeProjectDetail() {
                         <p className="text-sm text-gray-500">{project.client} • {project.type}</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    <button
+                        type="button"
+                        onClick={() => requestAnimationFrame(() => switchSection('activity'))}
+                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center text-xs font-medium ${
+                            activeSection === 'activity'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                        <i className="fas fa-history mr-1.5"></i>
+                        Activity
+                    </button>
                     <button 
                         onClick={async () => {
                             const loaded = await ensureProjectModalLoaded();
@@ -8377,18 +8389,6 @@ function initializeProjectDetail() {
                             Compliance Review
                         </button>
                     )}
-                    <button
-                        type="button"
-                        onClick={() => requestAnimationFrame(() => switchSection('activity'))}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            activeSection === 'activity'
-                                ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                    >
-                        <i className="fas fa-history mr-1.5"></i>
-                        Activity
-                    </button>
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}

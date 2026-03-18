@@ -2514,7 +2514,7 @@ const Projects = () => {
             // Try to get clients with timeout and error handling (short timeout so Projects UI isn't delayed)
             const getClientsPromise = window.dataService.getClients();
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Client sync timeout')), 2000)
+                setTimeout(() => reject(new Error('Client sync timeout')), 5000)
             );
             
             const clients = await Promise.race([getClientsPromise, timeoutPromise]).catch(error => {

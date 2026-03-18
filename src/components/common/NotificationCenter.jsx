@@ -224,11 +224,15 @@ const NotificationCenter = () => {
                                  errorMessage.includes('503') || 
                                  errorMessage.includes('504');
             
+            const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('Timeout');
             if (!isDatabaseError && !isServerError) {
                 console.error('❌ Error loading notifications:', error);
             }
-            consecutiveFailuresRef.current++;
-            // Pause polling after 5 total failures (including network errors)
+            // Don't count timeout toward "repeated errors" - slow server shouldn't permanently pause polling
+            if (!isTimeout) {
+                consecutiveFailuresRef.current++;
+            }
+            // Pause polling after 5 total failures (excluding timeouts)
             if (consecutiveFailuresRef.current >= 5) {
                 isPollingPausedRef.current = true;
                 console.warn('⏸️ NotificationCenter: Pausing polling due to repeated errors');

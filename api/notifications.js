@@ -255,8 +255,8 @@ async function handler(req, res) {
                     where.read = read === 'true';
                 }
 
-                // Timeout guard: respond with 504 before client/proxy (client uses 12s, so respond by 8s)
-                const NOTIFICATIONS_GET_TIMEOUT_MS = 8000;
+                // Timeout guard: respond with 504 before client (client uses 20s, so respond by 14s)
+                const NOTIFICATIONS_GET_TIMEOUT_MS = 14000;
                 const timeoutPromise = new Promise((_, reject) => {
                     setTimeout(() => reject(new Error('NOTIFICATIONS_TIMEOUT')), NOTIFICATIONS_GET_TIMEOUT_MS);
                 });

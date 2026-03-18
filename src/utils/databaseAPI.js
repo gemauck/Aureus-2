@@ -30,7 +30,7 @@ const DatabaseAPI = {
     },
     // Per-endpoint request timeout (ms) - fail fast for light endpoints when server is slow
     _endpointTimeout: {
-        '/notifications': 12000,   // 12s - match server; avoid piling up 30s waits
+        '/notifications': 20000,   // 20s - allow slow server/DB; reduce pause-after-timeout
         '/users/heartbeat': 10000, // 10s - heartbeat should be quick
         '/clients': 90000,        // 90s - list can be large/slow
         '/leads': 90000,          // 90s - list can be large/slow
