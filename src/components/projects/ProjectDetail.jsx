@@ -5760,7 +5760,7 @@ function initializeProjectDetail() {
     }, [updateUrl, project?.id]);
 
     const handleUpdateTaskFromDetail = async (updatedTaskData, options = {}) => {
-        const { closeModal = true } = options; // Default to closing modal unless explicitly set to false
+        const { closeModal = true, sendNotifications: sendNotificationsOption = false } = options; // Default to closing modal unless explicitly set to false
         
         // CRITICAL: Ensure tasks is always an array
         const safeTasks = Array.isArray(tasks) ? tasks : [];
@@ -5849,8 +5849,8 @@ function initializeProjectDetail() {
             return matchedUser || null;
         };
         
-        // Send notification if assignee changed
-        if (!isNewTask && oldTask && updatedTaskData.assignee && updatedTaskData.assignee !== oldTask.assignee) {
+        // Send notification if assignee changed (skip when API will send via sendNotificationsOption)
+        if (!sendNotificationsOption && !isNewTask && oldTask && updatedTaskData.assignee && updatedTaskData.assignee !== oldTask.assignee) {
             
             const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
             
@@ -5909,8 +5909,8 @@ function initializeProjectDetail() {
             }
         }
         
-        // Send notification if this is a new task with an assignee
-        if (isNewTask && updatedTaskData.assignee) {
+        // Send notification if this is a new task with an assignee (skip when API will send via sendNotificationsOption)
+        if (!sendNotificationsOption && isNewTask && updatedTaskData.assignee) {
             
             const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
             
@@ -6199,6 +6199,8 @@ function initializeProjectDetail() {
                         priority: taskToSave.priority || 'Medium',
                         assignee: taskToSave.assignee || '',
                         assigneeId: taskToSave.assigneeId || null,
+                        assigneeIds: Array.isArray(taskToSave.assigneeIds) ? taskToSave.assigneeIds : [],
+                        sendNotifications: sendNotificationsOption,
                         dueDate: taskToSave.dueDate || null,
                         listId: taskToSave.listId || null,
                         estimatedHours: taskToSave.estimatedHours || null,

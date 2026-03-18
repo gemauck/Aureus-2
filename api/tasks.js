@@ -8,6 +8,7 @@ import { parseJsonBody } from './_lib/body.js';
 import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { formatInSAST } from './_lib/sastDate.js';
+import { createNotificationForUser } from './notifications.js';
 
 // Helper to safely parse JSON fields from database
 function safeParseJson(value, defaultValue = null) {
@@ -65,6 +66,7 @@ function transformTask(task, options = {}) {
     priority: task.priority || 'Medium',
     assignee: task.assignee || task.assigneeUser?.name || '',
     assigneeId: task.assigneeId,
+    assigneeIds: safeParseJson(task.assigneeIds, []),
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     listId: task.listId,
     order: task.order != null ? task.order : 0,
@@ -575,6 +577,8 @@ async function handler(req, res) {
         priority = 'Medium', 
         assignee, 
         assigneeId, 
+        assigneeIds: bodyAssigneeIds, 
+        sendNotifications = false, 
         dueDate, 
         listId, 
         estimatedHours, 
@@ -594,19 +598,22 @@ async function handler(req, res) {
         return badRequest(res, 'Missing required fields: projectId and title are required');
       }
 
-      // Single source of truth: assignee from User table
-      let assigneeIdFinal = assigneeId || null;
-      let assigneeName = '';
-      if (assigneeIdFinal) {
-        assigneeName = await getAssigneeName(assigneeIdFinal);
-      } else if (assignee && String(assignee).trim()) {
+      // Resolve assignees: support assigneeIds[] (multi) or legacy assigneeId/assignee (single)
+      const rawIds = Array.isArray(bodyAssigneeIds) && bodyAssigneeIds.length > 0
+        ? bodyAssigneeIds.filter(Boolean).map((id) => String(id))
+        : (assigneeId ? [String(assigneeId)] : assignee && String(assignee).trim() ? [] : []);
+      if (assignee && String(assignee).trim() && rawIds.length === 0) {
         const resolved = await resolveAssigneeToUserId(assignee);
-        if (resolved) {
-          assigneeIdFinal = resolved.id;
-          assigneeName = resolved.name || await getAssigneeName(resolved.id);
-        } else {
-          assigneeName = String(assignee).trim();
-        }
+        if (resolved) rawIds.push(resolved.id);
+      }
+      const assigneeIdsFinal = [...new Set(rawIds)].filter(Boolean);
+      let assigneeIdFinal = assigneeIdsFinal[0] || null;
+      let assigneeName = '';
+      if (assigneeIdsFinal.length > 0) {
+        const names = await Promise.all(assigneeIdsFinal.map((id) => getAssigneeName(id)));
+        assigneeName = names.filter(Boolean).join(', ') || (await getAssigneeName(assigneeIdFinal)) || '';
+      } else if (assigneeIdFinal) {
+        assigneeName = await getAssigneeName(assigneeIdFinal);
       }
 
       const task = await prisma.task.create({
@@ -619,6 +626,7 @@ async function handler(req, res) {
           priority: String(priority || 'Medium'),
           assigneeId: assigneeIdFinal || null,
           assignee: assigneeName,
+          assigneeIds: JSON.stringify(assigneeIdsFinal),
           dueDate: dueDate ? new Date(dueDate) : null,
           listId: listId ? parseInt(String(listId), 10) : null,
           order: body.order != null ? parseInt(String(body.order), 10) : 0,
@@ -648,6 +656,32 @@ async function handler(req, res) {
         projectId: task.projectId,
         title: task.title
       });
+
+      // Send email/in-app notifications to assignees when requested
+      if (sendNotifications && assigneeIdsFinal.length > 0) {
+        const currentUserId = req.user?.sub || req.user?.id;
+        let assignerName = 'Someone';
+        if (currentUserId) {
+          try {
+            const u = await prisma.user.findUnique({ where: { id: currentUserId }, select: { name: true, email: true } });
+            assignerName = u?.name || u?.email || assignerName;
+          } catch (_) {}
+        }
+        const taskTitle = String(title).trim();
+        const link = `#/projects/${task.projectId}?task=${task.id}`;
+        const message = `${assignerName} assigned you to the task "${taskTitle}".`;
+        for (const uid of assigneeIdsFinal) {
+          try {
+            await createNotificationForUser(uid, 'task', 'Task assigned', message, link, {
+              projectId: task.projectId,
+              taskId: task.id,
+              taskTitle
+            });
+          } catch (notifyErr) {
+            console.warn('Failed to notify assignee', uid, notifyErr?.message);
+          }
+        }
+      }
 
       return ok(res, { task: transformTask(task, { includeComments: false, includeSubtasks: false }) });
     }
@@ -697,6 +731,18 @@ async function handler(req, res) {
             updateData.assigneeId = null;
             updateData.assignee = '';
           }
+        }
+      }
+      if (body.assigneeIds !== undefined) {
+        const ids = Array.isArray(body.assigneeIds) ? body.assigneeIds.filter(Boolean).map((id) => String(id)) : [];
+        const assigneeIdsUnique = [...new Set(ids)];
+        updateData.assigneeIds = JSON.stringify(assigneeIdsUnique);
+        updateData.assigneeId = assigneeIdsUnique[0] || null;
+        if (assigneeIdsUnique.length > 0) {
+          const names = await Promise.all(assigneeIdsUnique.map((id) => getAssigneeName(id)));
+          updateData.assignee = names.filter(Boolean).join(', ') || '';
+        } else {
+          updateData.assignee = '';
         }
       }
       if (body.dueDate !== undefined || body.due_date !== undefined) {
@@ -798,6 +844,38 @@ async function handler(req, res) {
         },
         orderBy: { createdAt: 'asc' }
       });
+
+      // Send email/in-app notifications to assignees when requested (on assignment change)
+      if (body.sendNotifications && (body.assigneeIds !== undefined || body.assigneeId !== undefined)) {
+        const ids = body.assigneeIds !== undefined
+          ? (Array.isArray(body.assigneeIds) ? body.assigneeIds : []).filter(Boolean).map((id) => String(id))
+          : body.assigneeId ? [String(body.assigneeId)] : [];
+        const assigneeIdsToNotify = [...new Set(ids)];
+        if (assigneeIdsToNotify.length > 0) {
+          const currentUserId = req.user?.sub || req.user?.id;
+          let assignerName = 'Someone';
+          if (currentUserId) {
+            try {
+              const u = await prisma.user.findUnique({ where: { id: currentUserId }, select: { name: true, email: true } });
+              assignerName = u?.name || u?.email || assignerName;
+            } catch (_) {}
+          }
+          const taskTitle = task.title || '';
+          const link = `#/projects/${task.projectId}?task=${task.id}`;
+          const message = `${assignerName} assigned you to the task "${taskTitle}".`;
+          for (const uid of assigneeIdsToNotify) {
+            try {
+              await createNotificationForUser(uid, 'task', 'Task assigned', message, link, {
+                projectId: task.projectId,
+                taskId: task.id,
+                taskTitle
+              });
+            } catch (notifyErr) {
+              console.warn('Failed to notify assignee', uid, notifyErr?.message);
+            }
+          }
+        }
+      }
 
       const taskWithComments = {
         ...task,

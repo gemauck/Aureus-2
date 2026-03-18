@@ -3919,7 +3919,7 @@ const Projects = () => {
                 setTimeout(() => setAllTasksError(prev => (prev && prev.includes('save change') ? null : prev)), 5000);
             }
         };
-        const saveTaskFromAllTasksModal = async (updated) => {
+        const saveTaskFromAllTasksModal = async (updated, options = {}) => {
             if (!updated?.id || !window.DatabaseAPI?.makeRequest) return;
             setAllTasksError(null);
             const dueDateVal = updated.dueDate === '' || updated.dueDate === null || updated.dueDate === undefined ? null : updated.dueDate;
@@ -3930,6 +3930,8 @@ const Projects = () => {
                 priority: updated.priority ?? 'Medium',
                 assigneeId: updated.assigneeId ?? null,
                 assignee: updated.assignee ?? '',
+                assigneeIds: Array.isArray(updated.assigneeIds) ? updated.assigneeIds : [],
+                sendNotifications: options.sendNotifications === true,
                 dueDate: dueDateVal,
                 listId: updated.listId ?? null,
                 estimatedHours: updated.estimatedHours ?? null,
@@ -4319,8 +4321,8 @@ const Projects = () => {
                         },
                         users: [],
                         onClose: closeAllTasksModal,
-                        onUpdate: (updated) => {
-                            saveTaskFromAllTasksModal(updated);
+                        onUpdate: (updated, options) => {
+                            saveTaskFromAllTasksModal(updated, options);
                         },
                         onDeleteTask: () => {
                             closeAllTasksModal();

@@ -695,7 +695,8 @@ model Task {
   status         String    @default("todo")
   priority       String    @default("Medium")
   assigneeId     String?
-  assignee       String    @default("") // Denormalized assignee name
+  assignee       String    @default("") // Denormalized assignee name (primary/first assignee)
+  assigneeIds    String    @default("[]") // JSON array of user IDs for multiple assignees
   dueDate        DateTime?
   listId         Int? // Task list/column ID (for Kanban)
   order          Int   @default(0) // Display order within list (for reordering)

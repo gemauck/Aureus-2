@@ -31,6 +31,7 @@ const TaskDetailModal = ({
         description: '',
         assignee: '',
         assigneeId: null,
+        assigneeIds: [],
         dueDate: '',
         priority: 'Medium',
         listId: task?.listId || (taskLists && taskLists[0]?.id) || 1,
@@ -47,6 +48,7 @@ const TaskDetailModal = ({
         dependencies: [],
         subscribers: [] // Track users subscribed to task conversation
     });
+    const [sendNotifications, setSendNotifications] = useState(true);
     const [newComment, setNewComment] = useState('');
     // CRITICAL: Initialize comments from task, ensuring it's always an array
     const [comments, setComments] = useState(() => {
@@ -720,6 +722,7 @@ const TaskDetailModal = ({
                 description: task.description !== undefined ? task.description : prev.description,
                 assignee: task.assignee !== undefined ? task.assignee : prev.assignee,
                 assigneeId: task.assigneeId !== undefined ? task.assigneeId : prev.assigneeId,
+                assigneeIds: task.assigneeIds !== undefined ? (Array.isArray(task.assigneeIds) ? task.assigneeIds : []) : (task.assigneeId != null ? [task.assigneeId] : prev.assigneeIds || []),
                 dueDate: task.dueDate !== undefined ? task.dueDate : prev.dueDate,
                 priority: task.priority !== undefined ? task.priority : prev.priority,
                 status: task.status !== undefined ? task.status : prev.status,
@@ -733,7 +736,7 @@ const TaskDetailModal = ({
                 subscribers: Array.isArray(task.subscribers) ? task.subscribers : (prev.subscribers || [])
             }));
         }
-    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.dueDate, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
+    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.assigneeIds, task?.dueDate, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
 
     // Sync description div content when task changes (contentEditable source of truth when focused)
     useEffect(() => {
@@ -932,8 +935,10 @@ const TaskDetailModal = ({
             commentsToSave = Array.from(commentsMap.values());
         }
         
+        const assigneeIdsToSave = Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : (editedTask.assigneeId != null ? [editedTask.assigneeId] : []);
         const taskToSave = {
             ...editedTask,
+            assigneeIds: assigneeIdsToSave,
             // Explicitly include arrays from current state to ensure persistence
             comments: commentsToSave,
             checklist: Array.isArray(checklist) ? checklist : [],
@@ -947,6 +952,7 @@ const TaskDetailModal = ({
         console.log('💾 TaskDetailModal: Saving task with:', {
             id: taskToSave.id,
             title: taskToSave.title,
+            assigneeIdsCount: assigneeIdsToSave.length,
             commentsCount: taskToSave.comments?.length || 0,
             checklistCount: taskToSave.checklist?.length || 0,
             attachmentsCount: taskToSave.attachments?.length || 0,
@@ -954,8 +960,8 @@ const TaskDetailModal = ({
             commentIds: taskToSave.comments?.map(c => c.id).filter(Boolean) || []
         });
 
-        // Save and close modal (explicit close for Save Changes button)
-        onUpdate(taskToSave, { closeModal: true });
+        // Save and close modal (explicit close for Save Changes button); pass sendNotifications so API can email assignees
+        onUpdate(taskToSave, { closeModal: true, sendNotifications });
         onClose();
     };
 
@@ -1169,18 +1175,17 @@ const TaskDetailModal = ({
                 mentions: mentionedUsers // Store mentioned users
             };
             
-            // Update subscribers: author, mentioned, assignee, and everyone who has ever commented (involved)
+            // Update subscribers: author, mentioned, all assignees, and everyone who has ever commented (involved)
             const existingCommentAuthorIds = (comments || []).map(c => c.authorId || c.authorUser?.id).filter(Boolean);
-            const assigneeVal = editedTask.assigneeId || editedTask.assignee || task?.assigneeId || task?.assignee;
-            const assigneeUserForSub = !assigneeVal ? null : users.find(u =>
-                u.id === assigneeVal || (u.email || '').toLowerCase() === String(assigneeVal).toLowerCase() || (u.name || '').toLowerCase() === String(assigneeVal).toLowerCase()
-            );
+            const assigneeIdsForSub = Array.isArray(editedTask.assigneeIds) && editedTask.assigneeIds.length > 0
+                ? editedTask.assigneeIds
+                : (editedTask.assigneeId != null ? [editedTask.assigneeId] : []);
             const newSubscribers = [...new Set([
                 ...(editedTask.subscribers || []),
                 currentUser.id,
                 ...mentionedUsers.map(u => u.id),
                 ...existingCommentAuthorIds,
-                ...(assigneeUserForSub?.id ? [assigneeUserForSub.id] : [])
+                ...assigneeIdsForSub.filter(Boolean)
             ])].filter(Boolean);
             
             setEditedTask({
@@ -1324,49 +1329,50 @@ const TaskDetailModal = ({
                     );
                 }
                 
-                // Send notification to task assignee if they're not the comment author
-                if (editedTask.assignee) {
-                    const assigneeUser = users.find(u => 
-                        u.name === editedTask.assignee || 
-                        u.email === editedTask.assignee ||
-                        u.id === editedTask.assignee
-                    );
-                    
-                    if (assigneeUser && assigneeUser.id !== currentUser.id && !mentionedUsers.find(m => m.id === assigneeUser.id)) {
-                        // Use taskLink (includes commentId when replying) so email and in-app open the same comment
-                        await window.DatabaseAPI.makeRequest('/notifications', {
-                            method: 'POST',
-                            body: JSON.stringify({
-                                userId: assigneeUser.id,
-                                type: 'comment',
-                                title: `New comment on task: ${taskTitle}`,
-                                message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                link: taskLink,
-                                metadata: {
-                                    taskId: taskId,
-                                    taskTitle: taskTitle,
-                                    taskDescription: editedTask.description || task?.description || null,
-                                    taskStatus: editedTask.status || task?.status || 'To Do',
-                                    taskPriority: editedTask.priority || task?.priority || 'Medium',
-                                    taskDueDate: editedTask.dueDate || task?.dueDate || null,
-                                    projectId: project?.id,
-                                    projectName: projectName,
-                                    clientId: project?.clientId || null,
-                                    commentAuthor: currentUser.name,
-                                    commentText: newComment,
-                                    commentId: commentId
-                                }
-                            })
-                        });
+                // Send notification to each task assignee if they're not the comment author
+                const assigneeIdsForCommentNotify = Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : (editedTask.assigneeId != null ? [editedTask.assigneeId] : []);
+                for (const assigneeId of assigneeIdsForCommentNotify) {
+                    if (!assigneeId || assigneeId === currentUser.id || mentionedUsers.find(m => m.id === assigneeId)) continue;
+                    const assigneeUser = users.find(u => String(u.id) === String(assigneeId));
+                    if (assigneeUser) {
+                        try {
+                            await window.DatabaseAPI.makeRequest('/notifications', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    userId: assigneeUser.id,
+                                    type: 'comment',
+                                    title: `New comment on task: ${taskTitle}`,
+                                    message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
+                                    link: taskLink,
+                                    metadata: {
+                                        taskId: taskId,
+                                        taskTitle: taskTitle,
+                                        taskDescription: editedTask.description || task?.description || null,
+                                        taskStatus: editedTask.status || task?.status || 'To Do',
+                                        taskPriority: editedTask.priority || task?.priority || 'Medium',
+                                        taskDueDate: editedTask.dueDate || task?.dueDate || null,
+                                        projectId: project?.id,
+                                        projectName: projectName,
+                                        clientId: project?.clientId || null,
+                                        commentAuthor: currentUser.name,
+                                        commentText: newComment,
+                                        commentId: commentId
+                                    }
+                                })
+                            });
+                        } catch (err) {
+                            console.warn('Failed to notify assignee', assigneeUser.id, err?.message);
+                        }
                     }
                 }
                 
-                // Send notifications to subscribers (excluding comment author and mentioned users)
+                // Send notifications to subscribers (excluding comment author, mentioned users, and assignees already notified above)
+                const assigneeIdSet = new Set((assigneeIdsForCommentNotify || []).map(String));
                 const subscriberIds = Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [];
                 const subscribersToNotify = subscriberIds.filter(subId => {
                     return subId !== currentUser.id && 
                            !mentionedUsers.find(m => m.id === subId) &&
-                           subId !== (editedTask.assignee ? users.find(u => u.name === editedTask.assignee || u.email === editedTask.assignee || u.id === editedTask.assignee)?.id : null);
+                           !assigneeIdSet.has(String(subId));
                 });
                 
                 for (const subscriberId of subscribersToNotify) {
@@ -2674,23 +2680,36 @@ const TaskDetailModal = ({
                                                     </select>
                                                 </div>
 
-                                                {/* Assignee - use assigneeId as source of truth, assignee for display */}
+                                                {/* Assignees - multi-select; assigneeIds is source of truth */}
                                                 <div className="space-y-2">
                                                     <label className="block text-xs font-semibold text-gray-700">
                                                         <span className="flex items-center gap-1.5">
-                                                            <i className="fas fa-user text-gray-400"></i>
-                                                            Assignee
+                                                            <i className="fas fa-users text-gray-400"></i>
+                                                            Assignees
                                                         </span>
                                                     </label>
                                                     <div className="relative" ref={assigneeDropdownRef}>
                                                         <button
                                                             type="button"
                                                             onClick={() => { setAssigneeDropdownOpen(prev => !prev); setAssigneeSearch(''); }}
-                                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition text-left flex items-center justify-between"
+                                                            className="w-full min-h-[38px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition text-left flex items-center justify-between flex-wrap gap-1"
                                                             aria-expanded={assigneeDropdownOpen}
                                                             aria-haspopup="listbox"
                                                         >
-                                                            <span className="truncate">{editedTask.assigneeId != null ? (editedTask.assignee || (users.find(u => String(u.id) === String(editedTask.assigneeId))?.name || users.find(u => String(u.id) === String(editedTask.assigneeId))?.email || 'Assigned')) : 'Unassigned'}</span>
+                                                            <span className="flex flex-wrap gap-1.5 items-center truncate">
+                                                                {(Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : (editedTask.assigneeId != null ? [editedTask.assigneeId] : [])).length === 0 ? (
+                                                                    <span className="text-gray-500">Unassigned</span>
+                                                                ) : (
+                                                                    (Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : [editedTask.assigneeId]).filter(Boolean).map((uid) => {
+                                                                        const u = users.find(us => String(us.id) === String(uid));
+                                                                        return (
+                                                                            <span key={uid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-100 text-primary-800 text-xs font-medium">
+                                                                                {u ? (u.name || u.email) : uid}
+                                                                            </span>
+                                                                        );
+                                                                    })
+                                                                )}
+                                                            </span>
                                                             <i className="fas fa-chevron-down text-xs text-gray-400 flex-shrink-0 ml-1"></i>
                                                         </button>
                                                         {assigneeDropdownOpen && (
@@ -2710,40 +2729,46 @@ const TaskDetailModal = ({
                                                                     <button
                                                                         type="button"
                                                                         role="option"
-                                                                        aria-selected={editedTask.assigneeId == null}
-                                                                        onClick={() => { setEditedTask({ ...editedTask, assigneeId: null, assignee: '' }); setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
-                                                                        className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 ${editedTask.assigneeId == null ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                                                                        aria-selected={(Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : []).length === 0}
+                                                                        onClick={() => {
+                                                                            setEditedTask({ ...editedTask, assigneeIds: [], assigneeId: null, assignee: '' });
+                                                                            setAssigneeDropdownOpen(false);
+                                                                            setAssigneeSearch('');
+                                                                        }}
+                                                                        className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 ${(Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : []).length === 0 ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
                                                                     >
                                                                         Unassigned
                                                                     </button>
                                                                     {(() => {
+                                                                        const ids = Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : (editedTask.assigneeId != null ? [editedTask.assigneeId] : []);
                                                                         const q = (assigneeSearch || '').toLowerCase().trim();
                                                                         const filtered = q ? users.filter(u => (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.id || '').toLowerCase().includes(q)) : users;
-                                                                        const showCurrent = editedTask.assigneeId && !users.some(u => String(u.id) === String(editedTask.assigneeId)) && (!q || (editedTask.assignee || '').toLowerCase().includes(q));
+                                                                        const toggleAssignee = (user) => {
+                                                                            const isSelected = ids.some(id => String(id) === String(user.id));
+                                                                            const newIds = isSelected ? ids.filter(id => String(id) !== String(user.id)) : [...ids, user.id];
+                                                                            const firstId = newIds[0] || null;
+                                                                            const names = newIds.map(id => { const u = users.find(us => String(us.id) === String(id)); return u ? (u.name || u.email) : id; }).filter(Boolean);
+                                                                            setEditedTask({ ...editedTask, assigneeIds: newIds, assigneeId: firstId, assignee: names.join(', ') });
+                                                                            if (!isSelected) setAssigneeSearch('');
+                                                                        };
                                                                         return (
                                                                             <>
-                                                                                {showCurrent && (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        role="option"
-                                                                                        className="w-full text-left py-2 px-3 text-sm hover:bg-gray-100 bg-blue-50 text-blue-700 truncate"
-                                                                                        onClick={() => { setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
-                                                                                    >
-                                                                                        {editedTask.assignee || 'Assigned'}
-                                                                                    </button>
-                                                                                )}
-                                                                                {filtered.map(user => (
-                                                                                    <button
-                                                                                        key={user.id}
-                                                                                        type="button"
-                                                                                        role="option"
-                                                                                        aria-selected={String(editedTask.assigneeId) === String(user.id)}
-                                                                                        onClick={() => { setEditedTask({ ...editedTask, assigneeId: user.id, assignee: user.name || user.email || '' }); setAssigneeDropdownOpen(false); setAssigneeSearch(''); }}
-                                                                                        className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 truncate ${String(editedTask.assigneeId) === String(user.id) ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
-                                                                                    >
-                                                                                        {user.name || user.email}
-                                                                                    </button>
-                                                                                ))}
+                                                                                {filtered.map(user => {
+                                                                                    const isSelected = ids.some(id => String(id) === String(user.id));
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={user.id}
+                                                                                            type="button"
+                                                                                            role="option"
+                                                                                            aria-selected={isSelected}
+                                                                                            onClick={() => toggleAssignee(user)}
+                                                                                            className={`w-full text-left py-2 px-3 text-sm hover:bg-gray-100 truncate flex items-center gap-2 ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                                                                                        >
+                                                                                            {isSelected && <i className="fas fa-check text-blue-600 flex-shrink-0"></i>}
+                                                                                            <span className={isSelected ? '' : 'pl-6'}>{user.name || user.email}</span>
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
                                                                             </>
                                                                         );
                                                                     })()}
@@ -2751,6 +2776,15 @@ const TaskDetailModal = ({
                                                             </div>
                                                         )}
                                                     </div>
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={sendNotifications}
+                                                            onChange={(e) => setSendNotifications(e.target.checked)}
+                                                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                                        />
+                                                        <span className="text-xs text-gray-600">Send email and notifications when assigning</span>
+                                                    </label>
                                                 </div>
 
                                                 {/* Due Date - value must be YYYY-MM-DD or empty for type="date" */}
