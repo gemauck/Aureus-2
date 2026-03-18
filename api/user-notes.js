@@ -20,7 +20,11 @@ function parseUserNoteJsonFields(note) {
     } else if (!parsed.tags) {
       parsed.tags = []
     }
-    
+
+    // Ensure pinned is boolean
+    if (parsed.pinned === undefined) parsed.pinned = false
+    parsed.pinned = Boolean(parsed.pinned)
+
     // Include sharedWith users if present
     if (note.sharedWith && Array.isArray(note.sharedWith)) {
       parsed.sharedWith = note.sharedWith.map(share => ({
@@ -184,8 +188,13 @@ async function handler(req, res) {
           }))
         ]
 
-        // Sort by updatedAt
-        allNotes.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+        // Sort: pinned first, then by updatedAt desc
+        allNotes.sort((a, b) => {
+          const aPinned = Boolean(a.pinned)
+          const bPinned = Boolean(b.pinned)
+          if (aPinned !== bPinned) return aPinned ? -1 : 1
+          return new Date(b.updatedAt) - new Date(a.updatedAt)
+        })
 
         return ok(res, { notes: allNotes })
       } catch (error) {
@@ -278,7 +287,8 @@ async function handler(req, res) {
         const {
           title,
           content = '',
-          tags = []
+          tags = [],
+          pinned = false
         } = payload
 
         if (!title || !title.trim()) {
@@ -289,6 +299,7 @@ async function handler(req, res) {
           title: title.trim(),
           content: content.trim(),
           tags: JSON.stringify(Array.isArray(tags) ? tags : []),
+          pinned: Boolean(pinned),
           ownerId: userId
         }
 
@@ -323,7 +334,8 @@ async function handler(req, res) {
         const {
           title,
           content,
-          tags
+          tags,
+          pinned
         } = payload
 
         // Verify note exists and belongs to user
@@ -342,6 +354,7 @@ async function handler(req, res) {
         if (title !== undefined) updateData.title = title.trim()
         if (content !== undefined) updateData.content = content.trim()
         if (tags !== undefined) updateData.tags = JSON.stringify(Array.isArray(tags) ? tags : [])
+        if (pinned !== undefined) updateData.pinned = Boolean(pinned)
 
         const note = await prisma.userNote.update({
           where: { id: noteId },

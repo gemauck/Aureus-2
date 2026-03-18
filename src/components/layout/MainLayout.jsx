@@ -3,7 +3,7 @@ if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
 
-const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'notifications'];
+const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 
 const MainLayout = () => {
@@ -1452,8 +1452,9 @@ const MainLayout = () => {
         </button>
     );
 
+    /* Layout: isMobile (sidebar overlay) uses 1024px; CSS mobile visuals use 768px — see main.css breakpoint comment */
     return (
-        <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`} style={{ width: '100vw', maxWidth: '100vw' }}>
+        <div className={`flex h-screen overflow-hidden overflow-x-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`} style={{ width: '100vw', maxWidth: '100vw', overflowX: 'hidden' }}>
             {/* Mobile Sidebar Overlay - FIXED positioning */}
             {isMobile && sidebarOpen && (
                 <div 
@@ -1545,8 +1546,8 @@ const MainLayout = () => {
                 </div>
             </div>
             
-            {/* Main Content - ALWAYS FULL WIDTH */}
-            <div className="flex-1 flex flex-col overflow-hidden" style={{ minWidth: 0, width: 'auto', maxWidth: 'none', flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
+            {/* Main Content - constrained so no horizontal scroll */}
+            <div className="flex-1 flex flex-col overflow-hidden overflow-x-hidden min-w-0" style={{ minWidth: 0, width: 'auto', maxWidth: '100%', flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
                 {/* Header - STICKY on mobile */}
                 <header 
                     className={`
@@ -1638,9 +1639,9 @@ const MainLayout = () => {
                     </div>
                 </header>
 
-                {/* Page Content - SCROLLABLE */}
-                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-6'}`} style={{ width: 'auto', maxWidth: 'none', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
-                    <div className={`w-full max-w-full min-w-full ${currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`} style={{ width: '100%', maxWidth: '100%', minWidth: '100%' }}>
+                {/* Page Content - scrollable, no horizontal overflow */}
+                <main className={`flex-1 overflow-y-auto overflow-x-hidden min-w-0 ${currentPage === 'clients' ? 'p-0' : 'p-6'}`} style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
+                    <div className={`w-full max-w-full min-w-0 ${currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`} style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
                         {renderPage}
                     </div>
                 </main>

@@ -60,6 +60,7 @@ model User {
   sentMessages              Message[]                    @relation("MessageSender")
   notifications             Notification[]               @relation("NotificationRecipient")
   notificationSettings      NotificationSetting?
+  userSettings              UserSettings?
   passwordHistory           PasswordHistory[]
   passwordResets            PasswordReset[]
   ownedProjects             Project[]                    @relation("ProjectOwner")
@@ -697,7 +698,10 @@ model Task {
   assigneeId     String?
   assignee       String    @default("") // Denormalized assignee name (primary/first assignee)
   assigneeIds    String    @default("[]") // JSON array of user IDs for multiple assignees
+  startDate      DateTime? // When work on the task can start
   dueDate        DateTime?
+  reminderRecurrence String?  // "none" | "daily" | "weekly" - recurring reminder until task is done
+  lastReminderSentAt DateTime? // Last time we sent a recurring reminder (cron updates this)
   listId         Int? // Task list/column ID (for Kanban)
   order          Int   @default(0) // Display order within list (for reordering)
   estimatedHours Float?
@@ -726,6 +730,8 @@ model Task {
   @@index([status])
   @@index([priority])
   @@index([dueDate])
+  @@index([startDate])
+  @@index([reminderRecurrence])
   @@index([createdAt])
   @@index([listId])
   @@index([parentTaskId])
@@ -2257,6 +2263,7 @@ model UserNote {
   title      String
   content    String          @default("")
   tags       String          @default("[]") // JSON array of tag strings
+  pinned     Boolean         @default(false)
   ownerId    String
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
