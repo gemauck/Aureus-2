@@ -362,6 +362,24 @@ const Helpdesk = () => {
         }
     }, []);
 
+    // Filtered tickets (must be declared before any useEffect that uses it)
+    const filteredTickets = useMemo(() => {
+        return tickets.filter(ticket => {
+            if (filterStatus !== 'all' && ticket.status !== filterStatus) return false;
+            if (filterPriority !== 'all' && ticket.priority !== filterPriority) return false;
+            if (filterCategory !== 'all' && ticket.category !== filterCategory) return false;
+            if (searchTerm) {
+                const searchLower = searchTerm.toLowerCase();
+                return (
+                    ticket.title?.toLowerCase().includes(searchLower) ||
+                    ticket.description?.toLowerCase().includes(searchLower) ||
+                    ticket.ticketNumber?.toLowerCase().includes(searchLower)
+                );
+            }
+            return true;
+        });
+    }, [tickets, filterStatus, filterPriority, filterCategory, searchTerm]);
+
     // Keyboard nav: arrow keys + Enter on list (only when list view, list visible, modal closed)
     useEffect(() => {
         if (viewMode !== 'list' || showModal || filteredTickets.length === 0) {
@@ -401,24 +419,6 @@ const Helpdesk = () => {
             row.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
         }
     }, [focusedIndex]);
-
-    // Filtered tickets
-    const filteredTickets = useMemo(() => {
-        return tickets.filter(ticket => {
-            if (filterStatus !== 'all' && ticket.status !== filterStatus) return false;
-            if (filterPriority !== 'all' && ticket.priority !== filterPriority) return false;
-            if (filterCategory !== 'all' && ticket.category !== filterCategory) return false;
-            if (searchTerm) {
-                const searchLower = searchTerm.toLowerCase();
-                return (
-                    ticket.title?.toLowerCase().includes(searchLower) ||
-                    ticket.description?.toLowerCase().includes(searchLower) ||
-                    ticket.ticketNumber?.toLowerCase().includes(searchLower)
-                );
-            }
-            return true;
-        });
-    }, [tickets, filterStatus, filterPriority, filterCategory, searchTerm]);
 
     // Check if TicketDetailModal is available
     const TicketDetailModal = window.TicketDetailModal;

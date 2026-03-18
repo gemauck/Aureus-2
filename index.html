@@ -80,7 +80,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1773389348765'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1773844286867'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload so Chrome gets fresh JS (fixes cached bundle) -->
     <script>
@@ -106,7 +106,7 @@
     <!-- VERSION: 20260129-doc-collection-cache-bust - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1773389348765';
+            var APP_VERSION = '1773844286867';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -1128,8 +1128,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1773389348765" as="script">
-    <script defer src="/dist/core-bundle.js?v=1773389348765"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1773844286867" as="script">
+    <script defer src="/dist/core-bundle.js?v=1773844286867"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1334,10 +1334,15 @@
                 
                 const script = document.createElement('script');
                 script.type = 'module';
-                // Fixed version for cacheability - bump VITE_PROJECTS_VERSION above when deploying new bundle
-                // NOTE: The Vite projects bundle is served from the /vite-projects static path on the server
-                script.src = '/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION;
-                console.log('📦 Loading vite projects module from /vite-projects with version:', VITE_PROJECTS_VERSION);
+                // Primary: /vite-projects/ (nginx alias or Node static). Fallback: /dist/vite-projects/ (nginx location /dist/)
+                const primaryScriptUrl = '/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION;
+                const fallbackScriptUrl = '/dist/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION;
+                let scriptAttempt = 0;
+                function setScriptSrc(url) {
+                    script.src = url;
+                    console.log('📦 Loading vite projects module from:', url);
+                }
+                setScriptSrc(primaryScriptUrl);
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
                     // Poll for both components to become available (more robust than fixed timeout)
@@ -1397,6 +1402,12 @@
                     }, 100);
                 };
                 script.onerror = (error) => {
+                    scriptAttempt++;
+                    if (scriptAttempt === 1 && script.src && script.src.indexOf('/vite-projects/') !== -1) {
+                        console.warn('⚠️ Primary /vite-projects/ failed, trying fallback /dist/vite-projects/...');
+                        setScriptSrc(fallbackScriptUrl);
+                        return;
+                    }
                     console.error('❌ Failed to load Vite Projects module script:', error);
                     console.error('❌ Script URL:', script.src);
                     console.error('❌ Please check that the file exists at: dist/vite-projects/projects-module.js');
@@ -1442,10 +1453,18 @@
                 
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
-                // Cache busting with version - update this when deploying new changes
-                // Served from the same /vite-projects static route as the JS bundle
-                link.href = '/vite-projects/projects-index.css?v=' + VITE_PROJECTS_VERSION;
-                link.onerror = () => console.warn('⚠️ Failed to load Vite Projects CSS');
+                const primaryCssUrl = '/vite-projects/projects-index.css?v=' + VITE_PROJECTS_VERSION;
+                const fallbackCssUrl = '/dist/vite-projects/projects-index.css?v=' + VITE_PROJECTS_VERSION;
+                link.href = primaryCssUrl;
+                link.onerror = () => {
+                    if (link.dataset.fallbackTried) {
+                        console.warn('⚠️ Failed to load Vite Projects CSS (primary and fallback)');
+                        return;
+                    }
+                    link.dataset.fallbackTried = '1';
+                    link.href = fallbackCssUrl;
+                    console.warn('⚠️ Primary Vite CSS failed, trying fallback /dist/vite-projects/...');
+                };
                 document.head.appendChild(link);
                 console.log('✅ Vite Projects module loading...');
                 console.log('📦 Script URL:', script.src);
@@ -1481,8 +1500,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1773389348765" as="script">
-    <script defer src="/lazy-load-components.js?v=1773389348765"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1773844286867" as="script">
+    <script defer src="/lazy-load-components.js?v=1773844286867"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
