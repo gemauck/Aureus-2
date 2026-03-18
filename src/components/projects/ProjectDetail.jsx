@@ -2151,13 +2151,6 @@ function initializeProjectDetail() {
         }
     }, [activeSection, project?.id, loadActivityLog]);
 
-    // When task modal opens, ensure activity log is loaded so History tab has data
-    useEffect(() => {
-        if (showTaskDetailModal && project?.id && !activityLogEntries && (!project.activityLog || project.activityLog.length === 0)) {
-            loadActivityLog();
-        }
-    }, [showTaskDetailModal, project?.id, project?.activityLog, activityLogEntries, loadActivityLog]);
-    
     // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
     // This runs synchronously in useEffect to ensure tasks are available instantly
     const previousProjectIdRef = useRef(project?.id);
@@ -3541,6 +3534,13 @@ function initializeProjectDetail() {
         const exists = taskLists.some(l => String(l.id) === String(kanbanListFilter));
         if (!exists) setKanbanListFilter('all');
     }, [kanbanListFilter, taskLists]);
+
+    // When task modal opens, ensure activity log is loaded so History tab has data
+    useEffect(() => {
+        if (showTaskDetailModal && project?.id && !activityLogEntries && (!project.activityLog || project.activityLog.length === 0)) {
+            loadActivityLog();
+        }
+    }, [showTaskDetailModal, project?.id, project?.activityLog, activityLogEntries, loadActivityLog]);
 
     // Track if task was manually closed to prevent deep-link from reopening it
     const taskManuallyClosedRef = useRef(false);
