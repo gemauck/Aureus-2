@@ -895,7 +895,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             console.warn('⚠️ EmployeeDetailComponent not available, showing employee list');
                         }
                     }
-                    if (canShowDetail) {
+                    if (canShowDetail && hasValidEmployeeId) {
                         try {
                             const Component = EmployeeDetailComponent;
                             return (

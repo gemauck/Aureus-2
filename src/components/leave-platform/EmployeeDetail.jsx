@@ -32,15 +32,15 @@ const EmployeeDetail = (props) => {
     // Safely destructure props with defaults
     const { employeeId, onBack, user, isAdmin } = props || {};
     
-    // Early return if required props are missing
-    if (!employeeId) {
+    // Early return if required props are missing (e.g. parent rendered before employee selected)
+    if (employeeId == null || (typeof employeeId === 'string' && employeeId.trim() === '')) {
         if (!_employeeIdWarned.current) {
             _employeeIdWarned.current = true;
-            console.warn('⚠️ EmployeeDetail: employeeId is required but not provided', props);
+            console.warn('⚠️ EmployeeDetail: employeeId is required but not provided. Show employee list or pass a valid employeeId.');
         }
         return (
             <div className="text-center py-12">
-                <p className="text-red-600">Error: Employee ID is required</p>
+                <p className="text-gray-600">Select an employee from the list to view details.</p>
                 {onBack && (
                     <button
                         onClick={onBack}

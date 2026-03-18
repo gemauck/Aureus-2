@@ -2176,9 +2176,10 @@ function initializeProjectDetail() {
     const [taskListSortDir, setTaskListSortDir] = useState('desc');
     
     // Load tasks from Task API (new approach) or fallback to JSON (backward compatibility)
-    const loadTasksFromAPI = useCallback(async (projectId) => {
+    // silent: when true, do not log success (for background/interval refresh to avoid console spam)
+    const loadTasksFromAPI = useCallback(async (projectId, silent = false) => {
         if (!projectId || !window.DatabaseAPI?.makeRequest) {
-            console.warn('⚠️ ProjectDetail: Cannot load tasks from API - missing projectId or DatabaseAPI');
+            if (!silent) console.warn('⚠️ ProjectDetail: Cannot load tasks from API - missing projectId or DatabaseAPI');
             return null;
         }
 
@@ -2190,18 +2191,20 @@ function initializeProjectDetail() {
             const taskArray = Array.isArray(data?.tasks) ? data.tasks : Array.isArray(data?.data?.tasks) ? data.data.tasks : Array.isArray(response?.tasks) ? response.tasks : null;
 
             if (taskArray && taskArray.length > 0) {
-                console.log('✅ ProjectDetail: Loaded tasks from Task API:', {
-                    projectId,
-                    taskCount: taskArray.length
-                });
+                if (!silent) {
+                    console.log('✅ ProjectDetail: Loaded tasks from Task API:', {
+                        projectId,
+                        taskCount: taskArray.length
+                    });
+                }
                 return taskArray;
             }
             if (taskArray && taskArray.length === 0) return [];
 
-            console.warn('⚠️ ProjectDetail: Task API returned no tasks (or unexpected shape)');
+            if (!silent) console.warn('⚠️ ProjectDetail: Task API returned no tasks (or unexpected shape)');
             return null;
         } catch (error) {
-            console.warn('⚠️ ProjectDetail: Failed to load tasks from API, will use JSON fallback:', error);
+            if (!silent) console.warn('⚠️ ProjectDetail: Failed to load tasks from API, will use JSON fallback:', error);
             return null;
         }
     }, []);
@@ -2218,7 +2221,7 @@ function initializeProjectDetail() {
             setTasks(prev => mergeTaskComments(prev, projectTasks));
             tasksRef.current = mergeTaskComments(tasksRef.current || [], projectTasks);
             const refreshInterval = setInterval(() => {
-                loadTasksFromAPI(projectId).then(apiTasks => {
+                loadTasksFromAPI(projectId, true).then(apiTasks => {
                     if (apiTasks && Array.isArray(apiTasks)) {
                         setTasks(prev => mergeTaskComments(prev, apiTasks));
                         tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
@@ -2227,18 +2230,20 @@ function initializeProjectDetail() {
             }, 60000);
             return () => clearInterval(refreshInterval);
         } else {
-            const loadTasks = async () => {
-                const apiTasks = await loadTasksFromAPI(projectId);
+            const loadTasks = async (isBackgroundRefresh = false) => {
+                const apiTasks = await loadTasksFromAPI(projectId, isBackgroundRefresh);
                 if (apiTasks != null && Array.isArray(apiTasks)) {
                     setTasks(prev => mergeTaskComments(prev, apiTasks));
                     tasksRef.current = mergeTaskComments(tasksRef.current || [], apiTasks);
-                    console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
-                } else {
+                    if (!isBackgroundRefresh) {
+                        console.log('✅ ProjectDetail: Tasks loaded from API:', apiTasks.length);
+                    }
+                } else if (!isBackgroundRefresh) {
                     console.log('⚠️ ProjectDetail: API returned no tasks, keeping existing tasks from project prop');
                 }
             };
-            loadTasks();
-            const refreshInterval = setInterval(() => loadTasks(), 30000);
+            loadTasks(false);
+            const refreshInterval = setInterval(() => loadTasks(true), 30000);
             return () => clearInterval(refreshInterval);
         }
         // Intentionally depend only on project.id; project tasks are synced by the effect that watches project?.tasksList/tasks
