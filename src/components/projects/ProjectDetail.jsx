@@ -2120,10 +2120,36 @@ function initializeProjectDetail() {
     const taskDragRef = useRef(null);
     const taskJustDroppedRef = useRef(false);
     const [dragOverTask, setDragOverTask] = useState(null); // { listId, taskIndex } or null
+    // Activity log: null = use project.activityLog from initial load; array = fetched for Activity tab / after mutations
+    const [activityLogEntries, setActivityLogEntries] = useState(null);
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
     }, [tasks]);
+
+    // Reset activity log when switching project so we don't show another project's entries
+    useEffect(() => {
+        setActivityLogEntries(null);
+    }, [project?.id]);
+
+    const loadActivityLog = useCallback(async () => {
+        if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
+        try {
+            const url = `/project-activity-logs?projectId=${encodeURIComponent(project.id)}&limit=100`;
+            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
+            const data = response?.data ?? response;
+            const logs = data?.logs ?? (Array.isArray(data) ? data : []);
+            setActivityLogEntries(Array.isArray(logs) ? logs : []);
+        } catch (err) {
+            console.warn('Failed to load activity log:', err?.message);
+        }
+    }, [project?.id]);
+
+    useEffect(() => {
+        if (activeSection === 'activity' && project?.id) {
+            loadActivityLog();
+        }
+    }, [activeSection, project?.id, loadActivityLog]);
     
     // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
     // This runs synchronously in useEffect to ensure tasks are available instantly
@@ -6385,6 +6411,7 @@ function initializeProjectDetail() {
                         // Don't reload from server immediately - we already have the correct task data from the API response
                         // Reloading immediately can cause the task to disappear if the server hasn't indexed it yet
                         // The local state update above already has the correct task with the real ID from the database
+                        loadActivityLog();
                     } else {
                         // Update existing task
                         const response = await window.DatabaseAPI.makeRequest(`/tasks?id=${encodeURIComponent(taskToSave.id)}`, {
@@ -6392,6 +6419,7 @@ function initializeProjectDetail() {
                             body: JSON.stringify(taskPayload)
                         });
                         console.log('✅ Task updated via Task API:', taskToSave.id);
+                        loadActivityLog();
                     }
                 } catch (taskApiError) {
                     console.error('❌ Failed to save task via Task API:', {
@@ -8473,9 +8501,18 @@ function initializeProjectDetail() {
                         Project activity & history
                     </h3>
                     <p className="text-sm text-gray-500 mb-4">Recent changes to tasks, documents, reviews, and project settings.</p>
+                    <button
+                        type="button"
+                        onClick={() => loadActivityLog()}
+                        className="mb-3 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                    >
+                        <i className="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
                     <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-                        {Array.isArray(project?.activityLog) && project.activityLog.length > 0 ? (
-                            project.activityLog.map((log) => {
+                        {(() => {
+                            const logs = activityLogEntries !== null ? activityLogEntries : (project?.activityLog ?? []);
+                            return Array.isArray(logs) && logs.length > 0 ? (
+                            logs.map((log) => {
                                 const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
                                 const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
                                 return (
@@ -8498,9 +8535,10 @@ function initializeProjectDetail() {
                                     </div>
                                 );
                             })
-                        ) : (
+                            ) : (
                             <p className="text-gray-500 text-sm">No activity recorded yet. Changes to tasks, document status, and reviews will appear here.</p>
-                        )}
+                        );
+                        })()}
                     </div>
                 </div>
             )}
@@ -8867,7 +8905,7 @@ function initializeProjectDetail() {
                     parentTask={viewingTaskParent}
                     customFieldDefinitions={customFieldDefinitions}
                     taskLists={taskLists}
-                    project={project}
+                    project={activityLogEntries !== null ? { ...project, activityLog: activityLogEntries } : project}
                     users={users}
                     focusInput={taskFocusInput?.focusInput || null}
                     focusTaskId={taskFocusInput?.taskId || null}
