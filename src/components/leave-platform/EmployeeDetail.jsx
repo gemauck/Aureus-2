@@ -7,7 +7,8 @@ try {
         ReactHooks = {
             useState: React.useState,
             useEffect: React.useEffect,
-            useCallback: React.useCallback
+            useCallback: React.useCallback,
+            useRef: React.useRef
         };
     } else {
         throw new Error('React not available');
@@ -18,11 +19,14 @@ try {
     ReactHooks = {
         useState: () => [null, () => {}],
         useEffect: () => {},
-        useCallback: (fn) => fn
+        useCallback: (fn) => fn,
+        useRef: () => ({ current: null })
     };
 }
 
-const { useState, useEffect, useCallback } = ReactHooks;
+const { useState, useEffect, useCallback, useRef } = ReactHooks;
+
+const _employeeIdWarned = { current: false };
 
 const EmployeeDetail = (props) => {
     // Safely destructure props with defaults
@@ -30,7 +34,10 @@ const EmployeeDetail = (props) => {
     
     // Early return if required props are missing
     if (!employeeId) {
-        console.warn('⚠️ EmployeeDetail: employeeId is required but not provided', props);
+        if (!_employeeIdWarned.current) {
+            _employeeIdWarned.current = true;
+            console.warn('⚠️ EmployeeDetail: employeeId is required but not provided', props);
+        }
         return (
             <div className="text-center py-12">
                 <p className="text-red-600">Error: Employee ID is required</p>

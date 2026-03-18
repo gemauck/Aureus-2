@@ -8,7 +8,8 @@ try {
             useState: React.useState,
             useEffect: React.useEffect,
             useMemo: React.useMemo,
-            useCallback: React.useCallback
+            useCallback: React.useCallback,
+            useRef: React.useRef
         };
     } else {
         throw new Error('React not available');
@@ -20,11 +21,12 @@ try {
         useState: () => [null, () => {}],
         useEffect: () => {},
         useMemo: (fn) => fn(),
-        useCallback: (fn) => fn()
+        useCallback: (fn) => fn(),
+        useRef: () => ({ current: null })
     };
 }
 
-const { useState, useEffect, useMemo, useCallback } = ReactHooks;
+const { useState, useEffect, useMemo, useCallback, useRef } = ReactHooks;
 
 const matchUserRecord = (record, user) => {
     if (!record || !user) return false;
@@ -201,6 +203,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         // State for dynamically loaded components - these update when components load
         const [EmployeeDetailComponent, setEmployeeDetailComponent] = useState(() => window.EmployeeDetail);
         const [EmployeeManagementComponent, setEmployeeManagementComponent] = useState(() => window.EmployeeManagement);
+        const employeeDetailUnavailableLogged = useRef(false);
 
         // Listen for component loaded events to update component references
         useEffect(() => {
@@ -268,6 +271,27 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 }
             };
         }, []);
+
+        // Proactively load EmployeeDetail when user is on Employees tab and component not yet on window
+        useEffect(() => {
+            if (currentTab !== 'employees') return;
+            if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
+                setEmployeeDetailComponent(window.EmployeeDetail);
+                return;
+            }
+            const scriptSrc = '/dist/src/components/leave-platform/EmployeeDetail.js';
+            if (document.querySelector(`script[src*="EmployeeDetail.js"]`)) return;
+            const script = document.createElement('script');
+            script.src = scriptSrc + (window.__BUILD_VERSION__ ? '?v=' + window.__BUILD_VERSION__ : '');
+            script.onload = () => {
+                if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
+                    setEmployeeDetailComponent(window.EmployeeDetail);
+                    window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'EmployeeDetail' } }));
+                }
+            };
+            document.head.appendChild(script);
+            return () => {};
+        }, [currentTab]);
 
         const leaveUtils = window.leaveUtils || {};
         // Update isAdmin if user role is available
@@ -860,10 +884,16 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     if (!resolvedAdmin && !isAdmin) {
                         return <AccessNotice />;
                     }
-                    // Show employee detail view only when we have a selected employee AND the detail component is loaded
-                    const canShowDetail = viewingEmployeeId && EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function';
-                    if (viewingEmployeeId && !canShowDetail) {
-                        console.warn('⚠️ EmployeeDetailComponent not available, showing employee list');
+                    // Valid employeeId: non-empty string or number (never render detail with undefined)
+                    const hasValidEmployeeId = viewingEmployeeId != null &&
+                        ((typeof viewingEmployeeId === 'string' && viewingEmployeeId.length > 0) ||
+                         (typeof viewingEmployeeId === 'number' && !Number.isNaN(viewingEmployeeId)));
+                    const canShowDetail = hasValidEmployeeId && EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function';
+                    if (viewingEmployeeId != null && !canShowDetail && !(EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function')) {
+                        if (!employeeDetailUnavailableLogged.current) {
+                            employeeDetailUnavailableLogged.current = true;
+                            console.warn('⚠️ EmployeeDetailComponent not available, showing employee list');
+                        }
                     }
                     if (canShowDetail) {
                         try {
