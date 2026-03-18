@@ -1579,6 +1579,12 @@ async function handler(req, res) {
         // Build where clause
         let whereClause = {};
         
+        // Filter by client when requested (e.g. helpdesk ticket "Project" dropdown)
+        const queryClientId = req.query?.clientId;
+        if (queryClientId && typeof queryClientId === 'string' && queryClientId.trim() !== '') {
+          whereClause.clientId = queryClientId.trim();
+        }
+        
         // For guest users, filter by accessibleProjectIds (from DB)
         if (userRole === 'guest') {
           try {
@@ -1599,8 +1605,9 @@ async function handler(req, res) {
               return ok(res, { projects: [], total: 0, page, limit });
             }
             
-            // Filter by accessible project IDs
+            // Filter by accessible project IDs (merge with existing whereClause e.g. clientId)
             whereClause = {
+              ...whereClause,
               id: {
                 in: accessibleProjectIds
               }
@@ -1631,6 +1638,7 @@ async function handler(req, res) {
             select: {
               id: true,
               name: true,
+              clientId: true,
               clientName: true,
               status: true,
               type: true,
@@ -1675,6 +1683,7 @@ async function handler(req, res) {
               select: {
                 id: true,
                 name: true,
+                clientId: true,
                 clientName: true,
                 status: true,
                 type: true,

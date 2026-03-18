@@ -371,9 +371,7 @@ const TicketDetailModal = ({
 
     useEffect(() => {
         loadUsers();
-        if (formData.clientId) {
-            loadProjectsForClient(formData.clientId);
-        }
+        loadProjectsForClient(formData.clientId || null);
     }, []);
 
     const loadUsers = async () => {
@@ -409,12 +407,12 @@ const TicketDetailModal = ({
 
     const loadProjectsForClient = async (clientId) => {
         try {
-            if (!clientId) return;
+            const query = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '?limit=500';
             let response;
             if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                response = await window.DatabaseAPI.makeRequest(`/projects?clientId=${clientId}`, { method: 'GET' });
+                response = await window.DatabaseAPI.makeRequest(`/projects${query}`, { method: 'GET' });
             } else {
-                const fetchResponse = await fetch(`/api/projects?clientId=${clientId}`, { method: 'GET', credentials: 'include' });
+                const fetchResponse = await fetch(`/api/projects${query}`, { method: 'GET', credentials: 'include' });
                 if (!fetchResponse.ok) return;
                 response = await fetchResponse.json();
             }
@@ -451,11 +449,7 @@ const TicketDetailModal = ({
     }, []);
 
     useEffect(() => {
-        if (formData.clientId) {
-            loadProjectsForClient(formData.clientId);
-        } else {
-            setProjects([]);
-        }
+        loadProjectsForClient(formData.clientId || null);
     }, [formData.clientId]);
 
     return (
@@ -886,14 +880,20 @@ const TicketDetailModal = ({
                                             </label>
                                             <select
                                                 value={formData.projectId || ''}
-                                                onChange={(e) => handleChange('projectId', e.target.value || null)}
-                                                disabled={!formData.clientId}
-                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                                                onChange={(e) => {
+                                                    const projectId = e.target.value || null;
+                                                    handleChange('projectId', projectId);
+                                                    if (projectId && !formData.clientId) {
+                                                        const proj = projects.find(p => p.id === projectId);
+                                                        if (proj?.clientId) handleChange('clientId', proj.clientId);
+                                                    }
+                                                }}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                                             >
                                                 <option value="">No Project</option>
                                                 {projects.map(project => (
                                                     <option key={project.id} value={project.id}>
-                                                        {project.name}
+                                                        {project.clientName ? `${project.name} (${project.clientName})` : project.name}
                                                     </option>
                                                 ))}
                                             </select>
