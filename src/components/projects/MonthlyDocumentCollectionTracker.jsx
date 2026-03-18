@@ -1865,14 +1865,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // STATUS OPTIONS
     // ============================================================
     
-    // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable, Available on Request (pastel)
+    // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable, Available on Request, Not Required (pastel)
     const documentCollectionStatusOptions = [
         { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-sky-800 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-400 shadow-sm' },
         { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-800 font-semibold', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm' },
         { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm' },
         { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm' },
         { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm' },
-        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm' }
+        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm' },
+        { value: 'not-required', label: 'Not Required', color: 'bg-gray-200 text-gray-800 font-semibold', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm' }
     ];
     // Monthly Data Review: Not Started, Started, Complete (Complete = stored as 'done' for backward compatibility)
     const monthlyDataReviewStatusOptions = [
@@ -2198,6 +2199,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const hasChildDocuments = (section, doc) => {
         if (!section || !section.documents || !doc) return false;
         return section.documents.some(d => d.parentId === doc.id);
+    };
+
+    // For drag-and-drop: root rows move as a block with their children; sub-rows move alone.
+    const getDragBlockRange = (section, docIndex) => {
+        const ordered = getOrderedDocumentRows(section);
+        if (docIndex < 0 || docIndex >= ordered.length) return { start: docIndex, end: docIndex };
+        const row = ordered[docIndex];
+        if (row.isSubRow) return { start: docIndex, end: docIndex };
+        let end = docIndex;
+        for (let i = docIndex + 1; i < ordered.length && ordered[i].isSubRow; i++) end = i;
+        return { start: docIndex, end };
     };
     
     const handleAddDocument = (sectionId) => {
@@ -2975,7 +2987,7 @@ const getAssigneeColor = (identifier, users) => {
     const handleDocumentDrop = (e, sectionId, dropDocIndex) => {
         e.preventDefault();
         const drag = documentDragRef.current;
-        if (!drag || String(drag.sectionId) !== String(sectionId) || drag.docIndex === dropDocIndex) {
+        if (!drag || String(drag.sectionId) !== String(sectionId)) {
             setDragOverDocumentSectionId(null);
             setDragOverDocumentIndex(null);
             return;
@@ -2984,8 +2996,13 @@ const getAssigneeColor = (identifier, users) => {
             if (String(section.id) !== String(sectionId)) return section;
             const ordered = getOrderedDocumentRows(section);
             const docs = ordered.map(r => r.doc);
-            const [removed] = docs.splice(drag.docIndex, 1);
-            docs.splice(dropDocIndex, 0, removed);
+            const { start: dragStart, end: dragEnd } = getDragBlockRange(section, drag.docIndex);
+            if (dropDocIndex >= dragStart && dropDocIndex <= dragEnd) return section;
+            const blockLength = dragEnd - dragStart + 1;
+            const removed = docs.splice(dragStart, blockLength);
+            let insertIndex = dropDocIndex;
+            if (dropDocIndex > dragEnd) insertIndex = dropDocIndex - blockLength;
+            docs.splice(insertIndex, 0, ...removed);
             return { ...section, documents: docs };
         }));
         setDragOverDocumentSectionId(null);
@@ -7227,9 +7244,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                             </tr>
                                         ) : (
                                             getOrderedDocumentRows(section).map(({ doc, isSubRow }, docIndex) => {
-                                                const hasChildren = hasChildDocuments(section, doc);
-                                                const isMasterGreyedOut = !doc.parentId && hasChildren;
-                                                const canDrag = !isSubRow && !isMasterGreyedOut;
+                                                const canDrag = true;
                                                 return (
                                                 <tr
                                                     key={doc.id}
@@ -7246,17 +7261,9 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
-                                                            {canDrag ? (
-                                                                <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title="Drag to reorder">
-                                                                    <i className="fas fa-grip-vertical text-[10px]"></i>
-                                                                </span>
-                                                            ) : isSubRow ? (
-                                                                <span className="inline-flex flex-shrink-0 mt-0.5 text-gray-400" title="Sub-document">
-                                                                    <i className="fas fa-level-down-alt text-[10px]"></i>
-                                                                </span>
-                                                            ) : (
-                                                                <span className="inline-flex flex-shrink-0 w-4" aria-hidden="true"></span>
-                                                            )}
+                                                            <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title={isSubRow ? 'Drag to reorder sub-document' : 'Drag to reorder'}>
+                                                                <i className="fas fa-grip-vertical text-[10px]"></i>
+                                                            </span>
                                                             <div className="flex-1 min-w-0">
                                                             <div className="text-sm font-semibold text-gray-900 leading-snug">{doc.name}</div>
                                                             {doc.description && (() => {
