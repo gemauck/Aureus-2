@@ -22,7 +22,7 @@ const TaskDetailModal = ({
     const isCreating = !task || !task.id;
     const isSubtask = !!parentTask;
     
-    const [activeTab, setActiveTab] = useState('details'); // details, comments, attachments, checklist
+    const [activeTab, setActiveTab] = useState('details'); // details, comments, attachments, checklist, history
     const [zoomImageSrc, setZoomImageSrc] = useState(null);
     const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
     const [assigneeSearch, setAssigneeSearch] = useState('');
@@ -78,7 +78,7 @@ const TaskDetailModal = ({
 
     useEffect(() => {
         if (!initialTab) return;
-        const normalizedTab = ['details', 'comments', 'checklist'].includes(initialTab) ? initialTab : null;
+        const normalizedTab = ['details', 'comments', 'checklist', 'history'].includes(initialTab) ? initialTab : null;
         if (!normalizedTab) return;
         
         const taskId = task?.id || 'new';
@@ -1912,6 +1912,17 @@ const TaskDetailModal = ({
                                 <i className="fas fa-paperclip mr-1.5"></i>
                                 Attachments ({Array.isArray(attachments) ? attachments.length : 0})
                             </button>
+                            <button
+                                onClick={() => setActiveTab('history')}
+                                className={`pb-2 px-1.5 text-sm font-medium transition whitespace-nowrap ${
+                                    activeTab === 'history'
+                                        ? 'text-primary-600 border-b-2 border-primary-600'
+                                        : 'text-gray-600 hover:text-gray-800'
+                                }`}
+                            >
+                                <i className="fas fa-history mr-1.5"></i>
+                                History
+                            </button>
                         </div>
 
                         {/* Tab Content */}
@@ -2544,6 +2555,46 @@ const TaskDetailModal = ({
                                             </div>
                                         ))
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'history' && (
+                            <div className="space-y-3">
+                                <p className="text-xs text-gray-500 mb-2">Changes to this task (status, assignee, title, etc.).</p>
+                                <div className="space-y-2 max-h-64 overflow-y-auto">
+                                    {(() => {
+                                        const logs = Array.isArray(project?.activityLog) ? project.activityLog : [];
+                                        const taskLogs = logs.filter((log) => {
+                                            try {
+                                                const meta = typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {});
+                                                return meta.entityType === 'task' && String(meta.entityId) === String(task?.id);
+                                            } catch (_) { return false; }
+                                        });
+                                        if (taskLogs.length === 0) {
+                                            return <p className="text-gray-500 text-sm">No history for this task yet.</p>;
+                                        }
+                                        return taskLogs.map((log) => {
+                                            const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                            const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                            return (
+                                                <div key={log.id} className="border border-gray-200 rounded-lg p-2 bg-gray-50/50 text-sm">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="font-medium text-gray-900">{log.description || log.type}</span>
+                                                        <span className="text-gray-500 text-xs">{log.userName || 'System'}</span>
+                                                        <span className="text-gray-400 text-xs">{dateStr}</span>
+                                                    </div>
+                                                    {(meta.oldValue != null || meta.newValue != null) && (
+                                                        <div className="mt-1 text-xs text-gray-600">
+                                                            {meta.oldValue != null && <span className="line-through text-gray-500">{String(meta.oldValue)}</span>}
+                                                            {meta.oldValue != null && meta.newValue != null && <span className="mx-1">→</span>}
+                                                            {meta.newValue != null && <span>{String(meta.newValue)}</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        });
+                                    })()}
                                 </div>
                             </div>
                         )}

@@ -6,6 +6,7 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
+import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every list GET). */
 let projectListColumnsMigrated = false;
@@ -439,9 +440,51 @@ function buildDocumentItemCreateData(doc, docIdx, parentId = null) {
 }
 
 /**
- * Save documentSections JSON to table structure
+ * Build a flat list of status entries from documentSections JSON for diffing.
+ * Each entry: { key, year, sectionName, docName, docId, month, status }
+ * key = `${year}-${sectionName}-${docName}-${month}` for stable matching.
  */
-async function saveDocumentSectionsToTable(projectId, jsonData) {
+function buildDocumentStatusMap(sectionsByYear) {
+  const map = new Map()
+  if (!sectionsByYear || typeof sectionsByYear !== 'object') return map
+  const years = Array.isArray(sectionsByYear)
+    ? [new Date().getFullYear()]
+    : Object.keys(sectionsByYear)
+  const yearSections = Array.isArray(sectionsByYear)
+    ? { [years[0]]: sectionsByYear }
+    : sectionsByYear
+  for (const yearStr of years) {
+    const sections = yearSections[yearStr]
+    if (!Array.isArray(sections)) continue
+    const year = parseInt(yearStr, 10)
+    if (isNaN(year)) continue
+    for (const section of sections) {
+      const sectionName = section.name || ''
+      for (const doc of section.documents || []) {
+        const docName = doc.name || ''
+        const docId = doc.id != null ? String(doc.id) : ''
+        const collectionStatus = doc.collectionStatus && typeof doc.collectionStatus === 'object' ? doc.collectionStatus : {}
+        for (const [key, status] of Object.entries(collectionStatus)) {
+          const parts = key.split('-')
+          const month = parts.length >= 2 ? parseInt(parts[1], 10) : null
+          if (month >= 1 && month <= 12 && status != null) {
+            const entryKey = `${year}-${sectionName}-${docName}-${month}`
+            map.set(entryKey, { year, sectionName, docName, docId, month, status: String(status) })
+          }
+        }
+      }
+    }
+  }
+  return map
+}
+
+/**
+ * Save documentSections JSON to table structure
+ * @param {string} projectId
+ * @param {object|string} jsonData
+ * @param {{ userId?: string, userName?: string }} [userContext] - Optional user for activity log
+ */
+async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}) {
   if (!jsonData) {
     console.log('⚠️ saveDocumentSectionsToTable: No jsonData provided, skipping save');
     return;
@@ -469,10 +512,43 @@ async function saveDocumentSectionsToTable(projectId, jsonData) {
 
     // Preserve comments that exist on the server but are missing from the payload (e.g. another tab or status-only save)
     const yearBased = typeof sections === 'object' && !Array.isArray(sections)
+    let existingForDiff = null
     if (yearBased) {
       const existing = await documentSectionsToJson(projectId, { skipComments: false })
       if (existing && typeof existing === 'object' && Object.keys(existing).length > 0) {
+        existingForDiff = existing
         sections = mergeExistingCommentsIntoPayload(existing, sections)
+      }
+    }
+
+    // Diff old vs new statuses for activity log (before we delete and recreate)
+    const newStatusMap = buildDocumentStatusMap(sections)
+    if (existingForDiff && Object.keys(existingForDiff).length > 0) {
+      const oldStatusMap = buildDocumentStatusMap(existingForDiff)
+      const userId = userContext.userId || null
+      const userName = userContext.userName != null ? userContext.userName : 'System'
+      for (const [entryKey, newEntry] of newStatusMap) {
+        const oldEntry = oldStatusMap.get(entryKey)
+        const oldStatus = oldEntry ? oldEntry.status : null
+        if (oldStatus !== newEntry.status) {
+          await logProjectActivity(prisma, {
+            projectId,
+            userId,
+            userName,
+            type: 'document_section_status_change',
+            description: `Document "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')}): ${oldStatus || 'pending'} → ${newEntry.status}`,
+            metadata: {
+              entityType: 'document_section',
+              entityId: newEntry.docId,
+              subEntityId: `${newEntry.docId}-${newEntry.year}-${newEntry.month}`,
+              documentName: newEntry.docName,
+              year: newEntry.year,
+              month: newEntry.month,
+              oldValue: oldStatus,
+              newValue: newEntry.status
+            }
+          })
+        }
       }
     }
 
@@ -990,8 +1066,11 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
 
 /**
  * Save monthlyFMSReviewSections JSON to table structure
+ * @param {string} projectId
+ * @param {object|string} jsonData
+ * @param {{ userId?: string, userName?: string }} [userContext] - Optional user for activity log
  */
-async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
+async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData, userContext = {}) {
   if (!jsonData) {
     console.log('⚠️ saveMonthlyFMSReviewSectionsToTable: No jsonData provided, skipping save');
     return;
@@ -1014,6 +1093,41 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData) {
       } catch (parseError) {
         console.error('❌ Error parsing monthlyFMSReviewSections JSON string:', parseError);
         throw new Error(`Invalid JSON in monthlyFMSReviewSections: ${parseError.message}`);
+      }
+    }
+
+    // Diff old vs new for activity log (before we delete and recreate)
+    const newStatusMap = buildDocumentStatusMap(sections)
+    let existingForDiff = null
+    try {
+      existingForDiff = await monthlyFMSReviewSectionsToJson(projectId, { skipComments: true })
+    } catch (_) {}
+    if (existingForDiff && typeof existingForDiff === 'object' && Object.keys(existingForDiff).length > 0) {
+      const oldStatusMap = buildDocumentStatusMap(existingForDiff)
+      const userId = userContext.userId || null
+      const userName = userContext.userName != null ? userContext.userName : 'System'
+      for (const [entryKey, newEntry] of newStatusMap) {
+        const oldEntry = oldStatusMap.get(entryKey)
+        const oldStatus = oldEntry ? oldEntry.status : null
+        if (oldStatus !== newEntry.status) {
+          await logProjectActivity(prisma, {
+            projectId,
+            userId,
+            userName,
+            type: 'monthly_fms_status_change',
+            description: `Monthly FMS "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')}): ${oldStatus || 'pending'} → ${newEntry.status}`,
+            metadata: {
+              entityType: 'monthly_fms',
+              entityId: newEntry.docId,
+              subEntityId: `${newEntry.docId}-${newEntry.year}-${newEntry.month}`,
+              documentName: newEntry.docName,
+              year: newEntry.year,
+              month: newEntry.month,
+              oldValue: oldStatus,
+              newValue: newEntry.status
+            }
+          })
+        }
       }
     }
 
@@ -1742,7 +1856,7 @@ async function handler(req, res) {
 
         // Save to tables if documentSections or weeklyFMSReviewSections are provided
         if (body.documentSections !== undefined && body.documentSections !== null) {
-          await saveDocumentSectionsToTable(project.id, body.documentSections)
+          await saveDocumentSectionsToTable(project.id, body.documentSections, getActivityUserFromRequest(req))
         }
         if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
           await saveWeeklyFMSReviewSectionsToTable(project.id, body.weeklyFMSReviewSections)
@@ -2101,7 +2215,7 @@ async function handler(req, res) {
           
           // Save to tables if documentSections or weeklyFMSReviewSections are being updated
           if (body.documentSections !== undefined && body.documentSections !== null) {
-            await saveDocumentSectionsToTable(id, body.documentSections)
+            await saveDocumentSectionsToTable(id, body.documentSections, getActivityUserFromRequest(req))
           }
           // Weekly FMS: source of truth is Project.weeklyFMSReviewSections JSON only. Skip table save
           // to avoid P2022 (e.g. missing attachments column) and keep PUT always succeeding.
@@ -2243,5 +2357,5 @@ async function handler(req, res) {
   }
 }
 
-export { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson }
+export { buildDocumentStatusMap, saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson }
 export default withHttp(withLogging(authRequired(handler)))

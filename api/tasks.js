@@ -9,6 +9,7 @@ import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { formatInSAST } from './_lib/sastDate.js';
 import { createNotificationForUser } from './notifications.js';
+import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js';
 
 // Helper to safely parse JSON fields from database
 function safeParseJson(value, defaultValue = null) {
@@ -657,6 +658,16 @@ async function handler(req, res) {
         title: task.title
       });
 
+      const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req);
+      await logProjectActivity(prisma, {
+        projectId: task.projectId,
+        userId: activityUserId,
+        userName: activityUserName,
+        type: 'task_created',
+        description: `Task created: ${task.title}`,
+        metadata: { entityType: 'task', entityId: task.id, taskTitle: task.title }
+      });
+
       // Send email/in-app notifications to assignees whenever a task has assignees (create)
       if (assigneeIdsFinal.length > 0) {
         const currentUserId = req.user?.sub || req.user?.id;
@@ -803,10 +814,22 @@ async function handler(req, res) {
         return badRequest(res, 'No fields to update');
       }
 
-      // Check if task exists and get current assignees so we can notify when assignment changes
+      // Check if task exists and get current values for activity log diff
       const existingTask = await prisma.task.findUnique({
         where: { id: String(taskId) },
-        select: { id: true, assigneeId: true, assigneeIds: true }
+        select: {
+          id: true,
+          projectId: true,
+          title: true,
+          status: true,
+          priority: true,
+          assigneeId: true,
+          assignee: true,
+          assigneeIds: true,
+          dueDate: true,
+          description: true,
+          listId: true
+        }
       });
 
       if (!existingTask) {
@@ -833,6 +856,76 @@ async function handler(req, res) {
           }
         }
       });
+
+      // Activity log: one entry per logical change (non-fatal)
+      const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req);
+      const taskTitle = task.title || existingTask.title || '';
+      const metaBase = { entityType: 'task', entityId: task.id, taskTitle };
+      if (updateData.status !== undefined && String(updateData.status) !== String(existingTask.status)) {
+        await logProjectActivity(prisma, {
+          projectId: task.projectId,
+          userId: activityUserId,
+          userName: activityUserName,
+          type: 'task_status_change',
+          description: `Task status changed: ${existingTask.status || ''} → ${updateData.status}`,
+          metadata: { ...metaBase, field: 'status', oldValue: existingTask.status, newValue: updateData.status }
+        });
+      }
+      if ((updateData.assigneeId !== undefined || updateData.assignee !== undefined) &&
+          (String(updateData.assigneeId || '') !== String(existingTask.assigneeId || '') || (updateData.assignee || '') !== (existingTask.assignee || ''))) {
+        await logProjectActivity(prisma, {
+          projectId: task.projectId,
+          userId: activityUserId,
+          userName: activityUserName,
+          type: 'task_assignee_change',
+          description: `Task assignee changed: ${existingTask.assignee || '(none)'} → ${task.assignee || '(none)'}`,
+          metadata: { ...metaBase, field: 'assignee', oldValue: existingTask.assignee, newValue: task.assignee }
+        });
+      }
+      if (updateData.title !== undefined && String(updateData.title).trim() !== String(existingTask.title || '').trim()) {
+        await logProjectActivity(prisma, {
+          projectId: task.projectId,
+          userId: activityUserId,
+          userName: activityUserName,
+          type: 'task_field_updated',
+          description: `Task title updated`,
+          metadata: { ...metaBase, field: 'title', oldValue: existingTask.title, newValue: updateData.title }
+        });
+      }
+      if (updateData.priority !== undefined && String(updateData.priority) !== String(existingTask.priority || '')) {
+        await logProjectActivity(prisma, {
+          projectId: task.projectId,
+          userId: activityUserId,
+          userName: activityUserName,
+          type: 'task_field_updated',
+          description: `Task priority changed: ${existingTask.priority || ''} → ${updateData.priority}`,
+          metadata: { ...metaBase, field: 'priority', oldValue: existingTask.priority, newValue: updateData.priority }
+        });
+      }
+      if (updateData.dueDate !== undefined) {
+        const oldDue = existingTask.dueDate ? existingTask.dueDate.toISOString() : null;
+        const newDue = updateData.dueDate ? (updateData.dueDate instanceof Date ? updateData.dueDate.toISOString() : new Date(updateData.dueDate).toISOString()) : null;
+        if (oldDue !== newDue) {
+          await logProjectActivity(prisma, {
+            projectId: task.projectId,
+            userId: activityUserId,
+            userName: activityUserName,
+            type: 'task_field_updated',
+            description: `Task due date ${newDue ? 'updated' : 'cleared'}`,
+            metadata: { ...metaBase, field: 'dueDate', oldValue: oldDue, newValue: newDue }
+          });
+        }
+      }
+      if (updateData.listId !== undefined && String(updateData.listId || '') !== String(existingTask.listId ?? '')) {
+        await logProjectActivity(prisma, {
+          projectId: task.projectId,
+          userId: activityUserId,
+          userName: activityUserName,
+          type: 'task_field_updated',
+          description: `Task list/column changed`,
+          metadata: { ...metaBase, field: 'listId', oldValue: existingTask.listId, newValue: updateData.listId }
+        });
+      }
 
       // Fetch comments separately (since Task.comments relation doesn't exist yet)
       const taskComments = await prisma.taskComment.findMany({

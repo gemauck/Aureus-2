@@ -4,7 +4,8 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson } from '../projects.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap } from '../projects.js'
+import { logProjectActivity, getActivityUserFromRequest } from '../_lib/projectActivityLog.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
 let projectColumnsMigrated = false;
@@ -627,7 +628,7 @@ async function handler(req, res) {
                 where: { projectId: id },
                 include: { user: { select: { id: true, name: true, email: true } } },
                 orderBy: { createdAt: 'desc' },
-                take: 20
+                take: 100
               }).catch(e => { console.warn('⚠️ Project activity logs load failed:', e.message); return []; })
             : Promise.resolve([])
         ]);
@@ -1336,9 +1337,33 @@ async function handler(req, res) {
         }
       })
       
-      // Check if project exists before updating
-      const projectExists = await prisma.project.findUnique({ where: { id } })
-      if (!projectExists) {
+      // Check if project exists and load current values for activity log diff
+      const existingProject = await prisma.project.findUnique({
+        where: { id },
+        select: {
+          name: true,
+          status: true,
+          clientId: true,
+          clientName: true,
+          description: true,
+          notes: true,
+          budget: true,
+          priority: true,
+          type: true,
+          assignedTo: true,
+          startDate: true,
+          dueDate: true,
+          hasDocumentCollectionProcess: true,
+          hasTimeProcess: true,
+          hasWeeklyFMSReviewProcess: true,
+          hasMonthlyFMSReviewProcess: true,
+          hasMonthlyDataReviewProcess: true,
+          hasComplianceReviewProcess: true,
+          monthlyDataReviewSections: true,
+          complianceReviewSections: true
+        }
+      })
+      if (!existingProject) {
         console.error('❌ Project not found for update:', id)
         return notFound(res, 'Project not found')
       }
@@ -1360,7 +1385,7 @@ async function handler(req, res) {
               if (process.env.NODE_ENV === 'development') {
                 console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', { projectId: id });
               }
-              await saveDocumentSectionsToTable(id, body.documentSections);
+              await saveDocumentSectionsToTable(id, body.documentSections, getActivityUserFromRequest(req));
               if (process.env.NODE_ENV === 'development') console.log('✅ PUT /api/projects/[id]: documentSections saved');
             } catch (tableError) {
               console.error('⚠️ Error saving documentSections to table (project row already updated):', {
@@ -1381,7 +1406,7 @@ async function handler(req, res) {
           if (body.monthlyFMSReviewSections !== undefined && body.monthlyFMSReviewSections !== null) {
             try {
               if (process.env.NODE_ENV === 'development') console.log('💾 PUT /api/projects/[id]: Saving monthlyFMSReviewSections to table', { projectId: id });
-              await saveMonthlyFMSReviewSectionsToTable(id, body.monthlyFMSReviewSections);
+              await saveMonthlyFMSReviewSectionsToTable(id, body.monthlyFMSReviewSections, getActivityUserFromRequest(req));
               if (process.env.NODE_ENV === 'development') console.log('✅ PUT /api/projects/[id]: monthlyFMSReviewSections saved');
             } catch (tableError) {
               console.error('⚠️ WARNING: Error saving monthlyFMSReviewSections to table (JSON field already saved):', {
@@ -1412,6 +1437,89 @@ async function handler(req, res) {
             `;
           } catch (e) {
             console.error('⚠️ Follow-up weeklyFMSReviewSections update failed (main update may have succeeded):', e.message);
+          }
+        }
+
+        // Activity log: project field changes and JSON section diffs (non-fatal)
+        const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req);
+        const scalarProjectFields = ['name', 'status', 'clientId', 'clientName', 'description', 'notes', 'budget', 'priority', 'type', 'assignedTo', 'hasDocumentCollectionProcess', 'hasTimeProcess', 'hasWeeklyFMSReviewProcess', 'hasMonthlyFMSReviewProcess', 'hasMonthlyDataReviewProcess', 'hasComplianceReviewProcess'];
+        const norm = (v) => (v instanceof Date ? v.toISOString() : (v != null ? String(v) : ''));
+        for (const field of scalarProjectFields) {
+          if (updateData[field] === undefined) continue;
+          const oldVal = existingProject[field];
+          const newVal = updateData[field];
+          if (field === 'startDate' || field === 'dueDate') {
+            const o = oldVal instanceof Date ? oldVal.toISOString() : (oldVal != null ? String(oldVal) : '');
+            const n = newVal instanceof Date ? newVal.toISOString() : (newVal != null ? String(newVal) : '');
+            if (o !== n) {
+              await logProjectActivity(prisma, {
+                projectId: id,
+                userId: activityUserId,
+                userName: activityUserName,
+                type: 'project_updated',
+                description: `Project ${field} ${newVal ? 'updated' : 'cleared'}`,
+                metadata: { entityType: 'project', entityId: id, field, oldValue: o, newValue: n }
+              });
+            }
+          } else if (norm(oldVal) !== norm(newVal)) {
+            await logProjectActivity(prisma, {
+              projectId: id,
+              userId: activityUserId,
+              userName: activityUserName,
+              type: 'project_updated',
+              description: `Project ${field} changed`,
+              metadata: { entityType: 'project', entityId: id, field, oldValue: oldVal, newValue: newVal }
+            });
+          }
+        }
+        if (body.monthlyDataReviewSections !== undefined && body.monthlyDataReviewSections !== null) {
+          try {
+            const oldJson = existingProject.monthlyDataReviewSections;
+            const oldParsed = (typeof oldJson === 'string' && oldJson) ? JSON.parse(oldJson) : (oldJson && typeof oldJson === 'object' ? oldJson : {});
+            const newParsed = typeof body.monthlyDataReviewSections === 'string' ? JSON.parse(body.monthlyDataReviewSections) : body.monthlyDataReviewSections;
+            const oldMap = buildDocumentStatusMap(oldParsed);
+            const newMap = buildDocumentStatusMap(newParsed);
+            for (const [entryKey, newEntry] of newMap) {
+              const oldEntry = oldMap.get(entryKey);
+              const oldStatus = oldEntry ? oldEntry.status : null;
+              if (oldStatus !== newEntry.status) {
+                await logProjectActivity(prisma, {
+                  projectId: id,
+                  userId: activityUserId,
+                  userName: activityUserName,
+                  type: 'monthly_data_review_status_change',
+                  description: `Monthly Data Review "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')}): ${oldStatus || 'pending'} → ${newEntry.status}`,
+                  metadata: { entityType: 'monthly_data_review', entityId: newEntry.docId, documentName: newEntry.docName, year: newEntry.year, month: newEntry.month, oldValue: oldStatus, newValue: newEntry.status }
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Activity log monthlyDataReviewSections diff failed (non-fatal):', e?.message);
+          }
+        }
+        if (body.complianceReviewSections !== undefined && body.complianceReviewSections !== null) {
+          try {
+            const oldJson = existingProject.complianceReviewSections;
+            const oldParsed = (typeof oldJson === 'string' && oldJson) ? JSON.parse(oldJson) : (oldJson && typeof oldJson === 'object' ? oldJson : {});
+            const newParsed = typeof body.complianceReviewSections === 'string' ? JSON.parse(body.complianceReviewSections) : body.complianceReviewSections;
+            const oldMap = buildDocumentStatusMap(oldParsed);
+            const newMap = buildDocumentStatusMap(newParsed);
+            for (const [entryKey, newEntry] of newMap) {
+              const oldEntry = oldMap.get(entryKey);
+              const oldStatus = oldEntry ? oldEntry.status : null;
+              if (oldStatus !== newEntry.status) {
+                await logProjectActivity(prisma, {
+                  projectId: id,
+                  userId: activityUserId,
+                  userName: activityUserName,
+                  type: 'compliance_review_status_change',
+                  description: `Compliance Review "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')}): ${oldStatus || 'pending'} → ${newEntry.status}`,
+                  metadata: { entityType: 'compliance_review', entityId: newEntry.docId, documentName: newEntry.docName, year: newEntry.year, month: newEntry.month, oldValue: oldStatus, newValue: newEntry.status }
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Activity log complianceReviewSections diff failed (non-fatal):', e?.message);
           }
         }
         

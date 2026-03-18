@@ -4,6 +4,7 @@
 import { prisma } from './_lib/prisma.js';
 import { ok, serverError, badRequest, notFound } from './_lib/response.js';
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js';
+import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js';
 
 export default async function handler(req, res) {
   const { method } = req;
@@ -172,6 +173,23 @@ export default async function handler(req, res) {
       } catch (notifyErr) {
         console.error('Notify comment participants failed (task comment):', notifyErr);
       }
+
+      const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req);
+      const taskForLog = await prisma.task.findUnique({ where: { id: String(taskId) }, select: { title: true } }).catch(() => null);
+      await logProjectActivity(prisma, {
+        projectId: String(projectId),
+        userId: activityUserId,
+        userName: activityUserName,
+        type: 'task_comment_added',
+        description: `Comment added on task: ${taskForLog?.title || taskId}`,
+        metadata: {
+          entityType: 'task',
+          entityId: String(taskId),
+          taskTitle: taskForLog?.title,
+          commentId: comment.id,
+          snippet: String(text).slice(0, 100)
+        }
+      });
 
       return ok(res, { comment });
     }

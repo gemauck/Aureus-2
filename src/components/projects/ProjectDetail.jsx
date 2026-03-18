@@ -1834,7 +1834,7 @@ function initializeProjectDetail() {
         
         const tabFromUrl = params ? (() => {
             const t = params.get('tab');
-            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview'].includes(t) ? t : null;
+            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity'].includes(t) ? t : null;
         })() : null;
         const hasDocWeek = params ? !!params.get('docWeek') : false;
         const hasWeeklySectionId = params ? !!params.get('weeklySectionId') : false;
@@ -2611,7 +2611,7 @@ function initializeProjectDetail() {
         }
         if (!params && search) params = new URLSearchParams(search);
         const tabFromUrl = params?.get('tab');
-        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview'];
+        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity'];
         if (tabFromUrl && validTabs.includes(tabFromUrl)) {
             if (tabFromUrl === 'time' && !normalizeHasTimeProcess(project.hasTimeProcess)) {
                 hasTimeProcessChangedRef.current = true;
@@ -6543,7 +6543,12 @@ function initializeProjectDetail() {
             
             // tasksList JSON write removed - task deletion handled by Task API above
             console.log('✅ Task deleted successfully');
-            
+            if (window.DatabaseAPI?.invalidateTasksCache) window.DatabaseAPI.invalidateTasksCache();
+            const pid = project?.id;
+            if (pid && window.DatabaseAPI?._responseCache) {
+                window.DatabaseAPI._responseCache.delete(`GET:/projects/${pid}`);
+                window.DatabaseAPI._responseCache.delete(`GET:/projects/${pid}?summary=1`);
+            }
             // Close task modal if the deleted task is currently being viewed
             if (viewingTask?.id === taskId) {
                 handleCloseTaskModal();
@@ -8337,6 +8342,18 @@ function initializeProjectDetail() {
                             Compliance Review
                         </button>
                     )}
+                    <button
+                        type="button"
+                        onClick={() => requestAnimationFrame(() => switchSection('activity'))}
+                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeSection === 'activity'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="fas fa-history mr-1.5"></i>
+                        Activity
+                    </button>
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
@@ -8448,6 +8465,45 @@ function initializeProjectDetail() {
             })()}
             
             {activeSection === 'overview' && <OverviewSection />}
+
+            {activeSection === 'activity' && (
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <i className="fas fa-history text-primary-600"></i>
+                        Project activity & history
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">Recent changes to tasks, documents, reviews, and project settings.</p>
+                    <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                        {Array.isArray(project?.activityLog) && project.activityLog.length > 0 ? (
+                            project.activityLog.map((log) => {
+                                const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                return (
+                                    <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50 hover:bg-gray-50">
+                                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                                            <span className="font-medium text-gray-900">{log.description || log.type || 'Activity'}</span>
+                                            <span className="text-gray-500">{log.userName || 'System'}</span>
+                                            <span className="text-gray-400 text-xs">{dateStr}</span>
+                                            {log.type && (
+                                                <span className="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{log.type}</span>
+                                            )}
+                                        </div>
+                                        {(meta.oldValue != null || meta.newValue != null) && (
+                                            <div className="mt-2 text-xs text-gray-600">
+                                                {meta.oldValue != null && <span className="line-through text-gray-500">{String(meta.oldValue)}</span>}
+                                                {meta.oldValue != null && meta.newValue != null && <span className="mx-1">→</span>}
+                                                {meta.newValue != null && <span>{String(meta.newValue)}</span>}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <p className="text-gray-500 text-sm">No activity recorded yet. Changes to tasks, document status, and reviews will appear here.</p>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {activeSection === 'time' && <TimeTrackingSection project={project} />}
             
