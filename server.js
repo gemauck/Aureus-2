@@ -1056,6 +1056,33 @@ app.all('/api/audit-logs', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for system settings (GET, PUT /api/settings)
+app.all('/api/settings', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'settings.js'))
+    if (!handler) {
+      console.error('❌ Settings handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in settings handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for feedback operations (GET, POST /api/feedback)
 app.all('/api/feedback', async (req, res, next) => {
   try {
@@ -2724,6 +2751,27 @@ app.listen(PORT, '0.0.0.0', async () => {
     } catch (error) {
       console.warn('⚠️ Failed to setup SARS monitoring cron:', error.message)
       console.warn('   Set DISABLE_SARS_MONITORING_CRON=true to disable')
+    }
+  }
+
+  // Task recurring reminders (daily at 9:00 AM - remind assignees until task is done)
+  if (process.env.DISABLE_TASK_REMINDERS_CRON !== 'true') {
+    try {
+      const cron = (await import('node-cron')).default
+      const { runTaskRecurringReminders } = await import('./api/cron/task-recurring-reminders.js')
+      cron.schedule('0 9 * * *', async () => {
+        console.log('🔔 Running task recurring reminders job...')
+        try {
+          const result = await runTaskRecurringReminders()
+          console.log('✅ Task reminders job completed:', result.sent?.length || 0, 'reminders sent')
+        } catch (error) {
+          console.error('❌ Task reminders job failed:', error)
+        }
+      }, { timezone: 'Africa/Johannesburg' })
+      console.log('✅ Task recurring reminders cron scheduled (9:00 AM daily)')
+    } catch (error) {
+      console.warn('⚠️ Failed to setup task reminders cron:', error.message)
+      console.warn('   Set DISABLE_TASK_REMINDERS_CRON=true to disable')
     }
   }
 })

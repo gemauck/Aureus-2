@@ -54,21 +54,43 @@ const Settings = () => {
                 return;
             }
             
-            // Save to database via API - try multiple methods
+            // Save to database via API: prefer bound window.api, then DatabaseAPI, then fetch fallback
             let saved = false;
             let savedSettings = null;
             
-            if (window.DatabaseAPI?.updateSettings) {
-                const response = await window.DatabaseAPI.updateSettings(settings);
-                // Get saved settings from response
-                savedSettings = response?.data?.settings || settings;
-                saved = true;
-            } else if (window.api?.updateSettings) {
-                const response = await window.api.updateSettings(settings);
-                savedSettings = response?.data?.settings || settings;
-                saved = true;
-            } else {
-                // Fallback: save to localStorage
+            try {
+                if (window.api?.updateSettings) {
+                    const response = await window.api.updateSettings(settings);
+                    savedSettings = response?.data?.settings || settings;
+                    saved = true;
+                } else if (window.DatabaseAPI?.updateSettings) {
+                    const response = await window.DatabaseAPI.updateSettings(settings);
+                    savedSettings = response?.data?.settings || settings;
+                    saved = true;
+                }
+            } catch (apiErr) {
+                console.warn('Settings API save failed, trying fetch fallback:', apiErr);
+            }
+            
+            if (!saved) {
+                const token = window.storage?.getToken?.() || localStorage.getItem('token');
+                const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+                if (token) {
+                    const res = await fetch(`${apiBase}/api/settings`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        credentials: 'include',
+                        body: JSON.stringify(settings)
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        savedSettings = json?.data?.settings || settings;
+                        saved = true;
+                    }
+                }
+            }
+            
+            if (!saved) {
                 localStorage.setItem('systemSettings', JSON.stringify(settings));
                 savedSettings = settings;
                 saved = true;
@@ -127,12 +149,24 @@ const Settings = () => {
             
             setSettings(defaultSettings);
             
-            // Also save the reset to database
+            // Also save the reset to database (prefer bound window.api)
             try {
-                if (window.DatabaseAPI?.updateSettings) {
-                    await window.DatabaseAPI.updateSettings(defaultSettings);
-                } else if (window.api?.updateSettings) {
+                if (window.api?.updateSettings) {
                     await window.api.updateSettings(defaultSettings);
+                } else if (window.DatabaseAPI?.updateSettings) {
+                    await window.DatabaseAPI.updateSettings(defaultSettings);
+                } else {
+                    const token = window.storage?.getToken?.() || localStorage.getItem('token');
+                    const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+                    if (token) {
+                        const res = await fetch(`${apiBase}/api/settings`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            credentials: 'include',
+                            body: JSON.stringify(defaultSettings)
+                        });
+                        if (!res.ok) throw new Error('Failed to save');
+                    }
                 }
                 localStorage.setItem('systemSettings', JSON.stringify(defaultSettings));
                 if (window.setSystemSettings) {
@@ -165,14 +199,24 @@ const Settings = () => {
                 data: {}
             };
             
-            // Fetch all data types in parallel
+            // Fetch all data types in parallel - use bound APIs only so 'this' is never lost
+            const api = window.api;
+            const dbApi = window.DatabaseAPI;
             const dataPromises = [];
-            
-            // Clients
-            if (window.DatabaseAPI?.getClients || window.api?.getClients) {
-                const getClients = window.DatabaseAPI?.getClients || window.api?.getClients;
+
+            if (api?.getClients) {
                 dataPromises.push(
-                    getClients().then(res => ({
+                    api.getClients().then(res => ({
+                        key: 'clients',
+                        data: res?.data?.clients || res?.clients || []
+                    })).catch(err => {
+                        console.warn('Failed to export clients:', err);
+                        return { key: 'clients', data: [] };
+                    })
+                );
+            } else if (dbApi?.getClients) {
+                dataPromises.push(
+                    dbApi.getClients.call(dbApi).then(res => ({
                         key: 'clients',
                         data: res?.data?.clients || res?.clients || []
                     })).catch(err => {
@@ -181,12 +225,20 @@ const Settings = () => {
                     })
                 );
             }
-            
-            // Projects
-            if (window.DatabaseAPI?.getProjects || window.api?.getProjects) {
-                const getProjects = window.DatabaseAPI?.getProjects || window.api?.getProjects;
+
+            if (api?.getProjects) {
                 dataPromises.push(
-                    getProjects().then(res => ({
+                    api.getProjects().then(res => ({
+                        key: 'projects',
+                        data: res?.data?.projects || res?.projects || []
+                    })).catch(err => {
+                        console.warn('Failed to export projects:', err);
+                        return { key: 'projects', data: [] };
+                    })
+                );
+            } else if (dbApi?.getProjects) {
+                dataPromises.push(
+                    dbApi.getProjects.call(dbApi).then(res => ({
                         key: 'projects',
                         data: res?.data?.projects || res?.projects || []
                     })).catch(err => {
@@ -195,12 +247,20 @@ const Settings = () => {
                     })
                 );
             }
-            
-            // Time Entries
-            if (window.DatabaseAPI?.getTimeEntries || window.api?.getTimeEntries) {
-                const getTimeEntries = window.DatabaseAPI?.getTimeEntries || window.api?.getTimeEntries;
+
+            if (api?.getTimeEntries) {
                 dataPromises.push(
-                    getTimeEntries().then(res => ({
+                    api.getTimeEntries().then(res => ({
+                        key: 'timeEntries',
+                        data: res?.data?.timeEntries || res?.timeEntries || []
+                    })).catch(err => {
+                        console.warn('Failed to export time entries:', err);
+                        return { key: 'timeEntries', data: [] };
+                    })
+                );
+            } else if (dbApi?.getTimeEntries) {
+                dataPromises.push(
+                    dbApi.getTimeEntries.call(dbApi).then(res => ({
                         key: 'timeEntries',
                         data: res?.data?.timeEntries || res?.timeEntries || []
                     })).catch(err => {
@@ -209,12 +269,20 @@ const Settings = () => {
                     })
                 );
             }
-            
-            // Leads
-            if (window.DatabaseAPI?.getLeads || window.api?.getLeads) {
-                const getLeads = window.DatabaseAPI?.getLeads || window.api?.getLeads;
+
+            if (api?.getLeads) {
                 dataPromises.push(
-                    getLeads().then(res => ({
+                    api.getLeads().then(res => ({
+                        key: 'leads',
+                        data: res?.data?.leads || res?.leads || []
+                    })).catch(err => {
+                        console.warn('Failed to export leads:', err);
+                        return { key: 'leads', data: [] };
+                    })
+                );
+            } else if (dbApi?.getLeads) {
+                dataPromises.push(
+                    dbApi.getLeads.call(dbApi).then(res => ({
                         key: 'leads',
                         data: res?.data?.leads || res?.leads || []
                     })).catch(err => {
@@ -277,14 +345,15 @@ const Settings = () => {
                     throw new Error('Invalid export file format');
                 }
                 
-                // Import each data type
+                // Import each data type - use bound APIs only so 'this' is never lost
                 const importPromises = [];
                 let importedCount = 0;
-                
-                // Import Clients
+                const api = window.api;
+                const dbApi = window.DatabaseAPI;
+
                 if (importData.data.clients && Array.isArray(importData.data.clients)) {
-                    if (window.DatabaseAPI?.createClient || window.api?.createClient) {
-                        const createClient = window.DatabaseAPI?.createClient || window.api?.createClient;
+                    const createClient = api?.createClient || (dbApi?.createClient && dbApi.createClient.bind(dbApi));
+                    if (createClient) {
                         for (const client of importData.data.clients) {
                             importPromises.push(
                                 createClient(client).then(() => {
@@ -296,11 +365,10 @@ const Settings = () => {
                         }
                     }
                 }
-                
-                // Import Projects
+
                 if (importData.data.projects && Array.isArray(importData.data.projects)) {
-                    if (window.DatabaseAPI?.createProject || window.api?.createProject) {
-                        const createProject = window.DatabaseAPI?.createProject || window.api?.createProject;
+                    const createProject = api?.createProject || (dbApi?.createProject && dbApi.createProject.bind(dbApi));
+                    if (createProject) {
                         for (const project of importData.data.projects) {
                             importPromises.push(
                                 createProject(project).then(() => {
@@ -312,11 +380,10 @@ const Settings = () => {
                         }
                     }
                 }
-                
-                // Import Time Entries
+
                 if (importData.data.timeEntries && Array.isArray(importData.data.timeEntries)) {
-                    if (window.DatabaseAPI?.createTimeEntry || window.api?.createTimeEntry) {
-                        const createTimeEntry = window.DatabaseAPI?.createTimeEntry || window.api?.createTimeEntry;
+                    const createTimeEntry = api?.createTimeEntry || (dbApi?.createTimeEntry && dbApi.createTimeEntry.bind(dbApi));
+                    if (createTimeEntry) {
                         for (const entry of importData.data.timeEntries) {
                             importPromises.push(
                                 createTimeEntry(entry).then(() => {
@@ -328,11 +395,10 @@ const Settings = () => {
                         }
                     }
                 }
-                
-                // Import Leads
+
                 if (importData.data.leads && Array.isArray(importData.data.leads)) {
-                    if (window.DatabaseAPI?.createLead || window.api?.createLead) {
-                        const createLead = window.DatabaseAPI?.createLead || window.api?.createLead;
+                    const createLead = api?.createLead || (dbApi?.createLead && dbApi.createLead.bind(dbApi));
+                    if (createLead) {
                         for (const lead of importData.data.leads) {
                             importPromises.push(
                                 createLead(lead).then(() => {
@@ -423,22 +489,36 @@ const Settings = () => {
         const loadSettings = async () => {
             setIsLoadingData(true);
             try {
-                // Try to load from database first
+                // Load from API: prefer bound window.api, then DatabaseAPI, then fetch fallback
                 let dbSettings = null;
-                
-                if (window.DatabaseAPI?.getSettings) {
-                    try {
-                        const response = await window.DatabaseAPI.getSettings();
-                        dbSettings = response?.data?.settings;
-                    } catch (err) {
-                        console.warn('Failed to load settings from DatabaseAPI:', err);
-                    }
-                } else if (window.api?.getSettings) {
-                    try {
+                try {
+                    if (window.api?.getSettings) {
                         const response = await window.api.getSettings();
                         dbSettings = response?.data?.settings;
-                    } catch (err) {
-                        console.warn('Failed to load settings from api:', err);
+                    } else if (window.DatabaseAPI?.getSettings) {
+                        const response = await window.DatabaseAPI.getSettings();
+                        dbSettings = response?.data?.settings;
+                    }
+                } catch (err) {
+                    console.warn('Settings API load failed:', err);
+                }
+                if (dbSettings == null) {
+                    const token = window.storage?.getToken?.() || localStorage.getItem('token');
+                    const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+                    if (token) {
+                        try {
+                            const res = await fetch(`${apiBase}/api/settings`, {
+                                method: 'GET',
+                                headers: { 'Authorization': `Bearer ${token}` },
+                                credentials: 'include'
+                            });
+                            if (res.ok) {
+                                const json = await res.json();
+                                dbSettings = json?.data?.settings;
+                            }
+                        } catch (fetchErr) {
+                            console.warn('Settings fetch fallback failed:', fetchErr);
+                        }
                     }
                 }
                 
