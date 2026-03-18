@@ -921,6 +921,37 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             );
                         }
                     }
+                    // Fallback when user clicked an employee but EmployeeDetail not loaded yet: show inline panel with link to User Management
+                    if (hasValidEmployeeId && viewingEmployeeId != null) {
+                        const selectedEmp = employees.find(e => e.id === viewingEmployeeId || String(e.id) === String(viewingEmployeeId));
+                        return (
+                            <div className="space-y-4">
+                                <button
+                                    type="button"
+                                    onClick={handleBackFromEmployeeDetail}
+                                    className="text-sm text-primary-600 hover:text-primary-800 flex items-center gap-1"
+                                >
+                                    <i className="fas fa-arrow-left"></i> Back to list
+                                </button>
+                                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedEmp?.name || 'Employee'}</h3>
+                                    <p className="text-sm text-gray-600 mb-1">{selectedEmp?.email || '—'}</p>
+                                    <p className="text-sm text-gray-600 mb-4">{selectedEmp?.role || '—'} · {selectedEmp?.department || '—'}</p>
+                                    <p className="text-sm text-gray-500 mb-4">To edit this person (role, department, leave balances), use User Management.</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            handleBackFromEmployeeDetail();
+                                            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'users' } }));
+                                        }}
+                                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                    >
+                                        <i className="fas fa-user-cog mr-2"></i>Edit in User Management
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    }
                     // Skip EmployeeManagement component and use our own table with click handlers
                     // This allows us to navigate to the full EmployeeDetail page
                     // Fallback: Show employees list directly with click handlers
@@ -979,6 +1010,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                                     <SortableHeader columnKey="email" label="Email" />
                                                     <SortableHeader columnKey="role" label="Role" />
                                                     <SortableHeader columnKey="status" label="Status" />
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-28">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
@@ -995,6 +1027,15 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                                             <span className={`px-2 py-1 text-xs rounded ${(emp.status === 'active' || emp.employmentStatus === 'Active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                                                                 {emp.employmentStatus || emp.status || 'active'}
                                                             </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm" onClick={e => e.stopPropagation()}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEmployeeClick(emp)}
+                                                                className="text-primary-600 hover:text-primary-800 font-medium"
+                                                            >
+                                                                View
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 ))}
