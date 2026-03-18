@@ -7245,6 +7245,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                         ) : (
                                             getOrderedDocumentRows(section).map(({ doc, isSubRow }, docIndex) => {
                                                 const canDrag = true;
+                                                const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
                                                 return (
                                                 <tr
                                                     key={doc.id}
