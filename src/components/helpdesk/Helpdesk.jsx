@@ -634,7 +634,7 @@ const Helpdesk = () => {
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    {['Ticket', 'Status', 'Priority', 'Category', 'Assigned To', 'Client', 'Project', 'Submitted By', 'Due', 'Created'].map((h) => (
+                                    {['Ticket', 'Title', 'Status', 'Priority', 'Category', 'Assigned To', 'Client', 'Project', 'Submitted By', 'Due', 'Created'].map((h) => (
                                         <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>
                                     ))}
                                 </tr>
@@ -643,6 +643,7 @@ const Helpdesk = () => {
                                 {[1, 2, 3, 4, 5].map((i) => (
                                     <tr key={i}>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-32 animate-pulse" /></td>
+                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-48 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-5 bg-gray-200 dark:bg-gray-600 rounded w-20 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-5 bg-gray-200 dark:bg-gray-600 rounded w-16 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-20 animate-pulse" /></td>
@@ -718,6 +719,7 @@ const Helpdesk = () => {
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>
                                         Ticket
                                     </th>
+                                    <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Title</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Status</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Priority</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Category</th>
@@ -745,26 +747,24 @@ const Helpdesk = () => {
                                         aria-label={`${ticket.ticketNumber} ${ticket.title}, ${ticket.status}. Press Enter to open.`}
                                     >
                                         <td className={`${cellPad} whitespace-nowrap ${cellText}`}>
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                                        {ticket.ticketNumber}
-                                                    </div>
-                                                    {ticket.type === 'email' && (
-                                                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" title="Created from email">
-                                                            <i className="fas fa-envelope mr-1"></i>Email
-                                                        </span>
-                                                    )}
-                                                    {ticket.type === 'internal' && (
-                                                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" title="Created manually">
-                                                            <i className="fas fa-user mr-1"></i>Manual
-                                                        </span>
-                                                    )}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                                    {ticket.ticketNumber}
                                                 </div>
-                                                <div className="text-sm text-gray-500 dark:text-gray-400">
-                                                    {ticket.title}
-                                                </div>
+                                                {ticket.type === 'email' && (
+                                                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" title="Created from email">
+                                                        <i className="fas fa-envelope mr-1"></i>Email
+                                                    </span>
+                                                )}
+                                                {ticket.type === 'internal' && (
+                                                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" title="Created manually">
+                                                        <i className="fas fa-user mr-1"></i>Manual
+                                                    </span>
+                                                )}
                                             </div>
+                                        </td>
+                                        <td className={`${cellPad} ${cellText} text-gray-900 dark:text-white max-w-[280px]`}>
+                                            <span className="line-clamp-2" title={ticket.title || ''}>{ticket.title || '—'}</span>
                                         </td>
                                         <td className={`${cellPad} whitespace-nowrap ${cellText}`}>
                                             <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColorClasses(ticket.status)}`}>
