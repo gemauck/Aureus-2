@@ -538,6 +538,7 @@ async function request(path, options = {}) {
       path.includes('/contacts/client/') || 
       (path.includes('/clients/') && path.includes('/groups'))
     );
+    const isHeartbeatTimeout = path === '/users/heartbeat' && (error?.isTimeout || errorMessage.includes('Request timeout'));
     
     // Handle rate limit errors - don't retry, just throw
     if (isRateLimitError) {
@@ -546,8 +547,8 @@ async function request(path, options = {}) {
       throw error;
     }
     
-    // Suppress error logs for server errors, database errors, and expected 404s (they're expected)
-    if (!isDatabaseError && !isServerError && !isExpected404) {
+    // Suppress error logs for server errors, database errors, expected 404s, and heartbeat timeouts (they're expected when server/network is slow)
+    if (!isDatabaseError && !isServerError && !isExpected404 && !isHeartbeatTimeout) {
       console.error('❌ Fetch Error:', { path, error: error.message, stack: error.stack });
     }
     throw error;
@@ -675,9 +676,11 @@ const api = {
                          errorStatus === 401 ||
                          errorStatus === 404;
       
-      // Only log unexpected errors (not auth, server, or database errors)
+      // Only log unexpected errors (not auth, server, database, or timeout - timeouts are expected when server/network is slow)
+      const isTimeout = error?.isTimeout || errorMessage.includes('Request timeout');
       if (errorMessage && 
           !isAuthError &&
+          !isTimeout &&
           !errorMessage.includes('500') && 
           !errorMessage.includes('502') &&
           !errorMessage.includes('503') &&

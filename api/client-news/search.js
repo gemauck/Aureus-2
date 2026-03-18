@@ -54,19 +54,24 @@ function parseRSS(xmlText) {
   }
 }
 
-// Fetch one RSS URL and parse
+// Fetch one RSS URL and parse (never throws - returns empty on network/timeout/parse errors)
 async function fetchRss(rssUrl) {
-  const response = await fetch(rssUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-      'Accept-Language': 'en-US,en;q=0.9'
-    },
-    signal: AbortSignal.timeout(15000)
-  })
-  if (!response.ok) return { articles: [], status: response.status }
-  const xmlText = await response.text()
-  return { articles: parseRSS(xmlText), status: response.status }
+  try {
+    const response = await fetch(rssUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'en-US,en;q=0.9'
+      },
+      signal: AbortSignal.timeout(15000)
+    })
+    if (!response.ok) return { articles: [], status: response.status }
+    const xmlText = await response.text()
+    return { articles: parseRSS(xmlText), status: response.status }
+  } catch (err) {
+    console.warn('RSS fetch failed:', err.message || err)
+    return { articles: [], status: 0 }
+  }
 }
 
 // Search news for a client using Google News RSS (no API key required)
@@ -185,92 +190,85 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
 }
 
 async function handler(req, res) {
+  // POST /api/client-news/search - Trigger news search for all clients
+  if (req.method !== 'POST') {
+    return serverError(res, 'Method not allowed')
+  }
+
   try {
+    let clients = []
+    try {
+      clients = await prisma.client.findMany({
+        where: {
+          OR: [
+            { rssSubscribed: true },
+            { rssSubscribed: null }
+          ]
+        },
+        select: {
+          id: true,
+          name: true,
+          website: true,
+          type: true,
+          rssSubscribed: true
+        }
+      })
+    } catch (dbErr) {
+      console.error('❌ Database error loading clients for news search:', dbErr)
+      return serverError(res, 'Failed to load clients for news search', dbErr.message)
+    }
 
-    // POST /api/client-news/search - Trigger news search for all clients
-    if (req.method === 'POST') {
+    if (clients.length === 0) {
+      console.warn('   ⚠️ No clients/leads found with rssSubscribed true or null. Check DB.')
+    } else {
+      console.log(`   📰 News search: ${clients.length} client(s)/lead(s) to search`)
+    }
+
+    const allArticles = []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    for (const client of clients) {
       try {
-        // Get ALL clients and leads subscribed to RSS (Client model has no status field)
-        const clients = await prisma.client.findMany({
-          where: {
-            OR: [
-              { rssSubscribed: true },
-              { rssSubscribed: null }
-            ]
-          },
-          select: {
-            id: true,
-            name: true,
-            website: true,
-            type: true,
-            rssSubscribed: true
-          }
-        })
-
-        if (clients.length === 0) {
-          console.warn('   ⚠️ No clients/leads found with rssSubscribed true or null. Check DB.')
-        } else {
-          console.log(`   📰 News search: ${clients.length} client(s)/lead(s) to search`)
+        const result = await searchAndSaveNewsForClient(
+          client.id,
+          client.name,
+          client.website || ''
+        )
+        if (result.articlesFound > 0) {
+          allArticles.push({
+            clientName: client.name,
+            title: `${result.articlesFound} new article(s) found`,
+            source: 'Google News'
+          })
         }
-
-        const allArticles = []
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-
-        // Search news for each client using the helper function
-        for (const client of clients) {
-          try {
-            const result = await searchAndSaveNewsForClient(
-              client.id,
-              client.name,
-              client.website || ''
-            )
-            
-            // Track articles for response (we don't have individual articles from the helper,
-            // but we can note that articles were processed)
-            if (result.articlesFound > 0) {
-              allArticles.push({
-                clientName: client.name,
-                title: `${result.articlesFound} new article(s) found`,
-                source: 'Google News'
-              })
-            }
-
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 1000))
-          } catch (clientError) {
-            console.error(`Error searching news for ${client.name}:`, clientError)
-            // Continue with other clients
-          }
-        }
-
-        // Mark old articles as not new (older than 24 hours)
-        const yesterday = new Date(today)
-        yesterday.setDate(yesterday.getDate() - 1)
-        
-        await prisma.clientNews.updateMany({
-          where: {
-            publishedAt: { lt: yesterday },
-            isNew: true
-          },
-          data: {
-            isNew: false
-          }
-        })
-
-        return ok(res, {
-          success: true,
-          articlesFound: allArticles.length,
-          clientsProcessed: clients.length,
-          articles: allArticles
-        })
-      } catch (dbError) {
-        console.error('❌ Database error during news search:', dbError)
-        return serverError(res, 'Failed to search news', dbError.message)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      } catch (clientError) {
+        console.error(`Error searching news for ${client.name}:`, clientError)
       }
     }
 
-    return serverError(res, 'Method not allowed')
+    try {
+      const yesterday = new Date(today)
+      yesterday.setDate(yesterday.getDate() - 1)
+      await prisma.clientNews.updateMany({
+        where: {
+          publishedAt: { lt: yesterday },
+          isNew: true
+        },
+        data: { isNew: false }
+      })
+    } catch (updateErr) {
+      console.error('❌ Database error marking old articles:', updateErr)
+      return serverError(res, 'Failed to update article flags', updateErr.message)
+    }
+
+    return ok(res, {
+      success: true,
+      articlesFound: allArticles.length,
+      clientsProcessed: clients.length,
+      articles: allArticles
+    })
   } catch (error) {
     console.error('❌ Client News Search API error:', error)
     return serverError(res, 'Internal server error', error.message)
