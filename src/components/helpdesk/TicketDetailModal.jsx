@@ -75,6 +75,8 @@ const TicketDetailModal = ({
     const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
     const [assigneeSearch, setAssigneeSearch] = useState('');
     const assigneeDropdownRef = useRef(null);
+    const [loadedTicket, setLoadedTicket] = useState(null);
+    const modalPanelRef = useRef(null);
     
     // Track current customFields to preserve other fields when saving notes
     const [currentCustomFields, setCurrentCustomFields] = useState(() => {
@@ -90,6 +92,40 @@ const TicketDetailModal = ({
             loadTicketDetails();
         }
     }, [ticket?.id]);
+
+    // Focus modal panel on open and trap focus; Escape to close
+    useEffect(() => {
+        const panel = modalPanelRef.current;
+        if (!panel) return;
+        const focusable = panel.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (first && typeof first.focus === 'function') first.focus();
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (onClose) onClose();
+                return;
+            }
+            if (e.key !== 'Tab') return;
+            if (e.shiftKey) {
+                if (document.activeElement === first) {
+                    e.preventDefault();
+                    if (last && typeof last.focus === 'function') last.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    if (first && typeof first.focus === 'function') first.focus();
+                }
+            }
+        };
+        panel.addEventListener('keydown', onKeyDown);
+        return () => panel.removeEventListener('keydown', onKeyDown);
+    }, [onClose]);
+
 
     const loadTicketDetails = async () => {
         try {
@@ -107,6 +143,7 @@ const TicketDetailModal = ({
             
             if (response?.ticket) {
                 const t = response.ticket;
+                setLoadedTicket(t);
                 setFormData({
                     title: t.title || '',
                     description: t.description || '',
@@ -428,12 +465,19 @@ const TicketDetailModal = ({
                 ></div>
 
                 {/* Modal panel */}
-                <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                <div
+                    ref={modalPanelRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="ticket-modal-title"
+                    className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+                    tabIndex={-1}
+                >
                     {/* Header */}
                     <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 border-b border-gray-200 dark:border-gray-600">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                                <h3 id="ticket-modal-title" className="text-lg font-medium text-gray-900 dark:text-white">
                                     {isCreating ? 'Create Ticket' : ticket?.ticketNumber || 'Ticket Details'}
                                 </h3>
                                 {!isCreating && ticket?.title && (
@@ -445,8 +489,10 @@ const TicketDetailModal = ({
                             <div className="flex items-center space-x-2">
                                 {!isCreating && !isEditing && (
                                     <button
+                                        type="button"
                                         onClick={() => setIsEditing(true)}
                                         className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                                        aria-label="Edit ticket"
                                     >
                                         Edit
                                     </button>
@@ -454,6 +500,7 @@ const TicketDetailModal = ({
                                 {isEditing && (
                                     <>
                                         <button
+                                            type="button"
                                             onClick={() => {
                                                 setIsEditing(false);
                                                 if (!isCreating) {
@@ -461,13 +508,16 @@ const TicketDetailModal = ({
                                                 }
                                             }}
                                             className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-500"
+                                            aria-label="Cancel editing"
                                         >
                                             Cancel
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={handleSave}
                                             disabled={isSaving}
                                             className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                            aria-label={isSaving ? 'Saving' : 'Save ticket'}
                                         >
                                             {isSaving ? 'Saving...' : 'Save'}
                                         </button>
@@ -475,32 +525,41 @@ const TicketDetailModal = ({
                                 )}
                                 {onDelete && !isCreating && (
                                     <button
+                                        type="button"
                                         onClick={() => {
                                             if (confirm('Are you sure you want to delete this ticket?')) {
                                                 onDelete();
                                             }
                                         }}
                                         className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                                        aria-label="Delete ticket"
                                     >
                                         Delete
                                     </button>
                                 )}
                                 <button
+                                    type="button"
                                     onClick={onClose}
                                     className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+                                    aria-label="Close modal"
                                 >
-                                    <i className="fas fa-times"></i>
+                                    <i className="fas fa-times" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
                     </div>
 
                     {/* Tabs */}
-                    <div className="border-b border-gray-200 dark:border-gray-600">
+                    <div className="border-b border-gray-200 dark:border-gray-600" role="tablist">
                         <nav className="flex -mb-px">
                             {['overview', 'notes', 'comments', 'timeline'].map((tab) => (
                                 <button
                                     key={tab}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={activeTab === tab}
+                                    aria-controls={`ticket-tabpanel-${tab}`}
+                                    id={`ticket-tab-${tab}`}
                                     onClick={() => setActiveTab(tab)}
                                     className={`px-6 py-3 text-sm font-medium border-b-2 ${
                                         activeTab === tab
@@ -517,7 +576,7 @@ const TicketDetailModal = ({
                     {/* Content */}
                     <div className="px-6 py-4 max-h-[calc(100vh-300px)] overflow-y-auto">
                         {activeTab === 'overview' && (
-                            <div className="space-y-4">
+                            <div id="ticket-tabpanel-overview" role="tabpanel" aria-labelledby="ticket-tab-overview" className="space-y-4">
                                 {/* Title */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -624,6 +683,53 @@ const TicketDetailModal = ({
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Submitted by (read-only) */}
+                                {!isCreating && ((loadedTicket || ticket)?.createdBy || (loadedTicket || ticket)?.createdById) && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Submitted by
+                                        </label>
+                                        <p className="text-gray-900 dark:text-white">
+                                            {(loadedTicket || ticket)?.createdBy ? ((loadedTicket || ticket).createdBy.name || (loadedTicket || ticket).createdBy.email) : '—'}
+                                            {((loadedTicket || ticket)?.createdById && user && (user.id === (loadedTicket || ticket).createdById || user.sub === (loadedTicket || ticket).createdById)) && (
+                                                <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">You</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* SLA & due (read-only display) */}
+                                {!isCreating && (() => {
+                                    const t = loadedTicket || ticket;
+                                    const dueDate = t?.dueDate || formData.dueDate;
+                                    const firstResponseAt = t?.firstResponseAt;
+                                    const closed = ['resolved', 'closed', 'cancelled'].includes(formData.status || t?.status);
+                                    const overdue = dueDate && !closed && new Date(dueDate) < new Date();
+                                    if (!dueDate && !firstResponseAt && !overdue) return null;
+                                    return (
+                                        <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 px-4 py-3">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                SLA & due
+                                            </label>
+                                            <div className="space-y-1 text-sm">
+                                                {dueDate && (
+                                                    <p className="text-gray-900 dark:text-white">
+                                                        Due: {new Date(dueDate).toLocaleString()}
+                                                        {overdue && (
+                                                            <span className="ml-2 px-1.5 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Overdue</span>
+                                                        )}
+                                                    </p>
+                                                )}
+                                                {firstResponseAt && (
+                                                    <p className="text-gray-700 dark:text-gray-300">
+                                                        First response: {new Date(firstResponseAt).toLocaleString()}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Assignment */}
                                 {isEditing && (
@@ -753,7 +859,7 @@ const TicketDetailModal = ({
                         )}
 
                         {activeTab === 'notes' && (
-                            <div className="space-y-4">
+                            <div id="ticket-tabpanel-notes" role="tabpanel" aria-labelledby="ticket-tab-notes" className="space-y-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Notes
@@ -820,6 +926,7 @@ const TicketDetailModal = ({
                         )}
 
                         {activeTab === 'comments' && (
+                            <div id="ticket-tabpanel-comments" role="tabpanel" aria-labelledby="ticket-tab-comments">
                             <div className="space-y-4">
                                 {/* Comments List */}
                                 <div className="space-y-4">
@@ -876,7 +983,7 @@ const TicketDetailModal = ({
                         )}
 
                         {activeTab === 'timeline' && (
-                            <div className="space-y-4">
+                            <div id="ticket-tabpanel-timeline" role="tabpanel" aria-labelledby="ticket-tab-timeline" className="space-y-4">
                                 {activityLog.length === 0 ? (
                                     <p className="text-gray-500 dark:text-gray-400 text-center py-8">
                                         No activity yet

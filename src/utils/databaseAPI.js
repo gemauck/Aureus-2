@@ -1428,6 +1428,16 @@ const DatabaseAPI = {
         } catch (_) {}
     },
 
+    invalidateHelpdeskCache() {
+        try {
+            const keysToDelete = [];
+            for (const key of this._responseCache.keys()) {
+                if (typeof key === 'string' && key.startsWith('GET:/helpdesk')) keysToDelete.push(key);
+            }
+            keysToDelete.forEach(k => this._responseCache.delete(k));
+        } catch (_) {}
+    },
+
     async getTasks(status = null, projectId = null) {
         let endpoint = '/tasks';
         const params = [];

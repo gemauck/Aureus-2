@@ -1,12 +1,13 @@
 # Gmail API Setup for Helpdesk Email-to-Ticket
 
-This guide explains how to set up Gmail API to automatically create tickets from emails sent to `support@abcotronics.co.za`.
+This guide explains how to set up Gmail API to automatically create tickets from emails sent to your support address.
 
 ## Overview
 
 Instead of using SendGrid/Mailgun webhooks, you can use Gmail API to:
-- ✅ Poll Gmail inbox for emails to `support@abcotronics.co.za`
+- ✅ Poll Gmail inbox for emails to your configured support address
 - ✅ Automatically create tickets from new emails
+- ✅ Assign tickets to clients when the sender email matches a Client Contact
 - ✅ Add comments from email replies
 - ✅ No DNS changes needed (uses existing Gmail account)
 
@@ -53,6 +54,10 @@ Add to your `.env` file:
 GMAIL_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 GMAIL_CLIENT_SECRET="your-client-secret"
 GMAIL_REDIRECT_URI="https://abcoafrica.co.za/api/helpdesk/gmail-callback"
+
+# Optional: support address for email-to-ticket (default: support@abcotronics.co.za)
+# Emails to this address will create tickets. Set to the Gmail address you use or forward to.
+HELPDESK_SUPPORT_EMAIL="support@yourdomain.com"
 ```
 
 ## Step 5: Get Refresh Token
@@ -133,13 +138,14 @@ curl -X POST https://abcoafrica.co.za/api/helpdesk/gmail-watcher
 
 ## How It Works
 
-1. **Cron job runs** every 5 minutes
-2. **Gmail API searches** for unread emails to `support@abcotronics.co.za`
+1. **Cron job runs** every 5 minutes (or trigger manually via `POST /api/helpdesk/gmail-watcher`)
+2. **Gmail API searches** for unread emails to the configured support address (`HELPDESK_SUPPORT_EMAIL` or default `support@abcotronics.co.za`)
 3. **For each email**:
    - Parses email content (subject, body, attachments)
+   - Resolves **client**: if the sender email matches a **Client Contact** email, the new ticket is assigned to that client
    - Checks if it's a reply (using `In-Reply-To` header)
    - If reply: Adds comment to existing ticket
-   - If new: Creates new ticket
+   - If new: Creates new ticket (with `clientId` set when sender matches a contact)
 4. **Marks email as read** in Gmail
 
 ## API Endpoints
@@ -180,7 +186,7 @@ Redirects to Google OAuth consent screen.
 
 ### "No emails found"
 - Verify emails are going to the correct Gmail account
-- Check Gmail search query: `to:support@abcotronics.co.za is:unread`
+- Check that `HELPDESK_SUPPORT_EMAIL` (or default) matches the address you're polling (e.g. Gmail search: `to:YOUR_SUPPORT_EMAIL is:unread`)
 - Make sure emails aren't already marked as read
 
 ### "Permission denied"

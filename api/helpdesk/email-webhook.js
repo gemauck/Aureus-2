@@ -7,6 +7,23 @@ import { ok, badRequest, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 
+const SUPPORT_EMAIL = (process.env.HELPDESK_SUPPORT_EMAIL || 'support@abcotronics.co.za').toLowerCase().trim()
+
+// Resolve client ID from sender email (match ClientContact.email)
+async function findClientIdBySenderEmail(fromEmail) {
+  if (!fromEmail) return null
+  try {
+    const contact = await prisma.clientContact.findFirst({
+      where: { email: { equals: fromEmail, mode: 'insensitive' } },
+      select: { clientId: true }
+    })
+    return contact?.clientId ?? null
+  } catch (e) {
+    console.warn('Could not resolve client for email:', fromEmail, e?.message)
+    return null
+  }
+}
+
 // Generate unique ticket number: TKT-YYYY-NNNN
 async function generateTicketNumber() {
   const year = new Date().getFullYear()
@@ -243,9 +260,9 @@ async function handler(req, res) {
     const fromEmail = fromMatch[1]?.trim().toLowerCase()
     const fromName = emailData.from.replace(/<[^>]+>/, '').trim() || fromEmail.split('@')[0]
     
-    // Check if email is to support@abcotronics.co.za
+    // Check if email is to configured support address
     const toEmail = (emailData.to || '').toLowerCase()
-    if (!toEmail.includes('support@abcotronics.co.za') && !toEmail.includes('helpdesk')) {
+    if (!toEmail.includes(SUPPORT_EMAIL) && !toEmail.includes('helpdesk')) {
       console.log('⚠️ Email not to support address, ignoring:', toEmail)
       return ok(res, { message: 'Email not to support address, ignored' })
     }
@@ -315,7 +332,9 @@ async function handler(req, res) {
     } else {
       // This is a new email - create ticket
       console.log(`📧 Creating new ticket from email: ${fromEmail}`)
-      
+      const clientId = await findClientIdBySenderEmail(fromEmail)
+      if (clientId) console.log(`📎 Matched sender to client: ${clientId}`)
+
       const ticketNumber = await generateTicketNumber()
       
       // Parse attachments
@@ -345,6 +364,7 @@ async function handler(req, res) {
           category: 'general',
           type: 'email',
           createdById: user.id,
+          clientId: clientId || undefined,
           sourceEmail: fromEmail,
           emailThreadId: threadInfo.threadId,
           emailMessageId: threadInfo.messageId,

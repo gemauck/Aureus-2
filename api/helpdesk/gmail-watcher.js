@@ -1,10 +1,12 @@
 // Gmail API integration for helpdesk email-to-ticket
-// Polls Gmail inbox for emails to support@abcotronics.co.za
+// Polls Gmail inbox for emails to configured support address
 // Creates tickets from new emails and adds comments from replies
 
 import { google } from 'googleapis'
 import { prisma } from '../_lib/prisma.js'
 import { generateTicketNumber } from '../helpdesk.js'
+
+const SUPPORT_EMAIL = (process.env.HELPDESK_SUPPORT_EMAIL || 'support@abcotronics.co.za').toLowerCase().trim()
 
 // Gmail API setup
 function getGmailClient() {
@@ -134,6 +136,21 @@ async function findOrCreateUserByEmail(email, name) {
   return user
 }
 
+// Resolve client ID from sender email (match ClientContact.email)
+async function findClientIdBySenderEmail(fromEmail) {
+  if (!fromEmail) return null
+  try {
+    const contact = await prisma.clientContact.findFirst({
+      where: { email: { equals: fromEmail, mode: 'insensitive' } },
+      select: { clientId: true }
+    })
+    return contact?.clientId ?? null
+  } catch (e) {
+    console.warn('Could not resolve client for email:', fromEmail, e?.message)
+    return null
+  }
+}
+
 // Find existing ticket by email thread
 async function findTicketByThread(threadId, messageId) {
   if (!threadId && !messageId) return null
@@ -173,9 +190,9 @@ async function processEmail(emailData) {
     const fromEmail = fromMatch[1]?.trim().toLowerCase()
     const fromName = emailData.from.replace(/<[^>]+>/, '').trim() || fromEmail.split('@')[0]
 
-    // Check if email is to support address
+    // Check if email is to configured support address
     const toEmail = (emailData.to || '').toLowerCase()
-    if (!toEmail.includes('support@abcotronics.co.za') && !toEmail.includes('helpdesk')) {
+    if (!toEmail.includes(SUPPORT_EMAIL) && !toEmail.includes('helpdesk')) {
       console.log('⚠️ Email not to support address, ignoring:', toEmail)
       return { processed: false, reason: 'Not to support address' }
     }
@@ -234,7 +251,9 @@ async function processEmail(emailData) {
     } else {
       // New email - create ticket
       console.log(`📧 Creating new ticket from email: ${fromEmail}`)
-      
+      const clientId = await findClientIdBySenderEmail(fromEmail)
+      if (clientId) console.log(`📎 Matched sender to client: ${clientId}`)
+
       const ticketNumber = await generateTicketNumber()
       
       const activityLog = [{
@@ -257,6 +276,7 @@ async function processEmail(emailData) {
           category: 'general',
           type: 'email',
           createdById: user.id,
+          clientId: clientId || undefined,
           sourceEmail: fromEmail,
           emailThreadId: cleanThreadId,
           emailMessageId: messageId,
@@ -281,9 +301,7 @@ async function processEmail(emailData) {
 export async function checkGmailForTickets() {
   try {
     const gmail = getGmailClient()
-    
-    // Search for unread emails to support@abcotronics.co.za
-    const query = 'to:support@abcotronics.co.za is:unread'
+    const query = `to:${SUPPORT_EMAIL} is:unread`
     
     const response = await gmail.users.messages.list({
       userId: 'me',
@@ -292,7 +310,7 @@ export async function checkGmailForTickets() {
     })
 
     const messages = response.data.messages || []
-    console.log(`📬 Found ${messages.length} unread emails to support@abcotronics.co.za`)
+    console.log(`📬 Found ${messages.length} unread emails to ${SUPPORT_EMAIL}`)
 
     const results = []
     
