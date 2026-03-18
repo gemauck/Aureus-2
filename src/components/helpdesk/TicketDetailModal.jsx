@@ -731,6 +731,63 @@ const TicketDetailModal = ({
                                     );
                                 })()}
 
+                                {/* Links to project, client, assignee (read-only when not editing) */}
+                                {!isCreating && !isEditing && (() => {
+                                    const t = loadedTicket || ticket;
+                                    const clientId = t?.clientId || formData.clientId;
+                                    const projectId = t?.projectId || formData.projectId;
+                                    const assignedToId = t?.assignedToId || formData.assignedToId;
+                                    const client = t?.client || (clientId && clients.find(c => c.id === clientId));
+                                    const project = t?.project || (projectId && projects.find(p => p.id === projectId));
+                                    const assignee = t?.assignedTo || (assignedToId && users.find(u => u.id === assignedToId));
+                                    if (!clientId && !projectId && !assignedToId) return null;
+                                    return (
+                                        <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 px-4 py-3 space-y-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Linked to
+                                            </label>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                                                {assignedToId && (
+                                                    <span>
+                                                        Assigned to:{' '}
+                                                        <a
+                                                            href={`#/users/${assignedToId}`}
+                                                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            {assignee?.name || assignee?.email || 'User'}
+                                                        </a>
+                                                    </span>
+                                                )}
+                                                {clientId && (
+                                                    <span>
+                                                        Client:{' '}
+                                                        <a
+                                                            href={`#/clients/${clientId}`}
+                                                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            {client?.name || 'Client'}
+                                                        </a>
+                                                    </span>
+                                                )}
+                                                {projectId && (
+                                                    <span>
+                                                        Project:{' '}
+                                                        <a
+                                                            href={`#/projects/${projectId}`}
+                                                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            {project?.name || 'Project'}
+                                                        </a>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
                                 {/* Assignment */}
                                 {isEditing && (
                                     <div>

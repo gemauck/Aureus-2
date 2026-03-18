@@ -634,7 +634,7 @@ const Helpdesk = () => {
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    {['Ticket', 'Status', 'Priority', 'Category', 'Assigned To', 'Submitted By', 'Due', 'Created'].map((h) => (
+                                    {['Ticket', 'Status', 'Priority', 'Category', 'Assigned To', 'Client', 'Project', 'Submitted By', 'Due', 'Created'].map((h) => (
                                         <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>
                                     ))}
                                 </tr>
@@ -647,7 +647,9 @@ const Helpdesk = () => {
                                         <td className="px-6 py-4"><div className="h-5 bg-gray-200 dark:bg-gray-600 rounded w-16 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-20 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-24 animate-pulse" /></td>
+                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-20 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-24 animate-pulse" /></td>
+                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-20 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-16 animate-pulse" /></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-20 animate-pulse" /></td>
                                     </tr>
@@ -720,6 +722,8 @@ const Helpdesk = () => {
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Priority</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Category</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Assigned To</th>
+                                    <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Client</th>
+                                    <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Project</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Submitted By</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Due</th>
                                     <th className={`text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${listDensity === 'compact' ? 'px-4 py-2' : 'px-6 py-3'}`}>Created</th>
@@ -775,20 +779,50 @@ const Helpdesk = () => {
                                         <td className={`${cellPad} whitespace-nowrap ${cellText} text-gray-500 dark:text-gray-400`}>
                                             {ticket.category}
                                         </td>
-                                        <td className={`${cellPad} whitespace-nowrap ${cellText} text-gray-500 dark:text-gray-400`}>
+                                        <td className={`${cellPad} whitespace-nowrap ${cellText} text-gray-500 dark:text-gray-400`} onClick={(e) => e.stopPropagation()}>
                                             {ticket.assignedTo ? (
-                                                <div className="flex items-center">
+                                                <a
+                                                    href={`#/users/${ticket.assignedTo.id || ticket.assignedToId}`}
+                                                    className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline"
+                                                    title="View user"
+                                                >
                                                     {ticket.assignedTo.avatar && (
                                                         <img
                                                             src={ticket.assignedTo.avatar}
-                                                            alt={ticket.assignedTo.name}
-                                                            className="w-6 h-6 rounded-full mr-2"
+                                                            alt=""
+                                                            className="w-6 h-6 rounded-full flex-shrink-0"
                                                         />
                                                     )}
                                                     <span>{ticket.assignedTo.name || ticket.assignedTo.email}</span>
-                                                </div>
+                                                </a>
                                             ) : (
                                                 <span className="text-gray-400">Unassigned</span>
+                                            )}
+                                        </td>
+                                        <td className={`${cellPad} whitespace-nowrap ${cellText} text-gray-500 dark:text-gray-400`} onClick={(e) => e.stopPropagation()}>
+                                            {ticket.clientId && ticket.client ? (
+                                                <a
+                                                    href={`#/clients/${ticket.clientId}`}
+                                                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                                                    title="View client"
+                                                >
+                                                    {ticket.client.name}
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400">—</span>
+                                            )}
+                                        </td>
+                                        <td className={`${cellPad} whitespace-nowrap ${cellText} text-gray-500 dark:text-gray-400`} onClick={(e) => e.stopPropagation()}>
+                                            {ticket.projectId && ticket.project ? (
+                                                <a
+                                                    href={`#/projects/${ticket.projectId}`}
+                                                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                                                    title="View project"
+                                                >
+                                                    {ticket.project.name}
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400">—</span>
                                             )}
                                         </td>
                                         <td className={`${cellPad} whitespace-nowrap ${cellText} text-gray-500 dark:text-gray-400`}>
@@ -889,17 +923,31 @@ const Helpdesk = () => {
                                                         )}
                                                     </div>
                                                     {ticket.assignedTo && (
-                                                        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600 flex items-center gap-1.5">
-                                                            {ticket.assignedTo.avatar ? (
-                                                                <img src={ticket.assignedTo.avatar} alt="" className="w-5 h-5 rounded-full" />
-                                                            ) : (
-                                                                <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] flex items-center justify-center font-semibold">
-                                                                    {(ticket.assignedTo.name || ticket.assignedTo.email || '?').charAt(0).toUpperCase()}
-                                                                </span>
+                                                        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                                            <a
+                                                                href={`#/users/${ticket.assignedTo.id || ticket.assignedToId}`}
+                                                                className="flex items-center gap-1.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline truncate min-w-0"
+                                                                title="View user"
+                                                            >
+                                                                {ticket.assignedTo.avatar ? (
+                                                                    <img src={ticket.assignedTo.avatar} alt="" className="w-5 h-5 rounded-full flex-shrink-0" />
+                                                                ) : (
+                                                                    <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] flex items-center justify-center font-semibold flex-shrink-0">
+                                                                        {(ticket.assignedTo.name || ticket.assignedTo.email || '?').charAt(0).toUpperCase()}
+                                                                    </span>
+                                                                )}
+                                                                <span className="truncate">{ticket.assignedTo.name || ticket.assignedTo.email}</span>
+                                                            </a>
+                                                        </div>
+                                                    )}
+                                                    {(ticket.clientId || ticket.projectId) && (
+                                                        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
+                                                            {ticket.clientId && ticket.client && (
+                                                                <a href={`#/clients/${ticket.clientId}`} className="text-blue-600 dark:text-blue-400 hover:underline truncate">{(ticket.client.name)}</a>
                                                             )}
-                                                            <span className="text-[10px] text-gray-600 dark:text-gray-400 truncate">
-                                                                {ticket.assignedTo.name || ticket.assignedTo.email}
-                                                            </span>
+                                                            {ticket.projectId && ticket.project && (
+                                                                <a href={`#/projects/${ticket.projectId}`} className="text-blue-600 dark:text-blue-400 hover:underline truncate">{(ticket.project.name)}</a>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
