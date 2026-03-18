@@ -2705,6 +2705,27 @@ app.listen(PORT, '0.0.0.0', async () => {
   } else {
     console.log('ℹ️ Leave email notifications disabled (ENABLE_LEAVE_EMAIL_NOTIFICATIONS=false)')
   }
+
+  // SARS website monitoring: daily check at 7:00 AM (same DB as app so logs appear in UI)
+  if (process.env.DISABLE_SARS_MONITORING_CRON !== 'true') {
+    try {
+      const cron = (await import('node-cron')).default
+      const { runSarsMonitoringCheck } = await import('./api/sars-monitoring/check.js')
+      cron.schedule('0 7 * * *', async () => {
+        console.log('🔍 Running SARS website monitoring check...')
+        try {
+          await runSarsMonitoringCheck()
+          console.log('✅ SARS monitoring check completed')
+        } catch (error) {
+          console.error('❌ SARS monitoring check failed:', error)
+        }
+      }, { timezone: 'Africa/Johannesburg' })
+      console.log('✅ SARS monitoring cron scheduled (7:00 AM daily)')
+    } catch (error) {
+      console.warn('⚠️ Failed to setup SARS monitoring cron:', error.message)
+      console.warn('   Set DISABLE_SARS_MONITORING_CRON=true to disable')
+    }
+  }
 })
 
 process.on('SIGTERM', () => {

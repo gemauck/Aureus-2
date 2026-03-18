@@ -267,6 +267,11 @@ async function checkSarsWebsite() {
   return results
 }
 
+/** Run full SARS check (for in-app cron). Exported so server.js can schedule it. */
+export async function runSarsMonitoringCheck() {
+  return checkSarsWebsite()
+}
+
 // API Handler
 async function handler(req, res) {
   try {
@@ -322,11 +327,15 @@ async function handler(req, res) {
       if (isRead !== undefined) where.isRead = isRead === 'true'
       if (category) where.category = category
       if (priority) where.priority = priority
+      const take = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200)
       try {
         const changes = await prisma.sarsWebsiteChange.findMany({
           where,
-          orderBy: { publishedAt: 'desc' },
-          take: parseInt(limit)
+          orderBy: [
+            { publishedAt: 'desc' },
+            { createdAt: 'desc' }
+          ],
+          take
         })
         return ok(res, { success: true, data: { changes } })
       } catch (err) {

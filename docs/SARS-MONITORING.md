@@ -126,14 +126,18 @@ Marks a specific change as read.
 
 ## Automated Monitoring
 
-### Cron job
+### In-app schedule (7:00 AM daily)
 
-The script checks all monitored sections and, when new changes are found, sends a summary email to the Compliance team. Run it daily (e.g. 9 AM):
+When the app server runs, it automatically schedules a **daily SARS check at 7:00 AM** (Africa/Johannesburg). This uses the same database as the UI, so changes that trigger summary emails will appear in the Teams → Compliance → SARS Monitoring tab. To disable this, set `DISABLE_SARS_MONITORING_CRON=true`.
+
+### Optional: external cron
+
+If you prefer to run the standalone script (e.g. on a different host), use a daily cron at 7 AM:
 
 ```bash
 crontab -e
 # Run from repo root so the script can import the email helper
-0 9 * * * cd /path/to/abcotronics-erp-modular && node scripts/sars-website-monitor.js >> /var/log/sars-monitoring.log 2>&1
+0 7 * * * cd /path/to/abcotronics-erp-modular && node scripts/sars-website-monitor.js >> /var/log/sars-monitoring.log 2>&1
 ```
 
 ### Manual run

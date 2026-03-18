@@ -47,8 +47,8 @@ Add to crontab for daily automatic checks:
 # Edit crontab
 crontab -e
 
-# Add this line (runs daily at 9 AM)
-0 9 * * * cd /path/to/abcotronics-erp-modular && /usr/bin/node scripts/sars-website-monitor.js >> /var/log/sars-monitoring.log 2>&1
+# Add this line (runs daily at 7 AM)
+0 7 * * * cd /path/to/abcotronics-erp-modular && /usr/bin/node scripts/sars-website-monitor.js >> /var/log/sars-monitoring.log 2>&1
 ```
 
 ## 📊 Features

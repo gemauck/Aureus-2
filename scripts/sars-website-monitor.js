@@ -5,7 +5,7 @@
  * Sends summary email to Compliance team when new changes are found.
  *
  * Usage:
- *   Cron: 0 9 * * * cd /path/to/repo && node scripts/sars-website-monitor.js
+ *   Cron: 0 7 * * * cd /path/to/repo && node scripts/sars-website-monitor.js
  *   Manual: node scripts/sars-website-monitor.js
  */
 
