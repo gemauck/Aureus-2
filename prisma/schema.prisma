@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
   engineType    = "binary"
 }
 
@@ -1951,6 +1951,28 @@ model StarredOpportunity {
   @@unique([userId, opportunityId])
   @@index([userId])
   @@index([opportunityId])
+}
+
+model UserSettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  timezone              String   @default("Africa/Johannesburg")
+  currency              String   @default("ZAR")
+  dateFormat            String   @default("DD/MM/YYYY")
+  language              String   @default("en")
+  sessionTimeout        Int      @default(30)
+  requirePasswordChange Boolean  @default(false)
+  twoFactorAuth         Boolean  @default(false)
+  auditLogging          Boolean  @default(true)
+  emailProvider         String   @default("gmail")
+  googleCalendar        Boolean  @default(false)
+  quickbooks            Boolean  @default(false)
+  slack                 Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model SystemSettings {
