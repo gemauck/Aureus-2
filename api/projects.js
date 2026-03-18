@@ -479,6 +479,45 @@ function buildDocumentStatusMap(sectionsByYear) {
 }
 
 /**
+ * Build a flat list of notes entries from documentSections/monthlyDataReviewSections/complianceReviewSections JSON.
+ * docs have notesByMonth: { "YYYY-MM": "text" }. key = `${year}-${sectionName}-${docName}-${month}`.
+ */
+function buildDocumentNotesMap(sectionsByYear) {
+  const map = new Map()
+  if (!sectionsByYear || typeof sectionsByYear !== 'object') return map
+  const years = Array.isArray(sectionsByYear)
+    ? [new Date().getFullYear()]
+    : Object.keys(sectionsByYear)
+  const yearSections = Array.isArray(sectionsByYear)
+    ? { [years[0]]: sectionsByYear }
+    : sectionsByYear
+  for (const yearStr of years) {
+    const sections = yearSections[yearStr]
+    if (!Array.isArray(sections)) continue
+    const year = parseInt(yearStr, 10)
+    if (isNaN(year)) continue
+    for (const section of sections) {
+      const sectionName = section.name || ''
+      for (const doc of section.documents || []) {
+        const docName = doc.name || ''
+        const docId = doc.id != null ? String(doc.id) : ''
+        const notesByMonth = doc.notesByMonth && typeof doc.notesByMonth === 'object' ? doc.notesByMonth : {}
+        for (const [key, notes] of Object.entries(notesByMonth)) {
+          const parts = key.split('-')
+          const month = parts.length >= 2 ? parseInt(parts[1], 10) : null
+          if (month >= 1 && month <= 12) {
+            const notesStr = notes != null ? String(notes).trim() : ''
+            const entryKey = `${year}-${sectionName}-${docName}-${month}`
+            map.set(entryKey, { year, sectionName, docName, docId, month, notes: notesStr })
+          }
+        }
+      }
+    }
+  }
+  return map
+}
+
+/**
  * Save documentSections JSON to table structure
  * @param {string} projectId
  * @param {object|string} jsonData
@@ -2357,5 +2396,5 @@ async function handler(req, res) {
   }
 }
 
-export { buildDocumentStatusMap, saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson }
+export { buildDocumentStatusMap, buildDocumentNotesMap, saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson }
 export default withHttp(withLogging(authRequired(handler)))

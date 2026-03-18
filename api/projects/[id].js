@@ -4,7 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap } from '../projects.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildDocumentNotesMap } from '../projects.js'
 import { logProjectActivity, getActivityUserFromRequest } from '../_lib/projectActivityLog.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
@@ -1359,6 +1359,7 @@ async function handler(req, res) {
           hasMonthlyFMSReviewProcess: true,
           hasMonthlyDataReviewProcess: true,
           hasComplianceReviewProcess: true,
+          documentSections: true,
           monthlyDataReviewSections: true,
           complianceReviewSections: true
         }
@@ -1493,6 +1494,32 @@ async function handler(req, res) {
                 });
               }
             }
+            const oldNotesMap = buildDocumentNotesMap(oldParsed);
+            const newNotesMap = buildDocumentNotesMap(newParsed);
+            const noteSnippetMdr = (text, maxLen = 120) => (text && text.length > maxLen ? text.slice(0, maxLen) + '…' : (text || ''));
+            for (const [entryKey, newEntry] of newNotesMap) {
+              const oldEntry = oldNotesMap.get(entryKey);
+              const oldNotes = oldEntry ? oldEntry.notes : '';
+              if (oldNotes !== newEntry.notes) {
+                await logProjectActivity(prisma, {
+                  projectId: id,
+                  userId: activityUserId,
+                  userName: activityUserName,
+                  type: 'monthly_data_review_notes_change',
+                  description: `Monthly Data Review notes: "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')})${newEntry.notes ? ` — ${noteSnippetMdr(newEntry.notes)}` : ' — cleared'}`,
+                  metadata: {
+                    entityType: 'monthly_data_review',
+                    entityId: newEntry.docId,
+                    documentName: newEntry.docName,
+                    year: newEntry.year,
+                    month: newEntry.month,
+                    oldValue: oldNotes,
+                    newValue: newEntry.notes,
+                    noteSnippet: noteSnippetMdr(newEntry.notes)
+                  }
+                });
+              }
+            }
           } catch (e) {
             console.warn('Activity log monthlyDataReviewSections diff failed (non-fatal):', e?.message);
           }
@@ -1518,11 +1545,73 @@ async function handler(req, res) {
                 });
               }
             }
+            const oldNotesMap = buildDocumentNotesMap(oldParsed);
+            const newNotesMap = buildDocumentNotesMap(newParsed);
+            const noteSnippet = (text, maxLen = 120) => (text && text.length > maxLen ? text.slice(0, maxLen) + '…' : (text || ''));
+            for (const [entryKey, newEntry] of newNotesMap) {
+              const oldEntry = oldNotesMap.get(entryKey);
+              const oldNotes = oldEntry ? oldEntry.notes : '';
+              if (oldNotes !== newEntry.notes) {
+                await logProjectActivity(prisma, {
+                  projectId: id,
+                  userId: activityUserId,
+                  userName: activityUserName,
+                  type: 'compliance_review_notes_change',
+                  description: `Compliance Review notes: "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')})${newEntry.notes ? ` — ${noteSnippet(newEntry.notes)}` : ' — cleared'}`,
+                  metadata: {
+                    entityType: 'compliance_review',
+                    entityId: newEntry.docId,
+                    documentName: newEntry.docName,
+                    year: newEntry.year,
+                    month: newEntry.month,
+                    oldValue: oldNotes,
+                    newValue: newEntry.notes,
+                    noteSnippet: noteSnippet(newEntry.notes)
+                  }
+                });
+              }
+            }
           } catch (e) {
             console.warn('Activity log complianceReviewSections diff failed (non-fatal):', e?.message);
           }
         }
-        
+
+        if (body.documentSections !== undefined && body.documentSections !== null) {
+          try {
+            const oldJson = existingProject.documentSections;
+            const oldParsed = (typeof oldJson === 'string' && oldJson) ? JSON.parse(oldJson) : (oldJson && typeof oldJson === 'object' ? oldJson : {});
+            const newParsed = typeof body.documentSections === 'string' ? JSON.parse(body.documentSections) : body.documentSections;
+            const oldNotesMap = buildDocumentNotesMap(oldParsed);
+            const newNotesMap = buildDocumentNotesMap(newParsed);
+            const noteSnippet = (text, maxLen = 120) => (text && text.length > maxLen ? text.slice(0, maxLen) + '…' : (text || ''));
+            for (const [entryKey, newEntry] of newNotesMap) {
+              const oldEntry = oldNotesMap.get(entryKey);
+              const oldNotes = oldEntry ? oldEntry.notes : '';
+              if (oldNotes !== newEntry.notes) {
+                await logProjectActivity(prisma, {
+                  projectId: id,
+                  userId: activityUserId,
+                  userName: activityUserName,
+                  type: 'document_section_notes_change',
+                  description: `Document Collection notes: "${newEntry.docName}" (${newEntry.year}-${String(newEntry.month).padStart(2, '0')})${newEntry.notes ? ` — ${noteSnippet(newEntry.notes)}` : ' — cleared'}`,
+                  metadata: {
+                    entityType: 'document_section',
+                    entityId: newEntry.docId,
+                    documentName: newEntry.docName,
+                    year: newEntry.year,
+                    month: newEntry.month,
+                    oldValue: oldNotes,
+                    newValue: newEntry.notes,
+                    noteSnippet: noteSnippet(newEntry.notes)
+                  }
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Activity log documentSections notes diff failed (non-fatal):', e?.message);
+          }
+        }
+
         return ok(res, { project: result })
       } catch (dbError) {
         console.error('❌ Database error updating project:', {

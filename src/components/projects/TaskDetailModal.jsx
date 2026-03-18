@@ -2577,14 +2577,18 @@ const TaskDetailModal = ({
                                         return taskLogs.map((log) => {
                                             const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
                                             const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                            const fieldLabel = meta.field ? String(meta.field).replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim() : null;
+                                            const summaryLine = fieldLabel && (meta.oldValue != null || meta.newValue != null)
+                                                ? `${fieldLabel}: ${meta.oldValue != null ? String(meta.oldValue) : ''}${meta.oldValue != null && meta.newValue != null ? ' → ' : ''}${meta.newValue != null ? String(meta.newValue) : ''}`
+                                                : (log.description || log.type);
                                             return (
                                                 <div key={log.id} className="border border-gray-200 rounded-lg p-2 bg-gray-50/50 text-sm">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="font-medium text-gray-900">{log.description || log.type}</span>
+                                                        <span className="font-medium text-gray-900">{summaryLine}</span>
                                                         <span className="text-gray-500 text-xs">{log.userName || 'System'}</span>
                                                         <span className="text-gray-400 text-xs">{dateStr}</span>
                                                     </div>
-                                                    {(meta.oldValue != null || meta.newValue != null) && (
+                                                    {!fieldLabel && (meta.oldValue != null || meta.newValue != null) && (
                                                         <div className="mt-1 text-xs text-gray-600">
                                                             {meta.oldValue != null && <span className="line-through text-gray-500">{String(meta.oldValue)}</span>}
                                                             {meta.oldValue != null && meta.newValue != null && <span className="mx-1">→</span>}

@@ -2150,6 +2150,13 @@ function initializeProjectDetail() {
             loadActivityLog();
         }
     }, [activeSection, project?.id, loadActivityLog]);
+
+    // When task modal opens, ensure activity log is loaded so History tab has data
+    useEffect(() => {
+        if (showTaskDetailModal && project?.id && !activityLogEntries && (!project.activityLog || project.activityLog.length === 0)) {
+            loadActivityLog();
+        }
+    }, [showTaskDetailModal, project?.id, project?.activityLog, activityLogEntries, loadActivityLog]);
     
     // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
     // This runs synchronously in useEffect to ensure tasks are available instantly
@@ -8515,23 +8522,108 @@ function initializeProjectDetail() {
                             logs.map((log) => {
                                 const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
                                 const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                const entityType = meta.entityType || '';
+                                const taskId = meta.entityId && entityType === 'task' ? meta.entityId : null;
+                                const taskTitle = meta.taskTitle || (taskId ? `Task ${String(taskId).slice(-6)}` : null);
+                                const documentName = meta.documentName || null;
+                                const yearMonth = (meta.year != null && meta.month != null) ? `${meta.year}-${String(meta.month).padStart(2, '0')}` : null;
+                                const fieldLabel = meta.field ? String(meta.field).replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim() : null;
+                                const hasTaskLink = taskId && project?.id;
+                                const docCollectionType = entityType === 'document_section';
+                                const monthlyFmsType = entityType === 'monthly_fms';
+                                const monthlyDataReviewType = entityType === 'monthly_data_review';
+                                const complianceType = entityType === 'compliance_review';
+                                const hasDocLink = (docCollectionType || monthlyFmsType || monthlyDataReviewType || complianceType) && project?.id;
+                                const isNotesChange = /_notes_change$/.test(log.type || '');
+                                const summaryLine = (() => {
+                                    if (taskTitle && entityType === 'task') return `Task: ${taskTitle}`;
+                                    if (isNotesChange && documentName && yearMonth) return `Notes: ${documentName} (${yearMonth})`;
+                                    if (documentName && yearMonth) return `${documentName} (${yearMonth})`;
+                                    if (documentName) return documentName;
+                                    if (entityType === 'project' && fieldLabel) return `Project: ${fieldLabel}`;
+                                    return log.description || log.type || 'Activity';
+                                })();
                                 return (
                                     <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50 hover:bg-gray-50">
                                         <div className="flex flex-wrap items-center gap-2 text-sm">
-                                            <span className="font-medium text-gray-900">{log.description || log.type || 'Activity'}</span>
+                                            <span className="font-medium text-gray-900">{summaryLine}</span>
+                                            {log.type && (
+                                                <span className="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{log.type.replace(/_/g, ' ')}</span>
+                                            )}
                                             <span className="text-gray-500">{log.userName || 'System'}</span>
                                             <span className="text-gray-400 text-xs">{dateStr}</span>
-                                            {log.type && (
-                                                <span className="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{log.type}</span>
-                                            )}
                                         </div>
-                                        {(meta.oldValue != null || meta.newValue != null) && (
+                                        {log.description && summaryLine !== log.description && (
+                                            <div className="mt-1 text-xs text-gray-600">{log.description}</div>
+                                        )}
+                                        {meta.noteSnippet && (
+                                            <div className="mt-2 text-xs text-gray-700 bg-white/90 rounded px-2 py-1.5 border border-gray-200">
+                                                <span className="text-gray-500 font-medium">Note: </span>
+                                                <span className="italic">{meta.noteSnippet}</span>
+                                            </div>
+                                        )}
+                                        {(meta.oldValue != null || meta.newValue != null) && !meta.noteSnippet && (
                                             <div className="mt-2 text-xs text-gray-600">
+                                                {fieldLabel && <span className="text-gray-500">{fieldLabel}: </span>}
                                                 {meta.oldValue != null && <span className="line-through text-gray-500">{String(meta.oldValue)}</span>}
                                                 {meta.oldValue != null && meta.newValue != null && <span className="mx-1">→</span>}
                                                 {meta.newValue != null && <span>{String(meta.newValue)}</span>}
                                             </div>
                                         )}
+                                        {(meta.oldValue != null || meta.newValue != null) && meta.noteSnippet && (meta.oldValue !== meta.newValue) && (
+                                            <div className="mt-1 text-xs text-gray-500">
+                                                {meta.oldValue ? 'Updated from previous note' : 'New note added'}
+                                            </div>
+                                        )}
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {hasTaskLink && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        window.dispatchEvent(new CustomEvent('openTask', { detail: { taskId } }));
+                                                    }}
+                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                >
+                                                    <i className="fas fa-external-link-alt mr-1"></i> View task
+                                                </button>
+                                            )}
+                                            {hasDocLink && docCollectionType && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => switchSection('documentCollection')}
+                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                >
+                                                    <i className="fas fa-folder-open mr-1"></i> Document Collection
+                                                </button>
+                                            )}
+                                            {hasDocLink && monthlyFmsType && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => switchSection('monthlyFMSReview')}
+                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                >
+                                                    <i className="fas fa-calendar-alt mr-1"></i> Monthly FMS Review
+                                                </button>
+                                            )}
+                                            {hasDocLink && monthlyDataReviewType && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => switchSection('monthlyDataReview')}
+                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                >
+                                                    <i className="fas fa-clipboard-check mr-1"></i> Monthly Data Review
+                                                </button>
+                                            )}
+                                            {hasDocLink && complianceType && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => switchSection('complianceReview')}
+                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                >
+                                                    <i className="fas fa-clipboard-list mr-1"></i> Compliance Review
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })
