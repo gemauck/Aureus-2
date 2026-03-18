@@ -657,8 +657,8 @@ async function handler(req, res) {
         title: task.title
       });
 
-      // Send email/in-app notifications to assignees when requested
-      if (sendNotifications && assigneeIdsFinal.length > 0) {
+      // Send email/in-app notifications to assignees whenever a task has assignees (create)
+      if (assigneeIdsFinal.length > 0) {
         const currentUserId = req.user?.sub || req.user?.id;
         let assignerName = 'Someone';
         if (currentUserId) {
@@ -668,14 +668,18 @@ async function handler(req, res) {
           } catch (_) {}
         }
         const taskTitle = String(title).trim();
+        const taskDescription = (description && String(description).trim()) ? String(description).trim().slice(0, 500) : '';
+        const message = taskDescription
+          ? `You have been assigned to "${taskTitle}". ${taskDescription}`
+          : `You have been assigned to "${taskTitle}".`;
         const link = `#/projects/${task.projectId}?task=${task.id}`;
-        const message = `${assignerName} assigned you to the task "${taskTitle}".`;
         for (const uid of assigneeIdsFinal) {
           try {
-            await createNotificationForUser(uid, 'task', 'Task assigned', message, link, {
+            await createNotificationForUser(uid, 'task', `You have been assigned to ${taskTitle}`, message, link, {
               projectId: task.projectId,
               taskId: task.id,
-              taskTitle
+              taskTitle,
+              taskDescription: taskDescription || null
             });
           } catch (notifyErr) {
             console.warn('Failed to notify assignee', uid, notifyErr?.message);
@@ -799,10 +803,10 @@ async function handler(req, res) {
         return badRequest(res, 'No fields to update');
       }
 
-      // Check if task exists before updating
+      // Check if task exists and get current assignees so we can notify when assignment changes
       const existingTask = await prisma.task.findUnique({
         where: { id: String(taskId) },
-        select: { id: true }
+        select: { id: true, assigneeId: true, assigneeIds: true }
       });
 
       if (!existingTask) {
@@ -845,13 +849,18 @@ async function handler(req, res) {
         orderBy: { createdAt: 'asc' }
       });
 
-      // Send email/in-app notifications to assignees when requested (on assignment change)
-      if (body.sendNotifications && (body.assigneeIds !== undefined || body.assigneeId !== undefined)) {
-        const ids = body.assigneeIds !== undefined
+      // Send email/in-app notifications when task assignment changed (always when assignees are updated)
+      const assignmentWasUpdated = body.assigneeIds !== undefined || body.assigneeId !== undefined;
+      if (assignmentWasUpdated) {
+        const newIds = body.assigneeIds !== undefined
           ? (Array.isArray(body.assigneeIds) ? body.assigneeIds : []).filter(Boolean).map((id) => String(id))
           : body.assigneeId ? [String(body.assigneeId)] : [];
-        const assigneeIdsToNotify = [...new Set(ids)];
-        if (assigneeIdsToNotify.length > 0) {
+        const newAssigneeSet = new Set(newIds);
+        const oldRaw = existingTask.assigneeIds != null ? safeParseJson(existingTask.assigneeIds, []) : [];
+        const oldIds = Array.isArray(oldRaw) && oldRaw.length > 0 ? oldRaw : (existingTask.assigneeId ? [String(existingTask.assigneeId)] : []);
+        const oldAssigneeSet = new Set(oldIds.map((id) => String(id)));
+        const newlyAdded = [...newAssigneeSet].filter((id) => !oldAssigneeSet.has(id));
+        if (newlyAdded.length > 0) {
           const currentUserId = req.user?.sub || req.user?.id;
           let assignerName = 'Someone';
           if (currentUserId) {
@@ -861,14 +870,18 @@ async function handler(req, res) {
             } catch (_) {}
           }
           const taskTitle = task.title || '';
+          const taskDescription = (task.description && String(task.description).trim()) ? String(task.description).trim().slice(0, 500) : '';
+          const message = taskDescription
+            ? `You have been assigned to "${taskTitle}". ${taskDescription}`
+            : `You have been assigned to "${taskTitle}".`;
           const link = `#/projects/${task.projectId}?task=${task.id}`;
-          const message = `${assignerName} assigned you to the task "${taskTitle}".`;
-          for (const uid of assigneeIdsToNotify) {
+          for (const uid of newlyAdded) {
             try {
-              await createNotificationForUser(uid, 'task', 'Task assigned', message, link, {
+              await createNotificationForUser(uid, 'task', `You have been assigned to ${taskTitle}`, message, link, {
                 projectId: task.projectId,
                 taskId: task.id,
-                taskTitle
+                taskTitle,
+                taskDescription: taskDescription || null
               });
             } catch (notifyErr) {
               console.warn('Failed to notify assignee', uid, notifyErr?.message);

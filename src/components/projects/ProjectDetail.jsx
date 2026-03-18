@@ -5867,13 +5867,16 @@ function initializeProjectDetail() {
                         // Get task list name for location context (if available)
                         const taskListName = lists?.find(list => list.id === updatedTaskData.listId)?.name || null;
                         
+                        const taskTitle = updatedTaskData.title || 'Untitled Task';
+                        const taskDesc = (updatedTaskData.description && String(updatedTaskData.description).trim()) ? String(updatedTaskData.description).trim().slice(0, 500) : '';
+                        const assignMessage = taskDesc ? `You have been assigned to "${taskTitle}". ${taskDesc}` : `You have been assigned to "${taskTitle}".`;
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
                                 userId: assigneeUser.id,
                                 type: 'task',
-                                title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
-                                message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
+                                title: `You have been assigned to ${taskTitle}`,
+                                message: assignMessage,
                                 link: taskLink, // Use task-specific link
                                 metadata: {
                                     taskId: updatedTaskData.id,
@@ -5927,13 +5930,16 @@ function initializeProjectDetail() {
                         // Get task list name for location context (if available)
                         const taskListName = lists?.find(list => list.id === updatedTaskData.listId)?.name || null;
                         
+                        const taskTitle = updatedTaskData.title || 'Untitled Task';
+                        const taskDesc = (updatedTaskData.description && String(updatedTaskData.description).trim()) ? String(updatedTaskData.description).trim().slice(0, 500) : '';
+                        const assignMessage = taskDesc ? `You have been assigned to "${taskTitle}". ${taskDesc}` : `You have been assigned to "${taskTitle}".`;
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
                                 userId: assigneeUser.id,
                                 type: 'task',
-                                title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
-                                message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
+                                title: `You have been assigned to ${taskTitle}`,
+                                message: assignMessage,
                                 link: taskLink, // Use task-specific link
                                 metadata: {
                                     taskId: updatedTaskData.id,

@@ -1866,20 +1866,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // ============================================================
     
     // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable, Available on Request, Not Required (pastel)
+    // optionStyle: inline colors for <option> elements in dropdowns (browser support varies)
     const documentCollectionStatusOptions = [
-        { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-sky-800 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-400 shadow-sm' },
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-800 font-semibold', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm' },
-        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm' },
-        { value: 'not-required', label: 'Not Required', color: 'bg-gray-200 text-gray-800 font-semibold', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm' }
+        { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-sky-800 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-400 shadow-sm', optionStyle: { backgroundColor: '#bae6fd', color: '#075985' } },
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-800 font-semibold', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm', optionStyle: { backgroundColor: '#fecaca', color: '#9f1239' } },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
+        { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm', optionStyle: { backgroundColor: '#e2e8f0', color: '#334155' } },
+        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm', optionStyle: { backgroundColor: '#ddd6fe', color: '#5b21b6' } },
+        { value: 'not-required', label: 'Not Required', color: 'bg-gray-200 text-gray-800 font-semibold', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } }
     ];
     // Monthly Data Review: Not Started, Started, Complete (Complete = stored as 'done' for backward compatibility)
     const monthlyDataReviewStatusOptions = [
-        { value: 'not-done', label: 'Not Started', color: 'bg-rose-200 text-rose-800 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' },
-        { value: 'in-progress', label: 'Started', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm' },
-        { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' }
+        { value: 'not-done', label: 'Not Started', color: 'bg-rose-200 text-rose-800 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm', optionStyle: { backgroundColor: '#fecdd3', color: '#9f1239' } },
+        { value: 'in-progress', label: 'Started', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
+        { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } }
     ];
     const statusOptions = isJsonOnlyTracker ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
 
@@ -4017,7 +4018,7 @@ const getAssigneeColor = (identifier, users) => {
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
-                            <option key={option.value} value={option.value}>
+                            <option key={option.value} value={option.value} style={option.optionStyle || {}}>
                                 {option.label}
                             </option>
                         ))}
@@ -5402,7 +5403,7 @@ Abcotronics`;
                                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0ea5e9] focus:border-[#0ea5e9]"
                                     >
                                         {statusOptions.map((opt) => (
-                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            <option key={opt.value} value={opt.value} style={opt.optionStyle || {}}>{opt.label}</option>
                                         ))}
                                     </select>
                                 </div>
