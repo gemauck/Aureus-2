@@ -914,6 +914,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
             } else {
+                // Document Collection: try browser backup when server/prop returned nothing (e.g. fetch blocked by cache/extension)
+                if (!isJsonOnlyTracker && project?.id && typeof window !== 'undefined' && window.localStorage) {
+                    const key = getSnapshotKey(project.id);
+                    if (key) {
+                        const raw = window.localStorage.getItem(key);
+                        if (raw && raw.trim()) {
+                            try {
+                                const parsed = JSON.parse(raw);
+                                const normalized = normalizeSectionsByYear(parsed, urlYearForNormalize);
+                                if (normalized && typeof normalized === 'object' && Object.keys(normalized).some((y) => Array.isArray(normalized[y]) && normalized[y].length > 0)) {
+                                    hasRetriedLoadRef.current = false;
+                                    setSectionsByYear(normalized);
+                                    sectionsRef.current = normalized;
+                                    lastSavedDataRef.current = null; // Force save so server gets this data
+                                    setIsLoading(false);
+                                    if (typeof saveToDatabase === 'function') saveToDatabase();
+                                    return;
+                                }
+                            } catch (e) {
+                                console.warn('Load from browser backup failed:', e);
+                            }
+                        }
+                    }
+                }
                 setSectionsByYear({});
                 sectionsRef.current = {};
                 lastSavedDataRef.current = JSON.stringify({});
@@ -984,8 +1008,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
             setSectionsByYear(normalized);
             sectionsRef.current = normalized;
-            lastSavedDataRef.current = raw;
-            if (typeof saveToDatabase === 'function') saveToDatabase();
+            // Do NOT set lastSavedDataRef here — we want saveToDatabase to see "changed" and push to server
+            if (typeof saveToDatabase === 'function') {
+                const savePromise = saveToDatabase();
+                if (savePromise && typeof savePromise.then === 'function') {
+                    savePromise.then(() => {
+                        if (typeof window !== 'undefined' && window.showNotification) {
+                            window.showNotification('Restored from browser backup and saved to server.', 'success');
+                        }
+                    }).catch(() => {
+                        if (typeof window !== 'undefined' && window.showNotification) {
+                            window.showNotification('Restored locally but save to server failed. Check network and retry.', 'error');
+                        }
+                    });
+                }
+            }
         } catch (e) {
             console.warn('Restore from backup failed:', e);
             alert('Backup data is invalid or corrupted.');
@@ -1828,13 +1865,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // STATUS OPTIONS
     // ============================================================
     
-    // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable (pastel)
+    // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable, Available on Request (pastel)
     const documentCollectionStatusOptions = [
         { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-sky-800 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-400 shadow-sm' },
         { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-800 font-semibold', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm' },
         { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm' },
         { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm' }
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm' },
+        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm' }
     ];
     // Monthly Data Review: Not Started, Started, Complete (Complete = stored as 'done' for backward compatibility)
     const monthlyDataReviewStatusOptions = [
