@@ -860,62 +860,32 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     if (!resolvedAdmin && !isAdmin) {
                         return <AccessNotice />;
                     }
-                    // Show employee detail view if an employee is selected
-                    if (viewingEmployeeId) {
-                        
-                        if (EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function') {
-                            try {
-                                const Component = EmployeeDetailComponent;
-                                // Ensure all props are defined before rendering
-                                if (!viewingEmployeeId) {
-                                    console.warn('⚠️ LeavePlatform: viewingEmployeeId is not set');
-                                    return (
-                                        <div className="text-center py-12">
-                                            <p className="text-gray-600">No employee selected</p>
-                                            <button
-                                                onClick={handleBackFromEmployeeDetail}
-                                                className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                                            >
-                                                Go Back
-                                            </button>
-                                        </div>
-                                    );
-                                }
-                                return (
-                                    <Component
-                                        employeeId={viewingEmployeeId}
-                                        onBack={handleBackFromEmployeeDetail}
-                                        user={user || null}
-                                        isAdmin={isAdmin || false}
-                                    />
-                                );
-                            } catch (err) {
-                                console.error('LeavePlatform: error rendering EmployeeDetail component', err);
-                                // Return error UI instead of crashing
-                                return (
-                                    <div className="text-center py-12">
-                                        <p className="text-red-600">Error loading employee details</p>
-                                        <button
-                                            onClick={handleBackFromEmployeeDetail}
-                                            className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                                        >
-                                            Go Back
-                                        </button>
-                                    </div>
-                                );
-                            }
-                        } else {
-                            console.warn('⚠️ EmployeeDetailComponent not available, showing loading message');
+                    // Show employee detail view only when we have a selected employee AND the detail component is loaded
+                    const canShowDetail = viewingEmployeeId && EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function';
+                    if (viewingEmployeeId && !canShowDetail) {
+                        console.warn('⚠️ EmployeeDetailComponent not available, showing employee list');
+                    }
+                    if (canShowDetail) {
+                        try {
+                            const Component = EmployeeDetailComponent;
+                            return (
+                                <Component
+                                    employeeId={viewingEmployeeId}
+                                    onBack={handleBackFromEmployeeDetail}
+                                    user={user || null}
+                                    isAdmin={isAdmin || false}
+                                />
+                            );
+                        } catch (err) {
+                            console.error('LeavePlatform: error rendering EmployeeDetail component', err);
                             return (
                                 <div className="text-center py-12">
-                                    <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-4"></i>
-                                    <p className="text-gray-600">Loading employee details...</p>
+                                    <p className="text-red-600">Error loading employee details</p>
                                     <button
                                         onClick={handleBackFromEmployeeDetail}
                                         className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                                     >
-                                        <i className="fas fa-arrow-left mr-2"></i>
-                                        Back to Employees
+                                        Go Back
                                     </button>
                                 </div>
                             );
