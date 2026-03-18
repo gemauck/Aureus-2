@@ -380,8 +380,10 @@
         const pathForEntity = normalizedHash.startsWith('#') ? normalizedHash.substring(1) : normalizedHash;
         const hasTrackerParams = pathForEntity.includes('docSectionId=') || pathForEntity.includes('docWeek=') ||
             pathForEntity.includes('commentId=') || pathForEntity.includes('weeklySectionId=') || pathForEntity.includes('docMonth=');
+        // EntityUrl.parseEntityUrl/navigateToEntity do not preserve task= query param; use direct hash so project+task opens
+        const hasTaskParam = pathForEntity.includes('task=');
         let navigationSuccessful = false;
-        if (!hasTrackerParams && window.EntityUrl && pathForEntity) {
+        if (!hasTrackerParams && !hasTaskParam && window.EntityUrl && pathForEntity) {
             try {
                 const parsed = window.EntityUrl.parseEntityUrl(pathForEntity);
                 if (parsed && window.EntityUrl.navigateToEntity) {
