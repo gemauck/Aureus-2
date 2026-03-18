@@ -980,6 +980,7 @@ const TicketDetailModal = ({
                                     </button>
                                 </div>
                             </div>
+                            </div>
                         )}
 
                         {activeTab === 'timeline' && (
