@@ -386,8 +386,9 @@ const TicketDetailModal = ({
                 if (!fetchResponse.ok) return;
                 response = await fetchResponse.json();
             }
-            if (response?.users) {
-                setUsers(response.users);
+            const list = response?.data?.users ?? response?.users;
+            if (Array.isArray(list)) {
+                setUsers(list);
             }
         } catch (error) {
             console.error('Error loading users:', error);
@@ -417,8 +418,9 @@ const TicketDetailModal = ({
                 if (!fetchResponse.ok) return;
                 response = await fetchResponse.json();
             }
-            if (response?.projects) {
-                setProjects(response.projects);
+            const list = response?.data?.projects ?? response?.projects;
+            if (Array.isArray(list)) {
+                setProjects(list);
             }
         } catch (error) {
             console.error('Error loading projects:', error);
@@ -435,8 +437,9 @@ const TicketDetailModal = ({
                 if (!fetchResponse.ok) return;
                 response = await fetchResponse.json();
             }
-            if (response?.clients) {
-                setClients(response.clients);
+            const list = response?.data?.clients ?? response?.clients;
+            if (Array.isArray(list)) {
+                setClients(list);
             }
         } catch (error) {
             console.error('Error loading clients:', error);
