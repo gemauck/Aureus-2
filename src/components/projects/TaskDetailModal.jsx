@@ -23,6 +23,7 @@ const TaskDetailModal = ({
     const isSubtask = !!parentTask;
     
     const [activeTab, setActiveTab] = useState('details'); // details, comments, attachments, checklist
+    const [zoomImageSrc, setZoomImageSrc] = useState(null);
     const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
     const [assigneeSearch, setAssigneeSearch] = useState('');
     const assigneeDropdownRef = useRef(null);
@@ -764,6 +765,16 @@ const TaskDetailModal = ({
         document.addEventListener('mousedown', handle);
         return () => document.removeEventListener('mousedown', handle);
     }, [assigneeDropdownOpen]);
+
+    // Close image zoom overlay on Escape
+    useEffect(() => {
+        if (!zoomImageSrc) return;
+        const handle = (e) => {
+            if (e.key === 'Escape') setZoomImageSrc(null);
+        };
+        document.addEventListener('keydown', handle);
+        return () => document.removeEventListener('keydown', handle);
+    }, [zoomImageSrc]);
 
     // Fetch users on component mount
     useEffect(() => {
@@ -1758,6 +1769,7 @@ const TaskDetailModal = ({
     }
 
     return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto flex items-center justify-center" style={{ padding: '1rem' }}>
             <div ref={modalRef} className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col shadow-xl overflow-hidden" style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
                 {/* Header */}
@@ -1915,6 +1927,13 @@ const TaskDetailModal = ({
                                         ref={descriptionTextareaRef}
                                         contentEditable
                                         suppressContentEditableWarning
+                                        onClick={(e) => {
+                                            if (e.target.tagName === 'IMG') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setZoomImageSrc(e.target.getAttribute('src'));
+                                            }
+                                        }}
                                         onInput={(e) => {
                                             const el = e.currentTarget;
                                             const html = el.innerHTML || '';
@@ -1958,7 +1977,7 @@ const TaskDetailModal = ({
                                             };
                                             reader.readAsDataURL(file);
                                         }}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg min-h-[120px] focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none [&>img]:max-w-full [&>img]:h-auto [&>img]:block"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg min-h-[120px] focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none [&>img]:max-w-full [&>img]:h-auto [&>img]:block [&>img]:cursor-zoom-in [&>img]:rounded"
                                         data-placeholder="Add a detailed description..."
                                         style={{ minHeight: '120px' }}
                                     />
@@ -2973,6 +2992,20 @@ const TaskDetailModal = ({
                 </div>
             </div>
         </div>
+        {zoomImageSrc && (
+            <div
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80"
+                onClick={(e) => e.target === e.currentTarget && setZoomImageSrc(null)}
+            >
+                <img
+                    src={zoomImageSrc}
+                    alt="Zoom"
+                    className="max-w-[90vw] max-h-[90vh] object-contain"
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </div>
+        )}
+        </>
     );
 };
 
