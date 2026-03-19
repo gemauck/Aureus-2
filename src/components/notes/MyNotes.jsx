@@ -71,14 +71,30 @@ const MyNotes = () => {
     const loadProjects = useCallback(async () => {
         try {
             const token = storage?.getToken?.();
-            if (!token) return;
-            const response = await fetch('/api/projects', { headers: { 'Authorization': `Bearer ${token}` } });
-            if (response.ok) {
-                const data = await response.json();
-                const list = Array.isArray(data?.data?.projects) ? data.data.projects : Array.isArray(data?.projects) ? data.projects : Array.isArray(data?.items) ? data.items : [];
-                setProjects(list);
+            if (!token) {
+                setProjects([]);
+                return;
             }
-        } catch (e) { console.error('Error loading projects:', e); }
+            const response = await fetch('/api/projects?limit=500', { headers: { 'Authorization': `Bearer ${token}` } });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                const list = Array.isArray(data?.data?.projects)
+                    ? data.data.projects
+                    : Array.isArray(data?.projects)
+                        ? data.projects
+                        : Array.isArray(data?.data)
+                            ? data.data
+                            : Array.isArray(data?.items)
+                                ? data.items
+                                : [];
+                setProjects(list);
+            } else {
+                setProjects([]);
+            }
+        } catch (e) {
+            console.error('Error loading projects:', e);
+            setProjects([]);
+        }
     }, []);
 
     // Load notes, users, clients, projects
