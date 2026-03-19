@@ -91,6 +91,8 @@ model User {
   projectTeamMemberships   ProjectTeamMember[]          @relation("ProjectTeamMemberUser")
   projectTeamMembersAdded   ProjectTeamMember[]          @relation("ProjectTeamMemberAdder")
   projectActivityLogs       ProjectActivityLog[]         @relation("ProjectActivityLogUser")
+  clientNotesAuthored      ClientNote[]                  @relation("ClientNoteAuthor")
+  clientActivityLogs      ClientActivityLog[]            @relation("ClientActivityLogUser")
 
   @@index([createdAt])
   @@index([role])
@@ -203,8 +205,10 @@ model Client {
 
   // Phase 3: Normalized tables
   clientContacts  ClientContact[]
-  clientComments  ClientComment[]
-  clientSites     ClientSite[]
+  clientComments     ClientComment[]
+  clientNotes        ClientNote[]
+  clientActivityLogs ClientActivityLog[]
+  clientSites        ClientSite[]
   clientContracts ClientContract[]
   clientProposals ClientProposal[]
   clientFollowUps ClientFollowUp[]
@@ -308,6 +312,45 @@ model ClientComment {
   @@index([clientId])
   @@index([createdAt])
   @@index([authorId])
+}
+
+// Client notes (same pattern as ProjectNote — independent table for client Notes tab)
+model ClientNote {
+  id        String   @id @default(cuid())
+  clientId  String
+  title     String
+  content   String   @default("")
+  tags      String   @default("[]") // JSON array of tag strings
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  author    User     @relation("ClientNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+// Client-scoped activity log (for note create/update/delete and future client activity)
+model ClientActivityLog {
+  id          String   @id @default(cuid())
+  clientId    String
+  userId      String?
+  userName    String?  @default("")
+  type        String   @default("")
+  description String   @default("")
+  metadata    String   @default("{}")
+  action      String   @default("")
+  details     String   @default("")
+  createdAt   DateTime @default(now())
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user        User?    @relation("ClientActivityLogUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // Phase 6: Normalized Site table

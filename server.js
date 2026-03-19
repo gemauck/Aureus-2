@@ -1582,6 +1582,63 @@ app.all('/api/clients/:id/tags', async (req, res, next) => {
   }
 })
 
+// Client notes (ClientNote table — must be before /api/clients/:id)
+app.get('/api/clients/:id/notes', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'notes.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in client notes handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.post('/api/clients/:id/notes', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'notes.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in client notes handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.get('/api/clients/:id/notes/:noteId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'notes', '[noteId].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in client note handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.put('/api/clients/:id/notes/:noteId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'notes', '[noteId].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in client note handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.delete('/api/clients/:id/notes/:noteId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'notes', '[noteId].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in client note handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+
 // Explicit mapping for clients operations with ID (GET, PATCH, DELETE /api/clients/[id])
 app.all('/api/clients/:id', async (req, res, next) => {
   try {

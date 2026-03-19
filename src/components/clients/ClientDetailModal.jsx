@@ -1494,7 +1494,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [activeTab, formData]); // Use formData directly - it's already initialized at this point
     
-    // Fetch comment subscription status when on notes tab
+    // Fetch comment subscription status when on notes tab (legacy comments — kept for backward compat)
     useEffect(() => {
         if (activeTab !== 'notes' || !formData?.id || !window.DatabaseAPI?.makeRequest) return;
         const threadType = isLead ? 'lead' : 'client';
@@ -1502,7 +1502,24 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             .then((r) => { if (r && r.isSubscribed) setIsCommentSubscribed(true); })
             .catch(() => {});
     }, [activeTab, formData?.id, isLead]);
-    
+
+    // Load client notes (ClientNote table) when Notes tab is active
+    useEffect(() => {
+        if (activeTab !== 'notes' || !formData?.id) return;
+        loadClientNotes();
+    }, [activeTab, formData?.id, loadClientNotes]);
+
+    // Load activity for the note currently being edited (right-hand panel)
+    useEffect(() => {
+        const noteId = editingClientNoteFull?.id;
+        if (!noteId || !loadActivityForClientNote) return;
+        let cancelled = false;
+        loadActivityForClientNote(noteId).then(logs => {
+            if (!cancelled) setClientNoteActivityForEditor(Array.isArray(logs) ? logs : []);
+        });
+        return () => { cancelled = true; };
+    }, [editingClientNoteFull?.id, loadActivityForClientNote]);
+
     // Get theme with safe fallback - don't check system preference, only localStorage
     let isDark = false;
     try {
@@ -3131,6 +3148,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [newNoteAttachments, setNewNoteAttachments] = useState([]);
     const [notesTagFilter, setNotesTagFilter] = useState(null);
 
+    // Client notes (ClientNote table — same UX as Project Notes)
+    const [clientNotesList, setClientNotesList] = useState(null);
+    const [editingClientNoteFull, setEditingClientNoteFull] = useState(null);
+    const [expandedClientNoteActivityId, setExpandedClientNoteActivityId] = useState(null);
+    const [clientNoteActivityByNoteId, setClientNoteActivityByNoteId] = useState({});
+    const [editorClientNoteActivityPanelOpen, setEditorClientNoteActivityPanelOpen] = useState(false);
+    const [clientNoteActivityForEditor, setClientNoteActivityForEditor] = useState([]);
+    const [isSavingClientNote, setIsSavingClientNote] = useState(false);
+
     const handleAddTagFromInput = () => {
         const raw = (newNoteTagsInput || '').trim();
         if (!raw) return;
@@ -3164,6 +3190,134 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const handleRemoveNewAttachment = (id) => {
         setNewNoteAttachments((newNoteAttachments || []).filter(a => a.id !== id));
     };
+
+    // Client notes API (ClientNote table)
+    const loadClientNotes = useCallback(async () => {
+        const clientId = formData?.id;
+        if (!clientId || !window.storage?.getToken?.()) return;
+        setClientNotesList(null);
+        try {
+            const token = window.storage.getToken();
+            const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}/notes`, { headers: { Authorization: `Bearer ${token}` } });
+            const data = await res.json().catch(() => ({}));
+            const list = data?.data?.notes ?? data?.notes ?? [];
+            setClientNotesList(Array.isArray(list) ? list : []);
+        } catch (e) {
+            console.error('Load client notes failed:', e);
+            setClientNotesList([]);
+        }
+    }, [formData?.id]);
+
+    const loadActivityForClientNote = useCallback(async (noteId) => {
+        const clientId = formData?.id;
+        if (!clientId || !noteId || !window.storage?.getToken?.()) return [];
+        try {
+            const token = window.storage.getToken();
+            const url = `/api/client-activity-logs?clientId=${encodeURIComponent(clientId)}&noteId=${encodeURIComponent(noteId)}&limit=50`;
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            const data = await res.json().catch(() => ({}));
+            const logs = data?.data?.logs ?? data?.logs ?? [];
+            return Array.isArray(logs) ? logs : [];
+        } catch (e) {
+            console.warn('Load client note activity failed:', e);
+            return [];
+        }
+    }, [formData?.id]);
+
+    const createClientNote = useCallback(async () => {
+        const clientId = formData?.id;
+        if (!clientId || !window.storage?.getToken?.()) return;
+        setIsSavingClientNote(true);
+        try {
+            const token = window.storage.getToken();
+            const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}/notes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ title: 'Untitled Note', content: '', tags: [] })
+            });
+            const data = await res.json().catch(() => ({}));
+            const note = data?.data?.note ?? data?.note;
+            if (note) {
+                setClientNotesList(prev => (prev ? [note, ...prev] : [note]));
+                setEditingClientNoteFull(note);
+                setEditorClientNoteActivityPanelOpen(false);
+                setClientNoteActivityForEditor([]);
+            }
+        } catch (e) {
+            console.error('Create client note failed:', e);
+        } finally {
+            setIsSavingClientNote(false);
+        }
+    }, [formData?.id]);
+
+    const handleSaveClientNote = useCallback(async (payload) => {
+        const clientId = formData?.id;
+        const noteId = payload?.id;
+        if (!clientId || !noteId || !window.storage?.getToken?.()) return;
+        setIsSavingClientNote(true);
+        try {
+            const token = window.storage.getToken();
+            const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}/notes/${encodeURIComponent(noteId)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    title: payload.title || 'Untitled Note',
+                    content: payload.content || '',
+                    tags: Array.isArray(payload.tags) ? payload.tags : []
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            const updated = data?.data?.note ?? data?.note;
+            if (updated) {
+                setClientNotesList(prev => prev ? prev.map(n => n.id === noteId ? updated : n) : []);
+                setEditingClientNoteFull(updated);
+                loadActivityForClientNote(noteId).then(setClientNoteActivityForEditor);
+            }
+        } catch (e) {
+            console.error('Save client note failed:', e);
+        } finally {
+            setIsSavingClientNote(false);
+        }
+    }, [formData?.id, loadActivityForClientNote]);
+
+    const handleDeleteClientNote = useCallback(async (payload) => {
+        const clientId = formData?.id;
+        const noteId = payload?.id;
+        if (!clientId || !noteId || !window.storage?.getToken?.()) return;
+        if (!confirm('Delete this note?')) return;
+        setIsSavingClientNote(true);
+        try {
+            const token = window.storage.getToken();
+            await fetch(`/api/clients/${encodeURIComponent(clientId)}/notes/${encodeURIComponent(noteId)}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setClientNotesList(prev => prev ? prev.filter(n => n.id !== noteId) : []);
+            setEditingClientNoteFull(null);
+            setClientNoteActivityForEditor([]);
+            setExpandedClientNoteActivityId(null);
+        } catch (e) {
+            console.error('Delete client note failed:', e);
+        } finally {
+            setIsSavingClientNote(false);
+        }
+    }, [formData?.id]);
+
+    const handleToggleClientNoteActivity = useCallback((e, note) => {
+        e?.stopPropagation?.();
+        const id = note?.id;
+        if (!id) return;
+        if (expandedClientNoteActivityId === id) {
+            setExpandedClientNoteActivityId(null);
+            return;
+        }
+        setExpandedClientNoteActivityId(id);
+        if (!clientNoteActivityByNoteId[id]) {
+            loadActivityForClientNote(id).then(logs => {
+                setClientNoteActivityByNoteId(prev => ({ ...prev, [id]: logs }));
+            });
+        }
+    }, [expandedClientNoteActivityId, clientNoteActivityByNoteId, loadActivityForClientNote]);
 
     const handleAddComment = async () => {
         if (!newComment.trim()) return;
@@ -7056,195 +7210,199 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         )}
 
 
-                        {/* Notes/Comments Tab */}
+                        {/* Notes Tab — client notes (ClientNote table, same UX as Project Notes) */}
                         {activeTab === 'notes' && (
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center flex-wrap gap-2">
-                                    <h3 className="text-lg font-semibold text-gray-900">Notes & Comments</h3>
-                                    {isCommentSubscribed && (
-                                        <button
-                                            type="button"
-                                            onClick={handleUnsubscribeFromComments}
-                                            className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
-                                            title="Stop receiving notifications for new comments"
-                                        >
-                                            Unsubscribe from notifications
-                                        </button>
-                                    )}
-                                </div>
-
-                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                    <textarea
-                                        ref={commentTextareaRef}
-                                        value={newComment}
-                                        onChange={(e) => {
-                                            setNewComment(e.target.value);
-                                        }}
-                                        onKeyDown={(e) => {
-                                            // Handle spacebar specially to prevent cursor jumping
-                                            if (e.key === ' ') {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                const textarea = e.target;
-                                                const start = textarea.selectionStart;
-                                                const end = textarea.selectionEnd;
-                                                const newValue = newComment.substring(0, start) + ' ' + newComment.substring(end);
-                                                setNewComment(newValue);
-                                                // Restore cursor position after space
-                                                setTimeout(() => {
-                                                    if (commentTextareaRef.current) {
-                                                        commentTextareaRef.current.setSelectionRange(start + 1, start + 1);
-                                                        commentTextareaRef.current.focus();
-                                                    }
-                                                }, 0);
-                                            }
-                                        }}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-2"
-                                        rows="3"
-                                        placeholder="Add a comment or note..."
-                                    ></textarea>
-                                    {/* Tags input */}
-                                    <div className="mb-2">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Tags</label>
-                                        <div className="flex gap-2 items-center">
-                                            <input
-                                                type="text"
-                                                value={newNoteTagsInput}
-                                                onChange={(e) => setNewNoteTagsInput(e.target.value)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTagFromInput(); } }}
-                                                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                placeholder="Type a tag and press Enter or comma"
-                                            />
-                                            <button type="button" onClick={handleAddTagFromInput} className="px-2.5 py-1.5 text-xs bg-gray-200 rounded hover:bg-gray-300">Add</button>
+                            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col min-h-[400px]">
+                                {editingClientNoteFull ? (
+                                    <div className="flex flex-col flex-1 min-h-0">
+                                        <div className="flex items-center gap-2 p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setEditingClientNoteFull(null); setClientNoteActivityForEditor([]); }}
+                                                className="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-arrow-left"></i>
+                                                Back to list
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditorClientNoteActivityPanelOpen(prev => !prev)}
+                                                className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${editorClientNoteActivityPanelOpen ? 'bg-primary-100 text-primary-800 border border-primary-300' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+                                            >
+                                                <i className="fas fa-history"></i>
+                                                Activity
+                                                <i className={`fas fa-chevron-${editorClientNoteActivityPanelOpen ? 'right' : 'left'} text-xs`}></i>
+                                            </button>
                                         </div>
-                                        {(newNoteTags || []).length > 0 && (
-                                            <div className="flex flex-wrap gap-2 mt-2">
-                                                {newNoteTags.map(tag => (
-                                                    <span key={tag} className="inline-flex items-center px-2 py-0.5 text-xs bg-primary-100 text-primary-700 rounded">
-                                                        <i className="fas fa-tag mr-1"></i>{tag}
-                                                        <button type="button" className="ml-1 text-primary-700" onClick={() => handleRemoveNewTag(tag)}><i className="fas fa-times"></i></button>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Attachments */}
-                                    <div className="mb-3">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Attachments</label>
-                                        <input
-                                            type="file"
-                                            multiple
-                                            onChange={(e) => handleAttachmentFiles(e.target.files)}
-                                            className="block w-full text-xs text-gray-600"
-                                        />
-                                        {(newNoteAttachments || []).length > 0 && (
-                                            <div className="mt-2 space-y-1">
-                                                {newNoteAttachments.map(att => (
-                                                    <div key={att.id} className="flex items-center justify-between text-xs bg-white border border-gray-200 rounded px-2 py-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <i className="fas fa-paperclip text-gray-500"></i>
-                                                            <span className="text-gray-700">{att.name}</span>
-                                                            <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>
-                                                            <button type="button" className="text-red-600" onClick={() => handleRemoveNewAttachment(att.id)} title="Remove"><i className="fas fa-trash"></i></button>
-                                                        </div>
+                                        <div className="flex flex-1 min-h-0">
+                                            <div className="flex-1 min-w-0 overflow-hidden">
+                                                {window.NoteEditor ? (
+                                                    React.createElement(window.NoteEditor, {
+                                                        note: editingClientNoteFull,
+                                                        allTags: [],
+                                                        clients: [],
+                                                        projects: [],
+                                                        clientProjects: [],
+                                                        onSave: handleSaveClientNote,
+                                                        onDelete: handleDeleteClientNote,
+                                                        onShare: () => {},
+                                                        onTogglePin: () => {},
+                                                        onExport: () => {},
+                                                        isSaving: isSavingClientNote,
+                                                        lastSavedAt: null,
+                                                        isDark: isDark,
+                                                        isProjectNote: true
+                                                    })
+                                                ) : (
+                                                    <div className="p-8 text-center">
+                                                        <i className="fas fa-spinner fa-spin text-2xl text-primary-500 mb-2" aria-hidden="true"></i>
+                                                        <p className="text-gray-500">Loading editor…</p>
                                                     </div>
-                                                ))}
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
-                                    <div className="flex justify-end">
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                handleAddComment().catch(err => {
-                                                    console.error('Error adding comment:', err);
-                                                });
-                                            }}
-                                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                                        >
-                                            <i className="fas fa-plus mr-1.5"></i>
-                                            Add Comment
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Tag filter */}
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-600">Filter by tag:</span>
-                                    <button type="button" className={`text-xs px-2 py-0.5 rounded ${!notesTagFilter ? 'bg-gray-200' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(null)}>All</button>
-                                    {Array.from(new Set((formData.comments || []).flatMap(c => Array.isArray(c.tags) ? c.tags : []))).map(tag => (
-                                        <button key={tag} type="button" className={`text-xs px-2 py-0.5 rounded ${notesTagFilter === tag ? 'bg-primary-200 text-primary-800' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(tag)}>
-                                            <i className="fas fa-tag mr-1"></i>{tag}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div ref={commentsContainerRef} className="space-y-2">
-                                    {(!formData.comments || formData.comments.length === 0) ? (
-                                        <div className="text-center py-8 text-gray-500 text-sm">
-                                            <i className="fas fa-comment-alt text-3xl mb-2"></i>
-                                            <p>No comments yet</p>
-                                        </div>
-                                    ) : (
-                                        (formData.comments.filter(c => !notesTagFilter || (Array.isArray(c.tags) && c.tags.includes(notesTagFilter)))).map(comment => (
-                                            <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-3">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                                                            <span className="text-primary-600 font-semibold text-xs">
-                                                                {(comment.createdBy || comment.author || 'U').charAt(0).toUpperCase()}
-                                                            </span>
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-medium text-gray-900 text-sm">{comment.createdBy || comment.author || 'User'}{comment.createdByEmail || comment.authorEmail ? ` (${comment.createdByEmail || comment.authorEmail})` : ''}</div>
-                                                            <div className="text-xs text-gray-500">
-                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
+                                            {editorClientNoteActivityPanelOpen && (
+                                                <div className={`w-80 flex-shrink-0 border-l flex flex-col ${isDark ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'}`}>
+                                                    <div className={`p-3 border-b flex items-center justify-between ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                                        <h4 className="text-sm font-semibold text-gray-800">Note activity</h4>
+                                                        <button type="button" onClick={() => setEditorClientNoteActivityPanelOpen(false)} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded" aria-label="Close activity panel">
+                                                            <i className="fas fa-times"></i>
+                                                        </button>
+                                                    </div>
+                                                    <div className="p-3 overflow-y-auto flex-1">
+                                                        {clientNoteActivityForEditor.length === 0 ? (
+                                                            <p className="text-xs text-gray-500">No activity recorded for this note yet.</p>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {clientNoteActivityForEditor.map((log) => {
+                                                                    const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                                                    const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                                                    const changes = Array.isArray(meta.changes) ? meta.changes : [];
+                                                                    return (
+                                                                        <div key={log.id} className={`border rounded-lg p-3 text-xs ${isDark ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-200 bg-white text-gray-800'}`}>
+                                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                                <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                                                <span className="text-gray-500">{log.userName || 'System'}</span>
+                                                                                <span className="text-gray-400">{dateStr}</span>
+                                                                            </div>
+                                                                            {changes.length > 0 ? (
+                                                                                <ul className="mt-2 list-disc list-inside text-gray-600 space-y-0.5">
+                                                                                    {changes.map((c, i) => (
+                                                                                        <li key={i}>{c}</li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            ) : log.description ? (
+                                                                                <div className="mt-1.5 text-gray-600">{log.description}</div>
+                                                                            ) : null}
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
-                                                        </div>
+                                                        )}
+                                                        <button type="button" onClick={() => editingClientNoteFull?.id && loadActivityForClientNote(editingClientNoteFull.id).then(setClientNoteActivityForEditor)} className="mt-3 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded">
+                                                            <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                                        </button>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteComment(comment.id)}
-                                                        className="text-red-600 hover:text-red-700 p-1"
-                                                        title="Delete"
-                                                    >
-                                                        <i className="fas fa-trash text-xs"></i>
-                                                    </button>
                                                 </div>
-                                                {Array.isArray(comment.tags) && comment.tags.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1.5 mt-1">
-                                                        {comment.tags.map(tag => (
-                                                            <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[10px] bg-gray-100 text-gray-700 rounded">
-                                                                <i className="fas fa-tag mr-1"></i>{tag}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{comment.text}</p>
-                                                {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
-                                                    <div className="mt-2 space-y-1">
-                                                        {comment.attachments.map(att => (
-                                                            <div key={att.id || att.name} className="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    <i className="fas fa-paperclip text-gray-500"></i>
-                                                                    <span className="text-gray-700">{att.name}</span>
-                                                                    {att.size && <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>}
-                                                                </div>
-                                                                {att.dataUrl && <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>}
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="p-4">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                                <i className="fas fa-sticky-note text-primary-600"></i>
+                                                Notes
+                                            </h3>
+                                            <p className="text-sm text-gray-500 mb-4">Notes for this {entityLabelLower} (stored in their own table). Create a note or open one to edit.</p>
+                                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                                                <button type="button" onClick={createClientNote} disabled={isSavingClientNote} className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50 flex items-center gap-2">
+                                                    <i className="fas fa-plus"></i>
+                                                    Create note
+                                                </button>
+                                                <button type="button" onClick={() => loadClientNotes()} className="px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded">
+                                                    <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-0 min-h-0 flex-1 px-4 pb-4">
+                                            <div className="flex-1 min-w-0 space-y-4 max-h-[60vh] overflow-y-auto">
+                                                {clientNotesList === null ? (
+                                                    <p className="text-sm text-gray-500">Loading…</p>
+                                                ) : !clientNotesList || clientNotesList.length === 0 ? (
+                                                    <p className="text-sm text-gray-500">No notes yet. Click &quot;Create note&quot; to add one.</p>
+                                                ) : (
+                                                    clientNotesList.map((note) => (
+                                                        <div
+                                                            key={note.id}
+                                                            role="button"
+                                                            tabIndex={0}
+                                                            onClick={() => setEditingClientNoteFull(note)}
+                                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingClientNoteFull(note); } }}
+                                                            className={`border rounded-lg p-4 cursor-pointer transition-colors ${isDark ? 'border-gray-600 bg-gray-700/30 hover:bg-gray-700/50' : 'border-gray-200 bg-gray-50/50 hover:bg-gray-100'}`}
+                                                        >
+                                                            <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
+                                                                <span className="font-medium text-gray-900">{note.title || 'Untitled'}</span>
+                                                                {note.author?.name && <span className="text-gray-500">by {note.author.name}</span>}
+                                                                <span className="text-gray-400 text-xs">
+                                                                    {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                                                                </span>
+                                                                <button type="button" onClick={(e) => handleToggleClientNoteActivity(e, note)} className="text-primary-600 text-xs hover:text-primary-700 hover:underline ml-auto">
+                                                                    <i className="fas fa-history mr-1"></i>
+                                                                    {expandedClientNoteActivityId === note.id ? 'Hide activity' : 'Activity'}
+                                                                </button>
+                                                                <span className="text-primary-600 text-xs">View & edit →</span>
                                                             </div>
-                                                        ))}
-                                                    </div>
+                                                            <div className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-2" dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }} />
+                                                        </div>
+                                                    ))
                                                 )}
                                             </div>
-                                        ))
-                                    )}
-                                </div>
+                                            {expandedClientNoteActivityId && (
+                                                <div className={`w-80 flex-shrink-0 border-l flex flex-col max-h-[60vh] ${isDark ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'}`}>
+                                                    <div className={`p-3 border-b flex items-center justify-between ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                                        <h4 className="text-sm font-semibold text-gray-800 truncate">
+                                                            {clientNotesList?.find(n => n.id === expandedClientNoteActivityId)?.title || 'Note activity'}
+                                                        </h4>
+                                                        <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedClientNoteActivityId(null); }} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded" aria-label="Close activity panel">
+                                                            <i className="fas fa-times"></i>
+                                                        </button>
+                                                    </div>
+                                                    <div className="p-3 overflow-y-auto flex-1">
+                                                        {(clientNoteActivityByNoteId[expandedClientNoteActivityId] || []).length === 0 ? (
+                                                            <p className="text-xs text-gray-500">No activity for this note yet.</p>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {(clientNoteActivityByNoteId[expandedClientNoteActivityId] || []).map((log) => {
+                                                                    const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                                                    const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                                                    const changes = Array.isArray(meta.changes) ? meta.changes : [];
+                                                                    return (
+                                                                        <div key={log.id} className={`border rounded-lg p-3 text-xs ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+                                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                                <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                                                <span className="text-gray-500">{log.userName || 'System'}</span>
+                                                                                <span className="text-gray-400">{dateStr}</span>
+                                                                            </div>
+                                                                            {changes.length > 0 ? (
+                                                                                <ul className="mt-2 list-disc list-inside text-gray-600 space-y-0.5">
+                                                                                    {changes.map((c, i) => (
+                                                                                        <li key={i}>{c}</li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            ) : log.description ? (
+                                                                                <div className="mt-1.5 text-gray-600">{log.description}</div>
+                                                                            ) : null}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
 
