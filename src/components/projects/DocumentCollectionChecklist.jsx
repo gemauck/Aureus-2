@@ -281,36 +281,38 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
                     {onBack && (
                         <button
                             onClick={onBack}
-                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         >
                             <i className="fas fa-arrow-left"></i>
                         </button>
                     )}
                     <div>
-                        <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Document Collection Checklist</h2>
-                        <p className="text-sm text-gray-500 mt-0.5">Track required documents for this project</p>
+                        <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">Document Collection Checklist</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Track required documents for this project</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="text-right">
-                        <div className="text-sm text-gray-600">Progress</div>
-                        <div className="text-2xl font-bold text-primary-600">{progress}%</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Progress</div>
+                        <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">{progress}%</div>
                     </div>
-                    <div className="w-16 h-16 rounded-full border-4 border-gray-200 flex items-center justify-center"
-                         style={{
-                             background: `conic-gradient(from 0deg, #3b82f6 0% ${progress}%, #e5e7eb ${progress}% 100%)`
-                         }}>
-                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
-                            <i className="fas fa-check text-primary-600"></i>
+                    <div
+                        className="w-16 h-16 rounded-full border-4 border-gray-200 dark:border-gray-600 flex items-center justify-center document-checklist-progress-ring"
+                        style={{
+                            background: `conic-gradient(from 0deg, #3b82f6 0% ${progress}%, var(--progress-track, #e5e7eb) ${progress}% 100%)`
+                        }}
+                    >
+                        <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center">
+                            <i className="fas fa-check text-primary-600 dark:text-primary-400"></i>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Progress Bar */}
-            <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                 <div 
-                    className="bg-primary-600 h-full transition-all duration-300"
+                    className="bg-primary-600 dark:bg-primary-500 h-full transition-all duration-300"
                     style={{ width: `${progress}%` }}
                 ></div>
             </div>
@@ -324,14 +326,14 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
                     const isExpanded = expandedSections.has(section.id);
 
                     return (
-                        <div key={section.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <div key={section.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden">
                             {/* Section Header */}
-                            <div className="p-4 bg-gray-50 border-b border-gray-200">
+                            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3 flex-1">
                                         <button
                                             onClick={() => toggleSectionExpansion(section.id)}
-                                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                                            className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
                                         >
                                             <i className={`fas fa-chevron-${isExpanded ? 'down' : 'right'} text-xs`}></i>
                                         </button>
@@ -340,11 +342,11 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
                                                 type="checkbox"
                                                 checked={sectionCompleted}
                                                 onChange={() => toggleSection(section.id)}
-                                                className="w-5 h-5 text-primary-600 rounded border-gray-300 focus:ring-primary-500 cursor-pointer"
+                                                className="w-5 h-5 text-primary-600 rounded border-gray-300 dark:border-gray-500 focus:ring-primary-500 cursor-pointer"
                                             />
-                                            <h3 className="text-base font-semibold text-gray-900">{section.name}</h3>
+                                            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{section.name}</h3>
                                         </div>
-                                        <span className="text-xs text-gray-500 ml-2">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
                                             ({sectionProgress}/{sectionTotal})
                                         </span>
                                     </div>
@@ -357,26 +359,26 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
                                     {section.documents.map((document) => (
                                         <div 
                                             key={document.id}
-                                            className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+                                            className="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
                                         >
                                             <input
                                                 type="checkbox"
                                                 checked={document.completed}
                                                 onChange={() => toggleDocument(section.id, document.id)}
-                                                className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500 cursor-pointer"
+                                                className="w-4 h-4 text-primary-600 rounded border-gray-300 dark:border-gray-500 focus:ring-primary-500 cursor-pointer"
                                             />
                                             <label 
                                                 className={`flex-1 cursor-pointer ${
                                                     document.completed 
-                                                        ? 'text-gray-500 line-through' 
-                                                        : 'text-gray-900'
+                                                        ? 'text-gray-500 dark:text-gray-400 line-through' 
+                                                        : 'text-gray-900 dark:text-gray-100'
                                                 }`}
                                                 onClick={() => toggleDocument(section.id, document.id)}
                                             >
                                                 {document.name}
                                             </label>
                                             {document.completed && (
-                                                <i className="fas fa-check-circle text-green-500"></i>
+                                                <i className="fas fa-check-circle text-green-500 dark:text-green-400"></i>
                                             )}
                                         </div>
                                     ))}

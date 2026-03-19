@@ -207,14 +207,14 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                             value={formData.description}
                             onChange={handleChange}
                             rows={2}
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none dark:bg-slate-700 dark:text-slate-100"
                             placeholder="Brief description of the checklist purpose..."
                         />
                     </div>
 
                     {/* Checklist Items */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-2 dark:text-slate-300">
                             Checklist Items ({formData.items.length})
                         </label>
                         
@@ -225,7 +225,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                                 value={itemInput}
                                 onChange={(e) => setItemInput(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddItem())}
-                                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:text-slate-100"
                                 placeholder="Enter checklist item and press Enter..."
                             />
                             <button
@@ -240,15 +240,15 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
 
                         {/* Items List */}
                         {formData.items.length > 0 ? (
-                            <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                            <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 dark:border-slate-600 rounded-lg p-2">
                                 {formData.items.map((item, index) => (
-                                    <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded hover:bg-gray-100 transition">
+                                    <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-slate-700/50 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition">
                                         <div className="flex flex-col gap-1">
                                             <button
                                                 type="button"
                                                 onClick={() => handleMoveItem(index, -1)}
                                                 disabled={index === 0}
-                                                className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                className="p-1 text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 <i className="fas fa-chevron-up text-xs"></i>
                                             </button>
@@ -256,14 +256,14 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                                                 type="button"
                                                 onClick={() => handleMoveItem(index, 1)}
                                                 disabled={index === formData.items.length - 1}
-                                                className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                className="p-1 text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 <i className="fas fa-chevron-down text-xs"></i>
                                             </button>
                                         </div>
                                         
-                                        <div className="w-6 h-6 bg-white rounded flex items-center justify-center flex-shrink-0 border border-gray-300">
-                                            <span className="text-xs text-gray-600">{index + 1}</span>
+                                        <div className="w-6 h-6 bg-white dark:bg-slate-700 rounded flex items-center justify-center flex-shrink-0 border border-gray-300 dark:border-slate-600">
+                                            <span className="text-xs text-gray-600 dark:text-slate-300">{index + 1}</span>
                                         </div>
                                         
                                         <button
@@ -271,20 +271,20 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                                             onClick={() => handleToggleRequired(item.id)}
                                             className={`p-1 rounded transition ${
                                                 item.required 
-                                                    ? 'text-red-600 hover:text-red-700' 
-                                                    : 'text-gray-400 hover:text-gray-600'
+                                                    ? 'text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300' 
+                                                    : 'text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200'
                                             }`}
                                             title={item.required ? 'Required' : 'Optional'}
                                         >
                                             <i className={`fas ${item.required ? 'fa-asterisk' : 'fa-circle'} text-xs`}></i>
                                         </button>
                                         
-                                        <span className="flex-1 text-sm text-gray-900">{item.text}</span>
+                                        <span className="flex-1 text-sm text-gray-900 dark:text-slate-100">{item.text}</span>
                                         
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveItem(item.id)}
-                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                            className="p-1 text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition"
                                         >
                                             <i className="fas fa-trash text-xs"></i>
                                         </button>
@@ -292,9 +292,9 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                                 ))}
                             </div>
                         ) : (
-                            <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
-                                <i className="fas fa-tasks text-3xl text-gray-300 mb-2"></i>
-                                <p className="text-sm text-gray-500">No items added yet</p>
+                            <div className="text-center py-8 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg">
+                                <i className="fas fa-tasks text-3xl text-gray-300 dark:text-slate-500 mb-2"></i>
+                                <p className="text-sm text-gray-500 dark:text-slate-400">No items added yet</p>
                             </div>
                         )}
                     </div>
@@ -310,7 +310,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                                 value={tagInput}
                                 onChange={(e) => setTagInput(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:text-slate-100"
                                 placeholder="Add tag and press Enter"
                             />
                             <button
@@ -332,7 +332,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveTag(tag)}
-                                            className="hover:text-primary-900"
+                                            className="hover:text-primary-900 dark:hover:text-primary-200"
                                         >
                                             <i className="fas fa-times text-xs"></i>
                                         </button>

@@ -149,6 +149,19 @@ body {
     }
 }
 
+/* Dark mode: modal panels and surfaces that would otherwise stay white */
+.dark .modal-panel,
+html.dark .modal-panel {
+    background-color: #1f2937;
+    border-color: #4b5563;
+}
+
+/* Dark mode: progress ring unfilled segment (Document Collection Checklist) */
+.dark,
+html.dark {
+    --progress-track: #374151;
+}
+
 @media (min-width: 769px) {
     .table-mobile {
         display: none;

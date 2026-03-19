@@ -5980,10 +5980,10 @@ Abcotronics`;
         if (showTemplateList) {
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                        <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                            <h2 className="text-base font-semibold text-gray-900">Template Management</h2>
-                            <button onClick={() => setShowTemplateModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                    <div className="modal-panel bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Template Management</h2>
+                            <button onClick={() => setShowTemplateModal(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 p-1">
                                 <i className="fas fa-times text-sm"></i>
                             </button>
                         </div>
@@ -6079,9 +6079,9 @@ Abcotronics`;
         
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
+                <div className="modal-panel bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
                             {editingTemplate ? 'Edit Template' : 'Create Template'}
                         </h2>
                         <div className="flex items-center gap-2">
@@ -6272,10 +6272,10 @@ Abcotronics`;
         
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-md">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">Apply Template</h2>
-                        <button onClick={() => setShowApplyTemplateModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                <div className="modal-panel bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Apply Template</h2>
+                        <button onClick={() => setShowApplyTemplateModal(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 p-1">
                             <i className="fas fa-times text-sm"></i>
                         </button>
                     </div>
@@ -6378,10 +6378,10 @@ Abcotronics`;
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl text-sky-600 mb-3"></i>
-                    <p className="text-sm text-gray-600">Loading document collection tracker...</p>
+                    <i className="fas fa-spinner fa-spin text-3xl text-sky-600 dark:text-sky-400 mb-3"></i>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading document collection tracker...</p>
                     {loadingSlow && (
-                        <p className="text-xs text-amber-600 mt-2">Taking longer than usual — still loading. You can retry by refreshing the page.</p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">Taking longer than usual — still loading. You can retry by refreshing the page.</p>
                     )}
                 </div>
             </div>
@@ -6449,7 +6449,7 @@ Abcotronics`;
                     <>
                         {/* Comment Popup */}
                         <div 
-                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
+                            className="comment-popup fixed w-72 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 z-[999]"
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                         >
                         {/* Show section and document context */}
@@ -6786,22 +6786,22 @@ Abcotronics`;
             })()}
             
             {/* Header - compact toolbar */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 mb-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 p-3 mb-4">
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
                             <button
                                 onClick={onBack}
-                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+                                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors shrink-0"
                                 aria-label="Back"
                             >
                                 <i className="fas fa-arrow-left"></i>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">
+                                <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
                                     {isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document Collection Tracker'}
                                 </h1>
-                                <p className="text-xs text-gray-500 truncate">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                     {project?.name}
                                     {project?.client && ` • ${project.client}`}
                                     {!isJsonOnlyTracker && getFacilitiesLabel(project) && ` • ${getFacilitiesLabel(project)}`}
@@ -6809,8 +6809,8 @@ Abcotronics`;
                             </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
-                                <label className="text-xs font-medium text-gray-600">Year</label>
+                            <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Year</label>
                                 <select
                                     value={selectedYear}
                                     onChange={(e) => {
@@ -6825,7 +6825,7 @@ Abcotronics`;
                                     }}
                                     aria-label="Select year"
                                     data-testid="year-selector"
-                                    className="text-xs font-medium text-gray-900 bg-transparent border-0 focus:ring-0 cursor-pointer py-0.5"
+                                    className="text-xs font-medium text-gray-900 dark:text-gray-100 bg-transparent border-0 focus:ring-0 cursor-pointer py-0.5"
                                 >
                                     {yearOptions.map(year => (
                                         <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
@@ -6835,7 +6835,7 @@ Abcotronics`;
                             <button
                                 type="button"
                                 onClick={handleAddSection}
-                                className="px-3 py-1.5 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-xs font-semibold flex items-center gap-1.5"
+                                className="px-3 py-1.5 bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600 text-xs font-semibold flex items-center gap-1.5"
                             >
                                 <i className="fas fa-plus"></i><span>Add Section</span>
                             </button>
@@ -6852,7 +6852,7 @@ Abcotronics`;
                                         type="button"
                                         onClick={handleImportFromExcelClick}
                                         disabled={isImportingExcel}
-                                        className="px-3 py-1.5 bg-amber-200 text-amber-800 rounded-lg hover:bg-amber-300 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                        className="px-3 py-1.5 bg-amber-200 dark:bg-amber-700 text-amber-800 dark:text-amber-100 rounded-lg hover:bg-amber-300 dark:hover:bg-amber-600 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                                         title="Import sections from Compliance Monthly Assessment Excel (.xlsx)"
                                     >
                                         {isImportingExcel ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-import"></i>}
@@ -6863,22 +6863,22 @@ Abcotronics`;
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
                                     onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
-                                    className="px-3 py-1.5 bg-violet-200 text-violet-800 rounded-lg hover:bg-violet-300 text-xs font-semibold flex items-center gap-1.5"
+                                    className="px-3 py-1.5 bg-violet-200 dark:bg-violet-700 text-violet-800 dark:text-violet-100 rounded-lg hover:bg-violet-300 dark:hover:bg-violet-600 text-xs font-semibold flex items-center gap-1.5"
                                 >
                                     <i className="fas fa-layer-group"></i><span>Templates</span>
                                     <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
                                 </button>
                                 
                                 {isTemplateDropdownOpen && (
-                                    <div className="absolute left-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                                    <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl z-50">
                                         <button
                                             onClick={() => {
                                                 setShowApplyTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-magic text-purple-600"></i>
+                                            <i className="fas fa-magic text-purple-600 dark:text-purple-400"></i>
                                             <span>Apply Template</span>
                                         </button>
                                         <button
@@ -6886,9 +6886,9 @@ Abcotronics`;
                                                 setShowTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/40 hover:text-violet-700 dark:hover:text-violet-300 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-layer-group text-violet-600"></i>
+                                            <i className="fas fa-layer-group text-violet-600 dark:text-violet-400"></i>
                                             <span>Manage Templates</span>
                                         </button>
                                         <button
@@ -6920,10 +6920,10 @@ Abcotronics`;
                                                     setIsTemplateDropdownOpen(false);
                                                 }
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-900/40 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-2 transition-colors"
                                             title="Save current year as template"
                                         >
-                                            <i className="fas fa-save text-amber-600"></i>
+                                            <i className="fas fa-save text-amber-600 dark:text-amber-400"></i>
                                             <span>Save Template</span>
                                         </button>
                                     </div>
@@ -6932,7 +6932,7 @@ Abcotronics`;
                             <button
                                 onClick={handleExportToExcel}
                                 disabled={isExporting || sections.length === 0}
-                                className="px-3 py-1.5 bg-emerald-200 text-emerald-800 rounded-lg hover:bg-emerald-300 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                className="px-3 py-1.5 bg-emerald-200 dark:bg-emerald-700 text-emerald-800 dark:text-emerald-100 rounded-lg hover:bg-emerald-300 dark:hover:bg-emerald-600 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                             >
                                 {isExporting ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-excel"></i>}
                                 <span>{isExporting ? 'Exporting…' : 'Export'}</span>
@@ -6943,25 +6943,25 @@ Abcotronics`;
             </div>
             
             {/* Legend - collapsible to reduce clutter */}
-            <div className="rounded-xl border border-gray-200 mb-4 shadow-sm overflow-hidden bg-gradient-to-r from-gray-50 to-white">
+            <div className="rounded-xl border border-gray-200 dark:border-gray-600 mb-4 shadow-sm overflow-hidden bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
                 <button
                     type="button"
                     onClick={() => setLegendCollapsed(!legendCollapsed)}
-                                    className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-sky-50/80 transition-colors"
+                                    className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-sky-50/80 dark:hover:bg-sky-900/30 transition-colors"
                     aria-expanded={!legendCollapsed}
                 >
-                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status legend</span>
-                    <i className={`fas fa-chevron-${legendCollapsed ? 'down' : 'up'} text-gray-500 text-xs`}></i>
+                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Status legend</span>
+                    <i className={`fas fa-chevron-${legendCollapsed ? 'down' : 'up'} text-gray-500 dark:text-gray-400 text-xs`}></i>
                 </button>
                 {!legendCollapsed && (
                     <div className="px-3 pb-3 pt-0 flex flex-wrap items-center gap-3">
                         {statusOptions.map((option, idx) => (
                             <React.Fragment key={option.value}>
-                                <div className="flex items-center gap-2 bg-white px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm">
-                                    <div className={`w-3.5 h-3.5 rounded-full ${option.cellColor} ring-2 ring-white shadow-sm`}></div>
-                                    <span className="text-xs font-medium text-gray-700">{option.label}</span>
+                                <div className="flex items-center gap-2 bg-white dark:bg-gray-800 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm">
+                                    <div className={`w-3.5 h-3.5 rounded-full ${option.cellColor} ring-2 ring-white dark:ring-gray-700 shadow-sm`}></div>
+                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{option.label}</span>
                                 </div>
-                                {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[10px] text-gray-400"></i>}
+                                {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[10px] text-gray-400 dark:text-gray-500"></i>}
                             </React.Fragment>
                         ))}
                     </div>
@@ -6976,24 +6976,24 @@ Abcotronics`;
                         const hasDataInOtherYears = yearsWithSections.length > 0;
                         const bestYear = yearsWithSections[0];
                         return (
-                    <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 p-12 text-center">
                         <div className="flex flex-col items-center gap-4">
-                            <div className="w-20 h-20 bg-gradient-to-br from-sky-100 to-sky-200 rounded-full flex items-center justify-center">
-                                <i className="fas fa-folder-open text-3xl text-sky-600"></i>
+                            <div className="w-20 h-20 bg-gradient-to-br from-sky-100 to-sky-200 dark:from-sky-900 dark:to-sky-800 rounded-full flex items-center justify-center">
+                                <i className="fas fa-folder-open text-3xl text-sky-600 dark:text-sky-400"></i>
                             </div>
                             <div>
-                                <p className="text-lg font-bold text-gray-900">No sections yet</p>
+                                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">No sections yet</p>
                                 {hasDataInOtherYears ? (
                                     <>
-                                        <p className="text-sm text-gray-600 mt-1">No sections for <strong>{selectedYear}</strong>. Your document collection has data for {yearsWithSections.join(', ')}.</p>
-                                        <p className="text-sm text-sky-600 mt-2">Change the <strong>Year</strong> dropdown above, or click below to view that year.</p>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">No sections for <strong>{selectedYear}</strong>. Your document collection has data for {yearsWithSections.join(', ')}.</p>
+                                        <p className="text-sm text-sky-600 dark:text-sky-400 mt-2">Change the <strong>Year</strong> dropdown above, or click below to view that year.</p>
                                     </>
                                 ) : (
-                                    <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Create your first section to start organizing documents</p>
                                 )}
                                 {!hasDataInOtherYears && (
-                                <p className="text-xs text-amber-700 mt-3 p-2 bg-amber-50 rounded border border-amber-200">
-                                    <strong>Works in another browser but not here?</strong> Likely cache or an extension. Use <strong>Clear cache & reload</strong> below, or try Incognito/Private. Or F12 → Network and check <code className="bg-amber-100 px-0.5">document-sections-v2</code>.
+                                <p className="text-xs text-amber-700 dark:text-amber-300 mt-3 p-2 bg-amber-50 dark:bg-amber-900/30 rounded border border-amber-200 dark:border-amber-700">
+                                    <strong>Works in another browser but not here?</strong> Likely cache or an extension. Use <strong>Clear cache & reload</strong> below, or try Incognito/Private. Or F12 → Network and check <code className="bg-amber-100 dark:bg-amber-900/50 px-0.5">document-sections-v2</code>.
                                 </p>
                                 )}
                             </div>
@@ -7001,7 +7001,7 @@ Abcotronics`;
                                 {hasDataInOtherYears && bestYear != null && bestYear !== selectedYear && (
                                     <button
                                         onClick={() => copyYearData(bestYear, selectedYear)}
-                                        className="px-4 py-2 bg-emerald-200 text-emerald-800 rounded-lg hover:bg-emerald-300 text-sm font-semibold flex items-center gap-2"
+                                        className="px-4 py-2 bg-emerald-200 dark:bg-emerald-700 text-emerald-800 dark:text-emerald-100 rounded-lg hover:bg-emerald-300 dark:hover:bg-emerald-600 text-sm font-semibold flex items-center gap-2"
                                     >
                                         <i className="fas fa-arrow-right"></i>
                                         <span>Copy {bestYear} → {selectedYear}</span>
@@ -7010,7 +7010,7 @@ Abcotronics`;
                                 {hasDataInOtherYears && bestYear != null && (
                                     <button
                                         onClick={() => handleYearChange(bestYear)}
-                                        className="px-4 py-2 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-sm font-semibold"
+                                        className="px-4 py-2 bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600 text-sm font-semibold"
                                     >
                                         Show {bestYear}
                                     </button>
@@ -7022,14 +7022,14 @@ Abcotronics`;
                                         url.searchParams.set('clearCache', '1');
                                         window.location.href = url.pathname + url.search + (window.location.hash || '');
                                     }}
-                                    className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 text-sm font-medium border border-amber-300"
+                                    className="px-4 py-2 bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-800 text-sm font-medium border border-amber-300 dark:border-amber-700"
                                 >
                                     Clear cache & reload
                                 </button>
                                 <button
                                     onClick={() => { if (project?.id) loadData(); }}
                                     disabled={isLoading}
-                                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium disabled:opacity-50"
+                                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 text-sm font-medium disabled:opacity-50"
                                 >
                                     {isLoading ? 'Loading…' : 'Retry load'}
                                 </button>
@@ -7037,7 +7037,7 @@ Abcotronics`;
                                     <button
                                         type="button"
                                         onClick={handleRestoreFromBackup}
-                                        className="px-4 py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 text-sm font-medium border border-emerald-300"
+                                        className="px-4 py-2 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-800 text-sm font-medium border border-emerald-300 dark:border-emerald-700"
                                         title="Restore from last backup saved in this browser (e.g. recover File 6 after a failed save)"
                                     >
                                         <i className="fas fa-undo mr-1"></i> Restore from browser backup
@@ -7046,7 +7046,7 @@ Abcotronics`;
                                 <button
                                     type="button"
                                     onClick={handleAddSection}
-                                    className="px-6 py-3 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                                    className="px-6 py-3 bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600 text-sm font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
                                 >
                                     <i className="fas fa-plus"></i><span>Add First Section</span>
                                 </button>
@@ -7059,7 +7059,7 @@ Abcotronics`;
                     sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
-                            className={`bg-white rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragOverIndex === sectionIndex ? 'ring-2 ring-sky-400 ring-offset-2 border-sky-300' : 'border-gray-200'}`}
+                            className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragOverIndex === sectionIndex ? 'ring-2 ring-sky-400 ring-offset-2 dark:ring-offset-gray-900 border-sky-300 dark:border-sky-500' : 'border-gray-200 dark:border-gray-600'}`}
                             draggable="true"
                             onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
                             onDragEnd={handleSectionDragEnd}
@@ -7068,16 +7068,16 @@ Abcotronics`;
                             onDrop={(e) => handleSectionDrop(e, sectionIndex)}
                         >
                             {/* Section header */}
-                            <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex items-center justify-between cursor-grab active:cursor-grabbing">
+                            <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white dark:from-gray-700 dark:to-gray-800 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between cursor-grab active:cursor-grabbing">
                                 <div className="flex items-center gap-3 flex-1">
-                                    <i className="fas fa-grip-vertical text-gray-400 text-sm"></i>
+                                    <i className="fas fa-grip-vertical text-gray-400 dark:text-gray-500 text-sm"></i>
                                     <div className="flex-1">
-                                        <div className="font-bold text-base text-gray-900 flex items-center gap-2">
+                                        <div className="font-bold text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
                                             <span>#{sectionIndex + 1}</span>
                                             <span>{section.name}</span>
                                         </div>
                                         {section.description && (
-                                            <div className="text-xs text-gray-600 mt-1">{section.description}</div>
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{section.description}</div>
                                         )}
                                     </div>
                                 </div>
@@ -7085,7 +7085,7 @@ Abcotronics`;
                                     <button
                                         type="button"
                                         onClick={() => setSectionActionsOpenId(prev => prev === section.id ? null : section.id)}
-                                        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                                        className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors border border-gray-200 dark:border-gray-600"
                                         title="Section actions"
                                         aria-expanded={sectionActionsOpenId === section.id}
                                         aria-haspopup="true"
@@ -7094,27 +7094,27 @@ Abcotronics`;
                                         <span className="ml-1.5 text-xs font-medium">Actions</span>
                                     </button>
                                     {sectionActionsOpenId === section.id && (
-                                        <div className="absolute right-0 mt-1 w-48 py-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                                        <div className="absolute right-0 mt-1 w-48 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl z-50">
                                             <button
                                                 type="button"
                                                 onClick={() => { handleAddDocument(section.id); setSectionActionsOpenId(null); }}
-                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-sky-50 hover:text-sky-700 flex items-center gap-2"
+                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-2"
                                             >
-                                                <i className="fas fa-plus text-sky-600"></i>
+                                                <i className="fas fa-plus text-sky-600 dark:text-sky-400"></i>
                                                 <span>Add Document</span>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => { handleEditSection(section); setSectionActionsOpenId(null); }}
-                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                                className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
                                             >
-                                                <i className="fas fa-edit text-gray-500"></i>
+                                                <i className="fas fa-edit text-gray-500 dark:text-gray-400"></i>
                                                 <span>Edit section</span>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={(e) => { handleDeleteSection(section.id, e); setSectionActionsOpenId(null); }}
-                                                className="w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 flex items-center gap-2"
+                                                className="w-full px-3 py-2 text-left text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"
                                             >
                                                 <i className="fas fa-trash"></i>
                                                 <span>Delete section</span>
@@ -7125,15 +7125,15 @@ Abcotronics`;
                             </div>
 
                             {/* Scrollable month/document grid for this section only */}
-                            <div data-scroll-sync className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
+                                <div data-scroll-sync className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+                                        <thead className="bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800">
                                         {isJsonOnlyTracker ? (
                                             <>
                                                 <tr>
                                                     <th
                                                         rowSpan={2}
-                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
+                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 z-20 border-r-2 border-gray-300 dark:border-gray-600"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         Document / Data
@@ -7142,10 +7142,10 @@ Abcotronics`;
                                                         <th
                                                             key={month}
                                                             colSpan={2}
-                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 ${
+                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 dark:border-gray-600 ${
                                                                 isOneMonthArrears(selectedYear, idx)
-                                                                    ? 'bg-sky-100 text-sky-800 border-sky-400'
-                                                                    : 'text-gray-700'
+                                                                    ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500'
+                                                                    : 'text-gray-700 dark:text-gray-300'
                                                             }`}
                                                         >
                                                             <div className="flex flex-col items-center gap-0.5">
@@ -7156,7 +7156,7 @@ Abcotronics`;
                                                     ))}
                                                     <th
                                                         rowSpan={2}
-                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-4 border-gray-400 bg-gradient-to-b from-gray-100 to-gray-50"
+                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider border-l-4 border-gray-400 dark:border-gray-600 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800"
                                                     >
                                                         Actions
                                                     </th>
@@ -7165,20 +7165,20 @@ Abcotronics`;
                                                     {months.map((month, idx) => (
                                                         <React.Fragment key={month}>
                                                             <th
-                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-4 border-t border-gray-400 ${
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-4 border-t border-gray-400 dark:border-gray-600 ${
                                                                     isOneMonthArrears(selectedYear, idx)
-                                                                        ? 'bg-sky-50 text-sky-800 border-sky-400'
-                                                                        : 'text-gray-600'
+                                                                        ? 'bg-sky-50 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500'
+                                                                        : 'text-gray-600 dark:text-gray-400'
                                                                 }`}
                                                                 style={{ minWidth: '180px', width: '180px' }}
                                                             >
                                                                 Status
                                                             </th>
                                                             <th
-                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 ${
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 dark:border-gray-600 ${
                                                                     isOneMonthArrears(selectedYear, idx)
-                                                                        ? 'bg-sky-50 text-sky-800 border-sky-200'
-                                                                        : 'text-gray-600'
+                                                                        ? 'bg-sky-50 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-200 dark:border-sky-600'
+                                                                        : 'text-gray-600 dark:text-gray-400'
                                                                 }`}
                                                                 style={{ minWidth: '180px', width: '180px' }}
                                                             >
@@ -7191,7 +7191,7 @@ Abcotronics`;
                                         ) : (
                                         <tr>
                                             <th
-                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
+                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 z-20 border-r-2 border-gray-300 dark:border-gray-600"
 style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                 >
                                                 Document / Data
@@ -7199,10 +7199,10 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                             {months.map((month, idx) => (
                                                 <th
                                                     key={month}
-                                                    className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 ${
+                                                    className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 dark:border-gray-600 ${
                                                         isOneMonthArrears(selectedYear, idx)
-                                                            ? 'bg-sky-100 text-sky-800 border-sky-300'
-                                                            : 'text-gray-700'
+                                                            ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-300 dark:border-sky-600'
+                                                            : 'text-gray-700 dark:text-gray-300'
                                                     }`}
                                                     style={{ minWidth: '180px' }}
                                                 >
@@ -7212,30 +7212,30 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     </div>
                                                 </th>
                                             ))}
-                                            <th className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-2 border-gray-300">
+                                            <th className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider border-l-2 border-gray-300 dark:border-gray-600">
                                                 Actions
                                             </th>
                                         </tr>
                                         )}
                                     </thead>
                                     <tbody
-                                        className="bg-white divide-y divide-gray-200"
+                                        className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600"
                                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                     >
                                         {section.documents.length === 0 ? (
                                             <tr>
                                                 <td colSpan={isJsonOnlyTracker ? 1 + months.length * 2 + 1 : 14} className="px-8 py-12 text-center">
                                                     <div className="flex flex-col items-center gap-3">
-                                                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-                                                            <i className="fas fa-file-alt text-2xl text-gray-400"></i>
+                                                        <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                                                            <i className="fas fa-file-alt text-2xl text-gray-400 dark:text-gray-500"></i>
                                                         </div>
                                                         <div>
-                                                            <p className="text-sm font-semibold text-gray-700">No documents in this section</p>
-                                                            <p className="text-xs text-gray-500 mt-1">Get started by adding your first document</p>
+                                                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No documents in this section</p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Get started by adding your first document</p>
                                                         </div>
                                                         <button
                                                             onClick={() => handleAddDocument(section.id)}
-                                                            className="px-4 py-2 bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
+                                                            className="px-4 py-2 bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600 text-sm font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-2"
                                                         >
                                                             <i className="fas fa-plus"></i><span>Add Document</span>
                                                         </button>
@@ -7249,7 +7249,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 return (
                                                 <tr
                                                     key={doc.id}
-                                                    className={`transition-colors border-b border-gray-100 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-sky-50 ring-1 ring-sky-200' : 'hover:bg-gray-50'} ${isSubRow ? 'bg-gray-50/50' : ''}`}
+                                                    className={`transition-colors border-b border-gray-100 dark:border-gray-700 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-sky-50 dark:bg-sky-900/30 ring-1 ring-sky-200 dark:ring-sky-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'} ${isSubRow ? 'bg-gray-50/50 dark:bg-gray-700/30' : ''}`}
                                                     draggable={canDrag}
                                                     onDragStart={canDrag ? (e) => handleDocumentDragStart(section.id, docIndex, e) : undefined}
                                                     onDragEnd={handleDocumentDragEnd}
@@ -7258,15 +7258,15 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     onDrop={canDrag ? (e) => handleDocumentDrop(e, section.id, docIndex) : undefined}
                                                 >
                                                     <td
-                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 ${isSubRow ? 'pl-10 bg-gray-50' : 'bg-white'}`}
+                                                        className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 dark:border-gray-600 ${isSubRow ? 'pl-10 bg-gray-50 dark:bg-gray-700/50' : 'bg-white dark:bg-gray-800'}`}
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
-                                                            <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5" title={isSubRow ? 'Drag to reorder sub-document' : 'Drag to reorder'}>
+                                                            <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 mt-0.5" title={isSubRow ? 'Drag to reorder sub-document' : 'Drag to reorder'}>
                                                                 <i className="fas fa-grip-vertical text-[10px]"></i>
                                                             </span>
                                                             <div className="flex-1 min-w-0">
-                                                            <div className="text-sm font-semibold text-gray-900 leading-snug">{doc.name}</div>
+                                                            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug">{doc.name}</div>
                                                             {doc.description && (() => {
                                                                 // Check if description contains ISO date strings and format them
                                                                 let desc = String(doc.description);
@@ -7374,11 +7374,11 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                                                         );
                                                                                     })}
                                                                                 </button>
-                                                                                <div className="absolute left-0 top-full mt-1 hidden group-hover/assignees:flex bg-white border border-gray-200 rounded-lg shadow-lg px-2 py-1.5 gap-1.5 z-20">
+                                                                                <div className="absolute left-0 top-full mt-1 hidden group-hover/assignees:flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg px-2 py-1.5 gap-1.5 z-20">
                                                                                     {assigned.map((uid, i) => {
                                                                                         const color = getAssigneeColor(uid, users);
                                                                                         return (
-                                                                                            <span key={`${doc.id}-full-${i}-${uid}`} className="inline-flex items-center gap-1 text-[10px] text-gray-700">
+                                                                                            <span key={`${doc.id}-full-${i}-${uid}`} className="inline-flex items-center gap-1 text-[10px] text-gray-700 dark:text-gray-300">
                                                                                                 <span
                                                                                                     className="w-4 h-4 rounded-full border"
                                                                                                     style={{ backgroundColor: color.bg, borderColor: color.ring }}
@@ -7596,7 +7596,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                 const dropdown = (
                     <div
                         ref={assignmentDropdownRef}
-                        className="fixed min-w-[180px] overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[10000]"
+                        className="fixed min-w-[180px] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl py-1 z-[10000]"
                         style={{
                             left,
                             top: openUpwards ? Math.max(8, assignmentAnchorRect.top - maxHeight - 4) : assignmentAnchorRect.bottom + 4,
