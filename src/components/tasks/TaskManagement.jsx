@@ -1,6 +1,96 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const storage = window.storage;
+
+// Loading skeleton for list view
+const TasksListSkeleton = ({ isDark, rows = 8 }) => (
+    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border overflow-hidden`}>
+        <div className={`${isDark ? 'bg-gray-900/40 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b px-4 py-2`}>
+            <div className="h-4 rounded w-3/4 max-w-xs bg-gray-200 dark:bg-gray-600 animate-pulse" />
+        </div>
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {Array.from({ length: rows }).map((_, i) => (
+                <div key={i} className="px-4 py-3 flex items-center gap-3">
+                    <div className={`h-4 rounded flex-1 max-w-md ${isDark ? 'bg-gray-600' : 'bg-gray-200'} animate-pulse`} />
+                    <div className={`h-6 rounded w-16 ${isDark ? 'bg-gray-600' : 'bg-gray-200'} animate-pulse`} />
+                    <div className={`h-4 rounded w-24 ${isDark ? 'bg-gray-600' : 'bg-gray-200'} animate-pulse`} />
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+// Loading skeleton for kanban view
+const TasksKanbanSkeleton = ({ isDark }) => (
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {['todo', 'in-progress', 'completed', 'cancelled'].map((status, i) => (
+            <div key={status} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
+                <div className={`h-5 rounded w-24 mb-4 ${isDark ? 'bg-gray-600' : 'bg-gray-200'} animate-pulse`} />
+                <div className="space-y-2">
+                    {[1, 2, 3].map((j) => (
+                        <div key={j} className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'} animate-pulse`}>
+                            <div className={`h-4 rounded w-full mb-2 ${isDark ? 'bg-gray-600' : 'bg-gray-200'}`} />
+                            <div className={`h-3 rounded w-2/3 ${isDark ? 'bg-gray-600' : 'bg-gray-200'}`} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
+// Loading skeleton for calendar view
+const TasksCalendarSkeleton = ({ isDark }) => (
+    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
+        <div className="flex justify-between items-center mb-4">
+            <div className={`h-8 rounded w-32 ${isDark ? 'bg-gray-600' : 'bg-gray-200'} animate-pulse`} />
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: 35 }).map((_, i) => (
+                <div key={i} className={`min-h-[80px] p-1 border rounded ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'} animate-pulse`} />
+            ))}
+        </div>
+    </div>
+);
+
+// Empty state when no tasks match
+const TasksEmptyState = ({ isDark, hasFilters, onClearFilters, onCreateTask }) => {
+    const hasAnyFilter = hasFilters;
+    return (
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-10 text-center`}>
+            <div className="max-w-sm mx-auto">
+                <div className={`w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <i className={`fas fa-tasks text-2xl ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
+                </div>
+                <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {hasAnyFilter ? 'No tasks match your filters' : 'No tasks yet'}
+                </h3>
+                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {hasAnyFilter ? 'Try clearing some filters or search to see more tasks.' : 'Create a task to get started, or check back for project tasks assigned to you.'}
+                </p>
+                <div className="flex flex-wrap justify-center gap-3">
+                    {hasAnyFilter && (
+                        <button
+                            type="button"
+                            onClick={onClearFilters}
+                            className={`px-4 py-2 rounded-lg border transition-colors ${isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                        >
+                            Clear filters
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={onCreateTask}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 mx-auto"
+                    >
+                        <i className="fas fa-plus"></i>
+                        New Task
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const TaskManagement = () => {
     const { isDark } = window.useTheme();
@@ -19,6 +109,8 @@ const TaskManagement = () => {
     const [filterCategory, setFilterCategory] = useState('all');
     const [filterTag, setFilterTag] = useState('all');
     const [filterPriority, setFilterPriority] = useState('all');
+    const [filterSource, setFilterSource] = useState('all'); // 'all' | 'user' | 'project'
+    const [quickDateFilter, setQuickDateFilter] = useState(null); // null | 'overdue' | 'today' | 'week'
     const [searchQuery, setSearchQuery] = useState('');
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [selectedTask, setSelectedTask] = useState(null);
@@ -83,18 +175,41 @@ const TaskManagement = () => {
         } catch {}
     };
 
-    // Load view preference from localStorage on mount
+    // Load view and filter preferences from localStorage on mount
     useEffect(() => {
         try {
             const savedView = localStorage.getItem('taskManagementView');
             if (savedView && ['list', 'kanban', 'calendar'].includes(savedView)) {
                 setView(savedView);
-            } else {
+            }
+            const savedFilters = localStorage.getItem('taskManagementFilters');
+            if (savedFilters) {
+                const parsed = JSON.parse(savedFilters);
+                if (parsed.filterStatus) setFilterStatus(parsed.filterStatus);
+                if (parsed.filterCategory) setFilterCategory(parsed.filterCategory);
+                if (parsed.filterTag) setFilterTag(parsed.filterTag);
+                if (parsed.filterPriority) setFilterPriority(parsed.filterPriority);
+                if (parsed.filterSource && ['all', 'user', 'project'].includes(parsed.filterSource)) setFilterSource(parsed.filterSource);
             }
         } catch (e) {
-            console.warn('Failed to load view preference from localStorage:', e);
+            console.warn('Failed to load preferences from localStorage:', e);
         }
     }, []);
+
+    // Persist filter preferences when they change
+    useEffect(() => {
+        try {
+            localStorage.setItem('taskManagementFilters', JSON.stringify({
+                filterStatus,
+                filterCategory,
+                filterTag,
+                filterPriority,
+                filterSource
+            }));
+        } catch (e) {
+            console.warn('Failed to save filters to localStorage:', e);
+        }
+    }, [filterStatus, filterCategory, filterTag, filterPriority, filterSource]);
 
     // Load data
     useEffect(() => {
@@ -386,9 +501,28 @@ const TaskManagement = () => {
         loadTasks();
     }, [filterStatus, filterCategory, filterTag, filterPriority]);
 
-    // Filter tasks by search query
+    // Filter tasks by search query, source, and quick date filter
     const filteredTasks = useMemo(() => {
         let filtered = [...tasks];
+
+        if (filterSource !== 'all') {
+            filtered = filtered.filter(task => task.type === filterSource);
+        }
+
+        if (quickDateFilter) {
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+            const weekEnd = new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+            filtered = filtered.filter(task => {
+                const due = task.dueDate ? new Date(task.dueDate) : null;
+                if (!due) return false;
+                if (quickDateFilter === 'overdue') return due < todayStart;
+                if (quickDateFilter === 'today') return due >= todayStart && due <= todayEnd;
+                if (quickDateFilter === 'week') return due >= todayStart && due < weekEnd;
+                return true;
+            });
+        }
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -401,7 +535,7 @@ const TaskManagement = () => {
         }
 
         return filtered;
-    }, [tasks, searchQuery]);
+    }, [tasks, searchQuery, filterSource, quickDateFilter]);
 
     // Sort tasks for List view (uses display values like client/lead names)
     const sortedListTasks = useMemo(() => {
@@ -781,14 +915,40 @@ const TaskManagement = () => {
         return colors[status] || colors.todo;
     };
 
-    if (loading) {
-        return (
-            <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} p-8 text-center`}>
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Loading tasks...</p>
-            </div>
-        );
-    }
+    const hasActiveFilters = filterStatus !== 'all' || filterCategory !== 'all' || filterTag !== 'all' || filterPriority !== 'all' || filterSource !== 'all' || quickDateFilter || searchQuery.trim();
+    const clearFilters = useCallback(() => {
+        setFilterStatus('all');
+        setFilterCategory('all');
+        setFilterTag('all');
+        setFilterPriority('all');
+        setFilterSource('all');
+        setQuickDateFilter(null);
+        setSearchQuery('');
+    }, []);
+
+    const quickAddTitleRef = useRef(null);
+    useEffect(() => {
+        if (showInlineQuickAdd && quickAddTitleRef.current) {
+            quickAddTitleRef.current.focus();
+        }
+    }, [showInlineQuickAdd]);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+            if (e.key === 'n' && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                handleCreateTask();
+            }
+            if (e.key === 'q' && !e.ctrlKey && !e.metaKey && view === 'list') {
+                e.preventDefault();
+                setShowInlineQuickAdd(true);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [view]);
 
     return (
         <div className="space-y-4">
@@ -820,13 +980,40 @@ const TaskManagement = () => {
                         <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                             My Tasks
                         </h2>
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {stats.total} total • {stats.todo} to do • {stats.inProgress} in progress • {stats.completed} completed
+                        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            User and project tasks in one place
                         </p>
+                        {/* Stats row: clickable pills */}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            <button
+                                type="button"
+                                onClick={() => setFilterStatus(filterStatus === 'all' ? 'todo' : filterStatus === 'todo' ? 'all' : 'todo')}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${filterStatus === 'todo' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            >
+                                {stats.todo} To do
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilterStatus(filterStatus === 'in-progress' ? 'all' : 'in-progress')}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${filterStatus === 'in-progress' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            >
+                                {stats.inProgress} In progress
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilterStatus(filterStatus === 'completed' ? 'all' : 'completed')}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${filterStatus === 'completed' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            >
+                                {stats.completed} Done
+                            </button>
+                            <span className={`px-3 py-1.5 text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                {stats.total} total
+                            </span>
+                        </div>
                     </div>
                     <button
                         onClick={handleCreateTask}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 flex-shrink-0"
                     >
                         <i className="fas fa-plus"></i>
                         New Task
@@ -837,24 +1024,56 @@ const TaskManagement = () => {
             {/* Filters and View Toggle */}
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
                 <div className="flex flex-col gap-4">
-                    {/* Search */}
-                    <div className="relative">
-                        <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                        <input
-                            type="text"
-                            placeholder="Search tasks..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                        />
+                    {/* Search + View Toggle row */}
+                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                        <div className="relative flex-1">
+                            <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            <input
+                                type="text"
+                                placeholder="Search tasks..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            />
+                        </div>
+                        {/* View Toggle - segmented control */}
+                        <div className={`flex rounded-lg p-1 ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                            <button
+                                onClick={() => updateView('list')}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${view === 'list' ? (isDark ? 'bg-gray-600 text-white' : 'bg-white text-gray-900 shadow-sm') : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                            >
+                                <i className="fas fa-list mr-2"></i>List
+                            </button>
+                            <button
+                                onClick={() => updateView('kanban')}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${view === 'kanban' ? (isDark ? 'bg-gray-600 text-white' : 'bg-white text-gray-900 shadow-sm') : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                            >
+                                <i className="fas fa-columns mr-2"></i>Kanban
+                            </button>
+                            <button
+                                onClick={() => updateView('calendar')}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${view === 'calendar' ? (isDark ? 'bg-gray-600 text-white' : 'bg-white text-gray-900 shadow-sm') : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                            >
+                                <i className="fas fa-calendar mr-2"></i>Calendar
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Filters */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* Filter bar: active chips + dropdowns + source + quick date */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        {hasActiveFilters && (
+                            <button
+                                type="button"
+                                onClick={clearFilters}
+                                className={`text-sm px-2 py-1 rounded ${isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                            >
+                                Clear all
+                            </button>
+                        )}
                         <select
                             value={filterStatus}
                             onChange={(e) => setFilterStatus(e.target.value)}
-                            className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                            className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
                         >
                             <option value="all">All Status</option>
                             <option value="todo">To Do</option>
@@ -862,33 +1081,30 @@ const TaskManagement = () => {
                             <option value="completed">Completed</option>
                             <option value="cancelled">Cancelled</option>
                         </select>
-
                         <select
                             value={filterCategory}
                             onChange={(e) => setFilterCategory(e.target.value)}
-                            className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                            className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
                         >
                             <option value="all">All Categories</option>
                             {categories.map(cat => (
                                 <option key={cat} value={cat}>{cat}</option>
                             ))}
                         </select>
-
                         <select
                             value={filterTag}
                             onChange={(e) => setFilterTag(e.target.value)}
-                            className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                            className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
                         >
                             <option value="all">All Tags</option>
                             {tags.map(tag => (
                                 <option key={tag.id} value={tag.id}>{tag.name}</option>
                             ))}
                         </select>
-
                         <select
                             value={filterPriority}
                             onChange={(e) => setFilterPriority(e.target.value)}
-                            className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                            className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
                         >
                             <option value="all">All Priorities</option>
                             <option value="low">Low</option>
@@ -896,34 +1112,46 @@ const TaskManagement = () => {
                             <option value="high">High</option>
                             <option value="urgent">Urgent</option>
                         </select>
-                    </div>
-
-                    {/* View Toggle */}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => updateView('list')}
-                            className={`px-4 py-2 rounded-lg transition-colors ${view === 'list' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                        >
-                            <i className="fas fa-list mr-2"></i>List
-                        </button>
-                        <button
-                            onClick={() => updateView('kanban')}
-                            className={`px-4 py-2 rounded-lg transition-colors ${view === 'kanban' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                        >
-                            <i className="fas fa-columns mr-2"></i>Kanban
-                        </button>
-                        <button
-                            onClick={() => updateView('calendar')}
-                            className={`px-4 py-2 rounded-lg transition-colors ${view === 'calendar' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
-                        >
-                            <i className="fas fa-calendar mr-2"></i>Calendar
-                        </button>
+                        <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>|</span>
+                        <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Source:</span>
+                        <div className="flex gap-1">
+                            {['all', 'user', 'project'].map(src => (
+                                <button
+                                    key={src}
+                                    type="button"
+                                    onClick={() => setFilterSource(src)}
+                                    className={`px-2 py-1 rounded text-sm ${filterSource === src ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                >
+                                    {src === 'all' ? 'All' : src === 'user' ? 'My tasks' : 'Project tasks'}
+                                </button>
+                            ))}
+                        </div>
+                        <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>|</span>
+                        <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Due:</span>
+                        <div className="flex gap-1">
+                            {[{ id: null, label: 'Any' }, { id: 'overdue', label: 'Overdue' }, { id: 'today', label: 'Today' }, { id: 'week', label: 'This week' }].map(({ id, label }) => (
+                                <button
+                                    key={id || 'any'}
+                                    type="button"
+                                    onClick={() => setQuickDateFilter(id)}
+                                    className={`px-2 py-1 rounded text-sm ${quickDateFilter === id ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Task Views */}
-            {view === 'list' && (
+            {loading ? (
+                <div className="space-y-2">
+                    {view === 'list' && <TasksListSkeleton isDark={isDark} />}
+                    {view === 'kanban' && <TasksKanbanSkeleton isDark={isDark} />}
+                    {view === 'calendar' && <TasksCalendarSkeleton isDark={isDark} />}
+                </div>
+            ) : view === 'list' ? (
                 <div className="space-y-2">
                     {/* Offline banner */}
                     {offlineMode && (
@@ -931,7 +1159,8 @@ const TaskManagement = () => {
                             You’re viewing local tasks stored on this device because the server is unavailable.
                         </div>
                     )}
-                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
+                    {/* Prominent quick add bar */}
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border overflow-hidden`}>
                         <button
                             type="button"
                             onClick={() => {
@@ -945,17 +1174,19 @@ const TaskManagement = () => {
                                     return next;
                                 });
                             }}
-                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`}
+                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${isDark ? 'hover:bg-gray-700/50 text-gray-300' : 'hover:bg-gray-50 text-gray-600'}`}
                         >
-                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white">
-                                <i className="fas fa-plus text-xs"></i>
+                            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white flex-shrink-0">
+                                <i className="fas fa-plus text-sm"></i>
                             </span>
-                            Quick To-Do
+                            <span className="text-sm font-medium">Add task…</span>
+                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Quick to-do (Enter to add)</span>
                         </button>
 
                         {showInlineQuickAdd && (
                             <form onSubmit={handleInlineQuickAddSubmit} className="mt-3 flex flex-col lg:flex-row lg:items-center gap-2">
                                 <input
+                                    ref={quickAddTitleRef}
                                     type="text"
                                     value={inlineQuickTitle}
                                     onChange={(e) => {
@@ -964,6 +1195,7 @@ const TaskManagement = () => {
                                     }}
                                     placeholder="Title (optional if description provided)"
                                     className={`w-full lg:w-1/3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                                    aria-label="Quick add task title"
                                 />
                                 <input
                                     type="text"
@@ -999,9 +1231,12 @@ const TaskManagement = () => {
                         )}
                     </div>
                     {filteredTasks.length === 0 ? (
-                        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-8 text-center`}>
-                            <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>No tasks found</p>
-                        </div>
+                        <TasksEmptyState
+                            isDark={isDark}
+                            hasFilters={hasActiveFilters}
+                            onClearFilters={clearFilters}
+                            onCreateTask={handleCreateTask}
+                        />
                     ) : (
                         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border overflow-hidden`}>
                             {/* Header */}
@@ -1041,6 +1276,7 @@ const TaskManagement = () => {
                                         onQuickStatusToggle={handleQuickStatusToggle}
                                         clients={clients}
                                         leads={leads}
+                                        projects={projects}
                                         getPriorityColor={getPriorityColor}
                                         getPriorityTextColor={getPriorityTextColor}
                                         getStatusColor={getStatusColor}
@@ -1050,9 +1286,7 @@ const TaskManagement = () => {
                         </div>
                     )}
                 </div>
-            )}
-
-            {view === 'kanban' && (
+            ) : view === 'kanban' ? (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     {['todo', 'in-progress', 'completed', 'cancelled'].map(status => {
                         const handleDragOver = (e) => {
@@ -1129,9 +1363,7 @@ const TaskManagement = () => {
                         );
                     })}
                 </div>
-            )}
-
-            {view === 'calendar' && (
+            ) : (
                 <CalendarView
                     tasks={calendarTasks}
                     isDark={isDark}
@@ -1170,8 +1402,10 @@ const TaskManagement = () => {
 
 // Task Card Component
 const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients, projects, tags, getPriorityColor, getPriorityTextColor, getStatusColor, compact = false, draggable = false }) => {
-    const client = clients.find(c => c.id === task.clientId);
-    const project = projects.find(p => p.id === task.projectId);
+    const client = clients?.find(c => c.id === task.clientId);
+    const projectName = task.type === 'project' && (task.project?.name != null || task.projectId)
+        ? (task.project?.name || (projects && projects.find(p => p.id === task.projectId)?.name))
+        : null;
     const taskTags = task.tags || [];
     const wasDraggedRef = React.useRef(false);
 
@@ -1291,25 +1525,31 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
                                     e.stopPropagation();
                                     onDelete(task.id);
                                 }}
-                                className={`p-1.5 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
-                                title="Delete"
+                                className={`p-1.5 rounded ${task.type === 'project' ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
+                                title={task.type === 'project' ? 'Managed in project — delete from the project page' : 'Delete'}
+                                disabled={task.type === 'project'}
                             >
                                 <i className={`fas fa-trash ${isDark ? 'text-red-500' : 'text-red-500'} text-sm`}></i>
                             </button>
                         </div>
                     </div>
 
-                    {/* Essential Info Only */}
-                    <div className={`flex items-center gap-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {/* Due Date - Only show if urgent */}
-                        {isUrgent && (
-                            <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-orange-600'}`}>
+                    {/* Project label for project tasks */}
+                    {projectName && (
+                        <div className={`text-xs mb-1.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                            <i className="fas fa-folder-open mr-1"></i>
+                            {projectName}
+                        </div>
+                    )}
+
+                    {/* Due date (always when set), checklist */}
+                    <div className={`flex items-center flex-wrap gap-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {task.dueDate && (
+                            <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : isUrgent ? 'text-orange-600' : ''}`}>
                                 <i className="fas fa-calendar text-[10px]"></i>
                                 {new Date(task.dueDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
                             </span>
                         )}
-                        
-                        {/* Checklist Progress - Only if exists */}
                         {task.checklist && task.checklist.length > 0 && (
                             <span className={`flex items-center gap-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                 <i className="fas fa-check-square text-[10px]"></i>
@@ -1341,9 +1581,12 @@ const SortableTh = ({ label, colSpan, sortKeyName, sortKey, sortDir, onSort, isD
 };
 
 // List Row Component (for List view column layout)
-const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients, leads, getPriorityColor, getPriorityTextColor, getStatusColor }) => {
+const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients, leads, projects, getPriorityColor, getPriorityTextColor, getStatusColor }) => {
     const client = clients?.find(c => c.id === task.clientId);
     const lead = leads?.find(l => l.id === task.leadId);
+    const project = task.type === 'project' && (task.project?.name != null || task.projectId)
+        ? (task.project?.name || (projects && projects.find(p => p.id === task.projectId)?.name))
+        : null;
 
     const statusLabel = (() => {
         const map = {
@@ -1389,8 +1632,14 @@ const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clie
                     <div className={`font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
                         {task.title}
                     </div>
-                    {task.description ? (
-                        <div className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {project && (
+                        <div className={`text-xs truncate mt-0.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} title="Project task">
+                            <i className="fas fa-folder-open mr-1"></i>
+                            {project}
+                        </div>
+                    )}
+                    {!project && task.description ? (
+                        <div className={`text-xs truncate mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             {task.description}
                         </div>
                     ) : null}
@@ -1452,9 +1701,10 @@ const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clie
                     </button>
                     <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
-                        className={`p-1.5 rounded ${isDark ? 'hover:bg-gray-700 text-red-400' : 'hover:bg-gray-100 text-red-500'}`}
-                        title="Delete"
+                        onClick={(e) => { e.stopPropagation(); if (task.type !== 'project') onDelete(task.id); }}
+                        className={`p-1.5 rounded ${task.type === 'project' ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'hover:bg-gray-700 text-red-400' : 'hover:bg-gray-100 text-red-500'}`}
+                        title={task.type === 'project' ? 'Managed in project — delete from the project page' : 'Delete'}
+                        disabled={task.type === 'project'}
                     >
                         <i className="fas fa-trash"></i>
                     </button>
@@ -1467,24 +1717,47 @@ const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clie
 // Calendar View Component
 const CalendarView = ({ tasks, isDark, onEdit, onDelete, clients, projects, tags, getPriorityColor, getPriorityTextColor, getStatusColor }) => {
     const [currentMonth, setCurrentMonth] = useState(new Date());
-    
+    const [expandedDayKey, setExpandedDayKey] = useState(null); // 'YYYY-MM-DD' when expanded
+
     const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
     const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
     const daysInMonth = monthEnd.getDate();
     const firstDayOfWeek = monthStart.getDay();
+    const today = new Date();
 
     const goToPreviousMonth = () => {
         setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+        setExpandedDayKey(null);
     };
 
     const goToNextMonth = () => {
         setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+        setExpandedDayKey(null);
+    };
+
+    const goToToday = () => {
+        setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+        setExpandedDayKey(null);
     };
 
     const getTasksForDate = (day) => {
         const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
         const dateStr = date.toISOString().split('T')[0];
         return tasks[dateStr] || [];
+    };
+
+    const getDayKey = (day) => {
+        if (!day) return null;
+        const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+        return d.toISOString().split('T')[0];
+    };
+
+    const isToday = (day) => day && currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth() && day === today.getDate();
+    const isWeekend = (day) => {
+        if (!day) return false;
+        const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+        const dow = d.getDay();
+        return dow === 0 || dow === 6;
     };
 
     const days = [];
@@ -1495,62 +1768,95 @@ const CalendarView = ({ tasks, isDark, onEdit, onDelete, clients, projects, tags
         days.push(day);
     }
 
+    const maxVisible = 3;
+
     return (
         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={goToPreviousMonth}
+                        className={`p-2 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                        title="Previous month"
+                    >
+                        <i className={`fas fa-chevron-left ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
+                    </button>
+                    <h3 className={`text-lg font-semibold min-w-[180px] text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {currentMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}
+                    </h3>
+                    <button
+                        onClick={goToNextMonth}
+                        className={`p-2 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                        title="Next month"
+                    >
+                        <i className={`fas fa-chevron-right ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
+                    </button>
+                </div>
                 <button
-                    onClick={goToPreviousMonth}
-                    className={`p-2 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                    onClick={goToToday}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
                 >
-                    <i className={`fas fa-chevron-left ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
-                </button>
-                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {currentMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}
-                </h3>
-                <button
-                    onClick={goToNextMonth}
-                    className={`p-2 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                >
-                    <i className={`fas fa-chevron-right ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
+                    Today
                 </button>
             </div>
             <div className="grid grid-cols-7 gap-1">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className={`text-center font-semibold py-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <div key={day} className={`text-center font-semibold py-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                         {day}
                     </div>
                 ))}
-                {days.map((day, index) => (
-                    <div
-                        key={index}
-                        className={`min-h-[80px] p-1 border ${isDark ? 'border-gray-700' : 'border-gray-200'} ${day ? '' : 'bg-gray-50'}`}
-                    >
-                        {day && (
-                            <>
-                                <div className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                    {day}
-                                </div>
-                                <div className="space-y-1">
-                                    {getTasksForDate(day).slice(0, 3).map(task => (
-                                        <div
-                                            key={task.id}
-                                            onClick={() => onEdit(task)}
-                                            className={`text-xs p-1 rounded cursor-pointer truncate ${getPriorityColor(task.priority)} ${getPriorityTextColor(task.priority)}`}
-                                            title={task.title}
-                                        >
-                                            {task.title}
-                                        </div>
-                                    ))}
-                                    {getTasksForDate(day).length > 3 && (
-                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            +{getTasksForDate(day).length - 3} more
-                                        </div>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                ))}
+                {days.map((day, index) => {
+                    const dayKey = getDayKey(day);
+                    const dayTasks = day ? getTasksForDate(day) : [];
+                    const isExpanded = expandedDayKey === dayKey;
+                    const visibleTasks = isExpanded ? dayTasks : dayTasks.slice(0, maxVisible);
+                    const moreCount = dayTasks.length - maxVisible;
+
+                    return (
+                        <div
+                            key={index}
+                            className={`min-h-[80px] p-1 border rounded ${day ? (isToday(day) ? 'ring-2 ring-blue-500 ' + (isDark ? 'bg-blue-900/20 border-blue-600' : 'bg-blue-50 border-blue-300') : isWeekend(day) ? (isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50/50') : (isDark ? 'border-gray-700' : 'border-gray-200')) : (isDark ? 'border-gray-700 bg-gray-900/30' : 'bg-gray-50')}`}
+                        >
+                            {day && (
+                                <>
+                                    <div className={`text-sm font-medium mb-1 ${isToday(day) ? (isDark ? 'text-blue-400' : 'text-blue-700') : (isDark ? 'text-gray-300' : 'text-gray-700')}`}>
+                                        {day}
+                                    </div>
+                                    <div className="space-y-1">
+                                        {visibleTasks.map(task => (
+                                            <div
+                                                key={task.id}
+                                                onClick={() => onEdit(task)}
+                                                className={`text-xs p-1 rounded cursor-pointer truncate ${getStatusColor(task.status || 'todo')} ${isDark ? 'text-gray-100' : 'text-gray-800'}`}
+                                                title={task.title}
+                                            >
+                                                {task.title}
+                                            </div>
+                                        ))}
+                                        {!isExpanded && moreCount > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setExpandedDayKey(dayKey); }}
+                                                className={`w-full text-left text-xs py-0.5 px-1 rounded ${isDark ? 'text-blue-400 hover:bg-gray-700' : 'text-blue-600 hover:bg-gray-100'}`}
+                                            >
+                                                +{moreCount} more
+                                            </button>
+                                        )}
+                                        {isExpanded && dayTasks.length > maxVisible && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setExpandedDayKey(null); }}
+                                                className={`w-full text-left text-xs py-0.5 px-1 rounded ${isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                                            >
+                                                Show less
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

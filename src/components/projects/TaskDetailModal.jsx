@@ -780,29 +780,40 @@ const TaskDetailModal = ({
         return () => document.removeEventListener('keydown', handle);
     }, [zoomImageSrc]);
 
-    // Fetch users on component mount
+    // Fetch users and merge with usersProp so assignees/subscribers (e.g. from parent) are never dropped
     useEffect(() => {
+        const mergeUsers = (fromApi) => {
+            const fromProp = usersProp || [];
+            const activeFromApi = (fromApi || []).filter(u => u && u.status !== 'inactive');
+            const byId = new Map();
+            fromProp.forEach(u => { if (u && u.id != null) byId.set(String(u.id), u); });
+            activeFromApi.forEach(u => { if (u && u.id != null) byId.set(String(u.id), u); });
+            return Array.from(byId.values());
+        };
         const fetchUsers = async () => {
             try {
                 if (window.DatabaseAPI?.getUsers) {
                     const response = await window.DatabaseAPI.getUsers();
-                    const usersList = response?.data?.users || response?.data?.data?.users || 
+                    const usersList = response?.data?.users || response?.data?.data?.users ||
                                      (Array.isArray(response?.data) ? response.data : []) ||
                                      (Array.isArray(response) ? response : []);
-                    setUsers(usersList.filter(u => u.status !== 'inactive'));
+                    setUsers(mergeUsers(usersList));
                 } else if (window.api?.getUsers) {
                     const response = await window.api.getUsers();
-                    const usersList = response?.data?.users || response?.data?.data?.users || 
+                    const usersList = response?.data?.users || response?.data?.data?.users ||
                                      (Array.isArray(response?.data) ? response.data : []) ||
                                      (Array.isArray(response) ? response : []);
-                    setUsers(usersList.filter(u => u.status !== 'inactive'));
+                    setUsers(mergeUsers(usersList));
+                } else if (usersProp && usersProp.length > 0) {
+                    setUsers(usersProp);
                 }
             } catch (error) {
                 console.error('Error fetching users:', error);
+                if (usersProp && usersProp.length > 0) setUsers(usersProp);
             }
         };
         fetchUsers();
-    }, []);
+    }, [usersProp]);
 
     // Auto-scroll to last comment when comments tab is opened or comments change
     useEffect(() => {
@@ -1249,6 +1260,8 @@ const TaskDetailModal = ({
             });
 
             // NEW: Save comment directly to TaskComment table via API
+            // Declare in outer scope so notification block can use saved comment ID
+            let savedCommentFromApi = null;
             try {
                 const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
                 
@@ -1265,7 +1278,7 @@ const TaskDetailModal = ({
                     })
                 });
                 // API wraps response in { data: { comment } }
-                const savedCommentFromApi = commentData?.data?.comment ?? commentData?.comment;
+                savedCommentFromApi = commentData?.data?.comment ?? commentData?.comment;
                 if (savedCommentFromApi) {
                     // Update local comment with the saved comment from API (includes generated ID)
                     const savedComment = {
@@ -1323,7 +1336,7 @@ const TaskDetailModal = ({
                 const taskTitle = editedTask.title || task?.title || 'Untitled Task';
                 const projectName = project?.name || 'Project';
                 
-                // Send notifications to mentioned users using MentionHelper
+                // 1) Notify @mentioned users (email + in-app via MentionHelper)
                 if (window.MentionHelper && mentionedUsers.length > 0) {
                     const contextTitle = `Task: ${taskTitle}`;
                     const contextLink = taskLink; // Use task-specific link with commentId
@@ -1344,84 +1357,86 @@ const TaskDetailModal = ({
                     );
                 }
                 
-                // Send notification to each task assignee if they're not the comment author
+                // 2) Notify all task assignees (in-app; skip if they are the author or already notified via @mention)
                 const assigneeIdsForCommentNotify = Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : (editedTask.assigneeId != null ? [editedTask.assigneeId] : []);
+                const currentUserIdStr = currentUser.id != null ? String(currentUser.id) : '';
                 for (const assigneeId of assigneeIdsForCommentNotify) {
-                    if (!assigneeId || assigneeId === currentUser.id || mentionedUsers.find(m => m.id === assigneeId)) continue;
-                    const assigneeUser = users.find(u => String(u.id) === String(assigneeId));
-                    if (assigneeUser) {
-                        try {
-                            await window.DatabaseAPI.makeRequest('/notifications', {
-                                method: 'POST',
-                                body: JSON.stringify({
-                                    userId: assigneeUser.id,
-                                    type: 'comment',
-                                    title: `New comment on task: ${taskTitle}`,
-                                    message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                    link: taskLink,
-                                    metadata: {
-                                        taskId: taskId,
-                                        taskTitle: taskTitle,
-                                        taskDescription: editedTask.description || task?.description || null,
-                                        taskStatus: editedTask.status || task?.status || 'To Do',
-                                        taskPriority: editedTask.priority || task?.priority || 'Medium',
-                                        taskDueDate: editedTask.dueDate || task?.dueDate || null,
-                                        projectId: project?.id,
-                                        projectName: projectName,
-                                        clientId: project?.clientId || null,
-                                        commentAuthor: currentUser.name,
-                                        commentText: newComment,
-                                        commentId: commentId
-                                    }
-                                })
-                            });
-                        } catch (err) {
-                            console.warn('Failed to notify assignee', assigneeUser.id, err?.message);
-                        }
+                    const assigneeIdStr = assigneeId != null ? String(assigneeId) : '';
+                    if (!assigneeIdStr || assigneeIdStr === currentUserIdStr || mentionedUsers.find(m => String(m.id) === assigneeIdStr)) continue;
+                    const assigneeUser = users.find(u => String(u.id) === assigneeIdStr);
+                    const userIdToNotify = assigneeUser ? assigneeUser.id : assigneeId;
+                    try {
+                        await window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                userId: userIdToNotify,
+                                type: 'comment',
+                                title: `New comment on task: ${taskTitle}`,
+                                message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
+                                link: taskLink,
+                                metadata: {
+                                    taskId: taskId,
+                                    taskTitle: taskTitle,
+                                    taskDescription: editedTask.description || task?.description || null,
+                                    taskStatus: editedTask.status || task?.status || 'To Do',
+                                    taskPriority: editedTask.priority || task?.priority || 'Medium',
+                                    taskDueDate: editedTask.dueDate || task?.dueDate || null,
+                                    projectId: project?.id,
+                                    projectName: projectName,
+                                    clientId: project?.clientId || null,
+                                    commentAuthor: currentUser.name,
+                                    commentText: newComment,
+                                    commentId: commentId
+                                }
+                            })
+                        });
+                    } catch (err) {
+                        console.warn('Failed to notify assignee', userIdToNotify, err?.message);
                     }
                 }
                 
-                // Send notifications to subscribers (excluding comment author, mentioned users, and assignees already notified above)
+                // 3) Notify other subscribers (e.g. past commenters) — exclude author, @mentioned, and assignees already notified above
                 const assigneeIdSet = new Set((assigneeIdsForCommentNotify || []).map(String));
                 const subscriberIds = Array.isArray(editedTask.subscribers) ? editedTask.subscribers : [];
                 const subscribersToNotify = subscriberIds.filter(subId => {
-                    return subId !== currentUser.id && 
-                           !mentionedUsers.find(m => m.id === subId) &&
-                           !assigneeIdSet.has(String(subId));
+                    const subIdStr = subId != null ? String(subId) : '';
+                    return subIdStr && subIdStr !== currentUserIdStr &&
+                           !mentionedUsers.find(m => String(m.id) === subIdStr) &&
+                           !assigneeIdSet.has(subIdStr);
                 });
                 
                 for (const subscriberId of subscribersToNotify) {
-                    const subscriber = users.find(u => u.id === subscriberId);
-                    if (subscriber) {
-                        try {
-                            // Use taskLink (includes commentId when replying) so email and in-app open the same comment
-                            await window.DatabaseAPI.makeRequest('/notifications', {
-                                method: 'POST',
-                                body: JSON.stringify({
-                                    userId: subscriber.id,
-                                    type: 'comment',
-                                    title: `New comment on task: ${taskTitle}`,
-                                    message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                    link: taskLink,
-                                    metadata: {
-                                        taskId: taskId,
-                                        taskTitle: taskTitle,
-                                        taskDescription: editedTask.description || task?.description || null,
-                                        taskStatus: editedTask.status || task?.status || 'To Do',
-                                        taskPriority: editedTask.priority || task?.priority || 'Medium',
-                                        taskDueDate: editedTask.dueDate || task?.dueDate || null,
-                                        projectId: project?.id,
-                                        projectName: projectName,
-                                        clientId: project?.clientId || null,
-                                        commentAuthor: currentUser.name,
-                                        commentText: newComment,
-                                        commentId: commentId
-                                    }
-                                })
-                            });
-                        } catch (error) {
-                            console.error(`❌ Failed to send comment notification to subscriber ${subscriber.name}:`, error);
-                        }
+                    const subscriberIdStr = subscriberId != null ? String(subscriberId) : '';
+                    if (!subscriberIdStr) continue;
+                    const subscriber = users.find(u => String(u.id) === subscriberIdStr);
+                    const userIdToNotify = subscriber ? subscriber.id : subscriberId;
+                    try {
+                        await window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                userId: userIdToNotify,
+                                type: 'comment',
+                                title: `New comment on task: ${taskTitle}`,
+                                message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
+                                link: taskLink,
+                                metadata: {
+                                    taskId: taskId,
+                                    taskTitle: taskTitle,
+                                    taskDescription: editedTask.description || task?.description || null,
+                                    taskStatus: editedTask.status || task?.status || 'To Do',
+                                    taskPriority: editedTask.priority || task?.priority || 'Medium',
+                                    taskDueDate: editedTask.dueDate || task?.dueDate || null,
+                                    projectId: project?.id,
+                                    projectName: projectName,
+                                    clientId: project?.clientId || null,
+                                    commentAuthor: currentUser.name,
+                                    commentText: newComment,
+                                    commentId: commentId
+                                }
+                            })
+                        });
+                    } catch (error) {
+                        console.error(`❌ Failed to send comment notification to subscriber ${subscriber?.name || subscriberIdStr}:`, error);
                     }
                 }
             } catch (error) {
@@ -2493,7 +2508,10 @@ const TaskDetailModal = ({
                                     <div className="mt-1.5 flex justify-between items-center">
                                         <div className="text-[10px] text-gray-500 flex items-center gap-2">
                                             {editedTask.subscribers && editedTask.subscribers.length > 0 && (
-                                                <span>
+                                                <span
+                                                    title="People who receive notifications when someone comments (comment author, assignees, @mentioned users, and anyone who has commented)"
+                                                    className="cursor-help"
+                                                >
                                                     <i className="fas fa-bell mr-1"></i>
                                                     {editedTask.subscribers.length} subscriber{editedTask.subscribers.length !== 1 ? 's' : ''}
                                                 </span>
