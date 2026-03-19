@@ -401,6 +401,12 @@ async function request(path, options = {}) {
           }
           throw new Error(`Server returned HTML instead of JSON. This usually means the API endpoint doesn't exist or there's a server error. Response: ${text.substring(0, 100)}...`)
         }
+        // For 500 on /clients: proxy may return non-JSON body (e.g. HTML with "||" in script) — throw clear message so callers can fall back instead of cryptic "Unexpected token '||'"
+        if ((path === '/clients' || (path && path.startsWith('/clients'))) && res.status === 500) {
+          const err = new Error('Server error (500) loading clients. Please try again.')
+          err.status = 500
+          throw err
+        }
         // "Unexpected token '||'" usually means response is JavaScript or malformed JSON (e.g. proxy/CDN injected script)
         const hint = (parseError.message && parseError.message.includes("'||'"))
           ? ' Response may be JavaScript or modified by a proxy - check Network tab for this URL.'

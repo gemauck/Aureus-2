@@ -614,14 +614,31 @@ async function handler(req, res) {
           }
         }
         
-        // Parse JSON fields before returning and add starred status
+        // Parse JSON fields before returning and add starred status (per-client try/catch so one bad record doesn't 500 the whole list)
         const parsedClients = clients.map(client => {
-          const parsed = parseClientJsonFields(client)
+          let parsed
+          try {
+            parsed = parseClientJsonFields(client)
+          } catch (parseErr) {
+            console.warn('⚠️ parseClientJsonFields failed for client', client?.id, parseErr?.message)
+            parsed = {
+              id: client.id,
+              name: client.name || '',
+              type: client.type || 'client',
+              contacts: [],
+              comments: [],
+              sites: [],
+              groupMemberships: [],
+              projectIds: [],
+              externalAgentId: client.externalAgentId ?? null,
+              externalAgent: client.externalAgent ? { id: client.externalAgent.id, name: client.externalAgent.name || '' } : null
+            }
+          }
           parsed.isStarred = validUserId && client.starredBy && Array.isArray(client.starredBy) && client.starredBy.length > 0
           const rawGroupMemberships = client.groupMemberships || parsed.groupMemberships
           parsed.groupMemberships = (rawGroupMemberships && Array.isArray(rawGroupMemberships)) ? rawGroupMemberships : []
-          parsed.externalAgentId = client.externalAgentId ?? client.externalAgent?.id ?? null
-          parsed.externalAgent = client.externalAgent ? { id: client.externalAgent.id, name: client.externalAgent.name || '' } : null
+          parsed.externalAgentId = parsed.externalAgentId ?? client.externalAgentId ?? client.externalAgent?.id ?? null
+          parsed.externalAgent = parsed.externalAgent ?? (client.externalAgent ? { id: client.externalAgent.id, name: client.externalAgent.name || '' } : null)
           return parsed
         })
         
@@ -761,7 +778,13 @@ async function handler(req, res) {
             clientsWithSites = (minimal || []).map(c => ({ ...c, groupMemberships: [], starredBy: [] }))
           }
           const parsed = clientsWithSites.map(c => {
-            const p = parseClientJsonFields(c)
+            let p
+            try {
+              p = parseClientJsonFields(c)
+            } catch (e) {
+              console.warn('⚠️ parseClientJsonFields failed in minimal fallback for client', c?.id, e?.message)
+              p = { id: c.id, name: c.name || '', type: c.type || 'client', contacts: [], comments: [], sites: [], groupMemberships: [], projectIds: [], externalAgentId: null, externalAgent: null }
+            }
             p.groupMemberships = p.groupMemberships || []
             p.isStarred = false
             return p
