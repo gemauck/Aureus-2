@@ -647,8 +647,8 @@ async function handler(req, res) {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
-        
-        
+        res.setHeader('X-Client-Count', String(parsedClients.length))
+
         return ok(res, { clients: parsedClients })
       } catch (dbError) {
         // Log the error immediately with full details
@@ -755,17 +755,19 @@ async function handler(req, res) {
           res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
           res.setHeader('Pragma', 'no-cache')
           res.setHeader('Expires', '0')
+          res.setHeader('X-Client-Count', String(parsed.length))
           return ok(res, { clients: parsed })
         } catch (minimalErr) {
           console.error('❌ Minimal clients query also failed:', minimalErr.message, minimalErr.code)
         }
         
         // Never 500 on list: return empty list so UI can load; server logs have the real error
-        console.error('❌ GET /api/clients returning empty list due to errors above. Fix DB/schema and restart.')
+        console.error('❌ GET /api/clients returning empty list (degraded). Fix DB/schema and restart. Error:', dbError?.message)
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
         res.setHeader('X-Client-List-Degraded', '1')
+        res.setHeader('X-Client-Count', '0')
         return ok(res, { clients: [], _degraded: true, _error: process.env.NODE_ENV === 'development' ? dbError.message : undefined })
       }
     }

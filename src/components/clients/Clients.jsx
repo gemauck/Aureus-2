@@ -1164,6 +1164,7 @@ const Clients = React.memo(() => {
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const [groupsPage, setGroupsPage] = useState(1);
+    const [clientsListDegraded, setClientsListDegraded] = useState(false); // true when API returned empty list in degraded/error fallback
     const ITEMS_PER_PAGE = 25;
     
     useEffect(() => {
@@ -2370,7 +2371,10 @@ const Clients = React.memo(() => {
                 const apiEndTime = performance.now();
                 // DatabaseAPI returns { data: { clients: [...] } }, while api.listClients might return { data: { clients: [...] } }
                 const apiClients = res?.data?.clients || res?.clients || [];
-                
+                const isDegraded = !!(res?.data?._degraded);
+                if (isDegraded) setClientsListDegraded(true);
+                if (apiClients.length > 0) setClientsListDegraded(false);
+
                 // CRITICAL: Store raw API response in ref for groupMemberships preservation
                 latestApiClientsRef.current = apiClients;
                 
@@ -7363,6 +7367,11 @@ const Clients = React.memo(() => {
                                 <td colSpan="4" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
+                                    {clientsListDegraded && (
+                                        <p className={`mt-2 text-amber-600 dark:text-amber-400 font-medium`}>
+                                            Server returned no data (degraded mode). Check server logs or try again later.
+                                        </p>
+                                    )}
                                 </td>
                             </tr>
                         ) : (
