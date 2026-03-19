@@ -2124,6 +2124,7 @@ function initializeProjectDetail() {
     const [activityLogEntries, setActivityLogEntries] = useState(null);
     // Public notes for this project (Notes tab)
     const [projectNotes, setProjectNotes] = useState(null);
+    const [selectedProjectNote, setSelectedProjectNote] = useState(null);
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
@@ -2133,6 +2134,7 @@ function initializeProjectDetail() {
     useEffect(() => {
         setActivityLogEntries(null);
         setProjectNotes(null);
+        setSelectedProjectNote(null);
     }, [project?.id]);
 
     const loadActivityLog = useCallback(async () => {
@@ -8582,7 +8584,14 @@ function initializeProjectDetail() {
                             <p className="text-sm text-gray-500">No public notes linked to this project yet. In My Notes, link a note to this project and check &quot;Make public&quot; to see it here.</p>
                         ) : (
                             projectNotes.map((note) => (
-                                <div key={note.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-50">
+                                <div
+                                    key={note.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => setSelectedProjectNote(note)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProjectNote(note); } }}
+                                    className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-100 cursor-pointer transition-colors"
+                                >
                                     <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
                                         <span className="font-medium text-gray-900">{note.title || 'Untitled'}</span>
                                         {note.author?.name && (
@@ -8591,9 +8600,10 @@ function initializeProjectDetail() {
                                         <span className="text-gray-400 text-xs">
                                             {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
                                         </span>
+                                        <span className="text-primary-600 text-xs ml-auto">View & edit →</span>
                                     </div>
                                     <div
-                                        className="text-sm text-gray-700 prose prose-sm max-w-none"
+                                        className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-2"
                                         dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
                                     />
                                 </div>
@@ -8601,6 +8611,84 @@ function initializeProjectDetail() {
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* Public note detail modal */}
+            {selectedProjectNote && (
+                <>
+                    <div
+                        className="fixed inset-0 bg-black/50 z-40"
+                        onClick={() => setSelectedProjectNote(null)}
+                        aria-hidden="true"
+                    />
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+                        <div
+                            className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-2xl w-full max-h-[85vh] flex flex-col pointer-events-auto"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="project-note-modal-title"
+                        >
+                            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                                <h2 id="project-note-modal-title" className="text-lg font-semibold text-gray-900 truncate pr-2">
+                                    {selectedProjectNote.title || 'Untitled'}
+                                </h2>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedProjectNote(null)}
+                                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                    aria-label="Close"
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div className="px-4 py-2 border-b border-gray-100 text-sm text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                {selectedProjectNote.author?.name && (
+                                    <span>by {selectedProjectNote.author.name}</span>
+                                )}
+                                <span>
+                                    {selectedProjectNote.updatedAt
+                                        ? new Date(selectedProjectNote.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+                                        : ''}
+                                </span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4">
+                                <div
+                                    className="text-gray-800 prose prose-sm max-w-none [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_blockquote]:italic"
+                                    dangerouslySetInnerHTML={{ __html: (selectedProjectNote.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
+                                />
+                            </div>
+                            <div className="p-4 border-t border-gray-200 flex flex-wrap items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedProjectNote(null)}
+                                    className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        try {
+                                            if (window.sessionStorage) {
+                                                window.sessionStorage.setItem('myNotesOpenNoteId', selectedProjectNote.id);
+                                            }
+                                            if (window.RouteState && typeof window.RouteState.setPageSubpath === 'function') {
+                                                window.RouteState.setPageSubpath('my-notes', []);
+                                            }
+                                        } catch (e) {
+                                            console.warn('Navigate to My Notes failed:', e);
+                                        }
+                                        setSelectedProjectNote(null);
+                                    }}
+                                    className="px-3 py-1.5 text-sm text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                    <i className="fas fa-external-link-alt"></i>
+                                    Open in My Notes to edit
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
 
             {activeSection === 'activity' && (

@@ -137,6 +137,16 @@ const MyNotes = () => {
         loadProjects();
     }, []);
 
+    // Open a specific note when navigated from project Notes tab ("Open in My Notes to edit")
+    useEffect(() => {
+        if (!notes.length || !window.sessionStorage) return;
+        const openNoteId = window.sessionStorage.getItem('myNotesOpenNoteId');
+        if (!openNoteId) return;
+        window.sessionStorage.removeItem('myNotesOpenNoteId');
+        const note = notes.find(n => n.id === openNoteId);
+        if (note) setSelectedNote(note);
+    }, [notes]);
+
     // When selected note has a client, load that client's projects for the Project dropdown
     useEffect(() => {
         const cid = selectedNote?.clientId ?? selectedNote?.client?.id;
