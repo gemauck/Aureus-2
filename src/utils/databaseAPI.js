@@ -382,7 +382,12 @@ const DatabaseAPI = {
                     
                     if (refreshRes.ok) {
                         const text = await refreshRes.text();
-                        const refreshData = text ? JSON.parse(text) : {};
+                        let refreshData = {};
+                        try {
+                            refreshData = text ? JSON.parse(text) : {};
+                        } catch (e) {
+                            console.error('❌ Refresh response was not valid JSON:', (text || '').substring(0, 100));
+                        }
                         const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
                         if (newToken && window.storage?.setToken) {
                             window.storage.setToken(newToken);
@@ -640,7 +645,12 @@ const DatabaseAPI = {
                         
                         if (refreshRes.ok) {
                             const text = await refreshRes.text();
-                            const refreshData = text ? JSON.parse(text) : {};
+                            let refreshData = {};
+                            try {
+                                refreshData = text ? JSON.parse(text) : {};
+                            } catch (e) {
+                                console.error('❌ Refresh response was not valid JSON:', (text || '').substring(0, 100));
+                            }
                             const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
                             if (newToken && window.storage?.setToken) {
                                 window.storage.setToken(newToken);
@@ -954,7 +964,9 @@ const DatabaseAPI = {
                 } catch (parseErr) {
                     const snippet = (text || '').substring(0, 300).replace(/\n/g, ' ');
                     console.error(`Invalid JSON from ${endpoint} (parse error: ${parseErr.message}). Response snippet:`, snippet);
-                    throw new Error(`Server returned invalid JSON for ${endpoint}. This may be an error page from the server or a proxy. Check network tab or server logs.`);
+                    // Always wrap so the raw SyntaxError message is never shown; include preview for debugging
+                    const msg = `Server returned invalid JSON for ${endpoint}. ${parseErr.message}. Check network tab. Preview: ${snippet.substring(0, 120)}`;
+                    throw new Error(msg);
                 }
                 // Only log for non-cached responses to reduce noise
                 if (!this._responseCache.has(`${(options.method || 'GET').toUpperCase()}:${endpoint}`)) {
