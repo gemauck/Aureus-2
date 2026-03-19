@@ -70,8 +70,8 @@ async function handler(req, res) {
                 create: {
                     userId,
                     emailMentions: emailMentions !== undefined ? emailMentions : true,
-                    emailComments: emailComments !== undefined ? emailComments : false,
-                    emailTasks: emailTasks !== undefined ? emailTasks : false,
+                    emailComments: emailComments !== undefined ? emailComments : true,
+                    emailTasks: emailTasks !== undefined ? emailTasks : true,
                     emailInvoices: emailInvoices !== undefined ? emailInvoices : true,
                     emailSystem: emailSystem !== undefined ? emailSystem : true,
                     inAppMentions: inAppMentions !== undefined ? inAppMentions : true,
