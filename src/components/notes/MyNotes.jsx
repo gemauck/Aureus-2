@@ -711,11 +711,11 @@ const MyNotes = () => {
                 <div className="flex flex-col md:flex-row gap-4">
                     {/* Notes List + optional right-hand activity panel */}
                     <section
-                        className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm flex ${viewMode === 'list' ? 'w-full md:w-1/3 min-w-0' : 'w-full'} transition-all overflow-hidden`}
+                        className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm flex ${viewMode === 'list' ? 'w-full md:w-1/3 md:min-w-[280px] min-w-0' : 'w-full'} transition-all overflow-hidden`}
                         aria-label="Notes list"
                         style={viewMode === 'list' && expandedNoteActivityId ? { maxWidth: 'none', flex: '1 1 0' } : {}}
                     >
-                        <div className={`flex flex-col min-w-0 ${expandedNoteActivityId ? 'flex-1' : viewMode === 'list' ? 'w-full md:w-1/3' : 'w-full'}`}>
+                        <div className="flex flex-col min-w-0 flex-1">
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                             <h2 className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {filteredNotes.length} Note{filteredNotes.length !== 1 ? 's' : ''}
