@@ -249,9 +249,21 @@ const MyProjectTasks = () => {
                                             </div>
                                         )}
                                         
-                                        <div className={`text-sm ${getDueDateColor(task.dueDate)}`}>
-                                            <i className="far fa-calendar mr-1"></i>
-                                            {formatDate(task.dueDate)}
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
+                                            {task.startDate && (() => {
+                                                const d = new Date(task.startDate);
+                                                if (Number.isNaN(d.getTime())) return null;
+                                                return (
+                                                    <span className="text-gray-600 dark:text-gray-400">
+                                                        <i className="fas fa-play-circle mr-1"></i>
+                                                        Start {formatDate(task.startDate)}
+                                                    </span>
+                                                );
+                                            })()}
+                                            <span className={getDueDateColor(task.dueDate)}>
+                                                <i className="far fa-calendar mr-1"></i>
+                                                {formatDate(task.dueDate)}
+                                            </span>
                                         </div>
                                     </div>
                                     

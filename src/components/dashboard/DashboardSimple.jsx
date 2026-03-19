@@ -143,10 +143,23 @@ const DashboardSimple = () => {
                                             )}
                                         </div>
                                     </div>
-                                    {dueDateInfo && (
-                                        <div className={`text-xs mt-1 ${dueDateInfo.color}`}>
-                                            <i className="fas fa-calendar-alt mr-1"></i>
-                                            {dueDateInfo.text}
+                                    {(task.startDate || dueDateInfo) && (
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs mt-1">
+                                            {task.startDate && (() => {
+                                                const d = new Date(task.startDate);
+                                                return !Number.isNaN(d.getTime()) ? (
+                                                    <span className={subText}>
+                                                        <i className="fas fa-play-circle mr-1"></i>
+                                                        Start {d.toLocaleDateString()}
+                                                    </span>
+                                                ) : null;
+                                            })()}
+                                            {dueDateInfo && (
+                                                <span className={dueDateInfo.color}>
+                                                    <i className="fas fa-calendar-alt mr-1"></i>
+                                                    {dueDateInfo.text}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
