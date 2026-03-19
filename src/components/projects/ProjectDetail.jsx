@@ -8678,18 +8678,6 @@ function initializeProjectDetail() {
                 <div className="flex gap-2 items-center">
                     <button
                         type="button"
-                        onClick={() => requestAnimationFrame(() => switchSection('activity'))}
-                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center text-xs font-medium ${
-                            activeSection === 'activity'
-                                ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                        }`}
-                    >
-                        <i className="fas fa-history mr-1.5"></i>
-                        Activity
-                    </button>
-                    <button
-                        type="button"
                         onClick={() => requestAnimationFrame(() => switchSection('notes'))}
                         className={`px-3 py-1.5 rounded-lg transition-colors flex items-center text-xs font-medium ${
                             activeSection === 'notes'
@@ -8699,6 +8687,18 @@ function initializeProjectDetail() {
                     >
                         <i className="fas fa-sticky-note mr-1.5"></i>
                         Notes
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => requestAnimationFrame(() => switchSection('activity'))}
+                        className={`px-3 py-1.5 rounded-lg transition-colors flex items-center text-xs font-medium ${
+                            activeSection === 'activity'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                        <i className="fas fa-history mr-1.5"></i>
+                        Activity
                     </button>
                     <button 
                         onClick={async () => {
