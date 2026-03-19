@@ -9055,114 +9055,104 @@ function initializeProjectDetail() {
                                     </button>
                                 </div>
                             </div>
-                            <div className="px-4 pb-4 space-y-4 max-h-[60vh] overflow-y-auto">
-                                {(projectNotes === null && projectNotesFromProject === null) ? (
-                                    <p className="text-sm text-gray-500">Loading…</p>
-                                ) : mergedNotesList.length === 0 ? (
-                                    <p className="text-sm text-gray-500">No notes yet. Click &quot;Create note&quot; to add a project note, or create and publish notes from My Notes to see them here.</p>
-                                ) : (
-                                    mergedNotesList.map((note) => (
-                                        <div
-                                            key={note.id}
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={() => openNoteForEditing(note)}
-                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteForEditing(note); } }}
-                                            className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-100 cursor-pointer transition-colors"
-                                        >
-                                            <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
-                                                <span className="font-medium text-gray-900">{note.title || 'Untitled'}</span>
-                                                {note.author?.name && (
-                                                    <span className="text-gray-500">by {note.author.name}</span>
-                                                )}
-                                                <span className="text-gray-400 text-xs">
-                                                    {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => handleToggleNoteActivity(e, note)}
-                                                    className="text-primary-600 text-xs hover:text-primary-700 hover:underline ml-auto"
-                                                >
-                                                    <i className="fas fa-history mr-1"></i>
-                                                    {expandedNoteActivityId === note.id ? 'Hide activity' : 'Activity'}
-                                                </button>
-                                                <span className="text-primary-600 text-xs">View & edit →</span>
-                                            </div>
-                                            <div
-                                                className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-2"
-                                                dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
-                                            />
-                                            {expandedNoteActivityId === note.id && (
-                                                <div className="mt-3 pt-3 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
-                                                    <h5 className="text-xs font-semibold text-gray-600 mb-2">Note activity</h5>
-                                                    {noteActivityByNoteId[note.id] === undefined ? (
-                                                        <p className="text-xs text-gray-500">Loading…</p>
-                                                    ) : !noteActivityByNoteId[note.id]?.length ? (
-                                                        <p className="text-xs text-gray-500">No activity for this note yet.</p>
-                                                    ) : (
-                                                        <div className="space-y-1.5 max-h-[20vh] overflow-y-auto">
-                                                            {noteActivityByNoteId[note.id].map((log) => {
-                                                                const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
-                                                                const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
-                                                                const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
-                                                                return (
-                                                                    <div key={log.id} className="border border-gray-200 rounded p-2 bg-white text-xs">
-                                                                        <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700 mr-2">{String(log.type || '').replace(/_/g, ' ')}</span>
-                                                                        <span className="text-gray-500">{log.userName || 'System'}</span>
-                                                                        <span className="text-gray-400 ml-1">{dateStr}</span>
-                                                                        {sourceLabel && <span className="text-gray-500">{sourceLabel}</span>}
-                                                                        {log.description && <div className="mt-1 text-gray-600">{log.description}</div>}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                            {/* Note activity — create/update/delete tracked in Notes section */}
-                            <div className="px-4 pb-4 pt-2 border-t border-gray-200">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                    <i className="fas fa-history text-primary-600"></i>
-                                    Recent note changes
-                                </h4>
-                                <button
-                                    type="button"
-                                    onClick={() => loadNoteActivity()}
-                                    className="mb-2 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
-                                >
-                                    <i className="fas fa-sync-alt mr-1"></i> Refresh
-                                </button>
-                                <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                                    {noteActivityEntries === null ? (
+                            <div className="flex gap-0 min-h-0 flex-1">
+                                <div className="flex-1 min-w-0 px-4 pb-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                                    {(projectNotes === null && projectNotesFromProject === null) ? (
                                         <p className="text-sm text-gray-500">Loading…</p>
-                                    ) : !Array.isArray(noteActivityEntries) || noteActivityEntries.length === 0 ? (
-                                        <p className="text-sm text-gray-500">No note activity yet.</p>
+                                    ) : mergedNotesList.length === 0 ? (
+                                        <p className="text-sm text-gray-500">No notes yet. Click &quot;Create note&quot; to add a project note, or create and publish notes from My Notes to see them here.</p>
                                     ) : (
-                                        noteActivityEntries.map((log) => {
-                                            const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
-                                            const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
-                                            const noteTitle = meta.noteTitle || 'Note';
-                                            const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
-                                            return (
-                                                <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50 text-sm">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="font-medium text-gray-900">{noteTitle}{sourceLabel}</span>
-                                                        <span className="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
-                                                        <span className="text-gray-500">{log.userName || 'System'}</span>
-                                                        <span className="text-gray-400 text-xs">{dateStr}</span>
-                                                    </div>
-                                                    {log.description && (
-                                                        <div className="mt-1 text-xs text-gray-600">{log.description}</div>
+                                        mergedNotesList.map((note) => (
+                                            <div
+                                                key={note.id}
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => openNoteForEditing(note)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteForEditing(note); } }}
+                                                className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-100 cursor-pointer transition-colors"
+                                            >
+                                                <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
+                                                    <span className="font-medium text-gray-900">{note.title || 'Untitled'}</span>
+                                                    {note.author?.name && (
+                                                        <span className="text-gray-500">by {note.author.name}</span>
                                                     )}
+                                                    <span className="text-gray-400 text-xs">
+                                                        {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => handleToggleNoteActivity(e, note)}
+                                                        className="text-primary-600 text-xs hover:text-primary-700 hover:underline ml-auto"
+                                                    >
+                                                        <i className="fas fa-history mr-1"></i>
+                                                        {expandedNoteActivityId === note.id ? 'Hide activity' : 'Activity'}
+                                                    </button>
+                                                    <span className="text-primary-600 text-xs">View & edit →</span>
                                                 </div>
-                                            );
-                                        })
+                                                <div
+                                                    className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-2"
+                                                    dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
+                                                />
+                                            </div>
+                                        ))
                                     )}
                                 </div>
+                                {/* Right-hand activity panel (Google Docs style) */}
+                                {expandedNoteActivityId && (
+                                    <div className="w-80 flex-shrink-0 border-l border-gray-200 bg-gray-50 flex flex-col max-h-[60vh]">
+                                        <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+                                            <h4 className="text-sm font-semibold text-gray-800 truncate">
+                                                {(() => {
+                                                    const note = mergedNotesList.find((n) => n.id === expandedNoteActivityId);
+                                                    return note ? (note.title || 'Untitled') : 'Note activity';
+                                                })()}
+                                            </h4>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setExpandedNoteActivityId(null); }}
+                                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
+                                                aria-label="Close activity panel"
+                                            >
+                                                <i className="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        <div className="p-3 overflow-y-auto flex-1">
+                                            {noteActivityByNoteId[expandedNoteActivityId] === undefined ? (
+                                                <p className="text-sm text-gray-500">Loading…</p>
+                                            ) : !noteActivityByNoteId[expandedNoteActivityId]?.length ? (
+                                                <p className="text-sm text-gray-500">No activity for this note yet.</p>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {noteActivityByNoteId[expandedNoteActivityId].map((log) => {
+                                                        const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                                        const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                                        const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
+                                                        return (
+                                                            <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-white text-sm">
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <span className="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                                    <span className="text-gray-500">{log.userName || 'System'}</span>
+                                                                    <span className="text-gray-400 text-xs">{dateStr}</span>
+                                                                    {sourceLabel && <span className="text-gray-500 text-xs">{sourceLabel}</span>}
+                                                                </div>
+                                                                {log.description && <div className="mt-1.5 text-xs text-gray-600">{log.description}</div>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {noteActivityByNoteId[expandedNoteActivityId] && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => expandedNoteActivityId && loadActivityForNote(expandedNoteActivityId).then((logs) => setNoteActivityByNoteId(prev => ({ ...prev, [expandedNoteActivityId]: Array.isArray(logs) ? logs : [] })))}
+                                                    className="mt-3 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                                >
+                                                    <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </>
                     )}
