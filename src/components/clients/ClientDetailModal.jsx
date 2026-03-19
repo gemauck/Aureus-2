@@ -1503,23 +1503,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             .catch(() => {});
     }, [activeTab, formData?.id, isLead]);
 
-    // Load client notes (ClientNote table) when Notes tab is active
-    useEffect(() => {
-        if (activeTab !== 'notes' || !formData?.id) return;
-        loadClientNotes();
-    }, [activeTab, formData?.id, loadClientNotes]);
-
-    // Load activity for the note currently being edited (right-hand panel)
-    useEffect(() => {
-        const noteId = editingClientNoteFull?.id;
-        if (!noteId || !loadActivityForClientNote) return;
-        let cancelled = false;
-        loadActivityForClientNote(noteId).then(logs => {
-            if (!cancelled) setClientNoteActivityForEditor(Array.isArray(logs) ? logs : []);
-        });
-        return () => { cancelled = true; };
-    }, [editingClientNoteFull?.id, loadActivityForClientNote]);
-
     // Get theme with safe fallback - don't check system preference, only localStorage
     let isDark = false;
     try {
@@ -3318,6 +3301,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             });
         }
     }, [expandedClientNoteActivityId, clientNoteActivityByNoteId, loadActivityForClientNote]);
+
+    // Load client notes (ClientNote table) when Notes tab is active — must be after loadClientNotes is defined
+    useEffect(() => {
+        if (activeTab !== 'notes' || !formData?.id) return;
+        loadClientNotes();
+    }, [activeTab, formData?.id, loadClientNotes]);
+
+    // Load activity for the note currently being edited (right-hand panel)
+    useEffect(() => {
+        const noteId = editingClientNoteFull?.id;
+        if (!noteId || !loadActivityForClientNote) return;
+        let cancelled = false;
+        loadActivityForClientNote(noteId).then(logs => {
+            if (!cancelled) setClientNoteActivityForEditor(Array.isArray(logs) ? logs : []);
+        });
+        return () => { cancelled = true; };
+    }, [editingClientNoteFull?.id, loadActivityForClientNote]);
 
     const handleAddComment = async () => {
         if (!newComment.trim()) return;
