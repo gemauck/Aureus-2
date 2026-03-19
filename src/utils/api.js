@@ -381,12 +381,19 @@ async function request(path, options = {}) {
 
     let data = {}
     if (text) {
+      const trimmed = text.trim()
+      // Reject non-JSON before parsing to avoid cryptic "Unexpected token '||'" (e.g. proxy-injected JS or HTML)
+      if (trimmed.length && trimmed[0] !== '{' && trimmed[0] !== '[') {
+        if (trimmed.startsWith('<') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<!doctype')) {
+          throw new Error(`Server returned HTML instead of JSON for ${path}. Response: ${text.substring(0, 100)}...`)
+        }
+        throw new Error(`Server did not return JSON for ${path}. Response may be JavaScript or modified by a proxy - check Network tab. Preview: ${text.substring(0, 150)}...`)
+      }
       try {
         data = JSON.parse(text)
       } catch (parseError) {
         // Check if response is HTML (common for 502/503/504 gateway errors)
-        if (text.trim().startsWith('<') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<!doctype')) {
-          // If it's a gateway error, throw a more specific error
+        if (trimmed.startsWith('<') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<!doctype')) {
           if (res.status === 502 || res.status === 503 || res.status === 504) {
             const gatewayError = new Error(`Server unavailable (${res.status}): The server is temporarily unavailable. Please try again later.`);
             gatewayError.status = res.status;

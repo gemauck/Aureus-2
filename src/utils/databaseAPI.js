@@ -939,6 +939,14 @@ const DatabaseAPI = {
                     throw new Error(`Server returned non-JSON response. Status: ${response.status}`);
                 }
 
+                // Reject body that doesn't look like JSON before parsing to avoid "Unexpected token '||'" (e.g. proxy-injected JS)
+                const trimmed = (text || '').trim();
+                if (trimmed.length && trimmed[0] !== '{' && trimmed[0] !== '[') {
+                    const snippet = trimmed.substring(0, 300).replace(/\n/g, ' ');
+                    console.error(`Invalid JSON from ${endpoint}: response does not start with { or [. Snippet:`, snippet);
+                    throw new Error(`Server did not return JSON for ${endpoint}. Response may be JavaScript or modified by a proxy. Check network tab. Preview: ${snippet.substring(0, 150)}...`);
+                }
+
                 // Parse as text first to avoid "Unexpected token '||'" when server/proxy returns HTML or JS instead of JSON
                 let data;
                 try {
