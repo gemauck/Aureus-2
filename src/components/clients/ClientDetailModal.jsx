@@ -7313,7 +7313,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <i className="fas fa-sticky-note text-primary-600"></i>
                                                 Notes
                                             </h3>
-                                            <p className="text-sm text-gray-500 mb-4">Notes for this {entityLabelLower} (stored in their own table). Create a note or open one to edit.</p>
                                             <div className="flex flex-wrap items-center gap-2 mb-3">
                                                 <button type="button" onClick={createClientNote} disabled={isSavingClientNote} className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50 flex items-center gap-2">
                                                     <i className="fas fa-plus"></i>
