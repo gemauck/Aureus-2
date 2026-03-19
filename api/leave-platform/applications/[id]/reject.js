@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../../../_lib/response.js
 import { parseJsonBody } from '../../../_lib/body.js'
 import { withHttp } from '../../../_lib/withHttp.js'
 import { withLogging } from '../../../_lib/logger.js'
+import { isAdminRole } from '../../../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -33,7 +34,7 @@ async function handler(req, res) {
       return badRequest(res, 'User not found')
     }
 
-    const isAdmin = currentUser.role?.toLowerCase() === 'admin'
+    const isAdmin = isAdminRole(currentUser.role)
 
     // Only admins can reject leave applications
     if (!isAdmin) {

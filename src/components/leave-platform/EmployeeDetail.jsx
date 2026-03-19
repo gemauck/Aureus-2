@@ -74,12 +74,13 @@ const EmployeeDetail = (props) => {
         try {
             const headers = getAuthHeaders();
             
-            // Load employee/user data
-            const userResponse = await fetch(`/api/users/${employeeId}`, { headers });
-            if (userResponse.ok) {
-                const userData = await userResponse.json();
-                setEmployee(userData.data?.user || userData.user || null);
-                setFormData(userData.data?.user || userData.user || {});
+            // Load employee profile data
+            const employeeResponse = await fetch(`/api/employees/${employeeId}`, { headers });
+            if (employeeResponse.ok) {
+                const employeeData = await employeeResponse.json();
+                const profile = employeeData.data?.employee || employeeData.employee || null;
+                setEmployee(profile);
+                setFormData(profile || {});
             }
 
             // Load leave balances
@@ -130,6 +131,7 @@ const EmployeeDetail = (props) => {
             
             // Basic info
             if (formData.name !== undefined) updateData.name = formData.name;
+            if (formData.email !== undefined) updateData.email = formData.email;
             if (formData.phone !== undefined) updateData.phone = formData.phone;
             
             // Employment info (including role – API allows admins to update)
@@ -168,15 +170,15 @@ const EmployeeDetail = (props) => {
             if (formData.emergencyContact !== undefined) updateData.emergencyContact = formData.emergencyContact || null;
             
             
-            const response = await fetch(`/api/users/${employeeId}`, {
-                method: 'PUT',
+            const response = await fetch(`/api/employees/${employeeId}`, {
+                method: 'PATCH',
                 headers,
                 body: JSON.stringify(updateData)
             });
 
             if (response.ok) {
                 const result = await response.json();
-                setEmployee(result.data?.user || result.user || employee);
+                setEmployee(result.data?.employee || result.employee || employee);
                 setEditing(false);
                 // Reload to ensure consistency
                 loadEmployeeData();
@@ -699,7 +701,16 @@ const EmployeeDetail = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                    <p className="text-sm text-gray-900">{employee.email || 'N/A'}</p>
+                    {editing ? (
+                        <input
+                            type="email"
+                            value={formData.email || ''}
+                            onChange={(e) => setFormData({...formData, email: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                    ) : (
+                        <p className="text-sm text-gray-900">{employee.email || 'N/A'}</p>
+                    )}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>

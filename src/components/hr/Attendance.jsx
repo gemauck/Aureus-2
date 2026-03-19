@@ -23,11 +23,11 @@ const Attendance = () => {
         }
         const token = window.storage?.getToken?.();
         if (!token) return;
-        fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } })
-            .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to load users')))
+        fetch('/api/employees', { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to load employees')))
             .then(data => {
-                const users = data.users || data.data?.users || [];
-                const list = users.map(u => ({ id: u.id, name: u.name || u.email || String(u.id) }));
+                const employees = data.employees || data.data?.employees || [];
+                const list = employees.map(emp => ({ id: emp.id, name: emp.name || emp.email || String(emp.id) }));
                 setEmployees(list);
             })
             .catch(err => {

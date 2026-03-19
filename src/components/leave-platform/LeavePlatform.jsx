@@ -297,11 +297,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }, [currentTab]);
 
         const leaveUtils = window.leaveUtils || {};
-        // Update isAdmin if user role is available
-        if (user?.role) {
-            isAdmin = user.role.toLowerCase() === 'admin';
-        }
-
         // South African BCEA leave types (centralised in leaveUtils)
         const leaveTypes = leaveUtils.BCEA_LEAVE_TYPES || [
         { value: 'annual', label: 'Annual Leave', days: 21, color: 'blue' },
@@ -448,7 +443,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             const startTime = performance.now();
             
             const [employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
-                fetch('/api/users', { headers }).catch(e => ({ ok: false, status: 0 })),
+                fetch('/api/employees', { headers }).catch(e => ({ ok: false, status: 0 })),
                 fetch('/api/leave-platform/departments', { headers }).catch(e => ({ ok: false, status: 0 })),
                 fetch('/api/leave-platform/approvers', { headers }).catch(e => ({ ok: false, status: 0 })),
                 fetch('/api/leave-platform/birthdays', { headers }).catch(e => ({ ok: false, status: 0 }))
@@ -457,7 +452,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             if (employeesResponse.status === 'fulfilled' && employeesResponse.value.ok) {
                 try {
                     const users = await employeesResponse.value.json();
-                    const employeesData = users.users || users.data?.users || [];
+                    const employeesData = users.employees || users.data?.employees || [];
                     setEmployees(employeesData);
                     if (employeesData.length === 0) {
                         console.warn('⚠️ Leave Platform: No employees found in API response. Response structure:', users);
@@ -528,7 +523,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             const [appsResponse, balancesResponse, employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
                 fetch('/api/leave-platform/applications', { headers }),
                 fetch('/api/leave-platform/balances', { headers }),
-                fetch('/api/users', { headers }),
+                fetch('/api/employees', { headers }),
                 fetch('/api/leave-platform/departments', { headers }),
                 fetch('/api/leave-platform/approvers', { headers }),
                 fetch('/api/leave-platform/birthdays', { headers })
@@ -568,7 +563,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     setLeaveBalances(balances);
                 }
 
-                const users = await parseArray(employeesResponse, ['users', 'data.users']);
+                const users = await parseArray(employeesResponse, ['employees', 'data.employees']);
                 if (users.length || employeesResponse.status === 'fulfilled') {
                     setEmployees(users);
                     if (users.length === 0 && employeesResponse.status === 'fulfilled' && employeesResponse.value?.ok) {
@@ -835,7 +830,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     alert('You must be logged in to add an employee.');
                     return;
                 }
-                const response = await fetch('/api/users', {
+                const response = await fetch('/api/employees', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -851,11 +846,15 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     })
                 });
                 const data = await response.json().catch(() => ({}));
-                if (response.ok && data.success) {
+                if (response.ok) {
                     setShowAddEmployeeModal(false);
                     setAddEmployeeForm({ name: '', email: '', role: 'user', department: '', phone: '' });
                     loadData();
-                    alert('Employee added. They can sign in with this email; an administrator can reset their password if needed.');
+                    if (data.tempPassword) {
+                        alert(`Employee added. Temporary password: ${data.tempPassword}`);
+                    } else {
+                        alert('Employee added successfully.');
+                    }
                 } else {
                     alert(data.message || data.error || 'Failed to add employee.');
                 }
@@ -876,22 +875,19 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     throw new Error('No authentication token available');
                 }
                 
-                const response = await fetch('/api/users', {
-                    method: 'PUT',
+                const response = await fetch(`/api/employees/${selectedEmployee.id}`, {
+                    method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({
-                        userId: selectedEmployee.id,
-                        ...employeeData
-                    })
+                    body: JSON.stringify(employeeData)
                 });
                 
                 if (response.ok) {
                     const result = await response.json();
                     const updatedEmployees = employees.map(emp =>
-                        emp.id === selectedEmployee.id ? (result.data?.user || { ...emp, ...employeeData }) : emp
+                        emp.id === selectedEmployee.id ? (result.data?.employee || result.employee || { ...emp, ...employeeData }) : emp
                     );
                     setEmployees(updatedEmployees);
                     setShowEmployeeModal(false);
@@ -1513,14 +1509,6 @@ const OverviewView = ({
                                 Manage leave approvers
                             </button>
                         )}
-                        <button
-                            type="button"
-                            onClick={() => window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'users' } }))}
-                            className="px-3 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
-                        >
-                            <i className="fas fa-user-cog mr-1.5"></i>
-                            User access & permissions
-                        </button>
                     </div>
                 </div>
             )}

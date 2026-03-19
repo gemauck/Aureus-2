@@ -18,7 +18,7 @@ const EmployeeManagement = () => {
 
     const loadEmployees = async () => {
         try {
-            // Load users - they ARE the employees
+            // Leave/HR employee source
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.error('❌ No token available');
@@ -26,7 +26,7 @@ const EmployeeManagement = () => {
                 return;
             }
 
-            const response = await fetch('/api/users', {
+            const response = await fetch('/api/employees', {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -34,10 +34,10 @@ const EmployeeManagement = () => {
 
             if (response.ok) {
                 const responseData = await response.json();
-                const userData = responseData.data?.users || responseData.users || [];
-                setEmployees(userData);
+                const employeeData = responseData.data?.employees || responseData.employees || [];
+                setEmployees(employeeData);
             } else {
-                console.error('❌ Failed to load users:', response);
+                console.error('❌ Failed to load employees:', response);
                 setEmployees([]);
             }
         } catch (error) {
@@ -51,26 +51,23 @@ const EmployeeManagement = () => {
         
         try {
             if (selectedEmployee) {
-                // Update existing user/employee via API
+                // Update existing employee via HR API
                 const token = window.storage?.getToken?.();
                 
-                const response = await fetch('/api/users', {
-                    method: 'PUT',
+                const response = await fetch(`/api/employees/${selectedEmployee.id}`, {
+                    method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({
-                        userId: selectedEmployee.id,
-                        ...employeeData
-                    })
+                    body: JSON.stringify(employeeData)
                 });
                 
                 if (response.ok) {
                     const result = await response.json();
                     // Update local state with server response
                     const updatedEmployees = employees.map(emp =>
-                        emp.id === selectedEmployee.id ? (result.data?.user || { ...emp, ...employeeData }) : emp
+                        emp.id === selectedEmployee.id ? (result.data?.employee || result.employee || { ...emp, ...employeeData }) : emp
                     );
                     setEmployees(updatedEmployees);
                     
@@ -90,9 +87,28 @@ const EmployeeManagement = () => {
                     throw new Error(errorData.message || 'Failed to update employee');
                 }
             } else {
-                // When creating a new employee, we should use the User invitation flow
-                alert('To add a new employee, please use the User Management section to invite them. Once they accept, they will appear here as employees.');
-                return;
+                const token = window.storage?.getToken?.();
+                const response = await fetch('/api/employees', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(employeeData)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const createdEmployee = result.data?.employee || result.employee;
+                    if (createdEmployee) {
+                        setEmployees(prev => [createdEmployee, ...prev]);
+                    }
+                    setShowEmployeeModal(false);
+                    setSelectedEmployee(null);
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Failed to create employee');
+                }
             }
         } catch (error) {
             console.error('❌ Error saving employee:', error);
@@ -101,15 +117,15 @@ const EmployeeManagement = () => {
     };
 
     const handleDeleteEmployee = async (id) => {
-        if (confirm('Are you sure you want to delete this employee? This will also remove their user account.')) {
+        if (confirm('Are you sure you want to archive this employee profile?')) {
             const user = window.storage?.getUser();
             const employee = employees.find(e => e.id === id);
             
             try {
-                // Delete user via API
+                // Archive employee via HR API
                 const token = window.storage?.getToken?.();
                 
-                const response = await fetch(`/api/users/${id}`, {
+                const response = await fetch(`/api/employees/${id}`, {
                     method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json',
@@ -216,15 +232,6 @@ const EmployeeManagement = () => {
                         </button>
                     </div>
 
-                    {!selectedEmployee && (
-                        <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
-                            <p className="text-xs text-blue-800">
-                                <i className="fas fa-info-circle mr-1"></i>
-                                To add a new employee, please go to <strong>User Management</strong> to invite them. Once they accept the invitation, they will appear here and you can add their HR details.
-                            </p>
-                        </div>
-                    )}
-
                     {/* Tabs */}
                     <div className="flex border-b border-gray-200 px-4">
                         <button
@@ -289,12 +296,9 @@ const EmployeeManagement = () => {
                                             type="email"
                                             value={formData.email || ''}
                                             onChange={(e) => setFormData({...formData, email: e.target.value})}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50"
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             required
-                                            disabled
-                                            title="Email cannot be changed here. Use User Management to update."
                                         />
-                                        <p className="text-[10px] text-gray-500 mt-1">Email is managed in User Management</p>
                                     </div>
 
                                     <div>
@@ -531,10 +535,13 @@ const EmployeeManagement = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-base font-semibold text-gray-900">Employee Management</h2>
-                    <p className="text-xs text-gray-600">Manage employee records and information (synced with Users)</p>
+                    <p className="text-xs text-gray-600">Manage employee records and information</p>
                 </div>
                 <button
-                    onClick={() => alert('To add a new employee, go to User Management and invite them. Once they accept, they will appear here.')}
+                    onClick={() => {
+                        setSelectedEmployee(null);
+                        setShowEmployeeModal(true);
+                    }}
                     className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
                 >
                     <i className="fas fa-user-plus mr-1.5"></i>
@@ -727,7 +734,7 @@ const EmployeeManagement = () => {
                 <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                     <i className="fas fa-users text-gray-300 text-4xl mb-3"></i>
                     <p className="text-sm text-gray-600 mb-2">No employees found</p>
-                    <p className="text-xs text-gray-500">Add users in User Management to populate the employee list</p>
+                    <p className="text-xs text-gray-500">Add employees to populate the list</p>
                 </div>
             )}
 

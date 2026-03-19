@@ -4,6 +4,7 @@ import { badRequest, ok, serverError } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { isAdminRole } from '../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -12,8 +13,6 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       try {
         // Get current user ID and role
-        const userRole = req.user?.role?.toLowerCase()
-
         // If no user ID, return unauthorized
         if (!currentUserId) {
           return badRequest(res, 'User not authenticated')
@@ -29,7 +28,7 @@ async function handler(req, res) {
           return badRequest(res, 'User not found')
         }
 
-        const isAdmin = currentUser.role?.toLowerCase() === 'admin'
+        const isAdmin = isAdminRole(currentUser.role)
 
         // Build where clause: admins see all birthdays, regular users see only their own
         const whereClause = isAdmin ? {} : { userId: currentUserId }
@@ -68,6 +67,14 @@ async function handler(req, res) {
 
     if (req.method === 'POST') {
       try {
+        const currentUser = await prisma.user.findUnique({
+          where: { id: currentUserId },
+          select: { id: true, role: true }
+        })
+        if (!currentUser || !isAdminRole(currentUser.role)) {
+          return badRequest(res, 'Only administrators can manage birthdays')
+        }
+
         const body = await parseJsonBody(req)
         const { userId, date, notes } = body
 

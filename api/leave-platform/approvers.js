@@ -4,10 +4,16 @@ import { badRequest, ok, serverError } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { isAdminRole } from '../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
     const currentUserId = req.user?.sub || req.user?.id
+    const currentUser = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { id: true, role: true }
+    })
+    const isAdmin = isAdminRole(currentUser?.role)
 
     if (req.method === 'GET') {
       try {
@@ -47,6 +53,10 @@ async function handler(req, res) {
 
     if (req.method === 'POST') {
       try {
+        if (!isAdmin) {
+          return badRequest(res, 'Only administrators can manage leave approvers')
+        }
+
         const body = await parseJsonBody(req)
         const { department, approverId } = body
 
@@ -89,6 +99,10 @@ async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       try {
+        if (!isAdmin) {
+          return badRequest(res, 'Only administrators can manage leave approvers')
+        }
+
         const body = await parseJsonBody(req)
         const { id } = body
 
