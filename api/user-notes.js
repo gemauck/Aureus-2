@@ -5,6 +5,7 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js'
+import { syncMentionsOnUserNote } from './_lib/noteMentions.js'
 
 const noteInclude = {
   sharedWith: {
@@ -285,6 +286,15 @@ async function handler(req, res) {
           include: noteInclude
         })
 
+        await syncMentionsOnUserNote({
+          noteId: note.id,
+          ownerId: userId,
+          title: note.title,
+          content: note.content,
+          clientId: note.clientId,
+          projectId: note.projectId
+        })
+
         if (noteData.projectId) {
           const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
           await logProjectActivity(prisma, {
@@ -343,6 +353,15 @@ async function handler(req, res) {
           where: { id: noteId },
           data: updateData,
           include: noteInclude
+        })
+
+        await syncMentionsOnUserNote({
+          noteId: note.id,
+          ownerId: userId,
+          title: note.title,
+          content: note.content,
+          clientId: note.clientId,
+          projectId: note.projectId
         })
 
         if (note.projectId) {

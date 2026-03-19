@@ -9,6 +9,7 @@ import { parseJsonBody } from '../../_lib/body.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
 import { logClientActivity, getActivityUserFromRequest } from '../../_lib/clientActivityLog.js'
+import { syncMentionsFromEntityNote } from '../../_lib/noteMentions.js'
 
 function parseClientNote(note) {
   const parsed = { ...note }
@@ -84,6 +85,16 @@ async function handler(req, res) {
         include: {
           author: { select: { id: true, name: true, email: true } }
         }
+      })
+      await syncMentionsFromEntityNote({
+        entityType: 'client',
+        entityNoteId: note.id,
+        title: note.title,
+        content: note.content,
+        tags,
+        authorId: userId,
+        authorName: note.author?.name || null,
+        clientId
       })
       const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
       await logClientActivity(prisma, {

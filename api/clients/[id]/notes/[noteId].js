@@ -10,6 +10,7 @@ import { parseJsonBody } from '../../../_lib/body.js'
 import { withHttp } from '../../../_lib/withHttp.js'
 import { withLogging } from '../../../_lib/logger.js'
 import { logClientActivity, getActivityUserFromRequest } from '../../../_lib/clientActivityLog.js'
+import { syncMentionsFromEntityNote } from '../../../_lib/noteMentions.js'
 
 function parseClientNote(note) {
   const parsed = { ...note }
@@ -77,6 +78,16 @@ async function handler(req, res) {
           author: { select: { id: true, name: true, email: true } }
         }
       })
+      await syncMentionsFromEntityNote({
+        entityType: 'client',
+        entityNoteId: note.id,
+        title: note.title,
+        content: note.content,
+        tags,
+        authorId: note.authorId || existing.authorId,
+        authorName: note.author?.name || null,
+        clientId
+      })
       const changes = []
       if (existing.title !== title) {
         changes.push(`Title changed from "${existing.title || ''}" to "${title || ''}"`)
@@ -124,6 +135,16 @@ async function handler(req, res) {
       const noteTitle = existing.title || 'Untitled'
       await prisma.clientNote.delete({
         where: { id: noteId }
+      })
+      await syncMentionsFromEntityNote({
+        entityType: 'client',
+        entityNoteId: noteId,
+        title: '',
+        content: '',
+        tags: [],
+        authorId: existing.authorId,
+        authorName: null,
+        clientId
       })
       const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
       await logClientActivity(prisma, {

@@ -493,7 +493,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                         onPaste={handlePaste}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
-                        data-placeholder="Start writing your note... (paste screenshots or use Attach)"
+                        data-placeholder="Start writing your note... Use @Name to mention users (paste screenshots or use Attach)"
                         {...(isDark ? { 'data-dark': 'true' } : {})}
                         className={`notes-editor w-full min-h-[320px] outline-none ${isDark ? 'text-gray-100' : 'text-gray-900'} [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:opacity-90 ${isDark ? '[&_a]:text-primary-400' : '[&_a]:text-primary-600'} [&_a]:underline`}
                         style={{ minHeight: '400px' }}
