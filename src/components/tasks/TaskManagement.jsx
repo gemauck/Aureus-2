@@ -813,15 +813,32 @@ const TaskManagement = () => {
     };
 
     const handleQuickStatusToggle = async (task, newStatus, optimistic = false) => {
-        // Optimistic update: immediately update UI
-        if (optimistic) {
-            setTasks(prevTasks => 
-                prevTasks.map(t => 
-                    t.id === task.id ? { ...t, status: newStatus } : t
-                )
-            );
+        // Optimistic update: immediately update UI so the card moves
+        setTasks(prevTasks =>
+            prevTasks.map(t =>
+                t.id === task.id ? { ...t, status: newStatus } : t
+            )
+        );
+
+        // Project tasks: move only in UI for this session — do NOT persist to the project
+        if (task.type === 'project') {
+            if (optimistic) {
+                setStats(prevStats => {
+                    const newStats = { ...prevStats };
+                    if (task.status === 'todo') newStats.todo = Math.max(0, newStats.todo - 1);
+                    if (task.status === 'in-progress') newStats.inProgress = Math.max(0, newStats.inProgress - 1);
+                    if (task.status === 'completed') newStats.completed = Math.max(0, newStats.completed - 1);
+                    if (task.status === 'cancelled') newStats.total = Math.max(0, newStats.total - 1);
+                    if (newStatus === 'todo') newStats.todo = (newStats.todo || 0) + 1;
+                    if (newStatus === 'in-progress') newStats.inProgress = (newStats.inProgress || 0) + 1;
+                    if (newStatus === 'completed') newStats.completed = (newStats.completed || 0) + 1;
+                    return newStats;
+                });
+            }
+            return;
         }
 
+        // User tasks: persist via API
         try {
             const token = storage?.getToken?.();
             if (!token) return;
@@ -838,50 +855,38 @@ const TaskManagement = () => {
             });
 
             if (response.ok) {
-                // Only reload if not using optimistic update
                 if (!optimistic) {
                     loadTasks();
                 } else {
-                    // Update stats optimistically
                     setStats(prevStats => {
                         const newStats = { ...prevStats };
-                        // Decrement old status count
                         if (task.status === 'todo') newStats.todo = Math.max(0, newStats.todo - 1);
                         if (task.status === 'in-progress') newStats.inProgress = Math.max(0, newStats.inProgress - 1);
                         if (task.status === 'completed') newStats.completed = Math.max(0, newStats.completed - 1);
                         if (task.status === 'cancelled') newStats.total = Math.max(0, newStats.total - 1);
-                        
-                        // Increment new status count
                         if (newStatus === 'todo') newStats.todo = (newStats.todo || 0) + 1;
                         if (newStatus === 'in-progress') newStats.inProgress = (newStats.inProgress || 0) + 1;
                         if (newStatus === 'completed') newStats.completed = (newStats.completed || 0) + 1;
-                        
                         return newStats;
                     });
                 }
             } else {
-                // Revert optimistic update on error
-                if (optimistic) {
-                    setTasks(prevTasks => 
-                        prevTasks.map(t => 
-                            t.id === task.id ? { ...t, status: task.status } : t
-                        )
-                    );
-                }
-                const error = await response.json();
-                alert(error.error?.message || 'Failed to update task status');
-            }
-        } catch (error) {
-            // Revert optimistic update on error
-            if (optimistic) {
-                setTasks(prevTasks => 
-                    prevTasks.map(t => 
+                setTasks(prevTasks =>
+                    prevTasks.map(t =>
                         t.id === task.id ? { ...t, status: task.status } : t
                     )
                 );
+                const error = await response.json().catch(() => ({}));
+                alert(error.error?.message || error.message || 'Failed to update task status');
             }
+        } catch (error) {
+            setTasks(prevTasks =>
+                prevTasks.map(t =>
+                    t.id === task.id ? { ...t, status: task.status } : t
+                )
+            );
             console.error('Error updating task status:', error);
-            alert('Error updating task: ' + error.message);
+            alert('Error updating task: ' + (error?.message || 'Unknown error'));
         }
     };
 

@@ -1464,49 +1464,40 @@ const TaskDetailModal = ({
     };
 
     const handleDeleteComment = async (commentId) => {
-        if (!confirm('Delete this comment?')) {
-            return;
-        }
-
         if (!commentId) {
             console.error('❌ TaskDetailModal: Cannot delete comment - missing commentId');
             alert('Cannot delete comment: missing comment ID');
             return;
         }
+        if (!confirm('Delete this comment? This cannot be undone.')) {
+            return;
+        }
+
+        const commentIdStr = String(commentId);
+        const removeFromState = () => {
+            setComments(prev => prev.filter(c => String(c.id) !== commentIdStr));
+        };
 
         try {
             console.log('🗑️ TaskDetailModal: Deleting comment from database', {
-                commentId: commentId,
+                commentId: commentIdStr,
                 taskId: editedTask.id || task?.id
             });
 
-            // Delete comment from TaskComment table via API
-            await window.DatabaseAPI.makeRequest(`/task-comments?id=${encodeURIComponent(commentId)}`, {
+            await window.DatabaseAPI.makeRequest(`/task-comments?id=${encodeURIComponent(commentIdStr)}`, {
                 method: 'DELETE'
             });
 
-            console.log('✅ TaskDetailModal: Comment deleted successfully', {
-                commentId: commentId
-            });
-
-            // Update local state to remove the deleted comment
-            const updatedComments = comments.filter(c => c.id !== commentId);
-            setComments(updatedComments);
-
+            console.log('✅ TaskDetailModal: Comment deleted successfully', { commentId: commentIdStr });
+            removeFromState();
         } catch (error) {
-            // If comment doesn't exist (404), just remove it from UI - it's already gone
             if (error.status === 404 || error.message?.includes('not found') || error.message?.includes('Not found')) {
-                console.log('ℹ️ TaskDetailModal: Comment already deleted, removing from UI', {
-                    commentId: commentId
-                });
-                // Update local state to remove the comment (it's already gone from database)
-                const updatedComments = comments.filter(c => c.id !== commentId);
-                setComments(updatedComments);
+                console.log('ℹ️ TaskDetailModal: Comment already deleted, removing from UI', { commentId: commentIdStr });
+                removeFromState();
                 return;
             }
-            
             console.error('❌ TaskDetailModal: Failed to delete comment:', {
-                commentId: commentId,
+                commentId: commentIdStr,
                 error: error.message,
                 status: error.status
             });
@@ -2570,8 +2561,11 @@ const TaskDetailModal = ({
                                                         </div>
                                                     </div>
                                                     <button
+                                                        type="button"
                                                         onClick={() => handleDeleteComment(comment.id)}
                                                         className="text-gray-400 hover:text-red-600 p-0.5"
+                                                        title="Delete comment"
+                                                        aria-label="Delete comment"
                                                     >
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
