@@ -309,22 +309,38 @@ const NotificationCenter = () => {
         }
     };
     
-    const deleteNotification = async (notificationIds) => {
+    const deleteNotification = async (notificationIds, options = {}) => {
+        const optimistic = options.optimistic !== false;
+        const ids = Array.isArray(notificationIds) ? notificationIds : [notificationIds].filter(Boolean);
+        if (!ids.length) return;
         try {
-            if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
-                console.warn('⚠️ NotificationCenter: DatabaseAPI.makeRequest not available for deleteNotification');
-                return;
+            // Optimistic update: remove from UI immediately
+            if (optimistic) {
+                const removedUnread = notifications.filter((n) => ids.includes(n.id) && !n.read).length;
+                setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+                setUnreadCount((c) => Math.max(0, c - removedUnread));
             }
-            
-            await window.DatabaseAPI.makeRequest('/notifications', {
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const url = `${apiBase}/api/notifications`;
+            // Use fetchWithRefresh so body is always sent (some environments drop DELETE body)
+            const res = await fetchWithRefresh(url, {
                 method: 'DELETE',
-                body: JSON.stringify({ notificationIds })
+                body: JSON.stringify({ notificationIds: ids })
             });
-            
-            loadNotifications();
+            if (!res.ok) {
+                // Fallback: send ids in query if server supports it (e.g. when body was stripped)
+                const fallback = await fetchWithRefresh(`${url}?ids=${encodeURIComponent(ids.join(','))}`, { method: 'DELETE' });
+                if (!fallback.ok) {
+                    const err = new Error(res.statusText || 'Delete failed');
+                    err.status = res.status;
+                    throw err;
+                }
+            }
+            if (!optimistic) loadNotifications();
         } catch (error) {
             console.error('❌ Error deleting notification:', error);
-            // Don't throw - this is a non-critical operation
+            // Reload to restore state on failure
+            loadNotifications();
         }
     };
     
@@ -498,6 +514,7 @@ const NotificationCenter = () => {
                                                             {formatTimeAgo(notification.createdAt)}
                                                         </span>
                                                         <button
+                                                            type="button"
                                                             data-delete-notification="true"
                                                             onClick={(e) => {
                                                                 e.preventDefault();
@@ -505,10 +522,11 @@ const NotificationCenter = () => {
                                                                 deleteNotification([notification.id]);
                                                             }}
                                                             onMouseDown={(e) => {
+                                                                e.preventDefault();
                                                                 e.stopPropagation();
                                                             }}
                                                             className={`text-xs ${isDark ? 'text-gray-500 hover:text-red-400' : 'text-gray-400 hover:text-red-600'} p-1`}
-                                                            title="Delete notification"
+                                                            title="Dismiss notification"
                                                         >
                                                             <i className="fas fa-times"></i>
                                                         </button>

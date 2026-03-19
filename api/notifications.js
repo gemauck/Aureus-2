@@ -351,10 +351,16 @@ async function handler(req, res) {
         if (req.method === 'DELETE') {
             try {
                 const body = req.body || await parseJsonBody(req);
-                const { notificationIds } = body || {};
-
+                let notificationIds = body?.notificationIds;
+                // Fallback: some clients/proxies don't send body with DELETE; accept ids in query
                 if (!notificationIds || !Array.isArray(notificationIds)) {
-                    return badRequest(res, 'Missing required field: notificationIds (array)');
+                    const q = req.query?.ids;
+                    if (typeof q === 'string' && q.trim()) {
+                        notificationIds = q.split(',').map((id) => id.trim()).filter(Boolean);
+                    }
+                }
+                if (!notificationIds || !Array.isArray(notificationIds) || notificationIds.length === 0) {
+                    return badRequest(res, 'Missing required field: notificationIds (array) or query param ids');
                 }
 
                 // Delete notifications
