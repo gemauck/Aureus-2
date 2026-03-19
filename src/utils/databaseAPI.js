@@ -933,13 +933,21 @@ const DatabaseAPI = {
 
                 // Check if response is JSON
                 const contentType = response.headers.get('content-type');
+                const text = await response.text();
                 if (!contentType || !contentType.includes('application/json')) {
-                    const text = await response.text();
                     console.error(`Non-JSON response from ${endpoint}:`, text.substring(0, 200));
                     throw new Error(`Server returned non-JSON response. Status: ${response.status}`);
                 }
 
-                const data = await response.json();
+                // Parse as text first to avoid "Unexpected token '||'" when server/proxy returns HTML or JS instead of JSON
+                let data;
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (parseErr) {
+                    const snippet = (text || '').substring(0, 300).replace(/\n/g, ' ');
+                    console.error(`Invalid JSON from ${endpoint} (parse error: ${parseErr.message}). Response snippet:`, snippet);
+                    throw new Error(`Server returned invalid JSON for ${endpoint}. This may be an error page from the server or a proxy. Check network tab or server logs.`);
+                }
                 // Only log for non-cached responses to reduce noise
                 if (!this._responseCache.has(`${(options.method || 'GET').toUpperCase()}:${endpoint}`)) {
                 }
