@@ -1187,7 +1187,18 @@ app.all('/api/clients', async (req, res, next) => {
     console.error('❌ Error in clients handler:', e)
     console.error('❌ Error stack:', e.stack)
     if (!res.headersSent) {
-      // Use only primitive values so JSON is always valid (avoids circular ref / "Unexpected token" on client)
+      // GET /api/clients: never 500 — return 200 with empty list so UI always gets valid JSON and no parse errors
+      const isGet = req.method === 'GET'
+      if (isGet) {
+        const body = JSON.stringify({ data: { clients: [], _degraded: true, _error: process.env.NODE_ENV === 'development' ? (e?.message || '') : undefined } })
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json')
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+        res.setHeader('X-Client-List-Degraded', '1')
+        res.setHeader('X-Client-Count', '0')
+        res.setHeader('Content-Length', Buffer.byteLength(body, 'utf8'))
+        return res.end(body)
+      }
       const safeMessage = e && typeof e.message === 'string' ? e.message : 'Internal server error'
       const body = JSON.stringify({
         error: 'Internal server error',

@@ -20,10 +20,10 @@ async function handler(req, res) {
     const id = pathSegments[pathSegments.length - 1] // For /api/clients/[id]
     const isListOrCreate = (pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && (urlPath === '/clients' || urlPath === '/clients/'))
 
-    // List Clients (GET /api/clients)
+    // List Clients (GET /api/clients) — never 500: top-level catch returns empty list so UI always gets valid JSON
     if (req.method === 'GET' && isListOrCreate) {
       try {
-        
+        try {
         const userId = req.user?.sub
         const userEmail = req.user?.email || 'unknown'
         
@@ -669,16 +669,13 @@ async function handler(req, res) {
         try {
           return ok(res, { clients: parsedClients })
         } catch (sendErr) {
-          // If serialization/send fails, respond with safe JSON 500 so client never sees invalid body
+          // Serialization/send failed — return 200 with empty list so we never 500 for GET /api/clients
           console.error('❌ GET /api/clients: failed to serialize or send response:', sendErr?.message || sendErr)
           if (!res.headersSent) {
-            const safeBody = JSON.stringify({
-              error: { code: 'SERVER_ERROR', message: 'Response serialization failed', details: String(sendErr?.message || 'Unknown error') }
-            })
-            res.statusCode = 500
-            res.setHeader('Content-Type', 'application/json')
-            res.setHeader('Content-Length', Buffer.byteLength(safeBody, 'utf8'))
-            res.end(safeBody)
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+            res.setHeader('X-Client-List-Degraded', '1')
+            res.setHeader('X-Client-Count', '0')
+            return ok(res, { clients: [], _degraded: true, _error: process.env.NODE_ENV === 'development' ? sendErr?.message : undefined })
           }
         }
         return
@@ -807,6 +804,17 @@ async function handler(req, res) {
         res.setHeader('X-Client-List-Degraded', '1')
         res.setHeader('X-Client-Count', '0')
         return ok(res, { clients: [], _degraded: true, _error: process.env.NODE_ENV === 'development' ? dbError.message : undefined })
+      }
+      } catch (anyErr) {
+        console.error('❌ GET /api/clients unexpected error (returning empty list):', anyErr?.message, anyErr?.stack?.substring(0, 500))
+        if (!res.headersSent && !res.writableEnded) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+          res.setHeader('Pragma', 'no-cache')
+          res.setHeader('Expires', '0')
+          res.setHeader('X-Client-List-Degraded', '1')
+          res.setHeader('X-Client-Count', '0')
+          return ok(res, { clients: [], _degraded: true, _error: process.env.NODE_ENV === 'development' ? anyErr?.message : undefined })
+        }
       }
     }
 

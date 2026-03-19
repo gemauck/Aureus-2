@@ -1,7 +1,8 @@
-// Replacer for JSON.stringify: Dates → ISO string, BigInt → number/string (PostgreSQL can return BigInt)
+// Replacer for JSON.stringify: Dates → ISO string, BigInt → number/string, drop functions/symbols (PostgreSQL/code can leak these)
 function safeJsonReplacer(key, value) {
   if (value instanceof Date) return value.toISOString()
   if (typeof value === 'bigint') return Number(value) <= Number.MAX_SAFE_INTEGER && Number(value) >= Number.MIN_SAFE_INTEGER ? Number(value) : String(value)
+  if (typeof value === 'function' || typeof value === 'symbol') return undefined
   return value
 }
 
