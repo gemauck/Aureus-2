@@ -221,6 +221,66 @@ async function handler(req, res) {
         return serverError(res, errorMessage, error.message)
       }
     }
+
+    // PATCH /api/clients/groups/:groupId - Update a group (name, industry, notes)
+    if (req.method === 'PATCH' && pathSegments.length === 3 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
+      const groupId = req.params?.groupId || pathSegments[2]
+      try {
+        const body = await parseJsonBody(req)
+        const { name, industry, notes } = body || {}
+        if (!name || typeof name !== 'string' || !name.trim()) {
+          return badRequest(res, 'Group name is required and must be a non-empty string')
+        }
+        const existing = await prisma.client.findUnique({
+          where: { id: groupId },
+          select: { id: true, name: true, type: true, industry: true, notes: true }
+        })
+        if (!existing) {
+          return notFound(res, 'Group not found')
+        }
+        if (existing.type !== 'group') {
+          return badRequest(res, 'Only company groups can be updated via this endpoint')
+        }
+        // Optional: ensure industry exists in Industry table (same as client PATCH)
+        const industryName = (industry && String(industry).trim()) || 'Other'
+        try {
+          const existingIndustry = await prisma.industry.findUnique({ where: { name: industryName } })
+          if (!existingIndustry) {
+            try {
+              await prisma.industry.create({ data: { name: industryName, isActive: true } })
+            } catch (e) {
+              if (e.code !== 'P2002') console.warn('Could not create industry:', e.message)
+            }
+          }
+        } catch (industryErr) {
+          console.warn('Industry sync warning:', industryErr.message)
+        }
+        const updated = await prisma.client.update({
+          where: { id: groupId },
+          data: {
+            name: name.trim(),
+            industry: industryName,
+            ...(notes !== undefined && { notes: notes != null ? String(notes) : '' })
+          },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            industry: true,
+            notes: true,
+            _count: { select: { groupChildren: true } }
+          }
+        })
+        console.log('✅ Group updated:', groupId, updated.name)
+        return ok(res, { group: updated })
+      } catch (error) {
+        console.error('Error updating group:', error)
+        if (error.code === 'P2002') {
+          return badRequest(res, 'A group with this name already exists')
+        }
+        return serverError(res, 'Failed to update group', error.message)
+      }
+    }
     
     // DELETE /api/clients/groups/:groupId - Delete a group
     if (req.method === 'DELETE' && pathSegments.length === 3 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {

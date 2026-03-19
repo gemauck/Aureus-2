@@ -840,13 +840,17 @@ async function handler(req, res) {
         type: 'client', // Always 'client' for client creation - never allow override
         industry: body.industry || 'Other',
         revenue: parseFloat(body.revenue) || 0,
-        value: parseFloat(body.value) || 0, // Add value field
-        probability: parseInt(body.probability) || 0, // Add probability field
+        value: parseFloat(body.value) ?? parseFloat(body.revenue) || 0,
+        probability: parseInt(body.probability) ?? 0,
+        engagementStage: (body.engagementStage != null && String(body.engagementStage).trim() !== '') ? String(body.engagementStage) : 'Potential',
+        aidaStatus: (body.aidaStatus != null && String(body.aidaStatus).trim() !== '') ? String(body.aidaStatus) : 'Awareness',
         lastContact: body.lastContact ? new Date(body.lastContact) : new Date(),
         address: body.address || '',
         website: body.website || '',
         notes: body.notes || '',
         thumbnail: body.thumbnail || '',
+        externalAgentId: body.externalAgentId && String(body.externalAgentId).trim() ? body.externalAgentId : null,
+        rssSubscribed: body.rssSubscribed !== false,
         // Phase 2: Dual-write - both String (backward compatibility) and JSONB (new)
         ...jsonFields,
         // CRITICAL FIX: Add services to JSON fields for persistence
@@ -903,10 +907,15 @@ async function handler(req, res) {
             revenue: clientData.revenue,
             value: clientData.value,
             probability: clientData.probability,
+            engagementStage: clientData.engagementStage,
+            aidaStatus: clientData.aidaStatus,
             lastContact: clientData.lastContact,
             address: clientData.address,
             website: clientData.website,
             notes: clientData.notes,
+            thumbnail: clientData.thumbnail || '',
+            externalAgentId: clientData.externalAgentId,
+            rssSubscribed: clientData.rssSubscribed,
             // Phase 5: Contacts/comments are written to normalized tables ONLY - no JSON writes
             // Removed: contacts, contactsJsonb, comments, commentsJsonb
             // Phase 6: Sites, contracts, proposals, followUps are written to normalized tables ONLY

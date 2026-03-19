@@ -406,16 +406,41 @@ async function handler(req, res) {
         let oldWebsite = null
         const existing = await prisma.client.findUnique({ 
           where: { id },
-          select: { name: true, website: true, type: true }
+          select: { name: true, website: true, type: true, activityLogJsonb: true, activityLog: true, engagementStage: true, aidaStatus: true, value: true, probability: true }
         })
         
         if (!existing) {
           return notFound(res)
         }
         
-        // Verify this is a client, not a lead
+        // Verify this is a client, not a lead (leads must be updated via /api/leads/[id])
         if (existing.type === 'lead') {
           return badRequest(res, 'Cannot update lead through clients endpoint. Use /api/leads/[id] instead.')
+        }
+
+        // Convert client back to lead: body.type === 'lead' and current type is client
+        const convertingToLead = existing.type === 'client' && body.type === 'lead'
+        if (convertingToLead) {
+          const activityLog = Array.isArray(existing.activityLogJsonb) ? existing.activityLogJsonb : (typeof existing.activityLog === 'string' && existing.activityLog.trim() ? (() => { try { return JSON.parse(existing.activityLog); } catch (_) { return []; } })() : [])
+          const convertedEntry = activityLog.find(e => e && e.type === 'Lead Converted' && e.snapshot && typeof e.snapshot === 'object')
+          const snapshot = convertedEntry && convertedEntry.snapshot ? convertedEntry.snapshot : {}
+          const revertData = {
+            type: 'lead',
+            engagementStage: (snapshot.engagementStage != null && String(snapshot.engagementStage).trim() !== '') ? String(snapshot.engagementStage) : (body.engagementStage ?? existing.engagementStage ?? 'Potential'),
+            aidaStatus: (snapshot.aidaStatus != null && String(snapshot.aidaStatus).trim() !== '') ? String(snapshot.aidaStatus) : (body.aidaStatus ?? existing.aidaStatus ?? 'Awareness'),
+            value: snapshot.value != null ? Number(snapshot.value) : (body.value != null ? Number(body.value) : existing.value),
+            probability: snapshot.probability != null ? parseInt(snapshot.probability, 10) : (body.probability != null ? parseInt(body.probability, 10) : existing.probability)
+          }
+          await prisma.client.update({
+            where: { id },
+            data: revertData
+          })
+          const updated = await prisma.client.findUnique({
+            where: { id },
+            include: { clientContacts: true, clientSites: true, clientComments: true, clientContracts: true, clientProposals: true, clientFollowUps: true, externalAgent: true, owner: { select: { id: true, name: true, email: true } } }
+          })
+          const parsedClient = parseClientJsonFields(updated)
+          return ok(res, { client: parsedClient })
         }
         
         oldName = existing.name

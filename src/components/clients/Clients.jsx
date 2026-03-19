@@ -6836,16 +6836,41 @@ const Clients = React.memo(() => {
 
         try {
             const token = window.storage?.getToken?.();
+            const existingActivityLog = Array.isArray(lead.activityLog) ? lead.activityLog : (typeof lead.activityLog === 'string' ? (() => { try { return JSON.parse(lead.activityLog || '[]'); } catch (_) { return []; } })() : []);
+            const leadSnapshot = {
+                engagementStage: lead.engagementStage ?? lead.status ?? 'Potential',
+                aidaStatus: lead.aidaStatus ?? lead.stage ?? 'Awareness',
+                value: lead.value ?? lead.revenue ?? 0,
+                probability: lead.probability ?? 0
+            };
+            const convertedEntry = {
+                id: Date.now(),
+                type: 'Lead Converted',
+                description: `Converted from lead: ${lead.name}`,
+                timestamp: new Date().toISOString(),
+                user: (window.storage?.getUser?.() || {}).name || 'System',
+                userId: (window.storage?.getUser?.() || {}).id || 'system',
+                userEmail: (window.storage?.getUser?.() || {}).email || 'system',
+                snapshot: leadSnapshot
+            };
             const newClientData = {
                 name: lead.name,
                 industry: lead.industry || 'Other',
                 status: 'active',
                 type: 'client',
-                revenue: lead.value || 0,
-                lastContact: new Date().toISOString().split('T')[0],
+                revenue: lead.value ?? lead.revenue ?? 0,
+                value: lead.value ?? lead.revenue ?? 0,
+                probability: lead.probability ?? 0,
+                engagementStage: leadSnapshot.engagementStage,
+                aidaStatus: leadSnapshot.aidaStatus,
+                lastContact: lead.lastContact ? (typeof lead.lastContact === 'string' ? lead.lastContact : new Date(lead.lastContact).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
                 address: lead.address || '',
                 website: lead.website || '',
                 notes: lead.notes || '',
+                thumbnail: lead.thumbnail || '',
+                externalAgentId: lead.externalAgentId || (lead.externalAgent?.id) || null,
+                ownerId: lead.ownerId || null,
+                rssSubscribed: lead.rssSubscribed !== false,
                 contacts: lead.contacts || lead.clientContacts || [],
                 followUps: lead.followUps || [],
                 projectIds: lead.projectIds || [],
@@ -6854,15 +6879,9 @@ const Clients = React.memo(() => {
                 contracts: lead.contracts || [],
                 proposals: lead.proposals || [],
                 services: lead.services || [],
-                activityLog: [{
-                    id: Date.now(),
-                    type: 'Lead Converted',
-                    description: `Converted from lead: ${lead.name}`,
-                    timestamp: new Date().toISOString(),
-                    user: (window.storage?.getUser?.() || {}).name || 'System',
-                    userId: (window.storage?.getUser?.() || {}).id || 'system',
-                    userEmail: (window.storage?.getUser?.() || {}).email || 'system'
-                }]
+                billingTerms: lead.billingTerms || undefined,
+                kyc: lead.kyc !== undefined ? lead.kyc : undefined,
+                activityLog: [...existingActivityLog, convertedEntry]
             };
 
             if (token && window.api?.createClient && window.api?.deleteLead) {
@@ -6899,6 +6918,33 @@ const Clients = React.memo(() => {
             }
         } catch (error) {
             alert('Failed to convert lead to client: ' + (error.message || 'Unknown error'));
+        }
+    };
+
+    const convertClientToLead = async (client) => {
+        if (!client || !client.id) {
+            alert('Cannot revert to lead: Invalid client data');
+            return;
+        }
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token || !window.api?.updateClient) {
+                alert('Please log in to revert to lead');
+                return;
+            }
+            await window.api.updateClient(client.id, { type: 'lead' });
+            await Promise.all([
+                loadClients(true).catch(() => {}),
+                loadLeads(true).catch(() => {})
+            ]);
+            setViewMode('leads');
+            selectedClientRef.current = null;
+            selectedLeadRef.current = { ...client, type: 'lead' };
+            setEditingLeadId(client.id);
+            setEditingClientId(null);
+            alert('Client reverted to lead. All lead-related data has been reinstated.');
+        } catch (error) {
+            alert('Failed to revert to lead: ' + (error.message || 'Unknown error'));
         }
     };
 
@@ -7534,8 +7580,8 @@ const Clients = React.memo(() => {
             };
 
             if (editingGroupId) {
-                // Update existing group - use client update API
-                const response = await fetch(`/api/clients/${editingGroupId}`, {
+                // Update existing group - use groups API so name/industry/notes persist
+                const response = await fetch(`/api/clients/groups/${editingGroupId}`, {
                     method: 'PATCH',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -9412,6 +9458,7 @@ const Clients = React.memo(() => {
                         onSave={handleSaveClient}
                         onClose={handleClientModalClose}
                         onDelete={handleDeleteClient}
+                        onRevertToLead={convertClientToLead}
                         allProjects={projects}
                         onNavigateToProject={handleNavigateToProject}
                         isFullPage={true}

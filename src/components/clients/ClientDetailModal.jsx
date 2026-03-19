@@ -14,7 +14,7 @@ const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
 // jump back to Overview. Must be long enough for parent re-renders and effect runs to settle.
 const TAB_PRESERVE_AFTER_INLINE_SAVE_MS = 3500;
 
-const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, initialSiteId, onInitialSiteOpened }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, onRevertToLead, initialSiteId, onInitialSiteOpened }) => {
     // entityType: 'client' or 'lead' - determines terminology and behavior
     const isLead = entityType === 'lead';
     const entityLabel = isLead ? 'Lead' : 'Client';
@@ -7551,7 +7551,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         type="button" 
                                         onClick={() => {
                                             if (onConvertToClient) {
-                                                onConvertToClient(client);
+                                                const dataToConvert = (formDataRef.current && formDataRef.current.id === client.id) ? formDataRef.current : client;
+                                                onConvertToClient(dataToConvert);
                                             }
                                         }}
                                         className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
@@ -7560,6 +7561,26 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         Convert to Client
                                     </button>
                                 )}
+                                {!isLead && onRevertToLead && client && (() => {
+                                    const log = client.activityLog || (client.activityLogJsonb ?? []);
+                                    const arr = Array.isArray(log) ? log : (typeof log === 'string' && log.trim() ? (() => { try { return JSON.parse(log); } catch (_) { return []; } })() : []);
+                                    const wasConvertedFromLead = arr.some(e => e && e.type === 'Lead Converted');
+                                    return wasConvertedFromLead ? (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => {
+                                                if (onRevertToLead) {
+                                                    const dataToRevert = (formDataRef.current && formDataRef.current.id === client.id) ? formDataRef.current : client;
+                                                    onRevertToLead(dataToRevert);
+                                                }
+                                            }}
+                                            className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium flex items-center gap-2"
+                                        >
+                                            <i className="fas fa-undo"></i>
+                                            Revert to Lead
+                                        </button>
+                                    ) : null;
+                                })()}
                             </div>
                             <div className="flex gap-3">
                                 <button 
