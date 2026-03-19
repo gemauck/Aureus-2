@@ -310,7 +310,6 @@ const MyNotes = () => {
                     setSelectedNote({ ...savedNote, isNew: false });
                 }
                 setLastSavedAt(Date.now());
-                showToast('Note saved', 'success');
                 loadNotes({ silent: true });
             } else {
                 const errorData = await response.json().catch(() => ({}));
@@ -803,7 +802,6 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
     };
 
     const wordCount = (content || '').trim().split(/\s+/).filter(Boolean).length;
-    const lastSavedStr = lastSavedAt ? `Last saved ${new Date(lastSavedAt).toLocaleTimeString()}` : '';
 
     return (
         <div className="flex flex-col h-full min-h-0">
@@ -820,23 +818,16 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
                     aria-label="Note title"
                 />
                 <div className="flex items-center gap-1 flex-wrap">
-                    {lastSavedStr && (
-                        <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`} title={lastSavedStr}>
-                            {lastSavedStr}
-                        </span>
-                    )}
                     <button
                         type="button"
                         onClick={() => { if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; } performSave(); }}
                         disabled={isSaving}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium ${isSaving ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-primary-600 hover:bg-primary-700 text-white'}`}
                         aria-label="Save note now"
+                        title="Save"
                     >
-                        {isSaving ? (
-                            <><i className="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i> Saving...</>
-                        ) : (
-                            <><i className="fas fa-save mr-1" aria-hidden="true"></i> Save</>
-                        )}
+                        <i className={`fas ${isSaving ? 'fa-spinner fa-spin' : 'fa-save'} mr-1`} aria-hidden="true"></i>
+                        Save
                     </button>
                     {canPin && onTogglePin && (
                         <button

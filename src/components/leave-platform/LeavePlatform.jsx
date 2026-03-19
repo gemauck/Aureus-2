@@ -162,6 +162,9 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         const [selectedEmployee, setSelectedEmployee] = useState(null);
         const [showEmployeeModal, setShowEmployeeModal] = useState(false);
         const [viewingEmployeeId, setViewingEmployeeId] = useState(null);
+    const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
+    const [addEmployeeForm, setAddEmployeeForm] = useState({ name: '', email: '', role: 'user', department: '', phone: '' });
+    const [addEmployeeSaving, setAddEmployeeSaving] = useState(false);
         
         useEffect(() => {
             setCurrentTab(initialTab);
@@ -819,6 +822,51 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             setViewingEmployeeId(null);
         }, []);
 
+        const handleAddEmployee = useCallback(async () => {
+            const { name, email, role, department, phone } = addEmployeeForm;
+            if (!name?.trim() || !email?.trim()) {
+                alert('Name and email are required.');
+                return;
+            }
+            setAddEmployeeSaving(true);
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    alert('You must be logged in to add an employee.');
+                    return;
+                }
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        name: name.trim(),
+                        email: email.trim(),
+                        role: role || 'user',
+                        department: (department || '').trim(),
+                        phone: (phone || '').trim(),
+                        status: 'active'
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data.success) {
+                    setShowAddEmployeeModal(false);
+                    setAddEmployeeForm({ name: '', email: '', role: 'user', department: '', phone: '' });
+                    loadData();
+                    alert('Employee added. They can sign in with this email; an administrator can reset their password if needed.');
+                } else {
+                    alert(data.message || data.error || 'Failed to add employee.');
+                }
+            } catch (e) {
+                console.error('Add employee error:', e);
+                alert('Failed to add employee. Try again.');
+            } finally {
+                setAddEmployeeSaving(false);
+            }
+        }, [addEmployeeForm, loadData]);
+
         const handleSaveEmployee = useCallback(async (employeeData) => {
             if (!selectedEmployee) return;
             
@@ -921,7 +969,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             );
                         }
                     }
-                    // Fallback when user clicked an employee but EmployeeDetail not loaded yet: show inline panel with link to User Management
+                    // Fallback when user clicked an employee but EmployeeDetail not loaded yet
                     if (hasValidEmployeeId && viewingEmployeeId != null) {
                         const selectedEmp = employees.find(e => e.id === viewingEmployeeId || String(e.id) === String(viewingEmployeeId));
                         return (
@@ -937,16 +985,13 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                     <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedEmp?.name || 'Employee'}</h3>
                                     <p className="text-sm text-gray-600 mb-1">{selectedEmp?.email || '—'}</p>
                                     <p className="text-sm text-gray-600 mb-4">{selectedEmp?.role || '—'} · {selectedEmp?.department || '—'}</p>
-                                    <p className="text-sm text-gray-500 mb-4">To edit this person (role, department, leave balances), use User Management.</p>
+                                    <p className="text-sm text-gray-500 mb-4">Refresh the page to load the full employee view and edit here. Employee management is done in Leave and HR → Employees.</p>
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            handleBackFromEmployeeDetail();
-                                            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'users' } }));
-                                        }}
+                                        onClick={() => window.location.reload()}
                                         className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                                     >
-                                        <i className="fas fa-user-cog mr-2"></i>Edit in User Management
+                                        <i className="fas fa-sync-alt mr-2"></i>Refresh page
                                     </button>
                                 </div>
                             </div>
@@ -978,15 +1023,109 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                     <h3 className="text-lg font-semibold text-gray-900">Employees</h3>
                                     <p className="text-sm text-gray-500">View and manage employee information</p>
                                 </div>
-                                <button
-                                    onClick={() => loadData()}
-                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                                >
-                                    <i className="fas fa-sync-alt mr-1.5"></i>
-                                    Refresh
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {(resolvedAdmin || isAdmin) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAddEmployeeModal(true)}
+                                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                        >
+                                            <i className="fas fa-user-plus mr-1.5"></i>
+                                            Add employee
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => loadData()}
+                                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                    >
+                                        <i className="fas fa-sync-alt mr-1.5"></i>
+                                        Refresh
+                                    </button>
+                                </div>
                             </div>
-                            
+
+                            {showAddEmployeeModal && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !addEmployeeSaving && setShowAddEmployeeModal(false)}>
+                                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add employee</h3>
+                                        <p className="text-sm text-gray-500 mb-4">New staff are managed here in Leave and HR. They can sign in with the email you provide.</p>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                                                <input
+                                                    type="text"
+                                                    value={addEmployeeForm.name}
+                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, name: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                    placeholder="Full name"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                                                <input
+                                                    type="email"
+                                                    value={addEmployeeForm.email}
+                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, email: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                    placeholder="email@company.com"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                                                <select
+                                                    value={addEmployeeForm.role}
+                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, role: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                >
+                                                    <option value="user">User</option>
+                                                    <option value="manager">Manager</option>
+                                                    <option value="admin">Admin</option>
+                                                    <option value="superadmin">Super Administrator</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                                                <input
+                                                    type="text"
+                                                    value={addEmployeeForm.department}
+                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, department: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                    placeholder="e.g. Operations"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                                <input
+                                                    type="text"
+                                                    value={addEmployeeForm.phone}
+                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, phone: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                    placeholder="Optional"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-6 flex justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => !addEmployeeSaving && setShowAddEmployeeModal(false)}
+                                                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                                disabled={addEmployeeSaving}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleAddEmployee}
+                                                disabled={addEmployeeSaving}
+                                                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                                            >
+                                                {addEmployeeSaving ? 'Adding…' : 'Add employee'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-1 relative">
                                     <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
@@ -1348,40 +1487,40 @@ const OverviewView = ({
                 <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
                     <h4 className="text-sm font-semibold text-primary-900 mb-2 flex items-center gap-2">
                         <i className="fas fa-cog"></i>
-                        Manage users & leave approvers
+                        Manage employees & leave approvers
                     </h4>
                     <p className="text-sm text-primary-800 mb-3">
-                        Add or edit staff in <strong>Users</strong> (sidebar). Assign who approves leave per department in <strong>Approvers</strong>.
+                        Employee management is here in Leave and HR. Use <strong>Employees</strong> to add or edit staff (role, department, leave). Use <strong>Approvers</strong> to set who approves leave per department.
                     </p>
                     <div className="flex flex-wrap gap-2">
+                        {onOpenEmployees && (
+                            <button
+                                type="button"
+                                onClick={onOpenEmployees}
+                                className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+                            >
+                                <i className="fas fa-users mr-1.5"></i>
+                                Manage employees
+                            </button>
+                        )}
+                        {onOpenApprovers && (
+                            <button
+                                type="button"
+                                onClick={onOpenApprovers}
+                                className="px-3 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
+                            >
+                                <i className="fas fa-user-shield mr-1.5"></i>
+                                Manage leave approvers
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={() => window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'users' } }))}
                             className="px-3 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
                         >
                             <i className="fas fa-user-cog mr-1.5"></i>
-                            Manage users
+                            User access & permissions
                         </button>
-                        {onOpenApprovers && (
-                            <button
-                                type="button"
-                                onClick={onOpenApprovers}
-                                className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
-                            >
-                                <i className="fas fa-user-shield mr-1.5"></i>
-                                Manage leave approvers
-                            </button>
-                        )}
-                        {onOpenEmployees && (
-                            <button
-                                type="button"
-                                onClick={onOpenEmployees}
-                                className="px-3 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
-                            >
-                                <i className="fas fa-users mr-1.5"></i>
-                                View employees
-                            </button>
-                        )}
                     </div>
                 </div>
             )}
