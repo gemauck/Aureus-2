@@ -1834,7 +1834,7 @@ function initializeProjectDetail() {
         
         const tabFromUrl = params ? (() => {
             const t = params.get('tab');
-            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity'].includes(t) ? t : null;
+            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity', 'notes'].includes(t) ? t : null;
         })() : null;
         const hasDocWeek = params ? !!params.get('docWeek') : false;
         const hasWeeklySectionId = params ? !!params.get('weeklySectionId') : false;
@@ -2122,14 +2122,17 @@ function initializeProjectDetail() {
     const [dragOverTask, setDragOverTask] = useState(null); // { listId, taskIndex } or null
     // Activity log: null = use project.activityLog from initial load; array = fetched for Activity tab / after mutations
     const [activityLogEntries, setActivityLogEntries] = useState(null);
+    // Public notes for this project (Notes tab)
+    const [projectNotes, setProjectNotes] = useState(null);
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
     }, [tasks]);
 
-    // Reset activity log when switching project so we don't show another project's entries
+    // Reset activity log and project notes when switching project
     useEffect(() => {
         setActivityLogEntries(null);
+        setProjectNotes(null);
     }, [project?.id]);
 
     const loadActivityLog = useCallback(async () => {
@@ -2150,6 +2153,32 @@ function initializeProjectDetail() {
             loadActivityLog();
         }
     }, [activeSection, project?.id, loadActivityLog]);
+
+    const loadProjectNotes = useCallback(async () => {
+        if (!project?.id || !window.storage?.getToken) return;
+        try {
+            const token = window.storage.getToken();
+            const response = await fetch(`/api/projects/${project.id}/public-notes`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const list = data?.data?.notes ?? data?.notes ?? [];
+                setProjectNotes(Array.isArray(list) ? list : []);
+            } else {
+                setProjectNotes([]);
+            }
+        } catch (err) {
+            console.warn('Failed to load project notes:', err?.message);
+            setProjectNotes([]);
+        }
+    }, [project?.id]);
+
+    useEffect(() => {
+        if (activeSection === 'notes' && project?.id) {
+            loadProjectNotes();
+        }
+    }, [activeSection, project?.id, loadProjectNotes]);
 
     // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
     // This runs synchronously in useEffect to ensure tasks are available instantly
@@ -2637,7 +2666,7 @@ function initializeProjectDetail() {
         }
         if (!params && search) params = new URLSearchParams(search);
         const tabFromUrl = params?.get('tab');
-        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity'];
+        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity', 'notes'];
         if (tabFromUrl && validTabs.includes(tabFromUrl)) {
             if (tabFromUrl === 'time' && !normalizeHasTimeProcess(project.hasTimeProcess)) {
                 hasTimeProcessChangedRef.current = true;
@@ -8408,6 +8437,18 @@ function initializeProjectDetail() {
                             Compliance Review
                         </button>
                     )}
+                    <button
+                        type="button"
+                        onClick={() => requestAnimationFrame(() => switchSection('notes'))}
+                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeSection === 'notes'
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="fas fa-sticky-note mr-1.5"></i>
+                        Notes
+                    </button>
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
@@ -8519,6 +8560,48 @@ function initializeProjectDetail() {
             })()}
             
             {activeSection === 'overview' && <OverviewSection />}
+
+            {activeSection === 'notes' && (
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <i className="fas fa-sticky-note text-primary-600"></i>
+                        Public notes
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">Notes that team members have made public and linked to this project. Create and publish notes from My Notes.</p>
+                    <button
+                        type="button"
+                        onClick={() => loadProjectNotes()}
+                        className="mb-3 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                    >
+                        <i className="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                        {projectNotes === null ? (
+                            <p className="text-sm text-gray-500">Loading…</p>
+                        ) : !Array.isArray(projectNotes) || projectNotes.length === 0 ? (
+                            <p className="text-sm text-gray-500">No public notes linked to this project yet. In My Notes, link a note to this project and check &quot;Make public&quot; to see it here.</p>
+                        ) : (
+                            projectNotes.map((note) => (
+                                <div key={note.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-50">
+                                    <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
+                                        <span className="font-medium text-gray-900">{note.title || 'Untitled'}</span>
+                                        {note.author?.name && (
+                                            <span className="text-gray-500">by {note.author.name}</span>
+                                        )}
+                                        <span className="text-gray-400 text-xs">
+                                            {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                                        </span>
+                                    </div>
+                                    <div
+                                        className="text-sm text-gray-700 prose prose-sm max-w-none"
+                                        dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
+                                    />
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
 
             {activeSection === 'activity' && (
                 <div className="bg-white rounded-lg border border-gray-200 p-4">

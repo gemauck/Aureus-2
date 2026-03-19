@@ -1751,6 +1751,23 @@ app.put('/api/projects/:id/weekly-fms-sections', async (req, res) => {
   }
 })
 
+// GET /api/projects/:id/public-notes — public notes for project (must be before /api/projects/:id)
+app.get('/api/projects/:id/public-notes', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects', '[id]', 'public-notes.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project public-notes handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error', message: e.message, timestamp: new Date().toISOString() })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for project operations with ID (GET, PUT, DELETE /api/projects/[id])
 app.all('/api/projects/:id', async (req, res, next) => {
   try {

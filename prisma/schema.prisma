@@ -2288,6 +2288,7 @@ model UserNote {
   content    String          @default("")
   tags       String          @default("[]") // JSON array of tag strings
   pinned     Boolean         @default(false)
+  isPublic   Boolean         @default(false) // when true and projectId set, shown in project Notes tab
   ownerId    String
   clientId   String?
   projectId  String?
@@ -2301,6 +2302,7 @@ model UserNote {
   @@index([ownerId])
   @@index([clientId])
   @@index([projectId])
+  @@index([isPublic])
   @@index([createdAt])
   @@index([updatedAt])
 }

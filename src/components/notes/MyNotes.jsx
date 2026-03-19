@@ -300,7 +300,7 @@ const MyNotes = () => {
             const response = await fetch(`/api/user-notes/${note.id}`, {
                 method: 'PUT',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: note.title, content: note.content, tags: note.tags || [], pinned: newPinned, clientId: note.clientId ?? null, projectId: note.projectId ?? null })
+                body: JSON.stringify({ title: note.title, content: note.content, tags: note.tags || [], pinned: newPinned, isPublic: Boolean(note.isPublic), clientId: note.clientId ?? null, projectId: note.projectId ?? null })
             });
             if (response.ok) {
                 const data = await response.json();
@@ -355,6 +355,7 @@ const MyNotes = () => {
                 content: note.content || '',
                 tags: note.tags || [],
                 pinned: Boolean(note.pinned),
+                isPublic: Boolean(note.isPublic),
                 clientId: note.clientId && String(note.clientId).trim() ? note.clientId : null,
                 projectId: note.projectId && String(note.projectId).trim() ? note.projectId : null
             };
@@ -898,6 +899,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
     const [newTag, setNewTag] = useState('');
     const [clientId, setClientId] = useState(note.clientId ?? note.client?.id ?? '');
     const [projectId, setProjectId] = useState(note.projectId ?? note.project?.id ?? '');
+    const [isPublic, setIsPublic] = useState(Boolean(note.isPublic));
     const saveTimeoutRef = useRef(null);
     const noteRef = useRef(note);
     const editorRef = useRef(null);
@@ -911,6 +913,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         setTags(note.tags || []);
         setClientId(note.clientId ?? note.client?.id ?? '');
         setProjectId(note.projectId ?? note.project?.id ?? '');
+        setIsPublic(Boolean(note.isPublic));
     }, [note.id]);
 
     React.useLayoutEffect(() => {
@@ -930,11 +933,12 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                 content: html || '',
                 tags,
                 pinned: currentNote.pinned,
+                isPublic,
                 clientId: clientId && String(clientId).trim() ? clientId : null,
                 projectId: projectId && String(projectId).trim() ? projectId : null
             });
         }
-    }, [title, content, tags, clientId, projectId, onSave]);
+    }, [title, content, tags, clientId, projectId, isPublic, onSave]);
 
     // Auto-save after 2 seconds of inactivity
     useEffect(() => {
@@ -947,7 +951,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                 clearTimeout(saveTimeoutRef.current);
             }
         };
-    }, [title, content, tags, clientId, projectId, performSave]);
+    }, [title, content, tags, clientId, projectId, isPublic, performSave]);
 
     const handleEditorInput = () => {
         if (!editorRef.current) return;
@@ -1005,7 +1009,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                     {canPin && onTogglePin && (
                         <button
                             type="button"
-                            onClick={() => onTogglePin({ ...note, title, content: editorRef.current?.innerHTML ?? content, tags, pinned: note.pinned, clientId: clientId || null, projectId: projectId || null })}
+                            onClick={() => onTogglePin({ ...note, title, content: editorRef.current?.innerHTML ?? content, tags, pinned: note.pinned, isPublic, clientId: clientId || null, projectId: projectId || null })}
                             className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
                             title={note.pinned ? 'Unpin' : 'Pin note'}
                             aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
@@ -1112,8 +1116,19 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                 </div>
             </div>
 
-            {/* Client & Project */}
+            {/* Make public + Client & Project */}
             <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex flex-wrap items-center gap-4`}>
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={!!isPublic}
+                        onChange={(e) => setIsPublic(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        aria-label="Make note public (show in project)"
+                    />
+                    <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Make public</span>
+                </label>
+                <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>When public and linked to a project, this note appears in the project’s Notes tab.</span>
                 <div className="flex items-center gap-2">
                     <label htmlFor="note-client" className={`text-xs font-medium whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Client

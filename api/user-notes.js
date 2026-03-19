@@ -14,7 +14,8 @@ const noteInclude = {
     }
   },
   client: { select: { id: true, name: true } },
-  project: { select: { id: true, name: true } }
+  project: { select: { id: true, name: true } },
+  owner: { select: { id: true, name: true, email: true } }
 }
 
 // Helper function to parse JSON fields from database responses
@@ -36,6 +37,17 @@ function parseUserNoteJsonFields(note) {
     // Ensure pinned is boolean
     if (parsed.pinned === undefined) parsed.pinned = false
     parsed.pinned = Boolean(parsed.pinned)
+
+    // Ensure isPublic is boolean
+    if (parsed.isPublic === undefined) parsed.isPublic = false
+    parsed.isPublic = Boolean(parsed.isPublic)
+
+    // Author (owner) for display when note is public
+    if (note.owner) {
+      parsed.author = { id: note.owner.id, name: note.owner.name, email: note.owner.email }
+    } else {
+      parsed.author = parsed.ownerId ? { id: parsed.ownerId, name: null, email: null } : null
+    }
 
     // Include sharedWith users if present
     if (note.sharedWith && Array.isArray(note.sharedWith)) {
@@ -247,6 +259,7 @@ async function handler(req, res) {
           content = '',
           tags = [],
           pinned = false,
+          isPublic = false,
           clientId = null,
           projectId = null
         } = payload
@@ -260,6 +273,7 @@ async function handler(req, res) {
           content: content.trim(),
           tags: JSON.stringify(Array.isArray(tags) ? tags : []),
           pinned: Boolean(pinned),
+          isPublic: Boolean(isPublic),
           ownerId: userId,
           clientId: clientId && String(clientId).trim() ? String(clientId).trim() : null,
           projectId: projectId && String(projectId).trim() ? String(projectId).trim() : null
@@ -286,6 +300,7 @@ async function handler(req, res) {
           content,
           tags,
           pinned,
+          isPublic,
           clientId,
           projectId
         } = payload
@@ -307,6 +322,7 @@ async function handler(req, res) {
         if (content !== undefined) updateData.content = content.trim()
         if (tags !== undefined) updateData.tags = JSON.stringify(Array.isArray(tags) ? tags : [])
         if (pinned !== undefined) updateData.pinned = Boolean(pinned)
+        if (isPublic !== undefined) updateData.isPublic = Boolean(isPublic)
         if (clientId !== undefined) updateData.clientId = clientId && String(clientId).trim() ? String(clientId).trim() : null
         if (projectId !== undefined) updateData.projectId = projectId && String(projectId).trim() ? String(projectId).trim() : null
 
