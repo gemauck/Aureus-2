@@ -4103,7 +4103,7 @@ placeholder="Notes..."
                     <>
                         {/* Comment Popup - fixed size and contain:layout to prevent jitter when typing/adding attachments */}
                         <div 
-                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999] max-h-[min(80vh,420px)] flex flex-col overflow-hidden"
+                            className="comment-popup fixed w-[28rem] min-w-[22rem] max-w-[95vw] bg-white border border-gray-300 rounded-lg shadow-xl p-4 z-[999] max-h-[min(85vh,560px)] flex flex-col overflow-hidden"
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px`, contain: 'layout' }}
                         >
                         {/* Show section and document context */}
