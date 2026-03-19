@@ -6718,7 +6718,6 @@ Abcotronics`;
                                         handleAddComment(section.id, doc.id, month, commentText, atts, hoverCommentCell);
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
-                                    rows={2}
                                     showButton={true}
                                     autoFocus={true}
                                 />

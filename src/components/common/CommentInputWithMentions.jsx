@@ -1,10 +1,13 @@
 // Comment input with @mention support
 const { useState, useEffect, useRef } = React;
 
+const MIN_TEXTAREA_HEIGHT_PX = 88;
+const MAX_TEXTAREA_HEIGHT_PX = 200;
+
 const CommentInputWithMentions = ({ 
     onSubmit, 
     placeholder = "Add a comment... (Enter to send)",
-    rows = 2,
+    rows = 4,
     autoFocus = false,
     taskTitle = '',
     taskLink = '',
@@ -24,6 +27,15 @@ const CommentInputWithMentions = ({
     useEffect(() => {
         loadUsers();
     }, []);
+
+    // Auto-expand textarea with content (min/max height)
+    useEffect(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        const h = Math.min(Math.max(el.scrollHeight, MIN_TEXTAREA_HEIGHT_PX), MAX_TEXTAREA_HEIGHT_PX);
+        el.style.height = h + 'px';
+    }, [comment]);
     
     const loadUsers = async () => {
         try {
@@ -49,29 +61,20 @@ const CommentInputWithMentions = ({
         const value = textarea.value;
         const oldValue = comment;
         
-        // Determine the correct cursor position
+        // Preserve cursor/selection from the DOM (avoids jump-to-end when editing in the middle)
         let cursorPosition = textarea.selectionStart;
         let selectionEnd = textarea.selectionEnd;
         
-        // Special handling for first keystroke - ALWAYS force cursor to position 1
         const isFirstKeystroke = oldValue.length === 0 && value.length === 1;
-        
         if (isFirstKeystroke) {
-            // For the first character, cursor MUST be at position 1 (right after the character)
             cursorPosition = 1;
             selectionEnd = 1;
-        } else if (value.length > oldValue.length) {
-            // Text was added - cursor should be at the end of the new text
-            cursorPosition = value.length;
-            selectionEnd = value.length;
-        } else if (value.length < oldValue.length) {
-            // Text was deleted - keep cursor at current position or adjust if needed
-            if (cursorPosition === 0 && value.length > 0) {
-                // Likely React reset it - try to calculate based on deletion
-                cursorPosition = Math.min(value.length, oldValue.length - (oldValue.length - value.length));
-                selectionEnd = cursorPosition;
-            }
+        } else if (value.length < oldValue.length && cursorPosition === 0 && value.length > 0) {
+            // Deletion when React may have reset selection
+            cursorPosition = Math.min(value.length, oldValue.length - (oldValue.length - value.length));
+            selectionEnd = cursorPosition;
         }
+        // Otherwise keep cursorPosition/selectionEnd from the event so inline editing works
         
         setComment(value);
         
@@ -227,10 +230,11 @@ const CommentInputWithMentions = ({
                     value={comment}
                     onChange={handleChange}
                     onKeyDown={handleKeyDown}
-                    className={`w-full px-2 py-1.5 text-xs border ${isDark ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-300 bg-white'} rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none`}
+                    className={`w-full px-2 py-1.5 text-sm border ${isDark ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-300 bg-white'} rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none overflow-y-auto`}
                     rows={rows}
                     placeholder={placeholder}
                     autoFocus={autoFocus}
+                    style={{ minHeight: MIN_TEXTAREA_HEIGHT_PX + 'px', maxHeight: MAX_TEXTAREA_HEIGHT_PX + 'px' }}
                 />
                 
                 {/* Suggestions Dropdown */}
