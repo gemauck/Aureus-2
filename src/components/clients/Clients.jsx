@@ -9105,7 +9105,7 @@ const Clients = React.memo(() => {
                 </div>
             </div>
             <div className="flex-1 overflow-auto w-full">
-                <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ width: '100%' }}>
+                <table className={`w-full ${isDark ? 'crm-leads-table-dark' : 'divide-y divide-gray-200'}`} style={{ width: '100%' }}>
                     <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                         <tr>
                             <th 
@@ -9168,7 +9168,7 @@ const Clients = React.memo(() => {
                             </th>
                         </tr>
                     </thead>
-                    <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
+                    <tbody className={`${isDark ? 'bg-gray-900 crm-leads-table-dark-body' : 'bg-white divide-gray-100 divide-y'}`}>
                         {paginatedLeads.length === 0 ? (
                             <tr>
                                 <td colSpan="6" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
