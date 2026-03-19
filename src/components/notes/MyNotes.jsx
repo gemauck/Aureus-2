@@ -689,6 +689,7 @@ const MyNotes = () => {
                             {selectedNote ? (
                                 <NoteEditor
                                     note={selectedNote}
+                                    allTags={allTags}
                                     onSave={handleSaveNote}
                                     onDelete={handleDeleteNote}
                                     onShare={handleShareNote}
@@ -786,7 +787,7 @@ const RichTextToolbar = ({ editorRef, isDark }) => {
 };
 
 // Note Editor Component
-const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark }) => {
+const NoteEditor = ({ note, allTags = [], onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark }) => {
     const [title, setTitle] = useState(note.title || '');
     const [content, setContent] = useState(note.content || '');
     const [tags, setTags] = useState(note.tags || []);
@@ -844,10 +845,17 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
         setContent(html);
     };
 
+    const tagSet = React.useMemo(() => new Set(tags.map(t => String(t).toLowerCase())), [tags]);
     const handleAddTag = () => {
-        if (newTag.trim() && !tags.includes(newTag.trim())) {
-            setTags([...tags, newTag.trim()]);
+        const trimmed = newTag.trim();
+        if (trimmed && !tagSet.has(trimmed.toLowerCase())) {
+            setTags([...tags, trimmed]);
             setNewTag('');
+        }
+    };
+    const handleAddExistingTag = (tag) => {
+        if (!tagSet.has(String(tag).toLowerCase())) {
+            setTags([...tags, tag]);
         }
     };
 
@@ -928,38 +936,70 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
             </div>
 
             {/* Tags */}
-            <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex items-center gap-2 flex-wrap`}>
-                {tags.map((tag, idx) => (
-                    <span
-                        key={idx}
-                        className={`px-2 py-1 rounded text-sm flex items-center gap-1 ${
-                            isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'
-                        }`}
-                    >
-                        {tag}
-                        <button
-                            type="button"
-                            onClick={() => handleRemoveTag(tag)}
-                            className="ml-1 hover:text-red-500"
-                            aria-label={`Remove tag ${tag}`}
+            <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <span className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tags</span>
+                    {tags.map((tag, idx) => (
+                        <span
+                            key={idx}
+                            className={`px-2 py-1 rounded text-sm flex items-center gap-1 ${
+                                isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'
+                            }`}
                         >
-                            <i className="fas fa-times text-xs" aria-hidden="true"></i>
-                        </button>
-                    </span>
-                ))}
-                <input
-                    type="text"
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                    placeholder="Add tag..."
-                    className={`px-2 py-1 rounded text-sm border ${
-                        isDark 
-                            ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                            : 'bg-white border-gray-300 text-gray-900'
-                    } focus:outline-none focus:ring-1 focus:ring-primary-500`}
-                    aria-label="Add tag"
-                />
+                            {tag}
+                            <button
+                                type="button"
+                                onClick={() => handleRemoveTag(tag)}
+                                className="ml-1 hover:text-red-500"
+                                aria-label={`Remove tag ${tag}`}
+                            >
+                                <i className="fas fa-times text-xs" aria-hidden="true"></i>
+                            </button>
+                        </span>
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    {allTags.filter(t => !tagSet.has(String(t).toLowerCase())).length > 0 && (
+                        <>
+                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Add from existing:</span>
+                            {allTags.filter(t => !tagSet.has(String(t).toLowerCase())).map((tag) => (
+                                <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => handleAddExistingTag(tag)}
+                                    className={`px-2 py-1 rounded text-sm border border-dashed ${
+                                        isDark ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+                                    }`}
+                                    aria-label={`Add tag ${tag}`}
+                                >
+                                    + {tag}
+                                </button>
+                            ))}
+                        </>
+                    )}
+                    <input
+                        type="text"
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
+                        placeholder="Type a new tag and press Enter or Add"
+                        className={`px-2 py-1 rounded text-sm border w-40 ${
+                            isDark 
+                                ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                : 'bg-white border-gray-300 text-gray-900'
+                        } focus:outline-none focus:ring-1 focus:ring-primary-500`}
+                        aria-label="New tag name"
+                    />
+                    <button
+                        type="button"
+                        onClick={handleAddTag}
+                        disabled={!newTag.trim()}
+                        className={`px-2 py-1 rounded text-sm font-medium ${isDark ? 'bg-gray-600 text-gray-200 hover:bg-gray-500 disabled:opacity-50' : 'bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50'}`}
+                        aria-label="Add tag"
+                    >
+                        Add
+                    </button>
+                </div>
             </div>
 
             {/* Rich text toolbar + Content Editor */}
