@@ -393,9 +393,12 @@ async function request(path, options = {}) {
             throw gatewayError;
           }
           throw new Error(`Server returned HTML instead of JSON. This usually means the API endpoint doesn't exist or there's a server error. Response: ${text.substring(0, 100)}...`)
-        } else {
-          throw new Error(`Invalid JSON response: ${parseError.message}. Response: ${text.substring(0, 100)}...`)
         }
+        // "Unexpected token '||'" usually means response is JavaScript or malformed JSON (e.g. proxy/CDN injected script)
+        const hint = (parseError.message && parseError.message.includes("'||'"))
+          ? ' Response may be JavaScript or modified by a proxy - check Network tab for this URL.'
+          : ''
+        throw new Error(`Invalid JSON response: ${parseError.message}.${hint} Response preview: ${text.substring(0, 120)}...`)
       }
     }
 
