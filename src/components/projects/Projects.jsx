@@ -4596,7 +4596,7 @@ const Projects = () => {
                         </div>
                     </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3">
+                <div className="flex flex-wrap items-stretch sm:items-center gap-3 sm:gap-3">
                     {/* View Toggle */}
                     <div className={`flex items-center ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 shrink-0`} role="group" aria-label="View mode selector">
                         <button
@@ -4705,9 +4705,9 @@ const Projects = () => {
             </div>
 
             {/* Search and Filters */}
-            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
+            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 sm:p-5 shadow-sm`}>
                 <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                         <div className="relative">
                             <input
                                 type="text"
@@ -4738,7 +4738,7 @@ const Projects = () => {
                     <select
                         value={selectedClient}
                         onChange={(e) => setSelectedClient(e.target.value)}
-                        className={`px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                        className={`w-full sm:w-auto min-w-0 sm:min-w-[140px] px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                             isDark 
                                 ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
                                 : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
@@ -4758,7 +4758,7 @@ const Projects = () => {
                     <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                        className={`px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                        className={`w-full sm:w-auto min-w-0 sm:min-w-[140px] px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                             isDark 
                                 ? 'bg-gray-800 border-gray-700 text-gray-200 focus:bg-gray-800' 
                                 : 'bg-gray-50 border-gray-200 text-gray-900 focus:bg-white'
@@ -4820,7 +4820,7 @@ const Projects = () => {
             {isLoading && (
                 <div className="col-span-full">
                     {viewMode === 'grid' ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
                             {[1, 2, 3, 4, 5, 6].map((i) => (
                                 <div key={i} className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 animate-pulse`}>
                                     <div className="flex justify-between items-start mb-4">
@@ -4965,7 +4965,7 @@ const Projects = () => {
                             )}
                         </div>
                     ) : viewMode === 'grid' ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
                             {filteredProjects.map((project, index) => (
                                 <div 
                                     key={project.id}
@@ -5036,7 +5036,7 @@ const Projects = () => {
                                         }
                                         mouseDownRef.current = null;
                                     }}
-                                    className={`group relative rounded-xl border-l-4 p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.01] focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-transparent ${getStatusBorderClasses(project.status)} ${isDark ? 'bg-gray-900 border border-gray-800 border-l-4' : 'bg-white border border-gray-100 border-l-4'}`}
+                                    className={`group relative rounded-xl border-l-4 p-4 sm:p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.01] focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-transparent ${getStatusBorderClasses(project.status)} ${isDark ? 'bg-gray-900 border border-gray-800 border-l-4' : 'bg-white border border-gray-100 border-l-4'}`}
                                 >
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex-1 min-w-0">
@@ -5090,14 +5090,14 @@ const Projects = () => {
                                     </colgroup>
                                     <thead className={isDark ? 'bg-gray-800 border-b border-gray-800' : 'bg-gray-50 border-b border-gray-100'}>
                                         <tr>
-                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
-                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
-                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
-                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
-                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
-                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
-                                            <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
-                                            <th className={`px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}><span className="sr-only">View</span></th>
+                                            <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                            <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
+                                            <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
+                                            <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                            <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
+                                            <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
+                                            <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
+                                            <th className={`px-4 sm:px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}><span className="sr-only">View</span></th>
                                         </tr>
                                     </thead>
                                     <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -5107,32 +5107,32 @@ const Projects = () => {
                                                 onClick={() => handleViewProject(project)}
                                                 className={`cursor-pointer transition-colors group/row ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}
                                             >
-                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>{project.name}</div>
                                                 </td>
-                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.client || '—'}</div>
                                                 </td>
-                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.type}</div>
                                                 </td>
-                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <span className={`px-2 py-1 text-xs rounded-lg font-medium ${getStatusColorClasses(project.status)}`}>
                                                         {project.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>
                                                         {formatProjectDateRange(project.startDate, project.dueDate)}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.assignedTo || 'Unassigned'}</div>
                                                 </td>
-                                                <td className="px-6 py-3 whitespace-nowrap">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.tasksCount || 0}</div>
                                                 </td>
-                                                <td className="px-6 py-3 whitespace-nowrap text-right">
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap text-right">
                                                     <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${isDark ? 'text-gray-500 group-hover/row:text-blue-400' : 'text-gray-400 group-hover/row:text-blue-600'}`} aria-hidden="true">
                                                         <i className="fas fa-chevron-right text-xs"></i>
                                                     </span>
@@ -5147,16 +5147,16 @@ const Projects = () => {
                         <div className="space-y-6">
                             {groupedProjectsByClient.map(group => (
                                 <div key={group.client} className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border shadow-sm overflow-hidden`}>
-                                    <div className={`flex items-center justify-between px-5 py-3 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-                                        <div className="flex items-center gap-2">
-                                            <i className={`fas fa-building ${isDark ? 'text-gray-300' : 'text-gray-600'}`} aria-hidden="true"></i>
-                                            <span className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{group.client}</span>
+                                    <div className={`flex items-center justify-between px-4 sm:px-5 py-3 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <i className={`fas fa-building flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} aria-hidden="true"></i>
+                                            <span className={`text-sm font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{group.client}</span>
                                         </div>
-                                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <span className={`text-xs flex-shrink-0 ml-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                             {group.projects.length} project{group.projects.length === 1 ? '' : 's'}
                                         </span>
                                     </div>
-                                    <div className="overflow-x-auto">
+                                    <div className="table-responsive overflow-x-auto min-w-0">
                                         <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                             <colgroup>
                                                 <col style={{ width: '30%' }} />
@@ -5168,12 +5168,12 @@ const Projects = () => {
                                             </colgroup>
                                             <thead className={isDark ? 'bg-gray-900 border-b border-gray-800' : 'bg-white border-b border-gray-100'}>
                                                 <tr>
-                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
-                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
-                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
-                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
-                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
-                                                    <th className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
+                                                    <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Project</th>
+                                                    <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Type</th>
+                                                    <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
+                                                    <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
+                                                    <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
+                                                    <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
                                                 </tr>
                                             </thead>
                                             <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -5183,26 +5183,26 @@ const Projects = () => {
                                                         onClick={() => handleViewProject(project)}
                                                         className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}
                                                     >
-                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>{project.name}</div>
                                                         </td>
-                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.type}</div>
                                                         </td>
-                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <span className={`px-2 py-1 text-xs rounded-lg font-medium ${getStatusColorClasses(project.status)}`}>
                                                                 {project.status}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>
                                                                 {formatProjectDateRange(project.startDate, project.dueDate)}
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.assignedTo || 'Unassigned'}</div>
                                                         </td>
-                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                        <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.tasksCount || 0}</div>
                                                         </td>
                                                     </tr>

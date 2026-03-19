@@ -93,13 +93,14 @@ const MyNotes = () => {
         return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
     }, [notes]);
 
-    const loadNotes = async () => {
+    const loadNotes = useCallback(async (opts = {}) => {
+        const { silent = false } = opts;
         try {
-            setIsLoading(true);
+            if (!silent) setIsLoading(true);
             const token = storage?.getToken?.();
             if (!token) {
                 setNotes([]);
-                setIsLoading(false);
+                if (!silent) setIsLoading(false);
                 return;
             }
 
@@ -112,33 +113,46 @@ const MyNotes = () => {
 
             if (response.ok) {
                 const data = await response.json();
-                const notesData = Array.isArray(data?.data?.notes) 
-                    ? data.data.notes 
-                    : Array.isArray(data?.notes) 
-                        ? data.notes 
+                const notesData = Array.isArray(data?.data?.notes)
+                    ? data.data.notes
+                    : Array.isArray(data?.notes)
+                        ? data.notes
                         : [];
-                
-                // API returns pinned first, then updatedAt; keep that order
+
                 const sorted = notesData.sort((a, b) => {
                     const aP = Boolean(a.pinned);
                     const bP = Boolean(b.pinned);
                     if (aP !== bP) return aP ? -1 : 1;
                     return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
                 });
-                setNotes(sorted);
+
+                if (silent) {
+                    setNotes(prev => {
+                        const prevIds = (prev || []).map(n => n.id).join(',');
+                        const nextIds = sorted.map(n => n.id).join(',');
+                        if (prevIds === nextIds && prev.length === sorted.length) return prev;
+                        return sorted;
+                    });
+                } else {
+                    setNotes(sorted);
+                }
             } else {
-                console.error('Failed to load notes:', response.statusText);
-                setNotes([]);
-                showToast('Failed to load notes', 'error');
+                if (!silent) {
+                    console.error('Failed to load notes:', response.statusText);
+                    setNotes([]);
+                    showToast('Failed to load notes', 'error');
+                }
             }
         } catch (error) {
             console.error('Error loading notes:', error);
-            setNotes([]);
-            showToast('Error loading notes', 'error');
+            if (!silent) {
+                setNotes([]);
+                showToast('Error loading notes', 'error');
+            }
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
-    };
+    }, [showToast]);
 
     const loadUsers = async () => {
         try {
@@ -297,7 +311,7 @@ const MyNotes = () => {
                 }
                 setLastSavedAt(Date.now());
                 showToast('Note saved', 'success');
-                await loadNotes();
+                loadNotes({ silent: true });
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 showToast(`Failed to save: ${errorData.message || response.statusText}`, 'error');
@@ -347,7 +361,6 @@ const MyNotes = () => {
 
     const handleShareNote = (note) => {
         setShareNoteId(note.id);
-        setSharedWith(note.sharedWith || []);
         setSelectedUsersToShare(note.sharedWith?.map(s => s.userId || s.id) || []);
         setShowShareModal(true);
     };
@@ -383,7 +396,7 @@ const MyNotes = () => {
                 
                 setShowShareModal(false);
                 showToast('Sharing updated', 'success');
-                await loadNotes();
+                loadNotes({ silent: true });
             } else {
                 showToast('Failed to update sharing', 'error');
             }
@@ -740,7 +753,10 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
     const [tags, setTags] = useState(note.tags || []);
     const [newTag, setNewTag] = useState('');
     const saveTimeoutRef = useRef(null);
+    const noteRef = useRef(note);
     const canPin = note.isOwner !== false && !note.id?.startsWith('temp-');
+
+    noteRef.current = note;
 
     useEffect(() => {
         setTitle(note.title || '');
@@ -748,30 +764,32 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
         setTags(note.tags || []);
     }, [note.id]);
 
+    const performSave = useCallback(() => {
+        const currentNote = noteRef.current;
+        if (!currentNote) return;
+        if (title.trim() || content.trim()) {
+            onSave({
+                ...currentNote,
+                title: title.trim() || 'Untitled Note',
+                content,
+                tags,
+                pinned: currentNote.pinned
+            });
+        }
+    }, [title, content, tags, onSave]);
+
     // Auto-save after 2 seconds of inactivity
     useEffect(() => {
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
         }
-
-        saveTimeoutRef.current = setTimeout(() => {
-            if (title.trim() || content.trim()) {
-                onSave({
-                    ...note,
-                    title: title.trim() || 'Untitled Note',
-                    content,
-                    tags,
-                    pinned: note.pinned
-                });
-            }
-        }, 2000);
-
+        saveTimeoutRef.current = setTimeout(performSave, 2000);
         return () => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
         };
-    }, [title, content, tags]);
+    }, [title, content, tags, performSave]);
 
     const handleAddTag = () => {
         if (newTag.trim() && !tags.includes(newTag.trim())) {
@@ -807,12 +825,19 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
                             {lastSavedStr}
                         </span>
                     )}
-                    {isSaving && (
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            <i className="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>
-                            Saving...
-                        </span>
-                    )}
+                    <button
+                        type="button"
+                        onClick={() => { if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; } performSave(); }}
+                        disabled={isSaving}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium ${isSaving ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-primary-600 hover:bg-primary-700 text-white'}`}
+                        aria-label="Save note now"
+                    >
+                        {isSaving ? (
+                            <><i className="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i> Saving...</>
+                        ) : (
+                            <><i className="fas fa-save mr-1" aria-hidden="true"></i> Save</>
+                        )}
+                    </button>
                     {canPin && onTogglePin && (
                         <button
                             type="button"
