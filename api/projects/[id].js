@@ -11,6 +11,8 @@ import { logProjectActivity, getActivityUserFromRequest } from '../_lib/projectA
 let projectColumnsMigrated = false;
 /** Run Task order column migration at most once per process. */
 let taskOrderColumnMigrated = false;
+/** Run Task startDate/reminderRecurrence/lastReminderSentAt columns at most once per process. */
+let taskDateColumnsMigrated = false;
 /** Run project subresource column migrations at most once per process. */
 let projectSubresourceColumnsMigrated = false;
 
@@ -252,6 +254,20 @@ async function handler(req, res) {
           } catch (migrationError) {
             if (!migrationError.message?.includes('already exists') && !migrationError.message?.includes('duplicate column')) {
               console.log('⚠️ Task order column migration (non-critical):', migrationError.message?.substring(0, 100));
+            }
+          }
+        }
+
+        /** Task start date, due date, recurring reminder columns (persist in UI). */
+        if (!taskDateColumnsMigrated) {
+          try {
+            await prisma.$executeRawUnsafe('ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "startDate" TIMESTAMP(3);');
+            await prisma.$executeRawUnsafe('ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "reminderRecurrence" TEXT;');
+            await prisma.$executeRawUnsafe('ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "lastReminderSentAt" TIMESTAMP(3);');
+            taskDateColumnsMigrated = true;
+          } catch (migrationError) {
+            if (!migrationError.message?.includes('already exists') && !migrationError.message?.includes('duplicate column')) {
+              console.log('⚠️ Task date columns migration (non-critical):', migrationError.message?.substring(0, 100));
             }
           }
         }
@@ -639,14 +655,22 @@ async function handler(req, res) {
           taskCommentsMap[comment.taskId].push(comment);
         });
 
-        const tasksWithComments = (project.tasks || []).map(task => ({
+        const toTaskResponse = (task) => ({
           ...task,
+          dueDate: task.dueDate != null ? (typeof task.dueDate === 'string' ? task.dueDate : task.dueDate.toISOString?.()) : null,
+          startDate: task.startDate != null ? (typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString?.()) : null,
+          lastReminderSentAt: task.lastReminderSentAt != null ? (typeof task.lastReminderSentAt === 'string' ? task.lastReminderSentAt : task.lastReminderSentAt.toISOString?.()) : null,
+          reminderRecurrence: task.reminderRecurrence ?? null,
           comments: taskCommentsMap[task.id] || [],
           subtasks: (task.subtasks || []).map(subtask => ({
             ...subtask,
+            dueDate: subtask.dueDate != null ? (typeof subtask.dueDate === 'string' ? subtask.dueDate : subtask.dueDate.toISOString?.()) : null,
+            startDate: subtask.startDate != null ? (typeof subtask.startDate === 'string' ? subtask.startDate : subtask.startDate.toISOString?.()) : null,
+            reminderRecurrence: subtask.reminderRecurrence ?? null,
             comments: taskCommentsMap[subtask.id] || []
           }))
-        }));
+        });
+        const tasksWithComments = (project.tasks || []).map(toTaskResponse);
 
         const taskLists = Array.isArray(taskListsResult) ? taskListsResult : [];
         const projectComments = Array.isArray(projectCommentsResult) ? projectCommentsResult : [];
