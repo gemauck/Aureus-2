@@ -1,13 +1,13 @@
 // Comment input with @mention support
 const { useState, useEffect, useRef } = React;
 
-const MIN_TEXTAREA_HEIGHT_PX = 112;
-const MAX_TEXTAREA_HEIGHT_PX = 280;
+const MIN_TEXTAREA_HEIGHT_PX = 88;
+const MAX_TEXTAREA_HEIGHT_PX = 200;
 
 const CommentInputWithMentions = ({ 
     onSubmit, 
     placeholder = "Add a comment... (Enter to send)",
-    rows = 5,
+    rows = 4,
     autoFocus = false,
     taskTitle = '',
     taskLink = '',

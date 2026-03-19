@@ -6449,7 +6449,7 @@ Abcotronics`;
                     <>
                         {/* Comment Popup */}
                         <div 
-                            className="comment-popup fixed w-[28rem] min-w-[22rem] max-w-[95vw] bg-white border border-gray-300 rounded-lg shadow-xl p-4 z-[999] max-h-[min(85vh,560px)] flex flex-col overflow-hidden"
+                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                         >
                         {/* Show section and document context */}
@@ -6464,13 +6464,13 @@ Abcotronics`;
                             </div>
                         )}
                         {/* Always show Comments section so the popup is clearly the comments modal, not just "Add Comment" */}
-                        <div className="mb-3 flex-1 min-h-0 flex flex-col">
+                        <div className="mb-3">
                             <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                             {comments.length > 0 ? (
                                 <div 
                                     key={`comment-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
-                                    className="comment-scroll-container mb-2 flex-1 min-h-0 overflow-y-auto"
+                                    className="comment-scroll-container mb-2"
                                 >
                                     <div className="space-y-2 pr-1">
                                         {comments.map((comment, idx) => (
