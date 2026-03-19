@@ -73,7 +73,8 @@ model User {
   tasks                     Task[]                       @relation("TaskAssignee")
   twoFactor                 TwoFactor?
   userTasks                 UserTask[]                   @relation("UserTaskOwner")
-  userTaskTags              UserTaskTag[]                @relation("UserTaskTagOwner")
+  userTaskLists              UserTaskList[]               @relation("UserTaskListOwner")
+  userTaskTags              UserTaskTag[]                 @relation("UserTaskTagOwner")
   userNotes                 UserNote[]                   @relation("UserNoteOwner")
   sharedNotes               UserNoteShare[]              @relation("UserNoteSharedWith")
   projectNotesAuthored      ProjectNote[]                 @relation("ProjectNoteAuthor")
@@ -2247,6 +2248,22 @@ model MeetingUserAllocation {
   @@index([userId])
 }
 
+model UserTaskList {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String   @default("")
+  color     String   @default("#3B82F6")
+  order     Int      @default(0)
+  status    String?  // "todo" | "in-progress" | "completed" | "cancelled" for project-task placement
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User     @relation("UserTaskListOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks     UserTask[]
+
+  @@index([ownerId])
+  @@index([order])
+}
+
 model UserTask {
   id             String                @id @default(cuid())
   title          String
@@ -2257,6 +2274,7 @@ model UserTask {
   dueDate        DateTime?
   completedDate  DateTime?
   ownerId        String
+  listId         String?
   clientId       String?
   projectId      String?
   leadId         String?
@@ -2268,9 +2286,11 @@ model UserTask {
   googleEventId  String?
   googleEventUrl String?
   owner          User                  @relation("UserTaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  list           UserTaskList?         @relation(fields: [listId], references: [id], onDelete: SetNull)
   tags           UserTaskTagRelation[]
 
   @@index([ownerId])
+  @@index([listId])
   @@index([status])
   @@index([category])
   @@index([dueDate])

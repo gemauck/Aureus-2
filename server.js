@@ -2042,6 +2042,28 @@ app.all('/api/user-tasks/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for user task lists (GET list, POST create /api/user-task-lists)
+app.all('/api/user-task-lists', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'user-task-lists.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for user task list by ID (GET, PUT, DELETE /api/user-task-lists/[id])
+app.all('/api/user-task-lists/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'user-task-lists.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for user task tags list and create operations (GET, POST /api/user-task-tags)
 app.all('/api/user-task-tags', async (req, res, next) => {
   try {

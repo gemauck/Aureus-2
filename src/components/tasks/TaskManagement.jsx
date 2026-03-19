@@ -123,6 +123,14 @@ const TaskManagement = () => {
     const [inlineQuickError, setInlineQuickError] = useState('');
     const [sortKey, setSortKey] = useState('dueDate');
     const [sortDir, setSortDir] = useState('asc'); // asc | desc
+    const [userTaskLists, setUserTaskLists] = useState([]);
+    const [showAddListModal, setShowAddListModal] = useState(false);
+    const [newListName, setNewListName] = useState('');
+    const [newListColor, setNewListColor] = useState('#3B82F6');
+    const [isAddingList, setIsAddingList] = useState(false);
+    const [editingListId, setEditingListId] = useState(null);
+    const [editingListName, setEditingListName] = useState('');
+    const [listMenuOpenId, setListMenuOpenId] = useState(null);
 
     // Function to update view and save to localStorage
     const updateView = (newView) => {
@@ -211,9 +219,96 @@ const TaskManagement = () => {
         }
     }, [filterStatus, filterCategory, filterTag, filterPriority, filterSource]);
 
+    const loadUserTaskLists = useCallback(async () => {
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+            const response = await fetch('/api/user-task-lists', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            const lists = Array.isArray(data?.data?.lists) ? data.data.lists : [];
+            setUserTaskLists(lists);
+        } catch (e) {
+            console.warn('TaskManagement: Failed to load user task lists', e);
+        }
+    }, []);
+
+    const handleAddList = useCallback(async () => {
+        const name = (newListName || '').trim();
+        if (!name) return;
+        setIsAddingList(true);
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+            const response = await fetch('/api/user-task-lists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ name, color: newListColor || undefined, order: userTaskLists.length })
+            });
+            if (!response.ok) throw new Error('Failed to create list');
+            await loadUserTaskLists();
+            setShowAddListModal(false);
+            setNewListName('');
+            setNewListColor('#3B82F6');
+        } catch (e) {
+            console.warn('TaskManagement: Failed to add list', e);
+            window.alert('Could not create list. Please try again.');
+        } finally {
+            setIsAddingList(false);
+        }
+    }, [newListName, newListColor, userTaskLists.length, loadUserTaskLists]);
+
+    const handleSaveListEdit = useCallback(async (listId) => {
+        const list = userTaskLists.find(l => l.id === listId);
+        if (!list) return;
+        const name = (editingListName ?? list.name || '').trim();
+        if (!name) return;
+        setEditingListId(null);
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+            const response = await fetch(`/api/user-task-lists/${listId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ name })
+            });
+            if (!response.ok) throw new Error('Failed to update list');
+            await loadUserTaskLists();
+        } catch (e) {
+            console.warn('TaskManagement: Failed to update list', e);
+            window.alert('Could not update list. Please try again.');
+        }
+    }, [userTaskLists, editingListName, loadUserTaskLists]);
+
+    const handleDeleteList = useCallback(async (listId) => {
+        if (userTaskLists.length <= 1) {
+            window.alert('You must keep at least one list.');
+            return;
+        }
+        if (!window.confirm('Delete this list? Tasks in it will be moved to the first remaining list.')) return;
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+            const response = await fetch(`/api/user-task-lists/${listId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Failed to delete list');
+            setListMenuOpenId(null);
+            await loadUserTaskLists();
+            await loadTasks();
+        } catch (e) {
+            console.warn('TaskManagement: Failed to delete list', e);
+            window.alert('Could not delete list. Please try again.');
+        }
+    }, [userTaskLists.length, loadUserTaskLists, loadTasks]);
+
     // Load data
     useEffect(() => {
         loadTasks();
+        loadUserTaskLists();
         loadTags();
         loadClients();
         loadProjects();
@@ -600,52 +695,50 @@ const TaskManagement = () => {
         return list;
     }, [filteredTasks, sortKey, sortDir, clients, leads]);
 
-    // Group tasks by status for kanban view
+    // Normalize task status for grouping (shared)
+    const normalizeStatus = useCallback((status) => {
+        if (!status) return 'todo';
+        const normalized = String(status).toLowerCase().trim();
+        if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') return 'todo';
+        if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') return 'in-progress';
+        if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') return 'completed';
+        if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
+        return 'todo';
+    }, []);
+
+    // Fallback: group by status when no custom lists (legacy kanban)
     const kanbanTasks = useMemo(() => {
-        const grouped = {
-            todo: [],
-            'in-progress': [],
-            completed: [],
-            cancelled: []
-        };
-
-        // Normalize task status to match grouping keys
-        const normalizeStatus = (status) => {
-            if (!status) return 'todo';
-            const normalized = String(status).toLowerCase().trim();
-            
-            // Map various status formats to standard keys
-            if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') {
-                return 'todo';
-            }
-            if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') {
-                return 'in-progress';
-            }
-            if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') {
-                return 'completed';
-            }
-            if (normalized === 'cancelled' || normalized === 'canceled') {
-                return 'cancelled';
-            }
-            
-            // If no match, check if it exists as-is (case-insensitive)
-            const statusKeys = Object.keys(grouped);
-            const exactMatch = statusKeys.find(key => key.toLowerCase() === normalized);
-            if (exactMatch) return exactMatch;
-            
-            // Default to todo for unknown statuses
-            return 'todo';
-        };
-
+        const grouped = { todo: [], 'in-progress': [], completed: [], cancelled: [] };
         filteredTasks.forEach(task => {
-            const normalizedStatus = normalizeStatus(task.status);
-            if (grouped[normalizedStatus]) {
-                grouped[normalizedStatus].push(task);
-            }
+            const s = normalizeStatus(task.status);
+            if (grouped[s]) grouped[s].push(task);
         });
-
         return grouped;
-    }, [filteredTasks]);
+    }, [filteredTasks, normalizeStatus]);
+
+    // List-based Kanban: for each user list, which tasks belong (user by listId, project by first list whose status matches)
+    const kanbanTasksByList = useMemo(() => {
+        if (!userTaskLists || userTaskLists.length === 0) return [];
+        const orderedLists = [...userTaskLists].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const listStatusMatches = (list, taskStatus) => {
+            const ls = (list.status || 'todo').toLowerCase().replace(/\s/g, '-');
+            return (ls === 'in-progress' || ls === 'inprogress') ? taskStatus === 'in-progress' : ls === taskStatus;
+        };
+        return orderedLists.map(list => {
+            const userTasksInList = filteredTasks.filter(t => t.type !== 'project' && String(t.listId || '') === String(list.id));
+            const projectTasksForThisList = filteredTasks.filter(t => {
+                if (t.type !== 'project') return false;
+                const taskStatus = normalizeStatus(t.status);
+                if (!listStatusMatches(list, taskStatus)) return false;
+                const firstMatchingList = orderedLists.find(l => listStatusMatches(l, taskStatus));
+                return firstMatchingList && firstMatchingList.id === list.id;
+            });
+            return {
+                list,
+                tasks: [...userTasksInList, ...projectTasksForThisList]
+            };
+        });
+    }, [filteredTasks, userTaskLists, normalizeStatus]);
 
     // Group tasks by date for calendar view
     const calendarTasks = useMemo(() => {
@@ -887,6 +980,56 @@ const TaskManagement = () => {
             );
             console.error('Error updating task status:', error);
             alert('Error updating task: ' + (error?.message || 'Unknown error'));
+        }
+    };
+
+    const handleMoveTaskToList = async (task, list, optimistic = true) => {
+        if (!list || !list.id) return;
+        if (optimistic) {
+            setTasks(prevTasks =>
+                prevTasks.map(t =>
+                    t.id === task.id ? { ...t, listId: list.id, status: list.status || t.status } : t
+                )
+            );
+        }
+        if (task.type === 'project') return;
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+            const response = await fetch(`/api/user-tasks/${task.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    listId: list.id,
+                    ...(list.status ? { status: list.status } : {})
+                })
+            });
+            if (!response.ok) {
+                if (optimistic) {
+                    setTasks(prevTasks =>
+                        prevTasks.map(t =>
+                            t.id === task.id ? { ...t, listId: task.listId, status: task.status } : t
+                        )
+                    );
+                }
+                const err = await response.json().catch(() => ({}));
+                alert(err.error?.message || err.message || 'Failed to move task');
+            } else if (!optimistic) {
+                loadTasks();
+            }
+        } catch (error) {
+            if (optimistic) {
+                setTasks(prevTasks =>
+                    prevTasks.map(t =>
+                        t.id === task.id ? { ...t, listId: task.listId, status: task.status } : t
+                    )
+                );
+            }
+            console.error('Error moving task:', error);
+            alert('Error moving task: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -1292,81 +1435,198 @@ const TaskManagement = () => {
                     )}
                 </div>
             ) : view === 'kanban' ? (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {['todo', 'in-progress', 'completed', 'cancelled'].map(status => {
-                        const handleDragOver = (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            e.currentTarget.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50');
-                            if (isDark) {
-                                e.currentTarget.classList.add('bg-blue-900', 'bg-opacity-20');
-                            } else {
-                                e.currentTarget.classList.add('bg-blue-50');
-                            }
-                        };
-
-                        const handleDragLeave = (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            // Only remove highlight if we're actually leaving the column (not just moving to a child)
-                            const relatedTarget = e.relatedTarget;
-                            if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
-                                e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
-                            }
-                        };
-
-                        const handleDrop = (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
-                            
-                            const taskId = e.dataTransfer.getData('taskId');
-                            if (taskId && taskId !== '') {
-                                const task = tasks.find(t => String(t.id) === String(taskId));
-                                if (task && task.status !== status) {
-                                    // Use optimistic update for smooth UI
-                                    handleQuickStatusToggle(task, status, true);
-                                }
-                            }
-                        };
-
-                        return (
-                            <div 
-                                key={status}
-                                data-column={status}
-                                className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 transition-all`}
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
-                                onDrop={handleDrop}
+                <div className="space-y-4">
+                    {userTaskLists.length > 0 && (
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => { setShowAddListModal(true); setNewListName(''); setNewListColor('#3B82F6'); }}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
                             >
-                                <h3 className={`font-semibold mb-4 capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    <span>{status.replace('-', ' ')}</span>
-                                    <span className="ml-2 transition-all duration-200 inline-block">({kanbanTasks[status]?.length || 0})</span>
-                                </h3>
-                                <div className="space-y-2 min-h-[200px] transition-all duration-200">
-                                    {kanbanTasks[status]?.map(task => (
-                                        <div key={task.id} className="transition-all duration-200 ease-in-out">
-                                            <TaskCard
-                                                task={task}
-                                                isDark={isDark}
-                                                onEdit={handleEditTask}
-                                                onDelete={handleDeleteTask}
-                                                onQuickStatusToggle={handleQuickStatusToggle}
-                                                clients={clients}
-                                                projects={projects}
-                                                tags={tags}
-                                                getPriorityColor={getPriorityColor}
-                                                getPriorityTextColor={getPriorityTextColor}
-                                                getStatusColor={getStatusColor}
-                                                compact
-                                                draggable
-                                            />
+                                <i className="fas fa-plus" />
+                                Add list
+                            </button>
+                        </div>
+                    )}
+                <div
+                    className="grid gap-4 grid-cols-1 md:grid-cols-4"
+                    style={userTaskLists.length > 0 ? { gridTemplateColumns: `repeat(${userTaskLists.length}, minmax(200px, 1fr))` } : undefined}
+                >
+                    {userTaskLists.length > 0 ? (
+                        kanbanTasksByList.map(({ list, tasks: listTasks }) => {
+                            const handleDragOver = (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.currentTarget.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50');
+                                if (isDark) e.currentTarget.classList.add('bg-blue-900', 'bg-opacity-20');
+                                else e.currentTarget.classList.add('bg-blue-50');
+                            };
+                            const handleDragLeave = (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const relatedTarget = e.relatedTarget;
+                                if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+                                    e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
+                                }
+                            };
+                            const handleDrop = (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
+                                const taskId = e.dataTransfer.getData('taskId');
+                                if (!taskId) return;
+                                const task = tasks.find(t => String(t.id) === String(taskId));
+                                if (task && String(task.listId || '') !== String(list.id)) {
+                                    handleMoveTaskToList(task, list, true);
+                                }
+                            };
+                            return (
+                                <div
+                                    key={list.id}
+                                    data-list-id={list.id}
+                                    className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 transition-all`}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
+                                >
+                                    <div className="flex items-center justify-between gap-2 mb-4">
+                                        <div className="min-w-0 flex-1">
+                                            {editingListId === list.id ? (
+                                                <input
+                                                    type="text"
+                                                    value={editingListName}
+                                                    onChange={(e) => setEditingListName(e.target.value)}
+                                                    onBlur={() => handleSaveListEdit(list.id)}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveListEdit(list.id); if (e.key === 'Escape') { setEditingListId(null); setEditingListName(''); } }}
+                                                    className={`w-full px-2 py-1 rounded text-sm font-semibold ${isDark ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-900 border-gray-300'} border`}
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setEditingListId(list.id); setEditingListName(list.name || ''); }}
+                                                    className={`text-left font-semibold truncate block w-full ${isDark ? 'text-white hover:text-blue-300' : 'text-gray-900 hover:text-blue-600'}`}
+                                                >
+                                                    {list.name || 'Unnamed'}
+                                                </button>
+                                            )}
                                         </div>
-                                    ))}
+                                        <span className={`text-sm shrink-0 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>({listTasks.length})</span>
+                                        <div className="relative shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => setListMenuOpenId(listMenuOpenId === list.id ? null : list.id)}
+                                                className={`p-1 rounded ${isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'}`}
+                                                aria-label="List options"
+                                            >
+                                                <i className="fas fa-ellipsis-v" />
+                                            </button>
+                                            {listMenuOpenId === list.id && (
+                                                <>
+                                                    <div className="fixed inset-0 z-10" onClick={() => setListMenuOpenId(null)} aria-hidden="true" />
+                                                    <div className={`absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg z-20 min-w-[140px] ${isDark ? 'bg-gray-700 border border-gray-600' : 'bg-white border border-gray-200'}`}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteList(list.id)}
+                                                            className={`w-full text-left px-3 py-2 text-sm ${isDark ? 'text-red-400 hover:bg-gray-600' : 'text-red-600 hover:bg-gray-50'}`}
+                                                        >
+                                                            Delete list
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 min-h-[200px]">
+                                        {listTasks.map(task => (
+                                            <div key={task.id} className="transition-all duration-200 ease-in-out">
+                                                <TaskCard
+                                                    task={task}
+                                                    isDark={isDark}
+                                                    onEdit={handleEditTask}
+                                                    onDelete={handleDeleteTask}
+                                                    onQuickStatusToggle={(t, newStatus, opt) => handleQuickStatusToggle(t, newStatus, opt)}
+                                                    clients={clients}
+                                                    projects={projects}
+                                                    tags={tags}
+                                                    getPriorityColor={getPriorityColor}
+                                                    getPriorityTextColor={getPriorityTextColor}
+                                                    getStatusColor={getStatusColor}
+                                                    compact
+                                                    draggable
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })
+                    ) : (
+                        ['todo', 'in-progress', 'completed', 'cancelled'].map(status => {
+                            const handleDragOver = (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.currentTarget.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50');
+                                if (isDark) e.currentTarget.classList.add('bg-blue-900', 'bg-opacity-20');
+                                else e.currentTarget.classList.add('bg-blue-50');
+                            };
+                            const handleDragLeave = (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const relatedTarget = e.relatedTarget;
+                                if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+                                    e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
+                                }
+                            };
+                            const handleDrop = (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
+                                const taskId = e.dataTransfer.getData('taskId');
+                                if (taskId) {
+                                    const task = tasks.find(t => String(t.id) === String(taskId));
+                                    if (task && task.status !== status) handleQuickStatusToggle(task, status, true);
+                                }
+                            };
+                            return (
+                                <div
+                                    key={status}
+                                    data-column={status}
+                                    className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 transition-all`}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
+                                >
+                                    <h3 className={`font-semibold mb-4 capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                        <span>{status.replace('-', ' ')}</span>
+                                        <span className="ml-2">({kanbanTasks[status]?.length || 0})</span>
+                                    </h3>
+                                    <div className="space-y-2 min-h-[200px]">
+                                        {(kanbanTasks[status] || []).map(task => (
+                                            <div key={task.id} className="transition-all duration-200 ease-in-out">
+                                                <TaskCard
+                                                    task={task}
+                                                    isDark={isDark}
+                                                    onEdit={handleEditTask}
+                                                    onDelete={handleDeleteTask}
+                                                    onQuickStatusToggle={handleQuickStatusToggle}
+                                                    clients={clients}
+                                                    projects={projects}
+                                                    tags={tags}
+                                                    getPriorityColor={getPriorityColor}
+                                                    getPriorityTextColor={getPriorityTextColor}
+                                                    getStatusColor={getStatusColor}
+                                                    compact
+                                                    draggable
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
                 </div>
             ) : (
                 <CalendarView
@@ -1381,6 +1641,55 @@ const TaskManagement = () => {
                     getPriorityTextColor={getPriorityTextColor}
                     getStatusColor={getStatusColor}
                 />
+            )}
+
+            {/* Add List Modal */}
+            {showAddListModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-modal="true" role="dialog">
+                    <div className="absolute inset-0 bg-black/50" onClick={() => !isAddingList && setShowAddListModal(false)} />
+                    <div className={`relative rounded-xl shadow-xl max-w-sm w-full p-4 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                        <h3 className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Add list</h3>
+                        <div className="space-y-3">
+                            <div>
+                                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Name</label>
+                                <input
+                                    type="text"
+                                    value={newListName}
+                                    onChange={(e) => setNewListName(e.target.value)}
+                                    placeholder="e.g. Backlog"
+                                    className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddList(); if (e.key === 'Escape') setShowAddListModal(false); }}
+                                />
+                            </div>
+                            <div>
+                                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Color</label>
+                                <input
+                                    type="color"
+                                    value={newListColor}
+                                    onChange={(e) => setNewListColor(e.target.value)}
+                                    className="w-full h-10 rounded border border-gray-300 cursor-pointer"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-4">
+                            <button
+                                type="button"
+                                onClick={() => !isAddingList && setShowAddListModal(false)}
+                                className={`px-3 py-2 rounded-lg ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleAddList}
+                                disabled={isAddingList || !(newListName || '').trim()}
+                                className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
+                            >
+                                {isAddingList ? 'Adding…' : 'Add list'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Task Modal */}

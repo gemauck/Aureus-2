@@ -295,6 +295,7 @@ async function handler(req, res) {
           clientId,
           projectId,
           leadId,
+          listId,
           checklist,
           photos,
           files,
@@ -334,6 +335,18 @@ async function handler(req, res) {
         if (clientId !== undefined) updateData.clientId = clientId || null
         if (projectId !== undefined) updateData.projectId = projectId || null
         if (leadId !== undefined) updateData.leadId = leadId || null
+        if (listId !== undefined) {
+          if (listId === null || listId === '') {
+            updateData.listId = null
+          } else {
+            const list = await prisma.userTaskList.findFirst({
+              where: { id: listId, ownerId: userId }
+            })
+            if (!list) return badRequest(res, 'List not found or access denied')
+            updateData.listId = listId
+            if (list.status) updateData.status = list.status
+          }
+        }
         if (checklist !== undefined) updateData.checklist = JSON.stringify(Array.isArray(checklist) ? checklist : [])
         if (photos !== undefined) updateData.photos = JSON.stringify(Array.isArray(photos) ? photos : [])
         if (files !== undefined) updateData.files = JSON.stringify(Array.isArray(files) ? files : [])
