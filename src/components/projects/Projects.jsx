@@ -222,6 +222,7 @@ const Projects = () => {
     const [waitingForTracker, setWaitingForTracker] = useState(false);
     const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
     const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, projectId: null });
+    const [rowMenuProjectId, setRowMenuProjectId] = useState(null);
     
     // All Tasks view state (when showAllTasksView is true)
     const [allTasksList, setAllTasksList] = useState([]);
@@ -5097,7 +5098,7 @@ const Projects = () => {
                                             <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
                                             <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
                                             <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
-                                            <th className={`px-4 sm:px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}><span className="sr-only">View</span></th>
+                                            <th className={`px-4 sm:px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'} w-16`}><span className="sr-only">Actions</span></th>
                                         </tr>
                                     </thead>
                                     <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -5132,10 +5133,32 @@ const Projects = () => {
                                                 <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.tasksCount || 0}</div>
                                                 </td>
-                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap text-right">
-                                                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${isDark ? 'text-gray-500 group-hover/row:text-blue-400' : 'text-gray-400 group-hover/row:text-blue-600'}`} aria-hidden="true">
-                                                        <i className="fas fa-chevron-right text-xs"></i>
-                                                    </span>
+                                                <td className="px-4 sm:px-6 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
+                                                    <div className="relative inline-block">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => { e.stopPropagation(); setRowMenuProjectId(prev => prev === project.id ? null : project.id); }}
+                                                            className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                                                            aria-label="Project actions"
+                                                            aria-expanded={rowMenuProjectId === project.id}
+                                                        >
+                                                            <i className="fas fa-ellipsis-v text-sm"></i>
+                                                        </button>
+                                                        {rowMenuProjectId === project.id && (
+                                                            <>
+                                                                <div className="fixed inset-0 z-10" aria-hidden="true" onClick={() => setRowMenuProjectId(null)} />
+                                                                <div className={`absolute right-0 top-full mt-1 z-20 min-w-[120px] py-1 rounded-lg shadow-lg border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => { handleDeleteProject(project.id); setRowMenuProjectId(null); }}
+                                                                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-gray-50'}`}
+                                                                    >
+                                                                        <i className="fas fa-trash text-xs"></i> Delete
+                                                                    </button>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -5159,12 +5182,13 @@ const Projects = () => {
                                     <div className="table-responsive overflow-x-auto min-w-0">
                                         <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                             <colgroup>
-                                                <col style={{ width: '30%' }} />
-                                                <col style={{ width: '18%' }} />
+                                                <col style={{ width: '28%' }} />
+                                                <col style={{ width: '16%' }} />
                                                 <col style={{ width: '12%' }} />
                                                 <col style={{ width: '16%' }} />
                                                 <col style={{ width: '16%' }} />
-                                                <col style={{ width: '8%' }} />
+                                                <col style={{ width: '6%' }} />
+                                                <col style={{ width: '6%' }} />
                                             </colgroup>
                                             <thead className={isDark ? 'bg-gray-900 border-b border-gray-800' : 'bg-white border-b border-gray-100'}>
                                                 <tr>
@@ -5174,6 +5198,7 @@ const Projects = () => {
                                                     <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dates</th>
                                                     <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Assigned To</th>
                                                     <th className={`px-4 sm:px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasks</th>
+                                                    <th className={`px-4 sm:px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'} w-16`}><span className="sr-only">Actions</span></th>
                                                 </tr>
                                             </thead>
                                             <tbody className={`${isDark ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-100'} divide-y`}>
@@ -5204,6 +5229,33 @@ const Projects = () => {
                                                         </td>
                                                         <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.tasksCount || 0}</div>
+                                                        </td>
+                                                        <td className="px-4 sm:px-6 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
+                                                            <div className="relative inline-block">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); setRowMenuProjectId(prev => prev === project.id ? null : project.id); }}
+                                                                    className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                                                                    aria-label="Project actions"
+                                                                    aria-expanded={rowMenuProjectId === project.id}
+                                                                >
+                                                                    <i className="fas fa-ellipsis-v text-sm"></i>
+                                                                </button>
+                                                                {rowMenuProjectId === project.id && (
+                                                                    <>
+                                                                        <div className="fixed inset-0 z-10" aria-hidden="true" onClick={() => setRowMenuProjectId(null)} />
+                                                                        <div className={`absolute right-0 top-full mt-1 z-20 min-w-[120px] py-1 rounded-lg shadow-lg border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => { handleDeleteProject(project.id); setRowMenuProjectId(null); }}
+                                                                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-gray-50'}`}
+                                                                            >
+                                                                                <i className="fas fa-trash text-xs"></i> Delete
+                                                                            </button>
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
