@@ -1447,9 +1447,9 @@ const gridColumns = React.useMemo(() => (
     // ============================================================
     
     const statusOptions = [
-        { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 font-semibold', cellColor: 'bg-white border border-gray-300' },
-        { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm' },
-        { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm' }
+        { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 dark:text-gray-300 font-semibold', cellColor: 'bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-600' },
+        { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500' },
+        { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500' }
     ];
     
     const getStatusConfig = (status) => {
@@ -3119,11 +3119,11 @@ const getAssigneeColor = (identifier, users) => {
             cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
         }
         
-        const baseTextColorClass = statusConfig && statusConfig.color 
-            ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
-            : 'text-gray-400';
-        
-        const textColorClass = isSelected ? 'text-white' : baseTextColorClass;
+const baseTextColorClass = statusConfig && statusConfig.color
+            ? statusConfig.color.split(' ').filter(cls => cls.startsWith('text-') || cls.startsWith('dark:')).join(' ') || 'text-gray-900 dark:text-gray-100'
+            : 'text-gray-400 dark:text-gray-400';
+
+        const textColorClass = isSelected ? 'text-white dark:text-gray-100' : baseTextColorClass;
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -4569,7 +4569,7 @@ placeholder="Notes..."
                     {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
                             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                                <div className={`w-4 h-4 rounded-full ${option.cellColor || 'bg-gray-200'} ring-2 ring-white shadow-sm`}></div>
+                                <div className={`w-4 h-4 rounded-full ${option.cellColor || 'bg-gray-200 dark:bg-gray-600'} ring-2 ring-white dark:ring-gray-700 shadow-sm`}></div>
                                 <span className="text-xs font-medium text-gray-700">{option.label}</span>
                             </div>
                             {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}

@@ -632,13 +632,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     // Status config
     const getStatusConfig = (status) => {
         const configs = {
-            'not-started': { label: 'Not Started', color: 'bg-red-100 text-red-800', cellColor: 'bg-red-50' },
-            'data-received': { label: 'Data Received', color: 'bg-orange-100 text-orange-800', cellColor: 'bg-orange-50' },
-            'in-progress': { label: 'In Progress', color: 'bg-yellow-100 text-yellow-800', cellColor: 'bg-yellow-50' },
-            'ready-checking': { label: 'Ready for Checking', color: 'bg-lime-100 text-lime-800', cellColor: 'bg-lime-50' },
-            'checked': { label: 'Checked', color: 'bg-cyan-100 text-cyan-800', cellColor: 'bg-cyan-50' },
-            'reports-prepared': { label: 'Reports Prepared', color: 'bg-blue-100 text-blue-800', cellColor: 'bg-blue-50' },
-            'done': { label: 'Done', color: 'bg-green-100 text-green-800', cellColor: 'bg-green-50' }
+            'not-started': { label: 'Not Started', color: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200', cellColor: 'bg-red-50 dark:bg-red-900/40' },
+            'data-received': { label: 'Data Received', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200', cellColor: 'bg-orange-50 dark:bg-orange-900/40' },
+            'in-progress': { label: 'In Progress', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200', cellColor: 'bg-yellow-50 dark:bg-yellow-900/40' },
+            'ready-checking': { label: 'Ready for Checking', color: 'bg-lime-100 text-lime-800 dark:bg-lime-900/50 dark:text-lime-200', cellColor: 'bg-lime-50 dark:bg-lime-900/40' },
+            'checked': { label: 'Checked', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200', cellColor: 'bg-cyan-50 dark:bg-cyan-900/40' },
+            'reports-prepared': { label: 'Reports Prepared', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200', cellColor: 'bg-blue-50 dark:bg-blue-900/40' },
+            'done': { label: 'Done', color: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200', cellColor: 'bg-green-50 dark:bg-green-900/40' }
         };
         return configs[String(status || '')] || configs['not-started'];
     };

@@ -930,10 +930,68 @@ async function handler(req, res) {
         
         
         // Phase 5: Sync contacts and comments to normalized tables after client creation
+        // Accept both *Jsonb and plain names (e.g. lead conversion sends contacts/sites/comments)
+        const contactsToSync = Array.isArray(clientData.contactsJsonb) && clientData.contactsJsonb.length > 0
+          ? clientData.contactsJsonb
+          : (Array.isArray(clientData.contacts) ? clientData.contacts : [])
+        const commentsToSync = Array.isArray(clientData.commentsJsonb) && clientData.commentsJsonb.length > 0
+          ? clientData.commentsJsonb
+          : (Array.isArray(clientData.comments) ? clientData.comments : [])
+        const sitesToSync = Array.isArray(clientData.sitesJsonb) && clientData.sitesJsonb.length > 0
+          ? clientData.sitesJsonb
+          : (Array.isArray(clientData.sites) ? clientData.sites : [])
+        const contractsToSync = Array.isArray(clientData.contractsJsonb) && clientData.contractsJsonb.length > 0
+          ? clientData.contractsJsonb
+          : (Array.isArray(clientData.contracts) ? clientData.contracts : [])
+        const proposalsToSync = Array.isArray(clientData.proposalsJsonb) && clientData.proposalsJsonb.length > 0
+          ? clientData.proposalsJsonb
+          : (Array.isArray(clientData.proposals) ? clientData.proposals : [])
+        const followUpsToSync = Array.isArray(clientData.followUpsJsonb) && clientData.followUpsJsonb.length > 0
+          ? clientData.followUpsJsonb
+          : (Array.isArray(clientData.followUps) ? clientData.followUps : [])
+
         try {
-          // Sync contacts if provided - use upsert to handle duplicates
-          if (clientData.contactsJsonb && Array.isArray(clientData.contactsJsonb) && clientData.contactsJsonb.length > 0) {
-            for (const contact of clientData.contactsJsonb) {
+          // Sync sites first so contact.siteId can reference them (e.g. lead conversion)
+          if (sitesToSync.length > 0) {
+            for (const site of sitesToSync) {
+              const siteData = {
+                clientId: client.id,
+                name: site.name || '',
+                address: site.address || '',
+                contactPerson: site.contactPerson || '',
+                contactPhone: site.contactPhone || '',
+                contactEmail: site.contactEmail || '',
+                notes: site.notes || '',
+                siteLead: site.siteLead != null ? String(site.siteLead) : '',
+                engagementStage: (site.engagementStage != null && String(site.engagementStage).trim() !== '') ? String(site.engagementStage) : 'Potential',
+                aidaStatus: (site.aidaStatus != null && String(site.aidaStatus).trim() !== '') ? String(site.aidaStatus) : 'Awareness',
+                siteType: site.siteType === 'client' ? 'client' : 'lead'
+              }
+              
+              if (site.id) {
+                try {
+                  await prisma.clientSite.create({
+                    data: { id: site.id, ...siteData }
+                  })
+                } catch (createError) {
+                  if (createError.code === 'P2002') {
+                    await prisma.clientSite.update({
+                      where: { id: site.id },
+                      data: siteData
+                    })
+                  } else {
+                    throw createError
+                  }
+                }
+              } else {
+                await prisma.clientSite.create({ data: siteData })
+              }
+            }
+          }
+
+          // Sync contacts if provided - use upsert to handle duplicates (siteId valid after sites created)
+          if (contactsToSync.length > 0) {
+            for (const contact of contactsToSync) {
               const contactData = {
                 clientId: client.id,
                 name: contact.name || '',
@@ -943,7 +1001,8 @@ async function handler(req, res) {
                 role: contact.role || null,
                 title: contact.title || contact.department || null,
                 isPrimary: !!contact.isPrimary,
-                notes: contact.notes || ''
+                notes: contact.notes || '',
+                siteId: (contact.siteId && String(contact.siteId).trim() !== '') ? contact.siteId : null
               }
               
               if (contact.id) {
@@ -976,7 +1035,7 @@ async function handler(req, res) {
           }
           
           // Sync comments if provided - use upsert to handle duplicates
-          if (clientData.commentsJsonb && Array.isArray(clientData.commentsJsonb) && clientData.commentsJsonb.length > 0) {
+          if (commentsToSync.length > 0) {
             const userId = ownerId || null
             let authorName = ''
             let userName = ''
@@ -996,7 +1055,7 @@ async function handler(req, res) {
               }
             }
             
-            for (const comment of clientData.commentsJsonb) {
+            for (const comment of commentsToSync) {
               // Map frontend field names (createdBy/createdById/createdByEmail) to database fields (author/authorId/userName)
               // Support both naming conventions for backward compatibility
               const commentData = {
@@ -1037,44 +1096,9 @@ async function handler(req, res) {
             }
           }
           
-          // Phase 6: Sync sites, contracts, proposals, followUps, services to normalized tables
-          // Sync sites if provided
-          if (clientData.sitesJsonb && Array.isArray(clientData.sitesJsonb) && clientData.sitesJsonb.length > 0) {
-            for (const site of clientData.sitesJsonb) {
-              const siteData = {
-                clientId: client.id,
-                name: site.name || '',
-                address: site.address || '',
-                contactPerson: site.contactPerson || '',
-                contactPhone: site.contactPhone || '',
-                contactEmail: site.contactEmail || '',
-                notes: site.notes || ''
-              }
-              
-              if (site.id) {
-                try {
-                  await prisma.clientSite.create({
-                    data: { id: site.id, ...siteData }
-                  })
-                } catch (createError) {
-                  if (createError.code === 'P2002') {
-                    await prisma.clientSite.update({
-                      where: { id: site.id },
-                      data: siteData
-                    })
-                  } else {
-                    throw createError
-                  }
-                }
-              } else {
-                await prisma.clientSite.create({ data: siteData })
-              }
-            }
-          }
-          
           // Sync contracts if provided
-          if (clientData.contractsJsonb && Array.isArray(clientData.contractsJsonb) && clientData.contractsJsonb.length > 0) {
-            for (const contract of clientData.contractsJsonb) {
+          if (contractsToSync.length > 0) {
+            for (const contract of contractsToSync) {
               const contractData = {
                 clientId: client.id,
                 name: contract.name || '',
@@ -1106,8 +1130,8 @@ async function handler(req, res) {
           }
           
           // Sync proposals if provided
-          if (clientData.proposalsJsonb && Array.isArray(clientData.proposalsJsonb) && clientData.proposalsJsonb.length > 0) {
-            for (const proposal of clientData.proposalsJsonb) {
+          if (proposalsToSync.length > 0) {
+            for (const proposal of proposalsToSync) {
               const proposalData = {
                 clientId: client.id,
                 title: proposal.title || '',
@@ -1141,8 +1165,8 @@ async function handler(req, res) {
           }
           
           // Sync followUps if provided
-          if (clientData.followUpsJsonb && Array.isArray(clientData.followUpsJsonb) && clientData.followUpsJsonb.length > 0) {
-            for (const followUp of clientData.followUpsJsonb) {
+          if (followUpsToSync.length > 0) {
+            for (const followUp of followUpsToSync) {
               const followUpData = {
                 clientId: client.id,
                 date: followUp.date || '',

@@ -1868,19 +1868,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Document Collection Checklist: Requested, Not Collected, Ongoing, Collected, Unavailable, Available on Request, Not Required (pastel)
     // optionStyle: inline colors for <option> elements in dropdowns (browser support varies)
     const documentCollectionStatusOptions = [
-        { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-sky-800 font-semibold', cellColor: 'bg-sky-200 border-l-4 border-sky-400 shadow-sm', optionStyle: { backgroundColor: '#bae6fd', color: '#075985' } },
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-800 font-semibold', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm', optionStyle: { backgroundColor: '#fecaca', color: '#9f1239' } },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
-        { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm', optionStyle: { backgroundColor: '#e2e8f0', color: '#334155' } },
-        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm', optionStyle: { backgroundColor: '#ddd6fe', color: '#5b21b6' } },
-        { value: 'not-required', label: 'Not Required', color: 'bg-gray-200 text-gray-800 font-semibold', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } }
+        { value: 'requested', label: 'Requested', color: 'bg-sky-200 text-sky-800 font-semibold dark:bg-sky-900/70 dark:text-sky-200', cellColor: 'bg-sky-200 border-l-4 border-sky-400 shadow-sm dark:bg-sky-900/70 dark:border-sky-500', optionStyle: { backgroundColor: '#bae6fd', color: '#075985' } },
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-800 font-semibold dark:bg-red-900/60 dark:text-red-200', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm dark:bg-red-900/60 dark:border-red-500', optionStyle: { backgroundColor: '#fecaca', color: '#9f1239' } },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold dark:bg-amber-900/60 dark:text-amber-200', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm dark:bg-amber-900/60 dark:border-amber-500', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
+        { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold dark:bg-slate-700 dark:text-slate-200', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm dark:bg-slate-700 dark:border-slate-500', optionStyle: { backgroundColor: '#e2e8f0', color: '#334155' } },
+        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold dark:bg-violet-900/60 dark:text-violet-200', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm dark:bg-violet-900/60 dark:border-violet-500', optionStyle: { backgroundColor: '#ddd6fe', color: '#5b21b6' } },
+        { value: 'not-required', label: 'Not Required', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-700 dark:text-gray-200', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-700 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } }
     ];
     // Monthly Data Review: Not Started, Started, Complete (Complete = stored as 'done' for backward compatibility)
     const monthlyDataReviewStatusOptions = [
-        { value: 'not-done', label: 'Not Started', color: 'bg-rose-200 text-rose-800 font-semibold', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm', optionStyle: { backgroundColor: '#fecdd3', color: '#9f1239' } },
-        { value: 'in-progress', label: 'Started', color: 'bg-amber-200 text-amber-800 font-semibold', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
-        { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } }
+        { value: 'not-done', label: 'Not Started', color: 'bg-rose-200 text-rose-800 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500', optionStyle: { backgroundColor: '#fecdd3', color: '#9f1239' } },
+        { value: 'in-progress', label: 'Started', color: 'bg-amber-200 text-amber-800 font-semibold dark:bg-amber-900/60 dark:text-amber-200', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm dark:bg-amber-900/60 dark:border-amber-500', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
+        { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } }
     ];
     const statusOptions = isJsonOnlyTracker ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
 
@@ -3903,14 +3903,14 @@ const getAssigneeColor = (identifier, users) => {
         
         // Add selection styling (with higher priority) - pastel
         if (isSelected) {
-            cellBackgroundClass = 'bg-sky-200 border-2 border-sky-400';
+            cellBackgroundClass = 'bg-sky-200 border-2 border-sky-400 dark:bg-sky-800 dark:border-sky-500';
         }
         
-        const baseTextColorClass = statusConfig && statusConfig.color 
-            ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
-            : 'text-gray-400';
+const baseTextColorClass = statusConfig && statusConfig.color
+            ? statusConfig.color.split(' ').filter(cls => cls.startsWith('text-') || cls.startsWith('dark:')).join(' ') || 'text-gray-900 dark:text-gray-100'
+            : 'text-gray-400 dark:text-gray-400';
         
-        const textColorClass = isSelected ? 'text-sky-900' : baseTextColorClass;
+        const textColorClass = isSelected ? 'text-sky-900 dark:text-sky-100' : baseTextColorClass;
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
