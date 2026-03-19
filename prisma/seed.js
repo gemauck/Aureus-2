@@ -305,33 +305,38 @@ async function main() {
     }
   ])
 
-  const client = await prisma.client.create({ 
-    data: { 
-      name: 'Acme Corp', 
-      type: 'client', 
-      ownerId: user.id,
-      industry: 'Mining',
-      engagementStage: 'Active',
-      aidaStatus: 'Awareness',
-      revenue: 125000,
-      address: '123 Mining Street, Johannesburg, 2001',
-      website: 'https://acmecorp.com',
-      notes: 'Key client in mining sector. Annual service contract for fuel management systems.',
-      followUps,
-      contracts,
-      comments,
-      contacts,
-      activityLog
-    } 
-  })
+  // Only create Acme Corp + Initial Project when DB has no projects (initial setup). If user deleted "Initial Project", don't re-create it on seed.
+  const projectCount = await prisma.project.count()
+  if (projectCount === 0) {
+    const client = await prisma.client.create({ 
+      data: { 
+        name: 'Acme Corp', 
+        type: 'client', 
+        ownerId: user.id,
+        industry: 'Mining',
+        engagementStage: 'Active',
+        aidaStatus: 'Awareness',
+        revenue: 125000,
+        address: '123 Mining Street, Johannesburg, 2001',
+        website: 'https://acmecorp.com',
+        notes: 'Key client in mining sector. Annual service contract for fuel management systems.',
+        followUps,
+        contracts,
+        comments,
+        contacts,
+        activityLog
+      } 
+    })
 
-  const project = await prisma.project.create({ data: { name: 'Initial Project', clientId: client.id, ownerId: user.id } })
-  await prisma.task.create({ data: { title: 'First Task', projectId: project.id, assigneeId: user.id } })
+    const project = await prisma.project.create({ data: { name: 'Initial Project', clientId: client.id, ownerId: user.id } })
+    await prisma.task.create({ data: { title: 'First Task', projectId: project.id, assigneeId: user.id } })
 
-  console.log('✅ Seed complete - Acme Corp created with test data for all tabs')
-  console.log('📅 Calendar: 2 follow-ups added')
-  console.log('📄 Contracts: 1 service contract added')
-  console.log('📝 Notes: 2 comments added')
+    console.log('📅 Calendar: 2 follow-ups added')
+    console.log('📄 Contracts: 1 service contract added')
+    console.log('📝 Notes: 2 comments added')
+  } else {
+    console.log('✅ Seed complete - Acme Corp/Initial Project skipped (projects already exist)')
+  }
 }
 
 main()

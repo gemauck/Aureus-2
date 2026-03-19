@@ -1414,6 +1414,14 @@ const DatabaseAPI = {
         const response = await this.makeRequest(`/projects/${id}`, {
             method: 'DELETE'
         });
+        // Clear all project list/detail cache so next getProjects() returns fresh data (deleted project won't reappear)
+        try {
+            const keysToDelete = [];
+            for (const key of this._responseCache.keys()) {
+                if (typeof key === 'string' && key.startsWith('GET:/projects')) keysToDelete.push(key);
+            }
+            keysToDelete.forEach(k => this._responseCache.delete(k));
+        } catch (_) {}
         return response;
     },
 
