@@ -5338,6 +5338,8 @@ try {
         window.dispatchEvent(new CustomEvent('projectsComponentReady', { 
             detail: { version: '20251112-list-view', hasListView: true } 
         }));
+        // Notify that the FULL Projects component (with per-client view) is available
+        window.dispatchEvent(new CustomEvent('projectsFullComponentReady'));
     }
 } catch (error) {
     console.error('❌ Error registering Projects component:', error);

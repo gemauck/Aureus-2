@@ -765,12 +765,17 @@ const MainLayout = () => {
     }, []);
     
     const [projectsComponentReady, setProjectsComponentReady] = React.useState(false);
+    // When true, full Projects.jsx (with per-client view) has loaded; re-resolve to use it
+    const [projectsFullComponentReady, setProjectsFullComponentReady] = React.useState(!!(typeof window !== 'undefined' && window.Projects));
 
     React.useEffect(() => {
         const checkProjects = () => {
             const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
             if (ProjectsComponent && typeof ProjectsComponent === 'function') {
                 setProjectsComponentReady(true);
+                if (window.Projects && typeof window.Projects === 'function') {
+                    setProjectsFullComponentReady(true);
+                }
                 return true;
             }
             return false;
@@ -783,7 +788,12 @@ const MainLayout = () => {
                 window.removeEventListener('projectsComponentReady', handleReady);
             }
         };
+        const handleFullReady = () => {
+            setProjectsFullComponentReady(true);
+            window.removeEventListener('projectsFullComponentReady', handleFullReady);
+        };
         window.addEventListener('projectsComponentReady', handleReady);
+        window.addEventListener('projectsFullComponentReady', handleFullReady);
 
         let intervalId = null;
         const maxAttempts = 20;
@@ -793,30 +803,33 @@ const MainLayout = () => {
             if (checkProjects() || attempts >= maxAttempts) {
                 clearInterval(intervalId);
                 window.removeEventListener('projectsComponentReady', handleReady);
+                window.removeEventListener('projectsFullComponentReady', handleFullReady);
             }
         }, 1000);
 
         const timeout = setTimeout(() => {
             if (intervalId) clearInterval(intervalId);
             window.removeEventListener('projectsComponentReady', handleReady);
+            window.removeEventListener('projectsFullComponentReady', handleFullReady);
         }, 21000);
 
         return () => {
             if (intervalId) clearInterval(intervalId);
             clearTimeout(timeout);
             window.removeEventListener('projectsComponentReady', handleReady);
+            window.removeEventListener('projectsFullComponentReady', handleFullReady);
         };
     }, []);
     
     const Projects = React.useMemo(() => {
-        // Prefer window.Projects (main component), then ProjectsDatabaseFirst, then ProjectsSimple
+        // Prefer window.Projects (main component with per-client view), then fallbacks
         const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
         
         if (ProjectsComponent) {
             return ProjectsComponent;
         }
         return () => <div className="text-center py-12 text-gray-500">Projects loading...</div>;
-    }, [projectsComponentReady]);
+    }, [projectsComponentReady, projectsFullComponentReady]);
     
     // Users component loading state
     const [usersComponentReady, setUsersComponentReady] = React.useState(
