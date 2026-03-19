@@ -348,7 +348,7 @@ const LoginPage = () => {
                     border: none;
                     border-radius: 0.72rem;
                     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-                    color: #ffffff;
+                    color: #ffffff !important;
                     font-size: 0.98rem;
                     font-weight: 650;
                     cursor: pointer;
@@ -359,11 +359,19 @@ const LoginPage = () => {
                 .submit-button:hover:not(:disabled) {
                     transform: translateY(-1px);
                     box-shadow: 0 11px 22px rgba(37, 99, 235, 0.34);
+                    color: #ffffff !important;
+                }
+
+                .submit-button:focus,
+                .submit-button:active,
+                .submit-button:visited {
+                    color: #ffffff !important;
                 }
 
                 .submit-button:disabled {
                     opacity: 0.75;
                     cursor: not-allowed;
+                    color: #ffffff !important;
                 }
 
                 .forgot-password {
