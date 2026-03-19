@@ -39,9 +39,12 @@ export function ok(res, data) {
   } catch (e) {
     console.error('ok(): serialization failed', e)
     if (!res.headersSent) {
+      const details = e && typeof e.message === 'string' ? e.message : 'Unknown'
+      const body = JSON.stringify({ error: { code: 'SERVER_ERROR', message: 'Response serialization failed', details } })
       res.statusCode = 500
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ error: { code: 'SERVER_ERROR', message: 'Response serialization failed', details: e.message } }))
+      res.setHeader('Content-Length', Buffer.byteLength(body, 'utf8'))
+      res.end(body)
     }
     return
   }
@@ -179,22 +182,27 @@ export function serverError(res, message = 'Server error', details) {
     errorDetails = 'The database server is unreachable. Please check your network connection and ensure the database server is running.'
   }
   
-  // In development, include more details
+  // In development, include more details (only primitives so JSON never fails with circular ref / "Unexpected token")
   const isDevelopment = process.env.NODE_ENV === 'development'
+  const safeMessage = typeof errorMessage === 'string' ? errorMessage : String(errorMessage ?? 'Server error')
+  const safeDetails = errorDetails != null && typeof errorDetails !== 'object' ? errorDetails : String(errorDetails ?? '')
   const response = {
     error: {
       code: errorCode,
-      message: errorMessage,
-      details: errorDetails
+      message: safeMessage,
+      details: safeDetails
     }
   }
-  
-  // Include full error details in development (use safe replacer in case details contain BigInt or other non-JSON values)
-  if (isDevelopment && details) {
-    response.error.fullDetails = details
+  if (isDevelopment && details != null) {
+    response.error.fullDetails = typeof details === 'string' ? details : String(details)
   }
-  
-  const serialized = JSON.stringify(response, safeJsonReplacer)
+
+  let serialized
+  try {
+    serialized = JSON.stringify(response, safeJsonReplacer)
+  } catch (stringifyErr) {
+    serialized = JSON.stringify({ error: { code: 'SERVER_ERROR', message: 'Error response serialization failed', details: String(stringifyErr?.message || '') } })
+  }
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 500

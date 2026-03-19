@@ -1187,11 +1187,17 @@ app.all('/api/clients', async (req, res, next) => {
     console.error('❌ Error in clients handler:', e)
     console.error('❌ Error stack:', e.stack)
     if (!res.headersSent) {
-      return res.status(500).json({ 
+      // Use only primitive values so JSON is always valid (avoids circular ref / "Unexpected token" on client)
+      const safeMessage = e && typeof e.message === 'string' ? e.message : 'Internal server error'
+      const body = JSON.stringify({
         error: 'Internal server error',
-        message: e.message,
+        message: safeMessage,
         timestamp: new Date().toISOString()
       })
+      res.statusCode = 500
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Content-Length', Buffer.byteLength(body, 'utf8'))
+      return res.end(body)
     }
     return next(e)
   }

@@ -649,7 +649,22 @@ async function handler(req, res) {
         res.setHeader('Expires', '0')
         res.setHeader('X-Client-Count', String(parsedClients.length))
 
-        return ok(res, { clients: parsedClients })
+        try {
+          return ok(res, { clients: parsedClients })
+        } catch (sendErr) {
+          // If serialization/send fails, respond with safe JSON 500 so client never sees invalid body
+          console.error('❌ GET /api/clients: failed to serialize or send response:', sendErr?.message || sendErr)
+          if (!res.headersSent) {
+            const safeBody = JSON.stringify({
+              error: { code: 'SERVER_ERROR', message: 'Response serialization failed', details: String(sendErr?.message || 'Unknown error') }
+            })
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.setHeader('Content-Length', Buffer.byteLength(safeBody, 'utf8'))
+            res.end(safeBody)
+          }
+        }
+        return
       } catch (dbError) {
         // Log the error immediately with full details
         console.error('❌ Database error in GET /api/clients:', {

@@ -75,25 +75,21 @@ export function withLogging(handler) {
       // If response hasn't been sent, try to send an error response
       if (!res.headersSent && !res.writableEnded) {
         try {
+          const msg = e && typeof e.message === 'string' ? e.message : 'An error occurred'
           const errorResponse = {
-            error: 'Internal server error',
-            message: process.env.NODE_ENV === 'development' ? e.message : 'An error occurred processing your request',
+            error: isDbError ? 'DATABASE_CONNECTION_ERROR' : 'Internal server error',
+            message: isDbError ? 'Database connection failed. The database server is unreachable.' : (process.env.NODE_ENV === 'development' ? msg : 'An error occurred processing your request'),
             requestId: id,
             timestamp: new Date().toISOString()
           }
-          
-          // Include error code in development
           if (process.env.NODE_ENV === 'development' && e.code) {
-            errorResponse.errorCode = e.code
+            errorResponse.errorCode = String(e.code)
           }
-          
-          // If it's a database connection error, provide a more helpful message
-          if (isDbError) {
-            errorResponse.error = 'DATABASE_CONNECTION_ERROR'
-            errorResponse.message = 'Database connection failed. The database server is unreachable.'
-          }
-          
-          res.status(500).json(errorResponse)
+          const body = JSON.stringify(errorResponse)
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Content-Length', Buffer.byteLength(body, 'utf8'))
+          res.end(body)
         } catch (sendError) {
           // If we can't send the error response, log it
           logger.error({ id, sendError: sendError.message }, 'failed to send error response')
