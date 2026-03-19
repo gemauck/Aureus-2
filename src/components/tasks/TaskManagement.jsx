@@ -1436,18 +1436,16 @@ const TaskManagement = () => {
                 </div>
             ) : view === 'kanban' ? (
                 <div className="space-y-4">
-                    {userTaskLists.length > 0 && (
-                        <div className="flex justify-end">
-                            <button
-                                type="button"
-                                onClick={() => { setShowAddListModal(true); setNewListName(''); setNewListColor('#3B82F6'); }}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
-                            >
-                                <i className="fas fa-plus" />
-                                Add list
-                            </button>
-                        </div>
-                    )}
+                    <div className="flex justify-end">
+                        <button
+                            type="button"
+                            onClick={() => { setShowAddListModal(true); setNewListName(''); setNewListColor('#3B82F6'); }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
+                        >
+                            <i className="fas fa-plus" />
+                            Add list
+                        </button>
+                    </div>
                 <div
                     className="grid gap-4 grid-cols-1 md:grid-cols-4"
                     style={userTaskLists.length > 0 ? { gridTemplateColumns: `repeat(${userTaskLists.length}, minmax(200px, 1fr))` } : undefined}
