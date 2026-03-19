@@ -42,8 +42,6 @@ const SettingsModal = ({ isOpen, onClose }) => {
     const tabs = [
         { id: 'general', label: 'General', icon: 'fa-cog' },
         { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
-        { id: 'security', label: 'Security', icon: 'fa-shield-alt' },
-        { id: 'integrations', label: 'Integrations', icon: 'fa-plug' },
         { id: 'data', label: 'Data Management', icon: 'fa-database' }
     ];
 
@@ -526,10 +524,6 @@ const SettingsModal = ({ isOpen, onClose }) => {
                 return renderGeneralSettings();
             case 'notifications':
                 return renderNotificationsSettings();
-            case 'security':
-                return renderSecuritySettings();
-            case 'integrations':
-                return renderIntegrationsSettings();
             case 'data':
                 return renderDataManagement();
             default:
