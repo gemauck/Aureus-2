@@ -51,6 +51,10 @@ const MyNotes = () => {
     const [clients, setClients] = useState([]);
     const [projects, setProjects] = useState([]);
     const [clientProjects, setClientProjects] = useState([]);
+    const [expandedNoteActivityId, setExpandedNoteActivityId] = useState(null);
+    const [noteActivityByNoteId, setNoteActivityByNoteId] = useState({});
+    const [editorActivityPanelOpen, setEditorActivityPanelOpen] = useState(false);
+    const [noteActivityForEditor, setNoteActivityForEditor] = useState([]);
 
     const showToast = useCallback((message, type = 'info') => {
         setToast({ message, type });
@@ -156,6 +160,35 @@ const MyNotes = () => {
             setClientProjects([]);
         }
     }, [selectedNote?.id, selectedNote?.clientId, selectedNote?.client?.id, loadProjectsForClient]);
+
+    /** Load activity for a single note (only when note is linked to a project). */
+    const loadActivityForNote = useCallback(async (noteId, projectId) => {
+        if (!projectId || !noteId) return [];
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return [];
+            const url = `/api/project-activity-logs?projectId=${encodeURIComponent(projectId)}&noteId=${encodeURIComponent(noteId)}&limit=50`;
+            const base = window.location.origin;
+            const response = await fetch(`${base}${url}`, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
+            if (!response.ok) return [];
+            const data = await response.json();
+            const logs = data?.data?.logs ?? data?.logs ?? (Array.isArray(data) ? data : []);
+            return Array.isArray(logs) ? logs : [];
+        } catch (err) {
+            console.warn('Failed to load note activity:', err?.message);
+            return [];
+        }
+    }, []);
+
+    // Load editor note activity when selected note has projectId
+    useEffect(() => {
+        if (!selectedNote?.id || !selectedNote?.projectId || !loadActivityForNote) return;
+        let cancelled = false;
+        loadActivityForNote(selectedNote.id, selectedNote.projectId).then((logs) => {
+            if (!cancelled) setNoteActivityForEditor(Array.isArray(logs) ? logs : []);
+        });
+        return () => { cancelled = true; };
+    }, [selectedNote?.id, selectedNote?.projectId, loadActivityForNote]);
 
     // Filter notes: search + tag, sort pinned first then updatedAt
     useEffect(() => {
@@ -414,6 +447,9 @@ const MyNotes = () => {
                 }
                 setLastSavedAt(Date.now());
                 loadNotes({ silent: true });
+                if (savedNote.projectId && (savedNote.id || note.id)) {
+                    loadActivityForNote(savedNote.id || note.id, savedNote.projectId).then((logs) => setNoteActivityForEditor(Array.isArray(logs) ? logs : []));
+                }
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 showToast(`Failed to save: ${errorData.message || response.statusText}`, 'error');
@@ -466,6 +502,23 @@ const MyNotes = () => {
         setSelectedUsersToShare(note.sharedWith?.map(s => s.userId || s.id) || []);
         setShowShareModal(true);
     };
+
+    const handleToggleNoteActivity = useCallback((e, note) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (expandedNoteActivityId === note.id) {
+            setExpandedNoteActivityId(null);
+            return;
+        }
+        setExpandedNoteActivityId(note.id);
+        if (note.projectId && !noteActivityByNoteId[note.id]) {
+            loadActivityForNote(note.id, note.projectId).then((logs) => {
+                setNoteActivityByNoteId(prev => ({ ...prev, [note.id]: Array.isArray(logs) ? logs : [] }));
+            });
+        } else if (!note.projectId) {
+            setNoteActivityByNoteId(prev => ({ ...prev, [note.id]: [] }));
+        }
+    }, [expandedNoteActivityId, noteActivityByNoteId, loadActivityForNote]);
 
     const handleSaveShare = async () => {
         try {
@@ -656,17 +709,19 @@ const MyNotes = () => {
                 </header>
 
                 <div className="flex flex-col md:flex-row gap-4">
-                    {/* Notes List */}
+                    {/* Notes List + optional right-hand activity panel */}
                     <section
-                        className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm ${viewMode === 'list' ? 'w-full md:w-1/3 min-w-0' : 'w-full'} transition-all`}
+                        className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm flex ${viewMode === 'list' ? 'w-full md:w-1/3 min-w-0' : 'w-full'} transition-all overflow-hidden`}
                         aria-label="Notes list"
+                        style={viewMode === 'list' && expandedNoteActivityId ? { maxWidth: 'none', flex: '1 1 0' } : {}}
                     >
+                        <div className={`flex flex-col min-w-0 ${expandedNoteActivityId ? 'flex-1' : viewMode === 'list' ? 'w-full md:w-1/3' : 'w-full'}`}>
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                             <h2 className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {filteredNotes.length} Note{filteredNotes.length !== 1 ? 's' : ''}
                             </h2>
                         </div>
-                        <div className={`overflow-y-auto ${viewMode === 'list' ? 'max-h-[calc(100vh-320px)]' : ''}`}>
+                        <div className={`overflow-y-auto flex-1 ${viewMode === 'list' ? 'max-h-[calc(100vh-320px)]' : ''}`}>
                             {filteredNotes.length === 0 ? (
                                 <div className="p-8 text-center">
                                     <i className="fas fa-sticky-note text-4xl text-gray-400 mb-4" aria-hidden="true"></i>
@@ -703,6 +758,15 @@ const MyNotes = () => {
                                                         {note.title || 'Untitled Note'}
                                                     </h3>
                                                     <span className="flex items-center gap-1 shrink-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleToggleNoteActivity(e, note)}
+                                                            className="text-primary-500 hover:text-primary-600 text-xs font-medium"
+                                                            title="Activity"
+                                                        >
+                                                            <i className={`fas fa-history mr-1`} aria-hidden="true"></i>
+                                                            {expandedNoteActivityId === note.id ? 'Hide' : 'Activity'}
+                                                        </button>
                                                         {note.pinned && (
                                                             <i className="fas fa-thumbtack text-primary-500 text-xs" title="Pinned" aria-label="Pinned"></i>
                                                         )}
@@ -762,6 +826,14 @@ const MyNotes = () => {
                                                     {note.title || 'Untitled Note'}
                                                 </h3>
                                                 <span className="flex items-center gap-1 shrink-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); handleToggleNoteActivity(e, note); }}
+                                                        className="text-primary-500 hover:text-primary-600 text-xs"
+                                                        title="Activity"
+                                                    >
+                                                        <i className="fas fa-history" aria-hidden="true"></i>
+                                                    </button>
                                                     {note.pinned && <i className="fas fa-thumbtack text-primary-500 text-xs" aria-label="Pinned"></i>}
                                                     {note.sharedWith && note.sharedWith.length > 0 && <i className="fas fa-share-alt text-primary-500 text-xs" aria-label="Shared"></i>}
                                                 </span>
@@ -789,40 +861,181 @@ const MyNotes = () => {
                                 </div>
                             )}
                         </div>
+                        </div>
+                        {/* Right-hand activity panel (Google Docs style) */}
+                        {expandedNoteActivityId && (
+                            <div className={`w-80 flex-shrink-0 border-l ${isDark ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'} flex flex-col max-h-[calc(100vh-320px)]`}>
+                                <div className={`p-3 border-b ${isDark ? 'border-gray-600' : 'border-gray-200'} flex items-center justify-between`}>
+                                    <h4 className={`text-sm font-semibold truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                        {(() => {
+                                            const note = filteredNotes.find((n) => n.id === expandedNoteActivityId);
+                                            return note ? (note.title || 'Untitled') : 'Note activity';
+                                        })()}
+                                    </h4>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setExpandedNoteActivityId(null); }}
+                                        className={`p-1.5 rounded ${isDark ? 'text-gray-400 hover:bg-gray-600' : 'text-gray-500 hover:bg-gray-200'}`}
+                                        aria-label="Close activity panel"
+                                    >
+                                        <i className="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div className="p-3 overflow-y-auto flex-1">
+                                    {!filteredNotes.find((n) => n.id === expandedNoteActivityId)?.projectId ? (
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Link this note to a project to see activity here.</p>
+                                    ) : noteActivityByNoteId[expandedNoteActivityId] === undefined ? (
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading…</p>
+                                    ) : !noteActivityByNoteId[expandedNoteActivityId]?.length ? (
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No activity for this note yet.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {noteActivityByNoteId[expandedNoteActivityId].map((log) => {
+                                                const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                                const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                                const changes = Array.isArray(meta.changes) ? meta.changes : [];
+                                                return (
+                                                    <div key={log.id} className={`border rounded-lg p-3 text-sm ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className={`px-1.5 py-0.5 rounded text-xs ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>{log.userName || 'System'}</span>
+                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{dateStr}</span>
+                                                        </div>
+                                                        {changes.length > 0 ? (
+                                                            <ul className={`mt-2 list-disc list-inside space-y-0.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                                {changes.map((c, i) => (
+                                                                    <li key={i}>{c}</li>
+                                                                ))}
+                                                            </ul>
+                                                        ) : log.description ? (
+                                                            <div className={`mt-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{log.description}</div>
+                                                        ) : null}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    {filteredNotes.find((n) => n.id === expandedNoteActivityId)?.projectId && noteActivityByNoteId[expandedNoteActivityId] && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const note = filteredNotes.find((n) => n.id === expandedNoteActivityId);
+                                                if (note?.projectId) loadActivityForNote(expandedNoteActivityId, note.projectId).then((logs) => setNoteActivityByNoteId(prev => ({ ...prev, [expandedNoteActivityId]: Array.isArray(logs) ? logs : [] })));
+                                            }}
+                                            className={`mt-3 px-2 py-1 text-xs rounded ${isDark ? 'text-primary-400 hover:bg-gray-600' : 'text-primary-600 hover:bg-primary-50'}`}
+                                        >
+                                            <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </section>
 
                     {/* Note Editor */}
                     {viewMode === 'list' && (
                         <section
-                            className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm flex-1 min-w-0 ${selectedNote ? 'block' : 'hidden md:block'}`}
+                            className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm flex-1 min-w-0 flex flex-col ${selectedNote ? 'block' : 'hidden md:block'}`}
                             aria-label="Note editor"
                         >
                             {selectedNote ? (
-                                (window.NoteEditor ? (
-                                    React.createElement(window.NoteEditor, {
-                                        note: selectedNote,
-                                        allTags,
-                                        clients,
-                                        projects,
-                                        clientProjects,
-                                        onClientChange: loadProjectsForClient,
-                                        onSave: handleSaveNote,
-                                        onDelete: handleDeleteNote,
-                                        onShare: handleShareNote,
-                                        onTogglePin: handleTogglePin,
-                                        onExport: handleExportNote,
-                                        isSaving,
-                                        lastSavedAt,
-                                        isDark
-                                    })
-                                ) : (
-                                    <div className="p-8 text-center">
-                                        <i className="fas fa-spinner fa-spin text-2xl text-primary-500 mb-2" aria-hidden="true"></i>
-                                        <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading editor…</p>
+                                <>
+                                    <div className={`flex items-center gap-2 p-3 border-b flex-shrink-0 ${isDark ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'}`}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditorActivityPanelOpen(prev => !prev)}
+                                            className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${editorActivityPanelOpen ? (isDark ? 'bg-primary-700 text-primary-200 border border-primary-500' : 'bg-primary-100 text-primary-800 border border-primary-300') : (isDark ? 'bg-gray-600 hover:bg-gray-500 text-gray-200 border border-gray-500' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+                                        >
+                                            <i className="fas fa-history"></i>
+                                            Activity
+                                            <i className={`fas fa-chevron-${editorActivityPanelOpen ? 'right' : 'left'} text-xs`}></i>
+                                        </button>
                                     </div>
-                                ))
+                                    <div className="flex flex-1 min-h-0">
+                                        <div className="flex-1 min-w-0 overflow-hidden">
+                                            {window.NoteEditor ? (
+                                                React.createElement(window.NoteEditor, {
+                                                    note: selectedNote,
+                                                    allTags,
+                                                    clients,
+                                                    projects,
+                                                    clientProjects,
+                                                    onClientChange: loadProjectsForClient,
+                                                    onSave: handleSaveNote,
+                                                    onDelete: handleDeleteNote,
+                                                    onShare: handleShareNote,
+                                                    onTogglePin: handleTogglePin,
+                                                    onExport: handleExportNote,
+                                                    isSaving,
+                                                    lastSavedAt,
+                                                    isDark
+                                                })
+                                            ) : (
+                                                <div className="p-8 text-center">
+                                                    <i className="fas fa-spinner fa-spin text-2xl text-primary-500 mb-2" aria-hidden="true"></i>
+                                                    <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading editor…</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {editorActivityPanelOpen && (
+                                            <div className={`w-80 flex-shrink-0 border-l flex flex-col ${isDark ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'}`}>
+                                                <div className={`p-3 border-b flex items-center justify-between ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                                    <h4 className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Note activity</h4>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditorActivityPanelOpen(false)}
+                                                        className={`p-1.5 rounded ${isDark ? 'text-gray-400 hover:bg-gray-600' : 'text-gray-500 hover:bg-gray-200'}`}
+                                                        aria-label="Close activity panel"
+                                                    >
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                <div className="p-3 overflow-y-auto flex-1">
+                                                    {!selectedNote.projectId ? (
+                                                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Link this note to a project to see activity here.</p>
+                                                    ) : noteActivityForEditor.length === 0 ? (
+                                                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No activity recorded for this note yet.</p>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {noteActivityForEditor.map((log) => {
+                                                                const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                                                const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                                                const changes = Array.isArray(meta.changes) ? meta.changes : [];
+                                                                return (
+                                                                    <div key={log.id} className={`border rounded-lg p-3 text-xs ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                            <span className={`px-1.5 py-0.5 rounded bg-gray-200 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>{log.userName || 'System'}</span>
+                                                                            <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>{dateStr}</span>
+                                                                        </div>
+                                                                        {changes.length > 0 ? (
+                                                                            <ul className="mt-2 list-disc list-inside space-y-0.5 text-gray-600 dark:text-gray-400">
+                                                                                {changes.map((c, i) => (
+                                                                                    <li key={i}>{c}</li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        ) : log.description ? (
+                                                                            <div className="mt-1.5 text-gray-600 dark:text-gray-400">{log.description}</div>
+                                                                        ) : null}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => selectedNote?.projectId && loadActivityForNote(selectedNote.id, selectedNote.projectId).then(setNoteActivityForEditor)}
+                                                        className={`mt-3 px-2 py-1 text-xs rounded ${isDark ? 'text-primary-400 hover:bg-gray-600' : 'text-primary-600 hover:bg-primary-50'}`}
+                                                    >
+                                                        <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
                             ) : (
-                                <div className="p-8 text-center">
+                                <div className="p-8 text-center flex-1 flex items-center justify-center flex-col">
                                     <i className="fas fa-sticky-note text-4xl text-gray-400 mb-4" aria-hidden="true"></i>
                                     <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>
                                         Select a note to edit or create a new one

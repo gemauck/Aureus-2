@@ -346,14 +346,36 @@ async function handler(req, res) {
         })
 
         if (note.projectId) {
+          const changes = []
+          if (title !== undefined && (existingNote.title || '').trim() !== (title || '').trim()) {
+            changes.push(`Title changed from "${existingNote.title || ''}" to "${note.title || ''}"`)
+          }
+          if (content !== undefined && (existingNote.content || '').trim() !== (content || '').trim()) {
+            const oldLen = (existingNote.content || '').length
+            const newLen = (note.content || '').length
+            if (oldLen !== newLen) {
+              changes.push(`Content edited (${oldLen} → ${newLen} characters)`)
+            } else {
+              changes.push('Content edited')
+            }
+          }
+          if (tags !== undefined) {
+            const existingTags = typeof existingNote.tags === 'string' ? (() => { try { return JSON.parse(existingNote.tags) } catch { return [] } })() : []
+            const newTags = Array.isArray(tags) ? tags : []
+            const tagsEqual = existingTags.length === newTags.length && newTags.every((t, i) => String(existingTags[i] || '') === String(t || ''))
+            if (!tagsEqual) changes.push('Tags updated')
+          }
+          const description = changes.length > 0
+            ? `Note "${note.title}" updated: ${changes.join('; ')}`
+            : `Note "${note.title}" updated`
           const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
           await logProjectActivity(prisma, {
             projectId: note.projectId,
             userId: uid,
             userName: uName,
             type: 'note_updated',
-            description: `Note "${note.title}" updated`,
-            metadata: { noteId: note.id, noteTitle: note.title, source: 'user' }
+            description,
+            metadata: { noteId: note.id, noteTitle: note.title, source: 'user', changes }
           })
         }
 

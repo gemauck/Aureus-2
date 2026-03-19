@@ -2140,6 +2140,7 @@ function initializeProjectDetail() {
     const [noteActivityForEditor, setNoteActivityForEditor] = useState([]);
     const [expandedNoteActivityId, setExpandedNoteActivityId] = useState(null);
     const [noteActivityByNoteId, setNoteActivityByNoteId] = useState({});
+    const [editorActivityPanelOpen, setEditorActivityPanelOpen] = useState(false);
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
@@ -2157,6 +2158,7 @@ function initializeProjectDetail() {
         setNoteActivityForEditor([]);
         setExpandedNoteActivityId(null);
         setNoteActivityByNoteId({});
+        setEditorActivityPanelOpen(false);
     }, [project?.id]);
 
     const loadActivityLog = useCallback(async () => {
@@ -8955,7 +8957,7 @@ function initializeProjectDetail() {
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                     {editingNoteFull ? (
                         <div className="flex flex-col h-full min-h-[500px]">
-                            <div className="flex items-center gap-2 p-3 border-b border-gray-200 bg-gray-50">
+                            <div className="flex items-center gap-2 p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
                                 <button
                                     type="button"
                                     onClick={closeNoteEditor}
@@ -8964,68 +8966,98 @@ function initializeProjectDetail() {
                                     <i className="fas fa-arrow-left"></i>
                                     Back to list
                                 </button>
-                            </div>
-                            <div className="flex-1 min-h-0 overflow-hidden">
-                                {window.NoteEditor && noteEditorReady ? (
-                                    React.createElement(window.NoteEditor, {
-                                        note: editingNoteFull,
-                                        allTags: noteEditorData.allTags,
-                                        clients: noteEditorData.clients,
-                                        projects: noteEditorData.projects,
-                                        clientProjects: noteEditorData.clientProjects,
-                                        onClientChange: loadProjectsForNoteClient,
-                                        onSave: handleSaveNoteInProject,
-                                        onDelete: handleDeleteNoteInProject,
-                                        onShare: handleShareNoteInProject,
-                                        onTogglePin: handleTogglePinNoteInProject,
-                                        onExport: handleExportNoteInProject,
-                                        isSaving: isSavingNote,
-                                        lastSavedAt: null,
-                                        isDark: false,
-                                        isProjectNote: editingNoteSource === 'project'
-                                    })
-                                ) : (
-                                    <div className="p-8 text-center">
-                                        <i className="fas fa-spinner fa-spin text-2xl text-primary-500 mb-2" aria-hidden="true"></i>
-                                        <p className="text-gray-500">Loading editor…</p>
-                                    </div>
-                                )}
-                            </div>
-                            {/* This note's activity — shown when editing */}
-                            <div className="border-t border-gray-200 p-3 bg-gray-50">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                    <i className="fas fa-history text-primary-600"></i>
-                                    Note activity
-                                </h4>
-                                <div className="space-y-2 max-h-[20vh] overflow-y-auto">
-                                    {noteActivityForEditor.length === 0 ? (
-                                        <p className="text-xs text-gray-500">No activity recorded for this note yet.</p>
-                                    ) : (
-                                        noteActivityForEditor.map((log) => {
-                                            const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
-                                            const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
-                                            const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
-                                            return (
-                                                <div key={log.id} className="border border-gray-200 rounded p-2 bg-white text-xs">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
-                                                        <span className="text-gray-500">{log.userName || 'System'}</span>
-                                                        <span className="text-gray-400">{dateStr}</span>
-                                                        {sourceLabel && <span className="text-gray-500">{sourceLabel}</span>}
-                                                    </div>
-                                                    {log.description && <div className="mt-1 text-gray-600">{log.description}</div>}
-                                                </div>
-                                            );
-                                        })
-                                    )}
-                                </div>
                                 <button
                                     type="button"
-                                    onClick={() => editingNoteFull?.id && loadActivityForNote(editingNoteFull.id).then(setNoteActivityForEditor)}
-                                    className="mt-2 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                    onClick={() => setEditorActivityPanelOpen(prev => !prev)}
+                                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${editorActivityPanelOpen ? 'bg-primary-100 text-primary-800 border border-primary-300' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
                                 >
-                                    <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                    <i className="fas fa-history"></i>
+                                    Activity
+                                    <i className={`fas fa-chevron-${editorActivityPanelOpen ? 'right' : 'left'} text-xs`}></i>
                                 </button>
+                            </div>
+                            <div className="flex flex-1 min-h-0">
+                                <div className="flex-1 min-w-0 overflow-hidden">
+                                    {window.NoteEditor && noteEditorReady ? (
+                                        React.createElement(window.NoteEditor, {
+                                            note: editingNoteFull,
+                                            allTags: noteEditorData.allTags,
+                                            clients: noteEditorData.clients,
+                                            projects: noteEditorData.projects,
+                                            clientProjects: noteEditorData.clientProjects,
+                                            onClientChange: loadProjectsForNoteClient,
+                                            onSave: handleSaveNoteInProject,
+                                            onDelete: handleDeleteNoteInProject,
+                                            onShare: handleShareNoteInProject,
+                                            onTogglePin: handleTogglePinNoteInProject,
+                                            onExport: handleExportNoteInProject,
+                                            isSaving: isSavingNote,
+                                            lastSavedAt: null,
+                                            isDark: false,
+                                            isProjectNote: editingNoteSource === 'project'
+                                        })
+                                    ) : (
+                                        <div className="p-8 text-center">
+                                            <i className="fas fa-spinner fa-spin text-2xl text-primary-500 mb-2" aria-hidden="true"></i>
+                                            <p className="text-gray-500">Loading editor…</p>
+                                        </div>
+                                    )}
+                                </div>
+                                {editorActivityPanelOpen && (
+                                    <div className="w-80 flex-shrink-0 border-l border-gray-200 bg-gray-50 flex flex-col">
+                                        <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+                                            <h4 className="text-sm font-semibold text-gray-800">Note activity</h4>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditorActivityPanelOpen(false)}
+                                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
+                                                aria-label="Close activity panel"
+                                            >
+                                                <i className="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        <div className="p-3 overflow-y-auto flex-1">
+                                            {noteActivityForEditor.length === 0 ? (
+                                                <p className="text-xs text-gray-500">No activity recorded for this note yet.</p>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {noteActivityForEditor.map((log) => {
+                                                        const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                                        const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                                        const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
+                                                        const changes = Array.isArray(meta.changes) ? meta.changes : [];
+                                                        return (
+                                                            <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-white text-xs">
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                                    <span className="text-gray-500">{log.userName || 'System'}</span>
+                                                                    <span className="text-gray-400">{dateStr}</span>
+                                                                    {sourceLabel && <span className="text-gray-500">{sourceLabel}</span>}
+                                                                </div>
+                                                                {changes.length > 0 ? (
+                                                                    <ul className="mt-2 list-disc list-inside text-gray-600 space-y-0.5">
+                                                                        {changes.map((c, i) => (
+                                                                            <li key={i}>{c}</li>
+                                                                        ))}
+                                                                    </ul>
+                                                                ) : log.description ? (
+                                                                    <div className="mt-1.5 text-gray-600">{log.description}</div>
+                                                                ) : null}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => editingNoteFull?.id && loadActivityForNote(editingNoteFull.id).then(setNoteActivityForEditor)}
+                                                className="mt-3 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                            >
+                                                <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ) : (
@@ -9127,6 +9159,7 @@ function initializeProjectDetail() {
                                                         const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
                                                         const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
                                                         const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
+                                                        const changes = Array.isArray(meta.changes) ? meta.changes : [];
                                                         return (
                                                             <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-white text-sm">
                                                                 <div className="flex flex-wrap items-center gap-2">
@@ -9135,7 +9168,15 @@ function initializeProjectDetail() {
                                                                     <span className="text-gray-400 text-xs">{dateStr}</span>
                                                                     {sourceLabel && <span className="text-gray-500 text-xs">{sourceLabel}</span>}
                                                                 </div>
-                                                                {log.description && <div className="mt-1.5 text-xs text-gray-600">{log.description}</div>}
+                                                                {changes.length > 0 ? (
+                                                                    <ul className="mt-1.5 list-disc list-inside text-xs text-gray-600 space-y-0.5">
+                                                                        {changes.map((c, i) => (
+                                                                            <li key={i}>{c}</li>
+                                                                        ))}
+                                                                    </ul>
+                                                                ) : log.description ? (
+                                                                    <div className="mt-1.5 text-xs text-gray-600">{log.description}</div>
+                                                                ) : null}
                                                             </div>
                                                         );
                                                     })}

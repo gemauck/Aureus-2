@@ -77,14 +77,35 @@ async function handler(req, res) {
           author: { select: { id: true, name: true, email: true } }
         }
       })
+      const changes = []
+      if (existing.title !== title) {
+        changes.push(`Title changed from "${existing.title || ''}" to "${title || ''}"`)
+      }
+      if (existing.content !== content) {
+        const oldLen = (existing.content || '').length
+        const newLen = (content || '').length
+        if (oldLen !== newLen) {
+          changes.push(`Content edited (${oldLen} → ${newLen} characters)`)
+        } else {
+          changes.push('Content edited')
+        }
+      }
+      const existingTags = typeof existing.tags === 'string' ? (() => { try { return JSON.parse(existing.tags) } catch { return [] } })() : []
+      const tagsEqual = existingTags.length === tags.length && tags.every((t, i) => String(existingTags[i] || '') === String(t || ''))
+      if (!tagsEqual) {
+        changes.push('Tags updated')
+      }
+      const description = changes.length > 0
+        ? `Note "${title}" updated: ${changes.join('; ')}`
+        : `Note "${title}" updated`
       const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
       await logProjectActivity(prisma, {
         projectId,
         userId: uid,
         userName: uName,
         type: 'note_updated',
-        description: `Note "${title}" updated`,
-        metadata: { noteId: note.id, noteTitle: title, source: 'project' }
+        description,
+        metadata: { noteId: note.id, noteTitle: title, source: 'project', changes }
       })
       return ok(res, { note: parseProjectNote(note) })
     } catch (e) {

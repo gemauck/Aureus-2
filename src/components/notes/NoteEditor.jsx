@@ -42,6 +42,34 @@ const RichTextToolbar = ({ editorRef, isDark }) => {
     );
 };
 
+// Upload a file for notes (screenshot or attachment) — uses /api/files with folder 'notes'
+function uploadNoteFile(file) {
+    const storage = window.storage;
+    const token = storage?.getToken?.();
+    if (!token) return Promise.reject(new Error('Not authenticated'));
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = reader.result;
+            const name = (file.name || 'paste.png').replace(/[^a-zA-Z0-9._-]/g, '_');
+            fetch('/api/files', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder: 'notes', name, dataUrl })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    const url = data?.data?.url || data?.url;
+                    if (url) resolve({ url, name });
+                    else reject(new Error(data?.error?.message || 'Upload failed'));
+                })
+                .catch(reject);
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
 // Note Editor Component
 // isProjectNote: when true, note is from project notes table (hide Make public, Client/Project, Share, Pin)
 const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientProjects = [], onClientChange, onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark, isProjectNote = false }) => {
@@ -52,9 +80,11 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
     const [clientId, setClientId] = useState(note.clientId ?? note.client?.id ?? '');
     const [projectId, setProjectId] = useState(note.projectId ?? note.project?.id ?? '');
     const [isPublic, setIsPublic] = useState(Boolean(note.isPublic));
+    const [isUploading, setIsUploading] = useState(false);
     const saveTimeoutRef = useRef(null);
     const noteRef = useRef(note);
     const editorRef = useRef(null);
+    const fileInputRef = useRef(null);
     const canPin = !isProjectNote && note.isOwner !== false && !note.id?.startsWith('temp-');
 
     noteRef.current = note;
@@ -109,6 +139,91 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         const html = editorRef.current.innerHTML;
         setContent(html);
     };
+
+    const insertAtCursor = useCallback((html) => {
+        const ed = editorRef.current;
+        if (!ed) return;
+        ed.focus();
+        const sel = window.getSelection();
+        const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+        if (range && range.commonAncestorContainer && ed.contains(range.commonAncestorContainer)) {
+            const fragment = ed.ownerDocument.createContextualFragment(html);
+            range.deleteContents();
+            range.insertNode(fragment);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else {
+            document.execCommand('insertHTML', false, html);
+        }
+        handleEditorInput();
+    }, []);
+
+    const handlePaste = useCallback((e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image/') !== 0) continue;
+            e.preventDefault();
+            const file = items[i].getAsFile();
+            if (!file) return;
+            setIsUploading(true);
+            uploadNoteFile(file)
+                .then(({ url }) => {
+                    insertAtCursor(`<img src="${url.replace(/"/g, '&quot;')}" alt="Pasted image" style="max-width:100%;height:auto;" />`);
+                })
+                .catch(() => {})
+                .finally(() => setIsUploading(false));
+            return;
+        }
+    }, [insertAtCursor]);
+
+    const handleAttachClick = useCallback(() => {
+        fileInputRef.current?.click();
+    }, []);
+
+    const processFiles = useCallback((files, resetInput) => {
+        if (!files?.length) return;
+        const ed = editorRef.current;
+        if (!ed) return;
+        ed.focus();
+        setIsUploading(true);
+        const fileList = Array.from(files);
+        const promises = fileList.map(file =>
+            uploadNoteFile(file)
+                .then(({ url, name }) => ({ url, name, type: (file.type || '').slice(0, 6) }))
+                .catch(() => null)
+        );
+        Promise.all(promises).then((results) => {
+            results.filter(Boolean).forEach(({ url, name, type }) => {
+                const safeUrl = url.replace(/"/g, '&quot;');
+                if (type === 'image/') {
+                    insertAtCursor(`<img src="${safeUrl}" alt="${(name || 'Image').replace(/"/g, '&quot;')}" style="max-width:100%;height:auto;" /><br>`);
+                } else {
+                    insertAtCursor(`<a href="${safeUrl}" target="_blank" rel="noopener">${(name || 'Attachment').replace(/</g, '&lt;')}</a><br>`);
+                }
+            });
+        }).finally(() => {
+            setIsUploading(false);
+            if (resetInput && fileInputRef.current) fileInputRef.current.value = '';
+        });
+    }, [insertAtCursor]);
+
+    const handleFileSelect = useCallback((e) => {
+        processFiles(e.target.files, true);
+    }, [processFiles]);
+
+    const handleDrop = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const files = e.dataTransfer?.files;
+        if (files?.length) processFiles(files, false);
+    }, [processFiles]);
+
+    const handleDragOver = useCallback((e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    }, []);
 
     const tagSet = React.useMemo(() => new Set(tags.map(t => String(t).toLowerCase())), [tags]);
     const handleAddTag = () => {
@@ -331,14 +446,54 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
             )}
 
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <RichTextToolbar editorRef={editorRef} isDark={isDark} />
+                <div className={`flex items-center border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                    <RichTextToolbar editorRef={editorRef} isDark={isDark} />
+                    <div className={`flex items-center gap-1 px-2 py-1 ml-auto border-l ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                            className="hidden"
+                            onChange={handleFileSelect}
+                            aria-hidden="true"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleAttachClick}
+                            disabled={isUploading}
+                            title="Attach file or image"
+                            className={`p-2 rounded text-sm font-medium ${isUploading ? 'opacity-50 cursor-wait' : ''} ${isDark ? 'hover:bg-gray-600 text-gray-200' : 'bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200'}`}
+                            aria-label="Attach file"
+                        >
+                            <i className={`fas ${isUploading ? 'fa-spinner fa-spin' : 'fa-paperclip'}`} aria-hidden="true"></i>
+                            <span className="ml-1">Attach</span>
+                        </button>
+                    </div>
+                </div>
+                <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleAttachClick}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleAttachClick(); } }}
+                    className={`flex items-center justify-center gap-2 py-2 px-3 border-b cursor-pointer ${isDark ? 'border-gray-600 bg-gray-700/30 hover:bg-gray-700/50 text-gray-300' : 'border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-600'}`}
+                    aria-label="Attach files"
+                >
+                    <i className={`fas fa-paperclip ${isUploading ? 'fa-spinner fa-spin' : ''}`} aria-hidden="true"></i>
+                    <span className="text-sm">
+                        {isUploading ? 'Uploading…' : 'Click to attach files or drag and drop images into the note'}
+                    </span>
+                </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0">
                     <div
                         ref={editorRef}
                         contentEditable
                         suppressContentEditableWarning
                         onInput={handleEditorInput}
-                        data-placeholder="Start writing your note..."
+                        onPaste={handlePaste}
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                        data-placeholder="Start writing your note... (paste screenshots or use Attach)"
                         {...(isDark ? { 'data-dark': 'true' } : {})}
                         className={`notes-editor w-full min-h-[320px] outline-none ${isDark ? 'text-gray-100' : 'text-gray-900'} [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:opacity-90 ${isDark ? '[&_a]:text-primary-400' : '[&_a]:text-primary-600'} [&_a]:underline`}
                         style={{ minHeight: '400px' }}
