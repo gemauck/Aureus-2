@@ -1,23 +1,25 @@
-// Settings Modal Component - Modal wrapper for Settings
+// Settings Modal Component - Per-user preferences (company name read-only)
 const { useState, useEffect } = React;
+
+const USER_PREF_DEFAULTS = {
+    timezone: 'Africa/Johannesburg',
+    currency: 'ZAR',
+    dateFormat: 'DD/MM/YYYY',
+    language: 'en',
+    sessionTimeout: 30,
+    requirePasswordChange: false,
+    twoFactorAuth: false,
+    auditLogging: true,
+    emailProvider: 'gmail',
+    googleCalendar: false,
+    quickbooks: false,
+    slack: false
+};
 
 const SettingsModal = ({ isOpen, onClose }) => {
     const [activeTab, setActiveTab] = useState('general');
-    const [settings, setSettings] = useState({
-        companyName: 'Abcotronics',
-        timezone: 'Africa/Johannesburg',
-        currency: 'ZAR',
-        dateFormat: 'DD/MM/YYYY',
-        language: 'en',
-        sessionTimeout: 30,
-        requirePasswordChange: false,
-        twoFactorAuth: false,
-        auditLogging: true,
-        emailProvider: 'gmail',
-        googleCalendar: false,
-        quickbooks: false,
-        slack: false
-    });
+    const [companyName, setCompanyName] = useState('Abcotronics');
+    const [settings, setSettings] = useState({ ...USER_PREF_DEFAULTS });
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [saveStatus, setSaveStatus] = useState('');
@@ -48,15 +50,16 @@ const SettingsModal = ({ isOpen, onClose }) => {
     const handleSave = async () => {
         setIsLoading(true);
         setSaveStatus('Saving...');
-        
         try {
-            if (window.DatabaseAPI?.updateSettings) {
+            if (window.api?.updateSettings) {
+                await window.api.updateSettings(settings);
+            } else if (window.DatabaseAPI?.updateSettings) {
                 await window.DatabaseAPI.updateSettings(settings);
-                setSaveStatus('Settings saved successfully!');
-                setTimeout(() => setSaveStatus(''), 3000);
             } else {
-                throw new Error('DatabaseAPI not available');
+                throw new Error('Settings API not available');
             }
+            setSaveStatus('Settings saved successfully!');
+            setTimeout(() => setSaveStatus(''), 3000);
         } catch (error) {
             console.error('Error saving settings:', error);
             setSaveStatus('Error saving settings: ' + error.message);
@@ -67,22 +70,8 @@ const SettingsModal = ({ isOpen, onClose }) => {
     };
 
     const handleReset = () => {
-        if (confirm('Are you sure you want to reset all settings to default?')) {
-            setSettings({
-                companyName: 'Abcotronics',
-                timezone: 'Africa/Johannesburg',
-                currency: 'ZAR',
-                dateFormat: 'DD/MM/YYYY',
-                language: 'en',
-                sessionTimeout: 30,
-                requirePasswordChange: false,
-                twoFactorAuth: false,
-                auditLogging: true,
-                emailProvider: 'gmail',
-                googleCalendar: false,
-                quickbooks: false,
-                slack: false
-            });
+        if (confirm('Are you sure you want to reset your preferences to default?')) {
+            setSettings({ ...USER_PREF_DEFAULTS });
         }
     };
 
@@ -104,15 +93,31 @@ const SettingsModal = ({ isOpen, onClose }) => {
 
     useEffect(() => {
         if (!isOpen) return;
-        
         const loadSettings = async () => {
             setIsLoadingData(true);
             try {
-                if (window.DatabaseAPI?.getSettings) {
-                    const response = await window.DatabaseAPI.getSettings();
-                    const dbSettings = response?.data?.settings;
-                    if (dbSettings) {
-                        setSettings(dbSettings);
+                const getSettings = window.api?.getSettings || window.DatabaseAPI?.getSettings;
+                if (getSettings) {
+                    const response = await getSettings();
+                    const userPrefs = response?.data?.settings;
+                    const company = response?.data?.companyName ?? 'Abcotronics';
+                    if (userPrefs) {
+                        setSettings({
+                            ...USER_PREF_DEFAULTS,
+                            timezone: userPrefs.timezone ?? USER_PREF_DEFAULTS.timezone,
+                            currency: userPrefs.currency ?? USER_PREF_DEFAULTS.currency,
+                            dateFormat: userPrefs.dateFormat ?? USER_PREF_DEFAULTS.dateFormat,
+                            language: userPrefs.language ?? USER_PREF_DEFAULTS.language,
+                            sessionTimeout: userPrefs.sessionTimeout ?? USER_PREF_DEFAULTS.sessionTimeout,
+                            requirePasswordChange: userPrefs.requirePasswordChange ?? USER_PREF_DEFAULTS.requirePasswordChange,
+                            twoFactorAuth: userPrefs.twoFactorAuth ?? USER_PREF_DEFAULTS.twoFactorAuth,
+                            auditLogging: userPrefs.auditLogging ?? USER_PREF_DEFAULTS.auditLogging,
+                            emailProvider: userPrefs.emailProvider ?? USER_PREF_DEFAULTS.emailProvider,
+                            googleCalendar: userPrefs.googleCalendar ?? USER_PREF_DEFAULTS.googleCalendar,
+                            quickbooks: userPrefs.quickbooks ?? USER_PREF_DEFAULTS.quickbooks,
+                            slack: userPrefs.slack ?? USER_PREF_DEFAULTS.slack
+                        });
+                        setCompanyName(company);
                     }
                 }
             } catch (error) {
@@ -138,16 +143,9 @@ const SettingsModal = ({ isOpen, onClose }) => {
         <div className="space-y-4">
             <div>
                 <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                    Company Name
+                    Company
                 </label>
-                <input
-                    type="text"
-                    value={settings.companyName}
-                    onChange={(e) => setSettings(prev => ({ ...prev, companyName: e.target.value }))}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                        isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
-                    }`}
-                />
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{companyName}</p>
             </div>
 
             <div>

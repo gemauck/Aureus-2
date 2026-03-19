@@ -39,7 +39,7 @@ const ClientModal = ({ client, onSave, onClose }) => {
 
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg w-full max-w-xl max-h-[90vh] overflow-y-auto`}>
+                <div className={`modal-panel ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg w-full max-w-xl max-h-[90vh] overflow-y-auto`}>
                     <div className={`flex justify-between items-center px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h2 className={`text-base font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {client ? 'Edit Client' : 'Add New Client'}

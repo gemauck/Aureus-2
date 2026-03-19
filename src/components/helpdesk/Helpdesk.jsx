@@ -442,9 +442,9 @@ const Helpdesk = () => {
             {/* Header */}
             <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white truncate">
                                 <i className="fas fa-headset mr-2"></i>
                                 Helpdesk
                             </h1>
@@ -454,7 +454,7 @@ const Helpdesk = () => {
                         </div>
                         <button
                             onClick={handleCreateTicket}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 flex-shrink-0 min-h-[44px]"
                         >
                             <i className="fas fa-plus"></i>
                             <span>New Ticket</span>
@@ -468,7 +468,7 @@ const Helpdesk = () => {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex flex-wrap items-center gap-4">
                         {/* Search */}
-                        <div className="flex-1 min-w-[200px]">
+                        <div className="flex-1 min-w-0 sm:min-w-[200px]">
                             <div className="relative">
                                 <input
                                     type="text"
@@ -713,6 +713,7 @@ const Helpdesk = () => {
                         className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
                         aria-label="Ticket list. Use arrow keys to move, Enter to open."
                     >
+                        <div className="table-responsive overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
@@ -852,6 +853,7 @@ const Helpdesk = () => {
                                 })}
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 ) : viewMode === 'kanban' ? (
                     <div className="flex gap-4 overflow-x-auto pb-4 min-h-[500px]">

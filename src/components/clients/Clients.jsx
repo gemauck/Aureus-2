@@ -264,23 +264,63 @@ function isValidThumbnailUrl(url) {
 
 const LOGO_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours - logos refresh at most once daily
 const logoDisplayCache = new Map(); // key -> { useImage, url?, ts }
+const DERIVED_LOGO_KEY_SUFFIX = '|derived';
 
-/** Returns stable logo display for an entity so logos don't flash on filter/sort/other changes. Uses a 24h cache. */
-function getLogoDisplay(entityKey, thumbnail, failedSet) {
-    const cached = logoDisplayCache.get(entityKey);
-    const now = Date.now();
-    if (cached && (now - cached.ts) < LOGO_CACHE_TTL_MS) {
-        return { useImage: cached.useImage, url: cached.url };
+/** Derives a favicon URL from a website (same as /api/website-logo). Use when thumbnail is missing or failed. */
+function getFaviconUrlFromWebsite(website) {
+    if (!website || typeof website !== 'string') return undefined;
+    const trimmed = website.trim();
+    if (!/^https?:\/\/[^\s/]+/i.test(trimmed)) return undefined;
+    try {
+        const parsed = new URL(trimmed);
+        const domain = parsed.hostname || parsed.host || '';
+        if (!domain) return undefined;
+        return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+    } catch (_) {
+        return undefined;
     }
-    const useImage = isValidThumbnailUrl(thumbnail) && !failedSet.has(entityKey);
-    const url = useImage ? thumbnail : undefined;
-    logoDisplayCache.set(entityKey, { useImage, url, ts: now });
-    return { useImage, url };
+}
+
+/** Returns stable logo display for an entity so logos don't flash on filter/sort/other changes. Uses a 24h cache.
+ *  When thumbnail is missing or failed, falls back to favicon derived from website so the icon can load from the linked site. */
+function getLogoDisplay(entityKey, thumbnail, failedSet, website) {
+    const now = Date.now();
+    const useThumbnail = isValidThumbnailUrl(thumbnail) && !failedSet.has(entityKey);
+    const derivedUrl = getFaviconUrlFromWebsite(website);
+    const derivedKey = entityKey + DERIVED_LOGO_KEY_SUFFIX;
+    const useDerived = !!derivedUrl && !failedSet.has(derivedKey);
+
+    const cached = logoDisplayCache.get(entityKey);
+    if (cached && (now - cached.ts) < LOGO_CACHE_TTL_MS) {
+        if (cached.useImage && cached.url) {
+            const cacheMatchesThumbnail = useThumbnail && cached.url === thumbnail;
+            const cacheMatchesDerived = useDerived && cached.url === derivedUrl;
+            if (cacheMatchesThumbnail || cacheMatchesDerived) {
+                return { useImage: true, url: cached.url, failKey: cacheMatchesThumbnail ? entityKey : derivedKey };
+            }
+        }
+        if (!cached.useImage && !useThumbnail && !useDerived) {
+            return { useImage: false, url: undefined, failKey: entityKey };
+        }
+    }
+
+    if (useThumbnail) {
+        logoDisplayCache.set(entityKey, { useImage: true, url: thumbnail, ts: now });
+        return { useImage: true, url: thumbnail, failKey: entityKey };
+    }
+    if (useDerived) {
+        logoDisplayCache.set(entityKey, { useImage: true, url: derivedUrl, ts: now });
+        return { useImage: true, url: derivedUrl, failKey: derivedKey };
+    }
+    logoDisplayCache.set(entityKey, { useImage: false, url: undefined, ts: now });
+    return { useImage: false, url: undefined, failKey: entityKey };
 }
 
 /** Call when an image fails to load so we cache "use initial" and stop retrying. */
-function setLogoFailed(entityKey) {
-    logoDisplayCache.set(entityKey, { useImage: false, url: undefined, ts: Date.now() });
+function setLogoFailed(failKey) {
+    const baseKey = typeof failKey === 'string' && failKey.endsWith(DERIVED_LOGO_KEY_SUFFIX)
+        ? failKey.slice(0, -DERIVED_LOGO_KEY_SUFFIX.length) : failKey;
+    logoDisplayCache.set(baseKey, { useImage: false, url: undefined, ts: Date.now() });
 }
 
 function extractStageValue(value) {
@@ -7070,7 +7110,7 @@ const Clients = React.memo(() => {
 
                 {/* Pipeline List View - Kanban removed */}
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
-                    <div className="overflow-x-auto">
+                    <div className="table-responsive overflow-x-auto">
                         <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                             <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                                 <tr>
@@ -7219,6 +7259,7 @@ const Clients = React.memo(() => {
     const ClientsListView = () => (
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full`}>
             <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="table-responsive overflow-x-auto min-w-0">
                 <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
                     <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                         <tr>
@@ -7297,11 +7338,12 @@ const Clients = React.memo(() => {
                                                 </button>
                                                 {(() => {
                                                     const key = `client-${client.id}`;
-                                                    const logo = getLogoDisplay(key, client.thumbnail, failedThumbnailIds);
+                                                    const logo = getLogoDisplay(key, client.thumbnail, failedThumbnailIds, client.website);
                                                     const showImg = !!(logo.useImage && logo.url);
                                                     const loadedKey = logo.url ? `${key}|${logo.url}` : '';
                                                     const isLoaded = loadedKey && loadedLogoKeys.has(loadedKey);
                                                     const showLoadedImg = showImg && isLoaded;
+                                                    const failKey = logo.failKey ?? key;
                                                     return (
                                                         <div className="w-8 h-8 flex-shrink-0 relative rounded-full overflow-hidden">
                                                             <div
@@ -7317,7 +7359,7 @@ const Clients = React.memo(() => {
                                                                     className="absolute inset-0 z-[1] w-full h-full rounded-full object-cover border border-gray-200"
                                                                     style={{ opacity: showLoadedImg ? 1 : 0, pointerEvents: showLoadedImg ? 'auto' : 'none' }}
                                                                     onLoad={() => loadedKey && setLoadedLogoKeys(prev => (prev.has(loadedKey) ? prev : new Set(prev).add(loadedKey)))}
-                                                                    onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
+                                                                    onError={() => { setLogoFailed(failKey); setFailedThumbnailIds(prev => new Set(prev).add(failKey)); }}
                                                                 />
                                                             ) : null}
                                                         </div>
@@ -7407,6 +7449,7 @@ const Clients = React.memo(() => {
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
             {/* Pagination Controls */}
             {sortedClients.length > 0 && (
@@ -8816,7 +8859,7 @@ const Clients = React.memo(() => {
 
         const renderListView = () => (
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm`}>
-                <div className="overflow-x-auto">
+                <div className="table-responsive overflow-x-auto">
                     <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                         <thead className={isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-500'}>
                             <tr>
@@ -9102,11 +9145,12 @@ const Clients = React.memo(() => {
                                                 </button>
                                                 {(() => {
                                                     const key = `lead-${lead.id}`;
-                                                    const logo = getLogoDisplay(key, lead.thumbnail, failedThumbnailIds);
+                                                    const logo = getLogoDisplay(key, lead.thumbnail, failedThumbnailIds, lead.website);
                                                     const showImg = !!(logo.useImage && logo.url);
                                                     const loadedKey = logo.url ? `${key}|${logo.url}` : '';
                                                     const isLoaded = loadedKey && loadedLogoKeys.has(loadedKey);
                                                     const showLoadedImg = showImg && isLoaded;
+                                                    const failKey = logo.failKey ?? key;
                                                     return (
                                                         <div className="w-8 h-8 flex-shrink-0 relative rounded-full overflow-hidden">
                                                             <div
@@ -9122,7 +9166,7 @@ const Clients = React.memo(() => {
                                                                     className="absolute inset-0 z-[1] w-full h-full rounded-full object-cover border border-gray-200"
                                                                     style={{ opacity: showLoadedImg ? 1 : 0, pointerEvents: showLoadedImg ? 'auto' : 'none' }}
                                                                     onLoad={() => loadedKey && setLoadedLogoKeys(prev => (prev.has(loadedKey) ? prev : new Set(prev).add(loadedKey)))}
-                                                                    onError={() => { setLogoFailed(key); setFailedThumbnailIds(prev => new Set(prev).add(key)); }}
+                                                                    onError={() => { setLogoFailed(failKey); setFailedThumbnailIds(prev => new Set(prev).add(failKey)); }}
                                                                 />
                                                             ) : null}
                                                         </div>

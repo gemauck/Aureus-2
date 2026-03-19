@@ -29,7 +29,7 @@ const DocumentCollectionModal = ({ document, onSave, onClose, users }) => {
             }}
         >
             <div 
-                className="bg-white rounded-lg w-full max-w-xl"
+                className="modal-panel bg-white rounded-lg w-full max-w-xl"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">

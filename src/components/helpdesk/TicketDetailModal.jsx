@@ -467,7 +467,7 @@ const TicketDetailModal = ({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="ticket-modal-title"
-                    className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+                    className="modal-panel inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
                     tabIndex={-1}
                 >
                     {/* Header */}

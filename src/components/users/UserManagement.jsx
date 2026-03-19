@@ -948,7 +948,7 @@ const UserManagement = () => {
                 <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     <h3 className={`text-lg font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Users</h3>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="table-responsive overflow-x-auto">
                     <table className="w-full">
                         <thead className={isDark ? 'bg-gray-700' : 'bg-gray-100'}>
                             <tr>
@@ -1115,7 +1115,7 @@ const UserManagement = () => {
                     <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h3 className={`text-lg font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Pending Invitations</h3>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="table-responsive overflow-x-auto">
                         <table className="w-full">
                             <thead className={isDark ? 'bg-gray-700' : 'bg-gray-100'}>
                                 <tr>

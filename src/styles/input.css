@@ -29,34 +29,7 @@ body {
     touch-action: manipulation;
 }
 
-/* Mobile-specific optimizations */
-@media (max-width: 768px) {
-    body {
-        font-size: 16px; /* Prevents zoom on iOS */
-        line-height: 1.5;
-    }
-    
-    /* Prevent horizontal scroll */
-    html, body {
-        overflow-x: hidden;
-        width: 100%;
-    }
-    
-    /* Touch-friendly buttons */
-    button, .btn {
-        min-height: 44px;
-        min-width: 44px;
-    }
-    
-    /* Better spacing for mobile */
-    .space-y-3 > * + * {
-        margin-top: 0.75rem;
-    }
-    
-    .space-y-4 > * + * {
-        margin-top: 1rem;
-    }
-}
+/* Mobile overrides (overflow, touch, tables, modals) live in main.css */
 
 /* Dark mode support: apply only when .dark class is present */
 .dark {

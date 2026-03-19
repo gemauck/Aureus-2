@@ -1002,7 +1002,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             
                             {filteredAndSortedEmployees.length > 0 ? (
                                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                                    <div className="overflow-x-auto">
+                                    <div className="table-responsive overflow-x-auto">
                                         <table className="min-w-full divide-y divide-gray-200">
                                             <thead className="bg-gray-50">
                                                 <tr>

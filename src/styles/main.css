@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * ERP Responsive breakpoint strategy (use in CSS and when aligning with JS):
+ * - Mobile:  max-width: 767px (phone) — tables→cards, modals full-screen, touch targets
+ * - Tablet:  768px–1023px — MainLayout uses "mobile" sidebar behavior below 1024px (JS)
+ * - Desktop: 1024px+
+ * CSS mobile visual changes use 768px; MainLayout isMobile uses 1024px for sidebar only.
+ */
+
 /* Custom Primary Colors */
 :root {
     --primary-50: #e0f2fe;
@@ -78,11 +86,13 @@ body {
         -webkit-overflow-scrolling: touch;
     }
     
-    /* Mobile table to card conversion */
-    .table-responsive {
-        display: none;
+    /* Mobile table: hide table, show cards (from converter or .table-mobile) */
+    .table-responsive table {
+        display: none !important;
     }
-    
+    .table-responsive .mobile-table-cards {
+        display: block !important;
+    }
     .table-mobile {
         display: block;
     }
@@ -105,13 +115,17 @@ body {
     .modal {
         margin: 0;
         max-height: 100vh;
+        max-height: 100dvh;
         border-radius: 0;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
     
     .modal-dialog {
         margin: 0;
         max-width: 100%;
+        width: 100%;
         height: 100vh;
+        height: 100dvh;
         display: flex;
         flex-direction: column;
     }
@@ -123,15 +137,27 @@ body {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
     }
+    
+    /* Any modal inner panel with this class becomes full-screen on mobile */
+    .modal-panel {
+        max-width: 100% !important;
+        width: 100% !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+    }
 }
 
 @media (min-width: 769px) {
     .table-mobile {
         display: none;
     }
-    
-    .table-responsive {
-        display: block;
+    .table-responsive .mobile-table-cards {
+        display: none !important;
+    }
+    .table-responsive table {
+        display: table !important;
     }
 }
 

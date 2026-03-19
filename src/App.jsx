@@ -23,6 +23,8 @@ const AppContent = () => {
     // Call ALL useState hooks first (must be in same order every render)
     const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
     const [loginPageReady, setLoginPageReady] = window.React.useState(!!window.LoginPage);
+    // Safety: after 30s, stop showing loading so user is never stuck
+    const [loadingEscape, setLoadingEscape] = window.React.useState(false);
     
     // Get auth state - always call this hook
     let user = null;
@@ -51,6 +53,12 @@ const AppContent = () => {
     }
     
     // Call ALL useEffect hooks (must be in same order every render)
+    // Safety: after 30s force out of loading so site never stays stuck on "Loading..."
+    window.React.useEffect(() => {
+        const t = setTimeout(() => setLoadingEscape(true), 30000);
+        return () => clearTimeout(t);
+    }, []);
+
     // Toggle a body class so mobile CSS can avoid affecting the login page
     window.React.useEffect(() => {
         const body = document.body;
@@ -169,7 +177,8 @@ const AppContent = () => {
 
     // Show loading screen during auth check OR initial data load (only if user exists)
     // DataContext handles no-user case by setting initialLoadComplete=true immediately
-    if (authLoading || (user && !initialLoadComplete)) {
+    // loadingEscape: after 30s we stop showing loading so the site never stays stuck
+    if (!loadingEscape && (authLoading || (user && !initialLoadComplete))) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                 <div className="text-center">
@@ -211,9 +220,10 @@ const AppContent = () => {
 
     // Handle rendering based on user state
     if (!user) {
-        if (window.LoginPage && loginPageReady) {
+        if (window.LoginPage && (loginPageReady || loadingEscape)) {
             return <window.LoginPage />;
-        } else {
+        }
+        if (!loadingEscape) {
             // LoginPage not loaded yet - show loading
             return (
                 <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -225,6 +235,22 @@ const AppContent = () => {
                 </div>
             );
         }
+        // loadingEscape and LoginPage still not available - show minimal fallback with reload
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center max-w-md px-4">
+                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Login didn’t load in time</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Check your connection and try again.</p>
+                    <button
+                        type="button"
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                    >
+                        Reload page
+                    </button>
+                </div>
+            </div>
+        );
     }
     
     return <window.MainLayout />;

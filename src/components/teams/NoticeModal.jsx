@@ -78,7 +78,7 @@ const NoticeModal = ({ isOpen, onClose, team, notice, onSave }) => {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
+            <div className="modal-panel bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between dark:bg-slate-800 dark:border-slate-700">
                     <div>
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">

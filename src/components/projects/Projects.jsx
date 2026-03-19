@@ -4091,7 +4091,7 @@ const Projects = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
+                        <div className="table-responsive overflow-x-auto">
                             <table className="w-full text-sm border-collapse [&_th:first-child]:pl-4 [&_td:first-child]:pl-4">
                                 <thead>
                                     <tr className={isDark ? 'bg-gray-800/50 border-b border-gray-700' : 'bg-gray-50 border-b border-gray-200'}>
@@ -4856,7 +4856,7 @@ const Projects = () => {
                         </div>
                     ) : (
                         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
-                            <div className="overflow-x-auto">
+                            <div className="table-responsive overflow-x-auto min-w-0">
                                 <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                     <colgroup>
                                         <col style={{ width: '28%' }} />
@@ -5076,7 +5076,7 @@ const Projects = () => {
                         </div>
                     ) : viewMode === 'list' ? (
                         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
-                            <div className="overflow-x-auto">
+                            <div className="table-responsive overflow-x-auto min-w-0">
                                 <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                     <colgroup>
                                         <col style={{ width: '28%' }} />
@@ -5231,7 +5231,7 @@ const Projects = () => {
                     />
                 ) : (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6 w-full max-w-md shadow-xl`}>
+                        <div className={`modal-panel ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6 w-full max-w-md shadow-xl`}>
                             <h2 className={`text-lg font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Something went wrong</h2>
                             <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Project editor failed to load. Please wait a moment and try again.</p>
                             <div className="flex justify-end">
@@ -5254,7 +5254,7 @@ const Projects = () => {
             {/* Delete Confirmation Modal */}
             {deleteConfirmation.show && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-confirmation-title">
-                    <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6 w-full max-w-md shadow-xl`}>
+                    <div className={`modal-panel ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6 w-full max-w-md shadow-xl`}>
                         <div className="flex items-start mb-4">
                             <div className="flex-shrink-0">
                                 <i className={`fas fa-exclamation-triangle text-2xl ${isDark ? 'text-red-400' : 'text-red-600'}`}></i>

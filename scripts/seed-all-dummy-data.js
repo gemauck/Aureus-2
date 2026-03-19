@@ -155,7 +155,7 @@ async function main() {
   }
   console.log('   ✅ Notifications for 4 users')
 
-  // System settings (ensure one exists)
+  // System settings (company name only; user preferences are in UserSettings)
   console.log('\n⚙️ Ensuring system settings...')
   await prisma.systemSettings.upsert({
     where: { id: 'system' },
@@ -168,6 +168,29 @@ async function main() {
     }
   })
   console.log('   ✅ System settings')
+
+  // User settings (per-user preferences) for admin
+  console.log('\n⚙️ Ensuring user settings for admin...')
+  await prisma.userSettings.upsert({
+    where: { userId: adminUser.id },
+    update: {},
+    create: {
+      userId: adminUser.id,
+      timezone: 'Africa/Johannesburg',
+      currency: 'ZAR',
+      dateFormat: 'DD/MM/YYYY',
+      language: 'en',
+      sessionTimeout: 30,
+      requirePasswordChange: false,
+      twoFactorAuth: false,
+      auditLogging: true,
+      emailProvider: 'gmail',
+      googleCalendar: false,
+      quickbooks: false,
+      slack: false
+    }
+  })
+  console.log('   ✅ User settings for admin')
 
   // Leave balances (for first user)
   const year = new Date().getFullYear()

@@ -755,7 +755,7 @@ const LeadDetailModal = ({
 
         // Create modal content
         const modalContent = document.createElement('div');
-        modalContent.className = 'bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col';
+        modalContent.className = 'modal-panel bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col';
         modalContent.style.cssText = 'z-index: 100000; position: relative;';
         modalContent.onclick = (e) => e.stopPropagation();
         modalContainer.appendChild(modalContent);
@@ -6063,7 +6063,7 @@ const LeadDetailModal = ({
                     }}
                 >
                     <div 
-                        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
+                        className="modal-panel bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
@@ -6672,7 +6672,7 @@ const LeadDetailModal = ({
             }
         },
             React.createElement('div', {
-                className: 'bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col',
+                className: 'modal-panel bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col',
                 onClick: (e) => e.stopPropagation()
             },
                 // Header

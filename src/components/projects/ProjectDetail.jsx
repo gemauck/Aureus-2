@@ -5165,6 +5165,13 @@ function initializeProjectDetail() {
         return { label: due.toLocaleDateString(), pillClass: 'bg-gray-100 text-gray-600' };
     }, []);
 
+    const formatStartDateLabel = useCallback((dateValue) => {
+        if (!dateValue) return null;
+        const parsed = new Date(dateValue);
+        if (Number.isNaN(parsed.getTime())) return null;
+        return parsed.toLocaleDateString();
+    }, []);
+
     const kanbanColumns = useMemo(() => {
         const baseOrder = ['to do', 'in progress', 'review', 'blocked', 'done'];
         const seen = new Set();
@@ -6249,7 +6256,9 @@ function initializeProjectDetail() {
                         assigneeId: taskToSave.assigneeId || null,
                         assigneeIds: Array.isArray(taskToSave.assigneeIds) ? taskToSave.assigneeIds : [],
                         sendNotifications: sendNotificationsOption,
+                        startDate: taskToSave.startDate || null,
                         dueDate: taskToSave.dueDate || null,
+                        reminderRecurrence: (taskToSave.reminderRecurrence && taskToSave.reminderRecurrence !== 'none') ? taskToSave.reminderRecurrence : null,
                         listId: taskToSave.listId || null,
                         estimatedHours: taskToSave.estimatedHours || null,
                         actualHours: taskToSave.actualHours || null,
@@ -6315,7 +6324,9 @@ function initializeProjectDetail() {
                                         priority: draft.priority || 'Medium',
                                         assignee: draft.assignee || '',
                                         assigneeId: draft.assigneeId || null,
+                                        startDate: draft.startDate || null,
                                         dueDate: draft.dueDate || null,
+                                        reminderRecurrence: (draft.reminderRecurrence && draft.reminderRecurrence !== 'none') ? draft.reminderRecurrence : null,
                                         listId: draft.listId || savedTask.listId || null,
                                         parentTaskId: savedTask.id
                                     };
@@ -7906,10 +7917,18 @@ function initializeProjectDetail() {
                                                                         </span>
                                                                     </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap">
-                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${dueMeta.pillClass}`}>
-                                                                            <i className="fas fa-calendar-alt text-[9px] mr-1"></i>
-                                                                            {dueMeta.label}
-                                                                        </span>
+                                                                        <div className="flex flex-wrap items-center gap-1">
+                                                                            {task.startDate && formatStartDateLabel(task.startDate) && (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700" title="Start date">
+                                                                                    <i className="fas fa-play-circle text-[9px] mr-1"></i>
+                                                                                    {formatStartDateLabel(task.startDate)}
+                                                                                </span>
+                                                                            )}
+                                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${dueMeta.pillClass}`}>
+                                                                                <i className="fas fa-calendar-alt text-[9px] mr-1"></i>
+                                                                                {dueMeta.label}
+                                                                            </span>
+                                                                        </div>
                                                                     </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap text-center">
                                                                         {task.comments?.length > 0 ? (
@@ -8722,6 +8741,7 @@ function initializeProjectDetail() {
                 ListView()
             ) : (
                 KanbanViewComponent ? (
+                    <div className="min-w-0 overflow-x-auto">
                     <KanbanViewComponent
                         tasks={kanbanTasks}
                         statusColumns={kanbanColumns}
@@ -8734,6 +8754,7 @@ function initializeProjectDetail() {
                         getPriorityColor={getPriorityColor}
                         getDueDateMeta={getDueDateMeta}
                     />
+                    </div>
                 ) : (
                     <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-gray-300 mb-2"></i>

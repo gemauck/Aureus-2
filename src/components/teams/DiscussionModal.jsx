@@ -64,7 +64,7 @@ const DiscussionModal = ({ isOpen, onClose, team, discussion, onSave, isDark, in
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className={`${bg} rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border ${border} shadow-lg`}>
+            <div className={`modal-panel ${bg} rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border ${border} shadow-lg`}>
                 <div className={`sticky top-0 ${bg} border-b ${border} px-4 py-3 flex items-center justify-between`}>
                     <h3 className={`text-lg font-semibold ${text}`}>
                         {discussion ? 'Edit Discussion' : type === 'notice' ? 'New Notice' : 'New Discussion'}

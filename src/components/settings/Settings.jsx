@@ -1,23 +1,25 @@
-// Settings Component - System Configuration and Preferences
+// Settings Component - Per-user preferences (company name is read-only from system)
 const { useState, useEffect } = React;
+
+const USER_PREF_DEFAULTS = {
+    timezone: 'Africa/Johannesburg',
+    currency: 'ZAR',
+    dateFormat: 'DD/MM/YYYY',
+    language: 'en',
+    sessionTimeout: 30,
+    requirePasswordChange: false,
+    twoFactorAuth: false,
+    auditLogging: true,
+    emailProvider: 'gmail',
+    googleCalendar: false,
+    quickbooks: false,
+    slack: false
+};
 
 const Settings = () => {
     const [activeTab, setActiveTab] = useState('general');
-    const [settings, setSettings] = useState({
-        companyName: 'Abcotronics',
-        timezone: 'Africa/Johannesburg',
-        currency: 'ZAR',
-        dateFormat: 'DD/MM/YYYY',
-        language: 'en',
-        sessionTimeout: 30,
-        requirePasswordChange: false,
-        twoFactorAuth: false,
-        auditLogging: true,
-        emailProvider: 'gmail',
-        googleCalendar: false,
-        quickbooks: false,
-        slack: false
-    });
+    const [companyName, setCompanyName] = useState('Abcotronics');
+    const [settings, setSettings] = useState({ ...USER_PREF_DEFAULTS });
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [saveStatus, setSaveStatus] = useState('');
@@ -44,34 +46,25 @@ const Settings = () => {
     const handleSave = async () => {
         setIsLoading(true);
         setSaveStatus('Saving...');
-        
         try {
-            // Validate settings before saving
-            if (!settings.companyName || settings.companyName.trim() === '') {
-                setSaveStatus('Error: Company name is required');
-                setTimeout(() => setSaveStatus(''), 3000);
-                setIsLoading(false);
-                return;
-            }
-            
-            // Save to database via API: prefer bound window.api, then DatabaseAPI, then fetch fallback
             let saved = false;
             let savedSettings = null;
-            
+            let savedCompanyName = companyName;
             try {
                 if (window.api?.updateSettings) {
                     const response = await window.api.updateSettings(settings);
                     savedSettings = response?.data?.settings || settings;
+                    savedCompanyName = response?.data?.companyName ?? companyName;
                     saved = true;
                 } else if (window.DatabaseAPI?.updateSettings) {
                     const response = await window.DatabaseAPI.updateSettings(settings);
                     savedSettings = response?.data?.settings || settings;
+                    savedCompanyName = response?.data?.companyName ?? companyName;
                     saved = true;
                 }
             } catch (apiErr) {
                 console.warn('Settings API save failed, trying fetch fallback:', apiErr);
             }
-            
             if (!saved) {
                 const token = window.storage?.getToken?.() || localStorage.getItem('token');
                 const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
@@ -85,35 +78,23 @@ const Settings = () => {
                     if (res.ok) {
                         const json = await res.json();
                         savedSettings = json?.data?.settings || settings;
+                        savedCompanyName = json?.data?.companyName ?? companyName;
                         saved = true;
                     }
                 }
             }
-            
             if (!saved) {
-                localStorage.setItem('systemSettings', JSON.stringify(settings));
                 savedSettings = settings;
                 saved = true;
                 console.warn('⚠️ Settings saved to localStorage (API not available)');
             }
-            
             if (saved && savedSettings) {
-                // Update state with saved settings (in case server normalized them)
                 setSettings(savedSettings);
-                
-                // Store settings in localStorage for quick access
-                localStorage.setItem('systemSettings', JSON.stringify(savedSettings));
-                
-                // Apply settings to global context if available
-                if (window.setSystemSettings) {
-                    window.setSystemSettings(savedSettings);
-                }
-                
-                // Dispatch event so other components can react to settings changes
-                window.dispatchEvent(new CustomEvent('systemSettingsChanged', { 
-                    detail: savedSettings 
-                }));
-                
+                setCompanyName(savedCompanyName);
+                const merged = { ...savedSettings, companyName: savedCompanyName };
+                localStorage.setItem('systemSettings', JSON.stringify(merged));
+                if (window.setSystemSettings) window.setSystemSettings(merged);
+                window.dispatchEvent(new CustomEvent('systemSettingsChanged', { detail: merged }));
                 setSaveStatus('✅ Settings saved successfully!');
                 setTimeout(() => setSaveStatus(''), 3000);
             } else {
@@ -130,31 +111,14 @@ const Settings = () => {
     };
 
     const handleReset = async () => {
-        if (confirm('Are you sure you want to reset all settings to default?')) {
-            const defaultSettings = {
-                companyName: 'Abcotronics',
-                timezone: 'Africa/Johannesburg',
-                currency: 'ZAR',
-                dateFormat: 'DD/MM/YYYY',
-                language: 'en',
-                sessionTimeout: 30,
-                requirePasswordChange: false,
-                twoFactorAuth: false,
-                auditLogging: true,
-                emailProvider: 'gmail',
-                googleCalendar: false,
-                quickbooks: false,
-                slack: false
-            };
-            
-            setSettings(defaultSettings);
-            
-            // Also save the reset to database (prefer bound window.api)
+        if (confirm('Are you sure you want to reset your preferences to default?')) {
+            const defaultPrefs = { ...USER_PREF_DEFAULTS };
+            setSettings(defaultPrefs);
             try {
                 if (window.api?.updateSettings) {
-                    await window.api.updateSettings(defaultSettings);
+                    await window.api.updateSettings(defaultPrefs);
                 } else if (window.DatabaseAPI?.updateSettings) {
-                    await window.DatabaseAPI.updateSettings(defaultSettings);
+                    await window.DatabaseAPI.updateSettings(defaultPrefs);
                 } else {
                     const token = window.storage?.getToken?.() || localStorage.getItem('token');
                     const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
@@ -163,21 +127,15 @@ const Settings = () => {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                             credentials: 'include',
-                            body: JSON.stringify(defaultSettings)
+                            body: JSON.stringify(defaultPrefs)
                         });
                         if (!res.ok) throw new Error('Failed to save');
                     }
                 }
-                localStorage.setItem('systemSettings', JSON.stringify(defaultSettings));
-                if (window.setSystemSettings) {
-                    window.setSystemSettings(defaultSettings);
-                }
-                
-                // Dispatch event so other components can react to settings changes
-                window.dispatchEvent(new CustomEvent('systemSettingsChanged', { 
-                    detail: defaultSettings 
-                }));
-                
+                const merged = { ...defaultPrefs, companyName };
+                localStorage.setItem('systemSettings', JSON.stringify(merged));
+                if (window.setSystemSettings) window.setSystemSettings(merged);
+                window.dispatchEvent(new CustomEvent('systemSettingsChanged', { detail: merged }));
                 setSaveStatus('Settings reset to default!');
                 setTimeout(() => setSaveStatus(''), 3000);
             } catch (error) {
@@ -195,7 +153,7 @@ const Settings = () => {
             const exportData = {
                 exportDate: new Date().toISOString(),
                 version: '1.0',
-                settings: settings,
+                settings: { ...settings, companyName },
                 data: {}
             };
             
@@ -411,9 +369,23 @@ const Settings = () => {
                     }
                 }
                 
-                // Import Settings if present
-                if (importData.settings && confirm('Do you want to import settings as well?')) {
-                    setSettings(importData.settings);
+                // Import user preferences if present (company name is not user-editable)
+                if (importData.settings && confirm('Do you want to import your preferences as well?')) {
+                    const prefs = { ...USER_PREF_DEFAULTS };
+                    const s = importData.settings;
+                    if (s.timezone != null) prefs.timezone = s.timezone;
+                    if (s.currency != null) prefs.currency = s.currency;
+                    if (s.dateFormat != null) prefs.dateFormat = s.dateFormat;
+                    if (s.language != null) prefs.language = s.language;
+                    if (s.sessionTimeout != null) prefs.sessionTimeout = s.sessionTimeout;
+                    if (s.requirePasswordChange != null) prefs.requirePasswordChange = s.requirePasswordChange;
+                    if (s.twoFactorAuth != null) prefs.twoFactorAuth = s.twoFactorAuth;
+                    if (s.auditLogging != null) prefs.auditLogging = s.auditLogging;
+                    if (s.emailProvider != null) prefs.emailProvider = s.emailProvider;
+                    if (s.googleCalendar != null) prefs.googleCalendar = s.googleCalendar;
+                    if (s.quickbooks != null) prefs.quickbooks = s.quickbooks;
+                    if (s.slack != null) prefs.slack = s.slack;
+                    setSettings(prefs);
                     await handleSave();
                 }
                 
@@ -485,24 +457,25 @@ const Settings = () => {
     };
 
     useEffect(() => {
-        // Load settings from database
         const loadSettings = async () => {
             setIsLoadingData(true);
             try {
-                // Load from API: prefer bound window.api, then DatabaseAPI, then fetch fallback
-                let dbSettings = null;
+                let userPrefs = null;
+                let company = 'Abcotronics';
                 try {
                     if (window.api?.getSettings) {
                         const response = await window.api.getSettings();
-                        dbSettings = response?.data?.settings;
+                        userPrefs = response?.data?.settings;
+                        company = response?.data?.companyName ?? company;
                     } else if (window.DatabaseAPI?.getSettings) {
                         const response = await window.DatabaseAPI.getSettings();
-                        dbSettings = response?.data?.settings;
+                        userPrefs = response?.data?.settings;
+                        company = response?.data?.companyName ?? company;
                     }
                 } catch (err) {
                     console.warn('Settings API load failed:', err);
                 }
-                if (dbSettings == null) {
+                if (userPrefs == null) {
                     const token = window.storage?.getToken?.() || localStorage.getItem('token');
                     const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
                     if (token) {
@@ -514,152 +487,79 @@ const Settings = () => {
                             });
                             if (res.ok) {
                                 const json = await res.json();
-                                dbSettings = json?.data?.settings;
+                                userPrefs = json?.data?.settings;
+                                company = json?.data?.companyName ?? company;
                             }
                         } catch (fetchErr) {
                             console.warn('Settings fetch fallback failed:', fetchErr);
                         }
                     }
                 }
-                
-                // If database settings found, merge with defaults to ensure all fields exist
-                if (dbSettings) {
-                    // Merge with defaults to ensure all fields are present
-                    const mergedSettings = {
-                        companyName: dbSettings.companyName ?? 'Abcotronics',
-                        timezone: dbSettings.timezone ?? 'Africa/Johannesburg',
-                        currency: dbSettings.currency ?? 'ZAR',
-                        dateFormat: dbSettings.dateFormat ?? 'DD/MM/YYYY',
-                        language: dbSettings.language ?? 'en',
-                        sessionTimeout: dbSettings.sessionTimeout ?? 30,
-                        requirePasswordChange: dbSettings.requirePasswordChange ?? false,
-                        twoFactorAuth: dbSettings.twoFactorAuth ?? false,
-                        auditLogging: dbSettings.auditLogging ?? true,
-                        emailProvider: dbSettings.emailProvider ?? 'gmail',
-                        googleCalendar: dbSettings.googleCalendar ?? false,
-                        quickbooks: dbSettings.quickbooks ?? false,
-                        slack: dbSettings.slack ?? false
-                    };
-                    setSettings(mergedSettings);
-                    localStorage.setItem('systemSettings', JSON.stringify(mergedSettings));
-                } else {
-                    // Fallback: try localStorage
-                    const localSettings = localStorage.getItem('systemSettings');
-                    if (localSettings) {
+                let mergedPrefs = {
+                    ...USER_PREF_DEFAULTS,
+                    ...(userPrefs || {}),
+                    timezone: userPrefs?.timezone ?? USER_PREF_DEFAULTS.timezone,
+                    currency: userPrefs?.currency ?? USER_PREF_DEFAULTS.currency,
+                    dateFormat: userPrefs?.dateFormat ?? USER_PREF_DEFAULTS.dateFormat,
+                    language: userPrefs?.language ?? USER_PREF_DEFAULTS.language,
+                    sessionTimeout: userPrefs?.sessionTimeout ?? USER_PREF_DEFAULTS.sessionTimeout,
+                    requirePasswordChange: userPrefs?.requirePasswordChange ?? USER_PREF_DEFAULTS.requirePasswordChange,
+                    twoFactorAuth: userPrefs?.twoFactorAuth ?? USER_PREF_DEFAULTS.twoFactorAuth,
+                    auditLogging: userPrefs?.auditLogging ?? USER_PREF_DEFAULTS.auditLogging,
+                    emailProvider: userPrefs?.emailProvider ?? USER_PREF_DEFAULTS.emailProvider,
+                    googleCalendar: userPrefs?.googleCalendar ?? USER_PREF_DEFAULTS.googleCalendar,
+                    quickbooks: userPrefs?.quickbooks ?? USER_PREF_DEFAULTS.quickbooks,
+                    slack: userPrefs?.slack ?? USER_PREF_DEFAULTS.slack
+                };
+                if (userPrefs == null && company === 'Abcotronics') {
+                    const stored = localStorage.getItem('systemSettings');
+                    if (stored) {
                         try {
-                            const parsed = JSON.parse(localSettings);
-                            // Merge with defaults
-                            const mergedSettings = {
-                                companyName: parsed.companyName ?? 'Abcotronics',
-                                timezone: parsed.timezone ?? 'Africa/Johannesburg',
-                                currency: parsed.currency ?? 'ZAR',
-                                dateFormat: parsed.dateFormat ?? 'DD/MM/YYYY',
-                                language: parsed.language ?? 'en',
-                                sessionTimeout: parsed.sessionTimeout ?? 30,
-                                requirePasswordChange: parsed.requirePasswordChange ?? false,
-                                twoFactorAuth: parsed.twoFactorAuth ?? false,
-                                auditLogging: parsed.auditLogging ?? true,
-                                emailProvider: parsed.emailProvider ?? 'gmail',
-                                googleCalendar: parsed.googleCalendar ?? false,
-                                quickbooks: parsed.quickbooks ?? false,
-                                slack: parsed.slack ?? false
-                            };
-                            setSettings(mergedSettings);
-                        } catch (err) {
-                            console.warn('Failed to parse localStorage settings:', err);
-                        }
-                    }
-                }
-                
-                // Get final settings (merged with defaults)
-                let finalSettings = {};
-                if (dbSettings) {
-                    finalSettings = {
-                        companyName: dbSettings.companyName ?? 'Abcotronics',
-                        timezone: dbSettings.timezone ?? 'Africa/Johannesburg',
-                        currency: dbSettings.currency ?? 'ZAR',
-                        dateFormat: dbSettings.dateFormat ?? 'DD/MM/YYYY',
-                        language: dbSettings.language ?? 'en',
-                        sessionTimeout: dbSettings.sessionTimeout ?? 30,
-                        requirePasswordChange: dbSettings.requirePasswordChange ?? false,
-                        twoFactorAuth: dbSettings.twoFactorAuth ?? false,
-                        auditLogging: dbSettings.auditLogging ?? true,
-                        emailProvider: dbSettings.emailProvider ?? 'gmail',
-                        googleCalendar: dbSettings.googleCalendar ?? false,
-                        quickbooks: dbSettings.quickbooks ?? false,
-                        slack: dbSettings.slack ?? false
-                    };
-                } else {
-                    const localSettings = localStorage.getItem('systemSettings');
-                    if (localSettings) {
-                        try {
-                            const parsed = JSON.parse(localSettings);
-                            finalSettings = {
-                                companyName: parsed.companyName ?? 'Abcotronics',
-                                timezone: parsed.timezone ?? 'Africa/Johannesburg',
-                                currency: parsed.currency ?? 'ZAR',
-                                dateFormat: parsed.dateFormat ?? 'DD/MM/YYYY',
-                                language: parsed.language ?? 'en',
-                                sessionTimeout: parsed.sessionTimeout ?? 30,
-                                requirePasswordChange: parsed.requirePasswordChange ?? false,
-                                twoFactorAuth: parsed.twoFactorAuth ?? false,
-                                auditLogging: parsed.auditLogging ?? true,
-                                emailProvider: parsed.emailProvider ?? 'gmail',
-                                googleCalendar: parsed.googleCalendar ?? false,
-                                quickbooks: parsed.quickbooks ?? false,
-                                slack: parsed.slack ?? false
+                            const parsed = JSON.parse(stored);
+                            company = parsed.companyName ?? 'Abcotronics';
+                            mergedPrefs = {
+                                ...USER_PREF_DEFAULTS,
+                                timezone: parsed.timezone ?? USER_PREF_DEFAULTS.timezone,
+                                currency: parsed.currency ?? USER_PREF_DEFAULTS.currency,
+                                dateFormat: parsed.dateFormat ?? USER_PREF_DEFAULTS.dateFormat,
+                                language: parsed.language ?? USER_PREF_DEFAULTS.language,
+                                sessionTimeout: parsed.sessionTimeout ?? USER_PREF_DEFAULTS.sessionTimeout,
+                                requirePasswordChange: parsed.requirePasswordChange ?? USER_PREF_DEFAULTS.requirePasswordChange,
+                                twoFactorAuth: parsed.twoFactorAuth ?? USER_PREF_DEFAULTS.twoFactorAuth,
+                                auditLogging: parsed.auditLogging ?? USER_PREF_DEFAULTS.auditLogging,
+                                emailProvider: parsed.emailProvider ?? USER_PREF_DEFAULTS.emailProvider,
+                                googleCalendar: parsed.googleCalendar ?? USER_PREF_DEFAULTS.googleCalendar,
+                                quickbooks: parsed.quickbooks ?? USER_PREF_DEFAULTS.quickbooks,
+                                slack: parsed.slack ?? USER_PREF_DEFAULTS.slack
                             };
                         } catch (e) {
                             console.warn('Failed to parse localStorage settings:', e);
                         }
                     }
                 }
-                
-                // Apply settings to global context if available
-                if (Object.keys(finalSettings).length > 0 && window.setSystemSettings) {
-                    window.setSystemSettings(finalSettings);
-                }
-                
-                // Dispatch event so other components can react to settings loaded
-                if (Object.keys(finalSettings).length > 0) {
-                    window.dispatchEvent(new CustomEvent('systemSettingsLoaded', { 
-                        detail: finalSettings 
-                    }));
-                }
-                
-                // Expose global getter function for settings
+                setSettings(mergedPrefs);
+                setCompanyName(company);
+                const finalSettings = { ...mergedPrefs, companyName: company };
+                localStorage.setItem('systemSettings', JSON.stringify(finalSettings));
+                if (window.setSystemSettings) window.setSystemSettings(finalSettings);
+                window.dispatchEvent(new CustomEvent('systemSettingsLoaded', { detail: finalSettings }));
                 window.getSystemSettings = () => {
                     const stored = localStorage.getItem('systemSettings');
                     if (stored) {
                         try {
-                            const parsed = JSON.parse(stored);
-                            // Merge with defaults
+                            const p = JSON.parse(stored);
                             return {
-                                companyName: parsed.companyName ?? 'Abcotronics',
-                                timezone: parsed.timezone ?? 'Africa/Johannesburg',
-                                currency: parsed.currency ?? 'ZAR',
-                                dateFormat: parsed.dateFormat ?? 'DD/MM/YYYY',
-                                language: parsed.language ?? 'en',
-                                sessionTimeout: parsed.sessionTimeout ?? 30,
-                                requirePasswordChange: parsed.requirePasswordChange ?? false,
-                                twoFactorAuth: parsed.twoFactorAuth ?? false,
-                                auditLogging: parsed.auditLogging ?? true,
-                                emailProvider: parsed.emailProvider ?? 'gmail',
-                                googleCalendar: parsed.googleCalendar ?? false,
-                                quickbooks: parsed.quickbooks ?? false,
-                                slack: parsed.slack ?? false
+                                companyName: p.companyName ?? 'Abcotronics',
+                                ...USER_PREF_DEFAULTS,
+                                ...p
                             };
                         } catch (e) {
                             console.warn('Failed to parse stored settings:', e);
                         }
                     }
-                    return finalSettings || {};
+                    return { ...USER_PREF_DEFAULTS, companyName: company };
                 };
-                
-                // Expose helper to check if settings API is available
-                window.isSettingsAPIAvailable = () => {
-                    return !!(window.DatabaseAPI?.updateSettings || window.api?.updateSettings);
-                };
+                window.isSettingsAPIAvailable = () => !!(window.DatabaseAPI?.updateSettings || window.api?.updateSettings);
             } catch (error) {
                 console.error('Error loading settings:', error);
             } finally {
@@ -673,16 +573,14 @@ const Settings = () => {
         <div className="space-y-6">
             <div>
                 <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                    Company Name
+                    Company
                 </label>
-                <input
-                    type="text"
-                    value={settings.companyName}
-                    onChange={(e) => setSettings(prev => ({ ...prev, companyName: e.target.value }))}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                        isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
-                    }`}
-                />
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {companyName}
+                </p>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                    Company name is set at the system level and cannot be changed here.
+                </p>
             </div>
 
             <div>

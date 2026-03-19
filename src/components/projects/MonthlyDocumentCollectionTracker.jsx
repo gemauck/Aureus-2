@@ -4250,7 +4250,7 @@ const getAssigneeColor = (identifier, users) => {
         
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-section-modal="true">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-md">
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             {editingSection ? 'Edit Section' : 'Add New Section'}
@@ -5151,7 +5151,7 @@ Abcotronics`;
 
         return (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-100">
+                <div className="modal-panel bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-100">
                     {/* Header with gradient */}
                     <div className="relative bg-gradient-to-r from-[#0369a1] to-[#0ea5e9] px-5 py-4">
                         <div className="flex items-center gap-3">
@@ -5829,7 +5829,7 @@ Abcotronics`;
         
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-md">
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             {editingDocument ? 'Edit Document' : 'Add Document'}
@@ -5980,7 +5980,7 @@ Abcotronics`;
         if (showTemplateList) {
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                             <h2 className="text-base font-semibold text-gray-900">Template Management</h2>
                             <button onClick={() => setShowTemplateModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
@@ -6079,7 +6079,7 @@ Abcotronics`;
         
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             {editingTemplate ? 'Edit Template' : 'Create Template'}
@@ -6272,7 +6272,7 @@ Abcotronics`;
         
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-md">
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">Apply Template</h2>
                         <button onClick={() => setShowApplyTemplateModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
@@ -7552,7 +7552,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                 
                 return (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setExpandedDescriptionId(null)}>
-                        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
                             <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                                 <h2 className="text-base font-semibold text-gray-900">{foundDocName} - Description</h2>
                                 <button 

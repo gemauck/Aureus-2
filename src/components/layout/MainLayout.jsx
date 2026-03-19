@@ -1454,7 +1454,19 @@ const MainLayout = () => {
 
     /* Layout: isMobile (sidebar overlay) uses 1024px; CSS mobile visuals use 768px — see main.css breakpoint comment */
     return (
-        <div className={`flex h-screen overflow-hidden overflow-x-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`} style={{ width: '100vw', maxWidth: '100vw', overflowX: 'hidden' }}>
+        <div 
+            className={`flex h-screen overflow-hidden overflow-x-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`} 
+            style={{ 
+                width: '100vw', 
+                maxWidth: '100vw', 
+                overflowX: 'hidden',
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingLeft: 'env(safe-area-inset-left)',
+                paddingRight: 'env(safe-area-inset-right)',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+                boxSizing: 'border-box'
+            }}
+        >
             {/* Mobile Sidebar Overlay - FIXED positioning */}
             {isMobile && sidebarOpen && (
                 <div 
@@ -1553,7 +1565,7 @@ const MainLayout = () => {
                     className={`
                         ${isDark ? 'bg-gray-900' : 'bg-white'} 
                         ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-100'} 
-                        h-16 flex items-center justify-between px-6 flex-shrink-0
+                        h-16 flex items-center justify-between px-4 sm:px-6 flex-shrink-0
                         ${isMobile ? 'sticky top-0 z-30' : ''}
                     `}
                 >

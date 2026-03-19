@@ -188,14 +188,14 @@ const KanbanView = ({
     };
 
     return (
-        <div className="flex gap-3 overflow-x-auto pb-4">
+        <div className="flex gap-3 overflow-x-auto pb-4 min-w-0" style={{ WebkitOverflowScrolling: 'touch' }}>
             {tasksByStatus.map(({ column, tasks: statusTasks }) => {
                 const statusColorClass = statusColorFn(column.label);
                 
                 return (
                     <div 
                         key={column.value} 
-                        className="flex-shrink-0 w-72"
+                        className="flex-shrink-0 w-72 min-w-[260px]"
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, column.label)}
@@ -245,13 +245,22 @@ const KanbanView = ({
 
                                             {/* Task Metadata */}
                                             <div className="space-y-1.5">
-                                                {/* Priority & Due Date */}
+                                                {/* Priority, Start & Due Date */}
                                                 <div className="flex items-center gap-1.5 flex-wrap">
                                                     {task.priority && (
                                                         <span className={`px-1.5 py-0.5 text-[10px] rounded ${priorityColorFn(task.priority)} font-medium`}>
                                                             {task.priority}
                                                         </span>
                                                     )}
+                                                    {task.startDate && (() => {
+                                                        const d = new Date(task.startDate);
+                                                        return !Number.isNaN(d.getTime()) ? (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-700 font-medium">
+                                                                <i className="fas fa-play-circle text-[9px]"></i>
+                                                                {d.toLocaleDateString()}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
                                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${dueMeta.pillClass}`}>
                                                         <i className="fas fa-calendar text-[9px]"></i>
                                                         {dueMeta.label}

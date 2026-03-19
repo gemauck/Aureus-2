@@ -68,7 +68,10 @@ function transformTask(task, options = {}) {
     assignee: task.assignee || task.assigneeUser?.name || '',
     assigneeId: task.assigneeId,
     assigneeIds: safeParseJson(task.assigneeIds, []),
+    startDate: task.startDate ? task.startDate.toISOString() : null,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    reminderRecurrence: task.reminderRecurrence || null,
+    lastReminderSentAt: task.lastReminderSentAt ? task.lastReminderSentAt.toISOString() : null,
     listId: task.listId,
     order: task.order != null ? task.order : 0,
     estimatedHours: task.estimatedHours,
@@ -580,7 +583,9 @@ async function handler(req, res) {
         assigneeId, 
         assigneeIds: bodyAssigneeIds, 
         sendNotifications = false, 
+        startDate, 
         dueDate, 
+        reminderRecurrence, 
         listId, 
         estimatedHours, 
         actualHours, 
@@ -628,7 +633,9 @@ async function handler(req, res) {
           assigneeId: assigneeIdFinal || null,
           assignee: assigneeName,
           assigneeIds: JSON.stringify(assigneeIdsFinal),
+          startDate: startDate ? new Date(startDate) : null,
           dueDate: dueDate ? new Date(dueDate) : null,
+          reminderRecurrence: (reminderRecurrence && ['daily', 'weekly'].includes(String(reminderRecurrence))) ? String(reminderRecurrence) : null,
           listId: listId ? parseInt(String(listId), 10) : null,
           order: body.order != null ? parseInt(String(body.order), 10) : 0,
           estimatedHours: estimatedHours ? parseFloat(String(estimatedHours)) : null,
@@ -760,6 +767,14 @@ async function handler(req, res) {
           updateData.assignee = '';
         }
       }
+      if (body.startDate !== undefined) {
+        if (body.startDate === null || body.startDate === undefined || body.startDate === '') {
+          updateData.startDate = null;
+        } else {
+          const d = new Date(body.startDate);
+          updateData.startDate = Number.isNaN(d.getTime()) ? null : d;
+        }
+      }
       if (body.dueDate !== undefined || body.due_date !== undefined) {
         const raw = body.dueDate !== undefined ? body.dueDate : body.due_date;
         if (raw === null || raw === undefined || raw === '') {
@@ -768,6 +783,10 @@ async function handler(req, res) {
           const d = new Date(raw);
           updateData.dueDate = Number.isNaN(d.getTime()) ? null : d;
         }
+      }
+      if (body.reminderRecurrence !== undefined) {
+        const val = body.reminderRecurrence;
+        updateData.reminderRecurrence = (val && ['daily', 'weekly'].includes(String(val))) ? String(val) : null;
       }
       if (body.listId !== undefined) {
         updateData.listId = body.listId ? parseInt(String(body.listId), 10) : null;

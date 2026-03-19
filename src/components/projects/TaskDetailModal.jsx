@@ -33,7 +33,9 @@ const TaskDetailModal = ({
         assignee: '',
         assigneeId: null,
         assigneeIds: [],
+        startDate: '',
         dueDate: '',
+        reminderRecurrence: 'none',
         priority: 'Medium',
         listId: task?.listId || (taskLists && taskLists[0]?.id) || 1,
         customFields: {},
@@ -724,7 +726,9 @@ const TaskDetailModal = ({
                 assignee: task.assignee !== undefined ? task.assignee : prev.assignee,
                 assigneeId: task.assigneeId !== undefined ? task.assigneeId : prev.assigneeId,
                 assigneeIds: task.assigneeIds !== undefined ? (Array.isArray(task.assigneeIds) ? task.assigneeIds : []) : (task.assigneeId != null ? [task.assigneeId] : prev.assigneeIds || []),
+                startDate: task.startDate !== undefined ? task.startDate : prev.startDate,
                 dueDate: task.dueDate !== undefined ? task.dueDate : prev.dueDate,
+                reminderRecurrence: task.reminderRecurrence !== undefined ? (task.reminderRecurrence || 'none') : prev.reminderRecurrence,
                 priority: task.priority !== undefined ? task.priority : prev.priority,
                 status: task.status !== undefined ? task.status : prev.status,
                 listId: task.listId !== undefined ? task.listId : prev.listId,
@@ -737,7 +741,7 @@ const TaskDetailModal = ({
                 subscribers: Array.isArray(task.subscribers) ? task.subscribers : (prev.subscribers || [])
             }));
         }
-    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.assigneeIds, task?.dueDate, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
+    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.assigneeIds, task?.startDate, task?.dueDate, task?.reminderRecurrence, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
 
     // Sync description div content when task changes (contentEditable source of truth when focused)
     useEffect(() => {
@@ -1762,6 +1766,11 @@ const TaskDetailModal = ({
 
     const subtasks = editedTask.subtasks || [];
 
+    let startDateDisplay = null;
+    if (editedTask.startDate) {
+        const startDateValue = new Date(editedTask.startDate);
+        startDateDisplay = isNaN(startDateValue) ? editedTask.startDate : startDateValue.toLocaleDateString();
+    }
     let dueDateDisplay = null;
     if (editedTask.dueDate) {
         const dueDateValue = new Date(editedTask.dueDate);
@@ -2704,6 +2713,12 @@ const TaskDetailModal = ({
                                                     <i className="fas fa-exclamation-circle text-[10px]"></i>
                                                     {editedTask.priority}
                                                 </span>
+                                                {startDateDisplay && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700">
+                                                        <i className="fas fa-play-circle text-[10px]"></i>
+                                                        Start {startDateDisplay}
+                                                    </span>
+                                                )}
                                                 {dueDateDisplay && (
                                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-700">
                                                         <i className="fas fa-calendar-alt text-[10px]"></i>
@@ -2861,6 +2876,27 @@ const TaskDetailModal = ({
                                                     </label>
                                                 </div>
 
+                                                {/* Start Date - value must be YYYY-MM-DD or empty for type="date" */}
+                                                <div className="space-y-2">
+                                                    <label className="block text-xs font-semibold text-gray-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <i className="fas fa-play-circle text-gray-400"></i>
+                                                            Start Date
+                                                        </span>
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={(() => {
+                                                            const d = editedTask.startDate;
+                                                            if (d === undefined || d === null || d === '') return '';
+                                                            if (typeof d === 'string') return d.slice(0, 10);
+                                                            try { return new Date(d).toISOString().slice(0, 10); } catch (_) { return ''; }
+                                                        })()}
+                                                        onChange={(e) => setEditedTask({...editedTask, startDate: e.target.value || null})}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    />
+                                                </div>
+
                                                 {/* Due Date - value must be YYYY-MM-DD or empty for type="date" */}
                                                 <div className="space-y-2">
                                                     <label className="block text-xs font-semibold text-gray-700">
@@ -2880,6 +2916,26 @@ const TaskDetailModal = ({
                                                         onChange={(e) => setEditedTask({...editedTask, dueDate: e.target.value || null})}
                                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
                                                     />
+                                                </div>
+
+                                                {/* Recurring reminder - until task is done */}
+                                                <div className="space-y-2">
+                                                    <label className="block text-xs font-semibold text-gray-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <i className="fas fa-bell text-gray-400"></i>
+                                                            Recurring reminder
+                                                        </span>
+                                                    </label>
+                                                    <select
+                                                        value={editedTask.reminderRecurrence || 'none'}
+                                                        onChange={(e) => setEditedTask({...editedTask, reminderRecurrence: e.target.value})}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    >
+                                                        <option value="none">None</option>
+                                                        <option value="daily">Daily (until done)</option>
+                                                        <option value="weekly">Weekly (until done)</option>
+                                                    </select>
+                                                    <p className="text-[11px] text-gray-500">You’ll get a reminder until the task is marked Done.</p>
                                                 </div>
 
                                                 {/* Priority */}

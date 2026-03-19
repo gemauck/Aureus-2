@@ -741,7 +741,7 @@ const AuditTrail = () => {
             {auditReportTab === 'log' && (
             <>
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="table-responsive overflow-x-auto">
                     <table className="w-full min-w-[900px]">
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
