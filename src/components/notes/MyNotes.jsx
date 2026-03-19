@@ -944,7 +944,7 @@ const MyNotes = () => {
                                         <button
                                             type="button"
                                             onClick={() => setEditorActivityPanelOpen(prev => !prev)}
-                                            className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${editorActivityPanelOpen ? (isDark ? 'bg-primary-700 text-primary-200 border border-primary-500' : 'bg-primary-100 text-primary-800 border border-primary-300') : (isDark ? 'bg-gray-600 hover:bg-gray-500 text-gray-200 border border-gray-500' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+                                            className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${editorActivityPanelOpen ? (isDark ? 'bg-primary-700 text-primary-200 border border-primary-500' : 'bg-primary-100 text-primary-800 border border-primary-300') : (isDark ? 'bg-gray-600 hover:bg-gray-500 text-gray-200 border border-gray-500' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50')}`}
                                         >
                                             <i className="fas fa-history"></i>
                                             Activity
