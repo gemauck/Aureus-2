@@ -2136,6 +2136,10 @@ function initializeProjectDetail() {
     const [isSavingNote, setIsSavingNote] = useState(false);
     const [showNoteShareModal, setShowNoteShareModal] = useState(false);
     const [noteShareSelectedUsers, setNoteShareSelectedUsers] = useState([]);
+    // Per-note activity: when editing a note, activity for that note; in list, expanded note's activity
+    const [noteActivityForEditor, setNoteActivityForEditor] = useState([]);
+    const [expandedNoteActivityId, setExpandedNoteActivityId] = useState(null);
+    const [noteActivityByNoteId, setNoteActivityByNoteId] = useState({});
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
@@ -2150,13 +2154,16 @@ function initializeProjectDetail() {
         setSelectedProjectNote(null);
         setEditingNoteFull(null);
         setEditingNoteSource(null);
+        setNoteActivityForEditor([]);
+        setExpandedNoteActivityId(null);
+        setNoteActivityByNoteId({});
     }, [project?.id]);
 
     const loadActivityLog = useCallback(async () => {
         if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
         try {
             const url = `/project-activity-logs?projectId=${encodeURIComponent(project.id)}&limit=100`;
-            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
+            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET', forceRefresh: true });
             const data = response?.data ?? response;
             const logs = data?.logs ?? (Array.isArray(data) ? data : []);
             setActivityLogEntries(Array.isArray(logs) ? logs : []);
@@ -2169,7 +2176,7 @@ function initializeProjectDetail() {
         if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
         try {
             const url = `/project-activity-logs?projectId=${encodeURIComponent(project.id)}&limit=100`;
-            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
+            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET', forceRefresh: true });
             const data = response?.data ?? response;
             const logs = data?.logs ?? (Array.isArray(data) ? data : []);
             const noteTypes = ['note_created', 'note_updated', 'note_deleted'];
@@ -2177,6 +2184,21 @@ function initializeProjectDetail() {
             setNoteActivityEntries(filtered);
         } catch (err) {
             console.warn('Failed to load note activity:', err?.message);
+        }
+    }, [project?.id]);
+
+    /** Load activity for a single note (for per-note activity). Returns array of log entries. */
+    const loadActivityForNote = useCallback(async (noteId) => {
+        if (!project?.id || !noteId || !window.DatabaseAPI?.makeRequest) return [];
+        try {
+            const url = `/project-activity-logs?projectId=${encodeURIComponent(project.id)}&noteId=${encodeURIComponent(noteId)}&limit=50`;
+            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET', forceRefresh: true });
+            const data = response?.data ?? response;
+            const logs = data?.logs ?? (Array.isArray(data) ? data : []);
+            return Array.isArray(logs) ? logs : [];
+        } catch (err) {
+            console.warn('Failed to load activity for note:', err?.message);
+            return [];
         }
     }, [project?.id]);
 
@@ -2234,6 +2256,16 @@ function initializeProjectDetail() {
             loadNoteActivity();
         }
     }, [activeSection, project?.id, loadProjectNotes, loadProjectNotesFromProject, loadNoteActivity]);
+
+    // Load this note's activity when editing a note
+    useEffect(() => {
+        if (!editingNoteFull?.id || !loadActivityForNote) return;
+        let cancelled = false;
+        loadActivityForNote(editingNoteFull.id).then((logs) => {
+            if (!cancelled) setNoteActivityForEditor(Array.isArray(logs) ? logs : []);
+        });
+        return () => { cancelled = true; };
+    }, [editingNoteFull?.id, loadActivityForNote]);
 
     // Load NoteEditor script when we need to edit a note in-project and it's not loaded yet
     useEffect(() => {
@@ -2339,6 +2371,21 @@ function initializeProjectDetail() {
         setShowNoteShareModal(false);
     }, []);
 
+    const handleToggleNoteActivity = useCallback((e, note) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (expandedNoteActivityId === note.id) {
+            setExpandedNoteActivityId(null);
+            return;
+        }
+        setExpandedNoteActivityId(note.id);
+        if (!noteActivityByNoteId[note.id]) {
+            loadActivityForNote(note.id).then((logs) => {
+                setNoteActivityByNoteId(prev => ({ ...prev, [note.id]: Array.isArray(logs) ? logs : [] }));
+            });
+        }
+    }, [expandedNoteActivityId, noteActivityByNoteId, loadActivityForNote]);
+
     // Merged list: project notes first, then user public notes, sorted by updatedAt desc
     const mergedNotesList = React.useMemo(() => {
         const fromProject = (projectNotesFromProject || []).map(n => ({ ...n, source: 'project' }));
@@ -2399,6 +2446,7 @@ function initializeProjectDetail() {
                     setEditingNoteFull(prev => prev?.id === notePayload.id ? (updated ?? prev) : prev);
                     loadProjectNotesFromProject();
                     loadNoteActivity();
+                    loadActivityForNote(notePayload.id).then((logs) => setNoteActivityForEditor(Array.isArray(logs) ? logs : []));
                 }
             } else {
                 const response = await fetch(`/api/user-notes/${notePayload.id}`, {
@@ -2420,6 +2468,7 @@ function initializeProjectDetail() {
                     setEditingNoteFull(prev => prev?.id === notePayload.id ? (updated ?? prev) : prev);
                     loadProjectNotes();
                     loadNoteActivity();
+                    loadActivityForNote(notePayload.id).then((logs) => setNoteActivityForEditor(Array.isArray(logs) ? logs : []));
                 }
             }
         } catch (e) {
@@ -2427,7 +2476,7 @@ function initializeProjectDetail() {
         } finally {
             setIsSavingNote(false);
         }
-    }, [project?.id, editingNoteSource, loadProjectNotesFromProject, loadProjectNotes, loadNoteActivity]);
+    }, [project?.id, editingNoteSource, loadProjectNotesFromProject, loadProjectNotes, loadNoteActivity, loadActivityForNote]);
 
     const handleDeleteNoteInProject = useCallback(async (noteId) => {
         if (!confirm('Are you sure you want to delete this note?')) return;
@@ -8942,6 +8991,42 @@ function initializeProjectDetail() {
                                     </div>
                                 )}
                             </div>
+                            {/* This note's activity — shown when editing */}
+                            <div className="border-t border-gray-200 p-3 bg-gray-50">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                    <i className="fas fa-history text-primary-600"></i>
+                                    Note activity
+                                </h4>
+                                <div className="space-y-2 max-h-[20vh] overflow-y-auto">
+                                    {noteActivityForEditor.length === 0 ? (
+                                        <p className="text-xs text-gray-500">No activity recorded for this note yet.</p>
+                                    ) : (
+                                        noteActivityForEditor.map((log) => {
+                                            const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                            const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                            const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
+                                            return (
+                                                <div key={log.id} className="border border-gray-200 rounded p-2 bg-white text-xs">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                        <span className="text-gray-500">{log.userName || 'System'}</span>
+                                                        <span className="text-gray-400">{dateStr}</span>
+                                                        {sourceLabel && <span className="text-gray-500">{sourceLabel}</span>}
+                                                    </div>
+                                                    {log.description && <div className="mt-1 text-gray-600">{log.description}</div>}
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => editingNoteFull?.id && loadActivityForNote(editingNoteFull.id).then(setNoteActivityForEditor)}
+                                    className="mt-2 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                >
+                                    <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <>
@@ -8993,12 +9078,47 @@ function initializeProjectDetail() {
                                                 <span className="text-gray-400 text-xs">
                                                     {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
                                                 </span>
-                                                <span className="text-primary-600 text-xs ml-auto">View & edit →</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => handleToggleNoteActivity(e, note)}
+                                                    className="text-primary-600 text-xs hover:text-primary-700 hover:underline ml-auto"
+                                                >
+                                                    <i className="fas fa-history mr-1"></i>
+                                                    {expandedNoteActivityId === note.id ? 'Hide activity' : 'Activity'}
+                                                </button>
+                                                <span className="text-primary-600 text-xs">View & edit →</span>
                                             </div>
                                             <div
                                                 className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-2"
                                                 dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
                                             />
+                                            {expandedNoteActivityId === note.id && (
+                                                <div className="mt-3 pt-3 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                                                    <h5 className="text-xs font-semibold text-gray-600 mb-2">Note activity</h5>
+                                                    {noteActivityByNoteId[note.id] === undefined ? (
+                                                        <p className="text-xs text-gray-500">Loading…</p>
+                                                    ) : !noteActivityByNoteId[note.id]?.length ? (
+                                                        <p className="text-xs text-gray-500">No activity for this note yet.</p>
+                                                    ) : (
+                                                        <div className="space-y-1.5 max-h-[20vh] overflow-y-auto">
+                                                            {noteActivityByNoteId[note.id].map((log) => {
+                                                                const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                                                const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                                                const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
+                                                                return (
+                                                                    <div key={log.id} className="border border-gray-200 rounded p-2 bg-white text-xs">
+                                                                        <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700 mr-2">{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                                        <span className="text-gray-500">{log.userName || 'System'}</span>
+                                                                        <span className="text-gray-400 ml-1">{dateStr}</span>
+                                                                        {sourceLabel && <span className="text-gray-500">{sourceLabel}</span>}
+                                                                        {log.description && <div className="mt-1 text-gray-600">{log.description}</div>}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     ))
                                 )}

@@ -26,7 +26,7 @@ async function ensureActivityLogColumns() {
 
 async function handler(req, res) {
   const { method } = req;
-  const { id: logId, projectId, type, userId, startDate, endDate } = req.query;
+  const { id: logId, projectId, type, userId, startDate, endDate, noteId } = req.query;
 
   try {
     await ensureActivityLogColumns();
@@ -60,6 +60,10 @@ async function handler(req, res) {
         if (type) {
           where.type = String(type);
         }
+        // When filtering by noteId, only fetch note_* types (then filter by metadata.noteId in memory)
+        if (noteId) {
+          where.type = { in: ['note_created', 'note_updated', 'note_deleted'] };
+        }
 
         if (userId) {
           where.userId = String(userId);
@@ -75,7 +79,7 @@ async function handler(req, res) {
           }
         }
 
-        const logs = await prisma.projectActivityLog.findMany({
+        let logs = await prisma.projectActivityLog.findMany({
           where,
           orderBy: { createdAt: 'desc' },
           include: {
@@ -89,6 +93,18 @@ async function handler(req, res) {
           },
           take: parseInt(req.query.limit) || 100 // Default limit 100
         });
+
+        if (noteId) {
+          const targetNoteId = String(noteId);
+          logs = logs.filter((log) => {
+            try {
+              const meta = typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {});
+              return meta.noteId === targetNoteId;
+            } catch (_) {
+              return false;
+            }
+          });
+        }
 
         return ok(res, { logs });
       } else {
