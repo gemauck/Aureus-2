@@ -1768,6 +1768,63 @@ app.get('/api/projects/:id/public-notes', async (req, res, next) => {
   }
 })
 
+// Project notes (project-scoped notes table) — list/create and get/update/delete (must be before /api/projects/:id)
+app.get('/api/projects/:id/notes', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects', '[id]', 'notes.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project notes handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.post('/api/projects/:id/notes', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects', '[id]', 'notes.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project notes handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.get('/api/projects/:id/notes/:noteId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects', '[id]', 'notes', '[noteId].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project note handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.put('/api/projects/:id/notes/:noteId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects', '[id]', 'notes', '[noteId].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project note handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+app.delete('/api/projects/:id/notes/:noteId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects', '[id]', 'notes', '[noteId].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project note handler:', e)
+    if (!res.headersSent) return res.status(500).json({ error: 'Internal server error', message: e.message })
+    return next(e)
+  }
+})
+
 // Explicit mapping for project operations with ID (GET, PUT, DELETE /api/projects/[id])
 app.all('/api/projects/:id', async (req, res, next) => {
   try {

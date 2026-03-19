@@ -61,6 +61,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/projects/MonthlyDataReview.jsx', // Monthly Data Review checklist
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
+        './src/components/notes/NoteEditor.jsx', // Shared note editor for Project Notes tab and My Notes
         // BULLETPROOF: ProjectDetail is loaded explicitly here AND via special handler
         // This ensures it loads even if one method fails
         './src/components/projects/ProjectDetail.jsx',

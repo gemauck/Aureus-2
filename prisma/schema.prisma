@@ -76,6 +76,7 @@ model User {
   userTaskTags              UserTaskTag[]                @relation("UserTaskTagOwner")
   userNotes                 UserNote[]                   @relation("UserNoteOwner")
   sharedNotes               UserNoteShare[]              @relation("UserNoteSharedWith")
+  projectNotesAuthored      ProjectNote[]                 @relation("ProjectNoteAuthor")
   createdTickets            Ticket[]                     @relation("TicketCreator")
   assignedTickets           Ticket[]                     @relation("TicketAssignee")
   taskComments              TaskComment[]                @relation("TaskCommentAuthor")
@@ -491,6 +492,7 @@ model Project {
   projectCustomFieldDefinitions ProjectCustomFieldDefinition[]
   projectActivityLogs           ProjectActivityLog[]
   userNotes                     UserNote[]
+  projectNotes                  ProjectNote[]
 
   @@index([clientId])
   @@index([status])
@@ -2318,4 +2320,23 @@ model UserNoteShare {
   @@unique([noteId, userId])
   @@index([noteId])
   @@index([userId])
+}
+
+// Notes created from the project Notes tab — stored per project, not in My Notes
+model ProjectNote {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  content   String   @default("")
+  tags      String   @default("[]") // JSON array of tag strings
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author    User     @relation("ProjectNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([updatedAt])
 }

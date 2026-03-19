@@ -2122,9 +2122,19 @@ function initializeProjectDetail() {
     const [dragOverTask, setDragOverTask] = useState(null); // { listId, taskIndex } or null
     // Activity log: null = use project.activityLog from initial load; array = fetched for Activity tab / after mutations
     const [activityLogEntries, setActivityLogEntries] = useState(null);
-    // Public notes for this project (Notes tab)
-    const [projectNotes, setProjectNotes] = useState(null);
+    // Public notes for this project (Notes tab) — from My Notes (user notes made public)
+    const [projectNotes, setProjectNotes] = useState(null); // user notes (public) for this project
+    // Notes from the project notes table (created from this project's Notes tab)
+    const [projectNotesFromProject, setProjectNotesFromProject] = useState(null);
     const [selectedProjectNote, setSelectedProjectNote] = useState(null);
+    // Full note opened for editing in-project (same UI as My Notes)
+    const [editingNoteFull, setEditingNoteFull] = useState(null);
+    const [editingNoteSource, setEditingNoteSource] = useState(null); // 'project' | 'user'
+    const [noteEditorReady, setNoteEditorReady] = useState(false);
+    const [noteEditorData, setNoteEditorData] = useState({ clients: [], projects: [], clientProjects: [], users: [], allTags: [] });
+    const [isSavingNote, setIsSavingNote] = useState(false);
+    const [showNoteShareModal, setShowNoteShareModal] = useState(false);
+    const [noteShareSelectedUsers, setNoteShareSelectedUsers] = useState([]);
     // Keep ref in sync with state
     useEffect(() => {
         tasksRef.current = tasks;
@@ -2134,7 +2144,10 @@ function initializeProjectDetail() {
     useEffect(() => {
         setActivityLogEntries(null);
         setProjectNotes(null);
+        setProjectNotesFromProject(null);
         setSelectedProjectNote(null);
+        setEditingNoteFull(null);
+        setEditingNoteSource(null);
     }, [project?.id]);
 
     const loadActivityLog = useCallback(async () => {
@@ -2166,7 +2179,8 @@ function initializeProjectDetail() {
             if (response.ok) {
                 const data = await response.json();
                 const list = data?.data?.notes ?? data?.notes ?? [];
-                setProjectNotes(Array.isArray(list) ? list : []);
+                const withSource = (Array.isArray(list) ? list : []).map(n => ({ ...n, source: 'user' }));
+                setProjectNotes(withSource);
             } else {
                 setProjectNotes([]);
             }
@@ -2176,11 +2190,313 @@ function initializeProjectDetail() {
         }
     }, [project?.id]);
 
+    const loadProjectNotesFromProject = useCallback(async () => {
+        if (!project?.id || !window.storage?.getToken) return;
+        try {
+            const token = window.storage.getToken();
+            const response = await fetch(`/api/projects/${project.id}/notes`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const list = data?.data?.notes ?? data?.notes ?? [];
+                setProjectNotesFromProject(Array.isArray(list) ? list : []);
+            } else {
+                setProjectNotesFromProject([]);
+            }
+        } catch (err) {
+            console.warn('Failed to load project notes from project:', err?.message);
+            setProjectNotesFromProject([]);
+        }
+    }, [project?.id]);
+
     useEffect(() => {
         if (activeSection === 'notes' && project?.id) {
             loadProjectNotes();
+            loadProjectNotesFromProject();
         }
-    }, [activeSection, project?.id, loadProjectNotes]);
+    }, [activeSection, project?.id, loadProjectNotes, loadProjectNotesFromProject]);
+
+    // Load NoteEditor script when we need to edit a note in-project and it's not loaded yet
+    useEffect(() => {
+        if (!editingNoteFull || window.NoteEditor) {
+            if (window.NoteEditor) setNoteEditorReady(true);
+            return;
+        }
+        const scriptSrc = '/dist/src/components/notes/NoteEditor.js';
+        if (document.querySelector(`script[src="${scriptSrc}"]`)) {
+            setNoteEditorReady(!!window.NoteEditor);
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = scriptSrc;
+        script.onload = () => setNoteEditorReady(true);
+        script.onerror = () => setNoteEditorReady(false);
+        document.body.appendChild(script);
+    }, [editingNoteFull]);
+
+    // Load clients, projects, users for note editor when opening a note
+    const loadNoteEditorData = useCallback(async () => {
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        try {
+            const [clientsRes, projectsRes, usersRes] = await Promise.all([
+                fetch('/api/clients', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/projects?limit=500', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } })
+            ]);
+            const clientsData = clientsRes.ok ? await clientsRes.json().catch(() => ({})) : {};
+            const projectsData = projectsRes.ok ? await projectsRes.json().catch(() => ({})) : {};
+            const usersData = usersRes.ok ? await usersRes.json().catch(() => ({})) : {};
+            const clients = clientsData?.data?.clients ?? clientsData?.clients ?? [];
+            const projectsList = projectsData?.data?.projects ?? projectsData?.projects ?? [];
+            const usersList = usersData?.data?.users ?? usersData?.users ?? [];
+            const allTags = Array.from(new Set((projectNotes || []).flatMap(n => n.tags || []).map(String).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+            setNoteEditorData(prev => ({
+                clients: Array.isArray(clients) ? clients : prev.clients,
+                projects: Array.isArray(projectsList) ? projectsList : prev.projects,
+                clientProjects: prev.clientProjects,
+                users: Array.isArray(usersList) ? usersList : prev.users,
+                allTags: allTags.length ? allTags : prev.allTags
+            }));
+        } catch (e) {
+            console.warn('Failed to load note editor data:', e);
+        }
+    }, [projectNotes]);
+
+    const loadProjectsForNoteClient = useCallback(async (clientId) => {
+        if (!clientId || !window.storage?.getToken?.()) return;
+        try {
+            const token = window.storage.getToken();
+            const response = await fetch(`/api/projects?clientId=${encodeURIComponent(clientId)}&limit=500`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const data = await response.json().catch(() => ({}));
+            const list = Array.isArray(data?.data?.projects) ? data.data.projects : Array.isArray(data?.projects) ? data.projects : [];
+            setNoteEditorData(prev => ({ ...prev, clientProjects: list }));
+        } catch (e) {
+            setNoteEditorData(prev => ({ ...prev, clientProjects: [] }));
+        }
+    }, []);
+
+    const openNoteForEditing = useCallback(async (note) => {
+        if (!note?.id || !window.storage?.getToken?.()) return;
+        const source = note.source || 'user';
+        setSelectedProjectNote(note);
+        setEditingNoteSource(source);
+        if (source === 'project') {
+            try {
+                const token = window.storage.getToken();
+                const response = await fetch(`/api/projects/${project.id}/notes/${note.id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (response.ok) {
+                    const data = await response.json();
+                    const fullNote = data?.data?.note ?? data?.note ?? note;
+                    setEditingNoteFull(fullNote);
+                } else {
+                    setEditingNoteFull(note);
+                }
+            } catch (e) {
+                console.warn('Failed to load project note:', e);
+                setEditingNoteFull(note);
+            }
+            return;
+        }
+        try {
+            const token = window.storage.getToken();
+            const response = await fetch(`/api/user-notes/${note.id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!response.ok) return;
+            const data = await response.json();
+            const fullNote = data?.data?.note ?? data?.note ?? note;
+            setEditingNoteFull(fullNote);
+            loadNoteEditorData();
+            const cid = fullNote.clientId ?? fullNote.client?.id;
+            if (cid) loadProjectsForNoteClient(cid);
+        } catch (e) {
+            console.warn('Failed to load full note:', e);
+        }
+    }, [project?.id, loadNoteEditorData, loadProjectsForNoteClient]);
+
+    const closeNoteEditor = useCallback(() => {
+        setEditingNoteFull(null);
+        setEditingNoteSource(null);
+        setSelectedProjectNote(null);
+        setShowNoteShareModal(false);
+    }, []);
+
+    // Merged list: project notes first, then user public notes, sorted by updatedAt desc
+    const mergedNotesList = React.useMemo(() => {
+        const fromProject = (projectNotesFromProject || []).map(n => ({ ...n, source: 'project' }));
+        const fromUser = projectNotes || [];
+        return [...fromProject, ...fromUser].sort((a, b) => {
+            const aAt = a.updatedAt || a.createdAt || 0;
+            const bAt = b.updatedAt || b.createdAt || 0;
+            return new Date(bAt) - new Date(aAt);
+        });
+    }, [projectNotesFromProject, projectNotes]);
+
+    const createProjectNote = useCallback(async () => {
+        if (!project?.id || !window.storage?.getToken) return;
+        setIsSavingNote(true);
+        try {
+            const token = window.storage.getToken();
+            const response = await fetch(`/api/projects/${project.id}/notes`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: 'Untitled Note', content: '', tags: [] })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const newNote = data?.data?.note ?? data?.note;
+                if (newNote) {
+                    setEditingNoteFull(newNote);
+                    setEditingNoteSource('project');
+                    setNoteEditorReady(!!window.NoteEditor);
+                    loadProjectNotesFromProject();
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to create project note:', e);
+        } finally {
+            setIsSavingNote(false);
+        }
+    }, [project?.id, loadProjectNotesFromProject]);
+
+    const handleSaveNoteInProject = useCallback(async (notePayload) => {
+        if (!notePayload?.id || notePayload.id.startsWith('temp-') || !window.storage?.getToken?.()) return;
+        setIsSavingNote(true);
+        try {
+            const token = window.storage.getToken();
+            if (editingNoteSource === 'project') {
+                const response = await fetch(`/api/projects/${project.id}/notes/${notePayload.id}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: notePayload.title || 'Untitled Note',
+                        content: notePayload.content || '',
+                        tags: notePayload.tags || []
+                    })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const updated = data?.data?.note ?? data?.note;
+                    setEditingNoteFull(prev => prev?.id === notePayload.id ? (updated ?? prev) : prev);
+                    loadProjectNotesFromProject();
+                }
+            } else {
+                const response = await fetch(`/api/user-notes/${notePayload.id}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: notePayload.title || 'Untitled Note',
+                        content: notePayload.content || '',
+                        tags: notePayload.tags || [],
+                        pinned: Boolean(notePayload.pinned),
+                        isPublic: Boolean(notePayload.isPublic),
+                        clientId: notePayload.clientId && String(notePayload.clientId).trim() ? notePayload.clientId : null,
+                        projectId: notePayload.projectId && String(notePayload.projectId).trim() ? notePayload.projectId : null
+                    })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const updated = data?.data?.note ?? data?.note;
+                    setEditingNoteFull(prev => prev?.id === notePayload.id ? (updated ?? prev) : prev);
+                    loadProjectNotes();
+                }
+            }
+        } catch (e) {
+            console.warn('Save note failed:', e);
+        } finally {
+            setIsSavingNote(false);
+        }
+    }, [project?.id, editingNoteSource, loadProjectNotesFromProject]);
+
+    const handleDeleteNoteInProject = useCallback(async (noteId) => {
+        if (!confirm('Are you sure you want to delete this note?')) return;
+        if (!noteId || !window.storage?.getToken?.()) return;
+        try {
+            const token = window.storage.getToken();
+            if (editingNoteSource === 'project') {
+                const response = await fetch(`/api/projects/${project.id}/notes/${noteId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                if (response.ok) {
+                    closeNoteEditor();
+                    loadProjectNotesFromProject();
+                }
+            } else {
+                const response = await fetch(`/api/user-notes/${noteId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                if (response.ok) {
+                    closeNoteEditor();
+                    loadProjectNotes();
+                }
+            }
+        } catch (e) {
+            console.warn('Delete note failed:', e);
+        }
+    }, [project?.id, editingNoteSource, closeNoteEditor, loadProjectNotesFromProject]);
+
+    const handleShareNoteInProject = useCallback((note) => {
+        setNoteShareSelectedUsers(note?.sharedWith?.map(s => s.userId || s.id) || []);
+        setShowNoteShareModal(true);
+    }, []);
+
+    const handleSaveNoteShareInProject = useCallback(async () => {
+        if (!editingNoteFull?.id || !window.storage?.getToken?.()) return;
+        try {
+            const token = window.storage.getToken();
+            const response = await fetch(`/api/user-notes/${editingNoteFull.id}/share`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sharedWith: noteShareSelectedUsers })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const updated = data?.data?.note ?? data?.note;
+                setEditingNoteFull(prev => prev?.id === editingNoteFull.id ? (updated ?? prev) : prev);
+                setShowNoteShareModal(false);
+                loadProjectNotes();
+            }
+        } catch (e) {
+            console.warn('Share note failed:', e);
+        }
+    }, [editingNoteFull?.id, noteShareSelectedUsers]);
+
+    const handleTogglePinNoteInProject = useCallback(async (notePayload) => {
+        if (!notePayload?.id || notePayload.id.startsWith('temp-') || !window.storage?.getToken?.()) return;
+        const newPinned = !Boolean(notePayload.pinned);
+        try {
+            const token = window.storage.getToken();
+            const response = await fetch(`/api/user-notes/${notePayload.id}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: notePayload.title || 'Untitled Note',
+                    content: notePayload.content || '',
+                    tags: notePayload.tags || [],
+                    pinned: newPinned,
+                    isPublic: Boolean(notePayload.isPublic),
+                    clientId: notePayload.clientId ?? null,
+                    projectId: notePayload.projectId ?? null
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const updated = data?.data?.note ?? data?.note;
+                setEditingNoteFull(prev => prev?.id === notePayload.id ? { ...(updated ?? prev), pinned: newPinned } : prev);
+                loadProjectNotes();
+            }
+        } catch (e) {
+            console.warn('Toggle pin failed:', e);
+        }
+    }, []);
+
+    const handleExportNoteInProject = useCallback((note) => {
+        const title = (note?.title || 'Untitled').replace(/[/\\?%*:|"<>]/g, '-');
+        const content = `# ${note?.title || 'Untitled Note'}\n\n${(note?.content || '').replace(/\r/g, '')}\n\n---\nTags: ${(note?.tags || []).join(', ')}`;
+        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${title}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, []);
 
     // CRITICAL: Update tasks IMMEDIATELY when project prop changes (synchronous, no delay)
     // This runs synchronously in useEffect to ensure tasks are available instantly
@@ -8564,132 +8880,121 @@ function initializeProjectDetail() {
             {activeSection === 'overview' && <OverviewSection />}
 
             {activeSection === 'notes' && (
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <i className="fas fa-sticky-note text-primary-600"></i>
-                        Public notes
-                    </h3>
-                    <p className="text-sm text-gray-500 mb-4">Notes that team members have made public and linked to this project. Create and publish notes from My Notes.</p>
-                    <button
-                        type="button"
-                        onClick={() => loadProjectNotes()}
-                        className="mb-3 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
-                    >
-                        <i className="fas fa-sync-alt mr-1"></i> Refresh
-                    </button>
-                    <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                        {projectNotes === null ? (
-                            <p className="text-sm text-gray-500">Loading…</p>
-                        ) : !Array.isArray(projectNotes) || projectNotes.length === 0 ? (
-                            <p className="text-sm text-gray-500">No public notes linked to this project yet. In My Notes, link a note to this project and check &quot;Make public&quot; to see it here.</p>
-                        ) : (
-                            projectNotes.map((note) => (
-                                <div
-                                    key={note.id}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => setSelectedProjectNote(note)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProjectNote(note); } }}
-                                    className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-100 cursor-pointer transition-colors"
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    {editingNoteFull ? (
+                        <div className="flex flex-col h-full min-h-[500px]">
+                            <div className="flex items-center gap-2 p-3 border-b border-gray-200 bg-gray-50">
+                                <button
+                                    type="button"
+                                    onClick={closeNoteEditor}
+                                    className="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-2"
                                 >
-                                    <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
-                                        <span className="font-medium text-gray-900">{note.title || 'Untitled'}</span>
-                                        {note.author?.name && (
-                                            <span className="text-gray-500">by {note.author.name}</span>
-                                        )}
-                                        <span className="text-gray-400 text-xs">
-                                            {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
-                                        </span>
-                                        <span className="text-primary-600 text-xs ml-auto">View & edit →</span>
+                                    <i className="fas fa-arrow-left"></i>
+                                    Back to list
+                                </button>
+                            </div>
+                            <div className="flex-1 min-h-0 overflow-hidden">
+                                {window.NoteEditor && noteEditorReady ? (
+                                    React.createElement(window.NoteEditor, {
+                                        note: editingNoteFull,
+                                        allTags: noteEditorData.allTags,
+                                        clients: noteEditorData.clients,
+                                        projects: noteEditorData.projects,
+                                        clientProjects: noteEditorData.clientProjects,
+                                        onClientChange: loadProjectsForNoteClient,
+                                        onSave: handleSaveNoteInProject,
+                                        onDelete: handleDeleteNoteInProject,
+                                        onShare: handleShareNoteInProject,
+                                        onTogglePin: handleTogglePinNoteInProject,
+                                        onExport: handleExportNoteInProject,
+                                        isSaving: isSavingNote,
+                                        lastSavedAt: null,
+                                        isDark: false,
+                                        isProjectNote: editingNoteSource === 'project'
+                                    })
+                                ) : (
+                                    <div className="p-8 text-center">
+                                        <i className="fas fa-spinner fa-spin text-2xl text-primary-500 mb-2" aria-hidden="true"></i>
+                                        <p className="text-gray-500">Loading editor…</p>
                                     </div>
-                                    <div
-                                        className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-2"
-                                        dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
-                                    />
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="p-4">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <i className="fas fa-sticky-note text-primary-600"></i>
+                                    Notes
+                                </h3>
+                                <p className="text-sm text-gray-500 mb-4">Project notes (saved with this project) and public notes from My Notes. Create a new note for this project or open one to edit.</p>
+                                <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <button
+                                        type="button"
+                                        onClick={createProjectNote}
+                                        disabled={isSavingNote}
+                                        className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        <i className="fas fa-plus"></i>
+                                        Create note
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { loadProjectNotes(); loadProjectNotesFromProject(); }}
+                                        className="px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                    >
+                                        <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                    </button>
                                 </div>
-                            ))
-                        )}
-                    </div>
+                            </div>
+                            <div className="px-4 pb-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                                {(projectNotes === null && projectNotesFromProject === null) ? (
+                                    <p className="text-sm text-gray-500">Loading…</p>
+                                ) : mergedNotesList.length === 0 ? (
+                                    <p className="text-sm text-gray-500">No notes yet. Click &quot;Create note&quot; to add a project note, or create and publish notes from My Notes to see them here.</p>
+                                ) : (
+                                    mergedNotesList.map((note) => (
+                                        <div
+                                            key={note.id}
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => openNoteForEditing(note)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteForEditing(note); } }}
+                                            className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 hover:bg-gray-100 cursor-pointer transition-colors"
+                                        >
+                                            <div className="flex flex-wrap items-center gap-2 text-sm mb-2">
+                                                <span className="font-medium text-gray-900">{note.title || 'Untitled'}</span>
+                                                {note.author?.name && (
+                                                    <span className="text-gray-500">by {note.author.name}</span>
+                                                )}
+                                                <span className="text-gray-400 text-xs">
+                                                    {note.updatedAt ? new Date(note.updatedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                                                </span>
+                                                <span className="text-primary-600 text-xs ml-auto">View & edit →</span>
+                                            </div>
+                                            <div
+                                                className="text-sm text-gray-700 prose prose-sm max-w-none line-clamp-2"
+                                                dangerouslySetInnerHTML={{ __html: (note.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
+                                            />
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
-            {/* Public note detail modal */}
-            {selectedProjectNote && (
-                <>
-                    <div
-                        className="fixed inset-0 bg-black/50 z-40"
-                        onClick={() => setSelectedProjectNote(null)}
-                        aria-hidden="true"
-                    />
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-                        <div
-                            className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-2xl w-full max-h-[85vh] flex flex-col pointer-events-auto"
-                            role="dialog"
-                            aria-modal="true"
-                            aria-labelledby="project-note-modal-title"
-                        >
-                            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                                <h2 id="project-note-modal-title" className="text-lg font-semibold text-gray-900 truncate pr-2">
-                                    {selectedProjectNote.title || 'Untitled'}
-                                </h2>
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedProjectNote(null)}
-                                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                                    aria-label="Close"
-                                >
-                                    <i className="fas fa-times"></i>
-                                </button>
-                            </div>
-                            <div className="px-4 py-2 border-b border-gray-100 text-sm text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                {selectedProjectNote.author?.name && (
-                                    <span>by {selectedProjectNote.author.name}</span>
-                                )}
-                                <span>
-                                    {selectedProjectNote.updatedAt
-                                        ? new Date(selectedProjectNote.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-                                        : ''}
-                                </span>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-4">
-                                <div
-                                    className="text-gray-800 prose prose-sm max-w-none [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_blockquote]:italic"
-                                    dangerouslySetInnerHTML={{ __html: (selectedProjectNote.content || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') }}
-                                />
-                            </div>
-                            <div className="p-4 border-t border-gray-200 flex flex-wrap items-center justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedProjectNote(null)}
-                                    className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                                >
-                                    Close
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        try {
-                                            if (window.sessionStorage) {
-                                                window.sessionStorage.setItem('myNotesOpenNoteId', selectedProjectNote.id);
-                                            }
-                                            if (window.RouteState && typeof window.RouteState.setPageSubpath === 'function') {
-                                                window.RouteState.setPageSubpath('my-notes', []);
-                                            }
-                                        } catch (e) {
-                                            console.warn('Navigate to My Notes failed:', e);
-                                        }
-                                        setSelectedProjectNote(null);
-                                    }}
-                                    className="px-3 py-1.5 text-sm text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex items-center gap-2"
-                                >
-                                    <i className="fas fa-external-link-alt"></i>
-                                    Open in My Notes to edit
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
+            {/* Share modal when editing a note in project */}
+            {showNoteShareModal && editingNoteFull && window.ShareModal && React.createElement(window.ShareModal, {
+                noteId: editingNoteFull.id,
+                users: noteEditorData.users,
+                selectedUsers: noteShareSelectedUsers,
+                onSelectUsers: setNoteShareSelectedUsers,
+                onSave: handleSaveNoteShareInProject,
+                onClose: () => setShowNoteShareModal(false),
+                isDark: false
+            })}
 
             {activeSection === 'activity' && (
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
