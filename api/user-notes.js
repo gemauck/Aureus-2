@@ -4,6 +4,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js'
 
 const noteInclude = {
   sharedWith: {
@@ -284,6 +285,18 @@ async function handler(req, res) {
           include: noteInclude
         })
 
+        if (noteData.projectId) {
+          const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
+          await logProjectActivity(prisma, {
+            projectId: noteData.projectId,
+            userId: uid,
+            userName: uName,
+            type: 'note_created',
+            description: `Note "${noteData.title}" created`,
+            metadata: { noteId: note.id, noteTitle: noteData.title, source: 'user' }
+          })
+        }
+
         return created(res, { note: parseUserNoteJsonFields(note) })
       } catch (error) {
         console.error('Error creating note:', error)
@@ -332,6 +345,18 @@ async function handler(req, res) {
           include: noteInclude
         })
 
+        if (note.projectId) {
+          const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
+          await logProjectActivity(prisma, {
+            projectId: note.projectId,
+            userId: uid,
+            userName: uName,
+            type: 'note_updated',
+            description: `Note "${note.title}" updated`,
+            metadata: { noteId: note.id, noteTitle: note.title, source: 'user' }
+          })
+        }
+
         return ok(res, { note: parseUserNoteJsonFields(note) })
       } catch (error) {
         console.error('Error updating note:', error)
@@ -353,9 +378,24 @@ async function handler(req, res) {
           return notFound(res, 'Note not found or you do not have permission to delete it')
         }
 
+        const projectIdForLog = note.projectId
+        const noteTitleForLog = note.title || 'Untitled'
+
         await prisma.userNote.delete({
           where: { id: noteId }
         })
+
+        if (projectIdForLog) {
+          const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
+          await logProjectActivity(prisma, {
+            projectId: projectIdForLog,
+            userId: uid,
+            userName: uName,
+            type: 'note_deleted',
+            description: `Note "${noteTitleForLog}" deleted`,
+            metadata: { noteId, noteTitle: noteTitleForLog, source: 'user' }
+          })
+        }
 
         return ok(res, { message: 'Note deleted successfully' })
       } catch (error) {

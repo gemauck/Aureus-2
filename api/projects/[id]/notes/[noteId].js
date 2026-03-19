@@ -9,6 +9,7 @@ import { ok, badRequest, notFound, serverError } from '../../../_lib/response.js
 import { parseJsonBody } from '../../../_lib/body.js'
 import { withHttp } from '../../../_lib/withHttp.js'
 import { withLogging } from '../../../_lib/logger.js'
+import { logProjectActivity, getActivityUserFromRequest } from '../../../_lib/projectActivityLog.js'
 
 function parseProjectNote(note) {
   const parsed = { ...note }
@@ -76,6 +77,15 @@ async function handler(req, res) {
           author: { select: { id: true, name: true, email: true } }
         }
       })
+      const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
+      await logProjectActivity(prisma, {
+        projectId,
+        userId: uid,
+        userName: uName,
+        type: 'note_updated',
+        description: `Note "${title}" updated`,
+        metadata: { noteId: note.id, noteTitle: title, source: 'project' }
+      })
       return ok(res, { note: parseProjectNote(note) })
     } catch (e) {
       console.error('Error updating project note:', e)
@@ -90,8 +100,18 @@ async function handler(req, res) {
       })
       if (!existing) return notFound(res, 'Note not found')
 
+      const noteTitle = existing.title || 'Untitled'
       await prisma.projectNote.delete({
         where: { id: noteId }
+      })
+      const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
+      await logProjectActivity(prisma, {
+        projectId,
+        userId: uid,
+        userName: uName,
+        type: 'note_deleted',
+        description: `Note "${noteTitle}" deleted`,
+        metadata: { noteId, noteTitle, source: 'project' }
       })
       return ok(res, { deleted: true })
     } catch (e) {

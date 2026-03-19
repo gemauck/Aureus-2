@@ -2122,6 +2122,7 @@ function initializeProjectDetail() {
     const [dragOverTask, setDragOverTask] = useState(null); // { listId, taskIndex } or null
     // Activity log: null = use project.activityLog from initial load; array = fetched for Activity tab / after mutations
     const [activityLogEntries, setActivityLogEntries] = useState(null);
+    const [noteActivityEntries, setNoteActivityEntries] = useState(null);
     // Public notes for this project (Notes tab) — from My Notes (user notes made public)
     const [projectNotes, setProjectNotes] = useState(null); // user notes (public) for this project
     // Notes from the project notes table (created from this project's Notes tab)
@@ -2143,6 +2144,7 @@ function initializeProjectDetail() {
     // Reset activity log and project notes when switching project
     useEffect(() => {
         setActivityLogEntries(null);
+        setNoteActivityEntries(null);
         setProjectNotes(null);
         setProjectNotesFromProject(null);
         setSelectedProjectNote(null);
@@ -2160,6 +2162,21 @@ function initializeProjectDetail() {
             setActivityLogEntries(Array.isArray(logs) ? logs : []);
         } catch (err) {
             console.warn('Failed to load activity log:', err?.message);
+        }
+    }, [project?.id]);
+
+    const loadNoteActivity = useCallback(async () => {
+        if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
+        try {
+            const url = `/project-activity-logs?projectId=${encodeURIComponent(project.id)}&limit=100`;
+            const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
+            const data = response?.data ?? response;
+            const logs = data?.logs ?? (Array.isArray(data) ? data : []);
+            const noteTypes = ['note_created', 'note_updated', 'note_deleted'];
+            const filtered = (Array.isArray(logs) ? logs : []).filter((log) => noteTypes.includes(log.type));
+            setNoteActivityEntries(filtered);
+        } catch (err) {
+            console.warn('Failed to load note activity:', err?.message);
         }
     }, [project?.id]);
 
@@ -2214,8 +2231,9 @@ function initializeProjectDetail() {
         if (activeSection === 'notes' && project?.id) {
             loadProjectNotes();
             loadProjectNotesFromProject();
+            loadNoteActivity();
         }
-    }, [activeSection, project?.id, loadProjectNotes, loadProjectNotesFromProject]);
+    }, [activeSection, project?.id, loadProjectNotes, loadProjectNotesFromProject, loadNoteActivity]);
 
     // Load NoteEditor script when we need to edit a note in-project and it's not loaded yet
     useEffect(() => {
@@ -2350,6 +2368,7 @@ function initializeProjectDetail() {
                     setEditingNoteSource('project');
                     setNoteEditorReady(!!window.NoteEditor);
                     loadProjectNotesFromProject();
+                    loadNoteActivity();
                 }
             }
         } catch (e) {
@@ -2357,7 +2376,7 @@ function initializeProjectDetail() {
         } finally {
             setIsSavingNote(false);
         }
-    }, [project?.id, loadProjectNotesFromProject]);
+    }, [project?.id, loadProjectNotesFromProject, loadNoteActivity]);
 
     const handleSaveNoteInProject = useCallback(async (notePayload) => {
         if (!notePayload?.id || notePayload.id.startsWith('temp-') || !window.storage?.getToken?.()) return;
@@ -2379,6 +2398,7 @@ function initializeProjectDetail() {
                     const updated = data?.data?.note ?? data?.note;
                     setEditingNoteFull(prev => prev?.id === notePayload.id ? (updated ?? prev) : prev);
                     loadProjectNotesFromProject();
+                    loadNoteActivity();
                 }
             } else {
                 const response = await fetch(`/api/user-notes/${notePayload.id}`, {
@@ -2399,6 +2419,7 @@ function initializeProjectDetail() {
                     const updated = data?.data?.note ?? data?.note;
                     setEditingNoteFull(prev => prev?.id === notePayload.id ? (updated ?? prev) : prev);
                     loadProjectNotes();
+                    loadNoteActivity();
                 }
             }
         } catch (e) {
@@ -2406,7 +2427,7 @@ function initializeProjectDetail() {
         } finally {
             setIsSavingNote(false);
         }
-    }, [project?.id, editingNoteSource, loadProjectNotesFromProject]);
+    }, [project?.id, editingNoteSource, loadProjectNotesFromProject, loadProjectNotes, loadNoteActivity]);
 
     const handleDeleteNoteInProject = useCallback(async (noteId) => {
         if (!confirm('Are you sure you want to delete this note?')) return;
@@ -2418,18 +2439,20 @@ function initializeProjectDetail() {
                 if (response.ok) {
                     closeNoteEditor();
                     loadProjectNotesFromProject();
+                    loadNoteActivity();
                 }
             } else {
                 const response = await fetch(`/api/user-notes/${noteId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     closeNoteEditor();
                     loadProjectNotes();
+                    loadNoteActivity();
                 }
             }
         } catch (e) {
             console.warn('Delete note failed:', e);
         }
-    }, [project?.id, editingNoteSource, closeNoteEditor, loadProjectNotesFromProject]);
+    }, [project?.id, editingNoteSource, closeNoteEditor, loadProjectNotesFromProject, loadProjectNotes, loadNoteActivity]);
 
     const handleShareNoteInProject = useCallback((note) => {
         setNoteShareSelectedUsers(note?.sharedWith?.map(s => s.userId || s.id) || []);
@@ -8979,6 +9002,47 @@ function initializeProjectDetail() {
                                         </div>
                                     ))
                                 )}
+                            </div>
+                            {/* Note activity — create/update/delete tracked in Notes section */}
+                            <div className="px-4 pb-4 pt-2 border-t border-gray-200">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                    <i className="fas fa-history text-primary-600"></i>
+                                    Recent note changes
+                                </h4>
+                                <button
+                                    type="button"
+                                    onClick={() => loadNoteActivity()}
+                                    className="mb-2 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                                >
+                                    <i className="fas fa-sync-alt mr-1"></i> Refresh
+                                </button>
+                                <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                                    {noteActivityEntries === null ? (
+                                        <p className="text-sm text-gray-500">Loading…</p>
+                                    ) : !Array.isArray(noteActivityEntries) || noteActivityEntries.length === 0 ? (
+                                        <p className="text-sm text-gray-500">No note activity yet.</p>
+                                    ) : (
+                                        noteActivityEntries.map((log) => {
+                                            const meta = (() => { try { return typeof log.metadata === 'string' ? JSON.parse(log.metadata || '{}') : (log.metadata || {}); } catch (_) { return {}; } })();
+                                            const dateStr = log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '';
+                                            const noteTitle = meta.noteTitle || 'Note';
+                                            const sourceLabel = meta.source === 'user' ? ' (My Notes)' : '';
+                                            return (
+                                                <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50 text-sm">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="font-medium text-gray-900">{noteTitle}{sourceLabel}</span>
+                                                        <span className="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{String(log.type || '').replace(/_/g, ' ')}</span>
+                                                        <span className="text-gray-500">{log.userName || 'System'}</span>
+                                                        <span className="text-gray-400 text-xs">{dateStr}</span>
+                                                    </div>
+                                                    {log.description && (
+                                                        <div className="mt-1 text-xs text-gray-600">{log.description}</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         </>
                     )}
