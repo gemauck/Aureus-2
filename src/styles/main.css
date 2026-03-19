@@ -361,3 +361,12 @@ h6:hover {
     background-color: transparent !important;
     color: inherit !important;
 }
+
+/* Notes rich-text editor placeholder */
+.notes-editor[contenteditable]:empty::before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+}
+.notes-editor[contenteditable][data-dark]:empty::before {
+    color: #6b7280;
+}

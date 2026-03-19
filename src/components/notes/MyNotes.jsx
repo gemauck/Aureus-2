@@ -745,6 +745,46 @@ const MyNotes = () => {
     );
 };
 
+// Formatting toolbar for contentEditable (uses execCommand)
+const RichTextToolbar = ({ editorRef, isDark }) => {
+    const exec = (cmd, value = null) => (e) => {
+        e.preventDefault();
+        editorRef.current?.focus();
+        if (cmd === 'createLink') {
+            const url = window.prompt('Enter URL:', 'https://');
+            if (url) document.execCommand(cmd, false, url);
+        } else if (cmd === 'formatBlock') {
+            document.execCommand('formatBlock', false, value);
+        } else {
+            document.execCommand(cmd, false, value);
+        }
+    };
+    const btn = (icon, title, cmd, value = null) => (
+        <button key={title} type="button" onClick={exec(cmd, value)} title={title} className={`p-2 rounded ${isDark ? 'hover:bg-gray-600 text-gray-200' : 'hover:bg-gray-200 text-gray-700'}`} aria-label={title}>
+            <i className={`fas fa-${icon}`} aria-hidden="true"></i>
+        </button>
+    );
+    return (
+        <div className={`flex items-center gap-0.5 flex-wrap border-b ${isDark ? 'border-gray-600' : 'border-gray-200'} px-2 py-1`}>
+            {btn('bold', 'Bold', 'bold')}
+            {btn('italic', 'Italic', 'italic')}
+            {btn('underline', 'Underline', 'underline')}
+            {btn('strikethrough', 'Strikethrough', 'strikeThrough')}
+            <span className={`w-px h-5 mx-1 ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} aria-hidden="true"></span>
+            {btn('list-ul', 'Bullet list', 'insertUnorderedList')}
+            {btn('list-ol', 'Numbered list', 'insertOrderedList')}
+            <span className={`w-px h-5 mx-1 ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} aria-hidden="true"></span>
+            {btn('heading', 'Heading 1', 'formatBlock', 'h1')}
+            {btn('heading', 'Heading 2', 'formatBlock', 'h2')}
+            {btn('heading', 'Heading 3', 'formatBlock', 'h3')}
+            {btn('quote-right', 'Blockquote', 'formatBlock', 'blockquote')}
+            <span className={`w-px h-5 mx-1 ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} aria-hidden="true"></span>
+            {btn('link', 'Insert link', 'createLink')}
+            {btn('eraser', 'Clear format', 'removeFormat')}
+        </div>
+    );
+};
+
 // Note Editor Component
 const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark }) => {
     const [title, setTitle] = useState(note.title || '');
@@ -753,6 +793,7 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
     const [newTag, setNewTag] = useState('');
     const saveTimeoutRef = useRef(null);
     const noteRef = useRef(note);
+    const editorRef = useRef(null);
     const canPin = note.isOwner !== false && !note.id?.startsWith('temp-');
 
     noteRef.current = note;
@@ -763,14 +804,21 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
         setTags(note.tags || []);
     }, [note.id]);
 
+    React.useLayoutEffect(() => {
+        if (editorRef.current && note.content !== undefined) {
+            editorRef.current.innerHTML = note.content || '';
+        }
+    }, [note.id]);
+
     const performSave = useCallback(() => {
         const currentNote = noteRef.current;
         if (!currentNote) return;
-        if (title.trim() || content.trim()) {
+        const html = editorRef.current ? editorRef.current.innerHTML : content;
+        if (title.trim() || (html && html.trim() !== '' && html !== '<br>')) {
             onSave({
                 ...currentNote,
                 title: title.trim() || 'Untitled Note',
-                content,
+                content: html || '',
                 tags,
                 pinned: currentNote.pinned
             });
@@ -790,6 +838,12 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
         };
     }, [title, content, tags, performSave]);
 
+    const handleEditorInput = () => {
+        if (!editorRef.current) return;
+        const html = editorRef.current.innerHTML;
+        setContent(html);
+    };
+
     const handleAddTag = () => {
         if (newTag.trim() && !tags.includes(newTag.trim())) {
             setTags([...tags, newTag.trim()]);
@@ -801,7 +855,8 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
         setTags(tags.filter(t => t !== tagToRemove));
     };
 
-    const wordCount = (content || '').trim().split(/\s+/).filter(Boolean).length;
+    const plainText = (content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const wordCount = plainText.split(/\s+/).filter(Boolean).length;
 
     return (
         <div className="flex flex-col h-full min-h-0">
@@ -832,7 +887,7 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
                     {canPin && onTogglePin && (
                         <button
                             type="button"
-                            onClick={() => onTogglePin({ ...note, title, content, tags, pinned: note.pinned })}
+                            onClick={() => onTogglePin({ ...note, title, content: editorRef.current?.innerHTML ?? content, tags, pinned: note.pinned })}
                             className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
                             title={note.pinned ? 'Unpin' : 'Pin note'}
                             aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
@@ -907,21 +962,25 @@ const NoteEditor = ({ note, onSave, onDelete, onShare, onTogglePin, onExport, is
                 />
             </div>
 
-            {/* Content Editor */}
-            <div className="flex-1 p-4 overflow-y-auto min-h-0">
-                <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Start writing your note..."
-                    className={`w-full h-full min-h-[320px] resize-none bg-transparent border-none outline-none ${
-                        isDark ? 'text-gray-100' : 'text-gray-900'
-                    }`}
-                    style={{ minHeight: '400px' }}
-                    aria-label="Note content"
-                />
-                <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                    {wordCount} word{wordCount !== 1 ? 's' : ''}
-                </p>
+            {/* Rich text toolbar + Content Editor */}
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <RichTextToolbar editorRef={editorRef} isDark={isDark} />
+                <div className="flex-1 p-4 overflow-y-auto min-h-0">
+                    <div
+                        ref={editorRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={handleEditorInput}
+                        data-placeholder="Start writing your note..."
+                        {...(isDark ? { 'data-dark': 'true' } : {})}
+                        className={`notes-editor w-full min-h-[320px] outline-none ${isDark ? 'text-gray-100' : 'text-gray-900'} [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-4 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:opacity-90 ${isDark ? '[&_a]:text-primary-400' : '[&_a]:text-primary-600'} [&_a]:underline`}
+                        style={{ minHeight: '400px' }}
+                        aria-label="Note content"
+                    />
+                    <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {wordCount} word{wordCount !== 1 ? 's' : ''}
+                    </p>
+                </div>
             </div>
         </div>
     );
