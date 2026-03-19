@@ -230,6 +230,14 @@ const LoginPage = () => {
                     text-transform: uppercase;
                 }
 
+                .login-slogan {
+                    margin: 0.25rem 0 0;
+                    text-align: center;
+                    font-size: 0.9rem;
+                    color: #4b5563;
+                    font-style: italic;
+                }
+
                 .login-subtitle {
                     margin: 0 0 1.5rem;
                     color: #6b7280;
@@ -349,11 +357,18 @@ const LoginPage = () => {
                     border-radius: 0.72rem;
                     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
                     color: #ffffff !important;
+                    -webkit-text-fill-color: #ffffff !important;
                     font-size: 0.98rem;
                     font-weight: 650;
                     cursor: pointer;
                     transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
                     box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+                }
+
+                .login-card .submit-button,
+                .login-card .submit-button * {
+                    color: #ffffff !important;
+                    -webkit-text-fill-color: #ffffff !important;
                 }
 
                 .submit-button:hover:not(:disabled) {
@@ -426,6 +441,7 @@ const LoginPage = () => {
             <div className="login-wrapper">
                 <div className="login-card login-modal">
                     <h1 className="login-title">Praxis ERP</h1>
+                    <p className="login-slogan">Knowlege drives action</p>
                     <p className="login-brand-subtitle">by Abco</p>
                     <p className="login-subtitle">Sign in to continue to your account</p>
 
