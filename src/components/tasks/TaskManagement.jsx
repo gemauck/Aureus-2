@@ -263,7 +263,7 @@ const TaskManagement = () => {
     const handleSaveListEdit = useCallback(async (listId) => {
         const list = userTaskLists.find(l => l.id === listId);
         if (!list) return;
-        const name = (editingListName ?? list.name || '').trim();
+        const name = ((editingListName ?? list.name) || '').trim();
         if (!name) return;
         setEditingListId(null);
         try {
