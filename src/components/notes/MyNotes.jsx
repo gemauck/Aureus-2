@@ -48,15 +48,45 @@ const MyNotes = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
     const [toast, setToast] = useState(null);
+    const [clients, setClients] = useState([]);
+    const [projects, setProjects] = useState([]);
 
     const showToast = useCallback((message, type = 'info') => {
         setToast({ message, type });
     }, []);
 
-    // Load notes
+    const loadClients = useCallback(async () => {
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+            const response = await fetch('/api/clients', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (response.ok) {
+                const data = await response.json();
+                const list = Array.isArray(data?.data?.clients) ? data.data.clients : Array.isArray(data?.clients) ? data.clients : Array.isArray(data?.items) ? data.items : [];
+                setClients(list);
+            }
+        } catch (e) { console.error('Error loading clients:', e); }
+    }, []);
+
+    const loadProjects = useCallback(async () => {
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+            const response = await fetch('/api/projects', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (response.ok) {
+                const data = await response.json();
+                const list = Array.isArray(data?.data?.projects) ? data.data.projects : Array.isArray(data?.projects) ? data.projects : Array.isArray(data?.items) ? data.items : [];
+                setProjects(list);
+            }
+        } catch (e) { console.error('Error loading projects:', e); }
+    }, []);
+
+    // Load notes, users, clients, projects
     useEffect(() => {
         loadNotes();
         loadUsers();
+        loadClients();
+        loadProjects();
     }, []);
 
     // Filter notes: search + tag, sort pinned first then updatedAt
@@ -190,6 +220,8 @@ const MyNotes = () => {
             tags: [],
             sharedWith: [],
             pinned: false,
+            clientId: null,
+            projectId: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             isNew: true
@@ -210,7 +242,7 @@ const MyNotes = () => {
             const response = await fetch(`/api/user-notes/${note.id}`, {
                 method: 'PUT',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: note.title, content: note.content, tags: note.tags || [], pinned: newPinned })
+                body: JSON.stringify({ title: note.title, content: note.content, tags: note.tags || [], pinned: newPinned, clientId: note.clientId ?? null, projectId: note.projectId ?? null })
             });
             if (response.ok) {
                 const data = await response.json();
@@ -264,7 +296,9 @@ const MyNotes = () => {
                 title: note.title || 'Untitled Note',
                 content: note.content || '',
                 tags: note.tags || [],
-                pinned: Boolean(note.pinned)
+                pinned: Boolean(note.pinned),
+                clientId: note.clientId && String(note.clientId).trim() ? note.clientId : null,
+                projectId: note.projectId && String(note.projectId).trim() ? note.projectId : null
             };
 
             let response;
@@ -614,6 +648,11 @@ const MyNotes = () => {
                                                 <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                                                     <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>
                                                         {formatDate(note.updatedAt || note.createdAt)}
+                                                        {(note.client?.name || note.project?.name) && (
+                                                            <span className="ml-1">
+                                                                {[note.client?.name, note.project?.name].filter(Boolean).join(' · ')}
+                                                            </span>
+                                                        )}
                                                     </span>
                                                     {note.tags && note.tags.length > 0 && (
                                                         <div className="flex gap-1 flex-wrap">
@@ -664,6 +703,9 @@ const MyNotes = () => {
                                             <div className="flex items-center justify-between text-xs mt-2 flex-wrap gap-1">
                                                 <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>
                                                     {formatDate(note.updatedAt || note.createdAt)}
+                                                    {(note.client?.name || note.project?.name) && (
+                                                        <span className="block mt-0.5">{(note.client?.name && note.project?.name) ? `${note.client.name} · ${note.project.name}` : (note.client?.name || note.project?.name)}</span>
+                                                    )}
                                                 </span>
                                                 {note.tags && note.tags.length > 0 && (
                                                     <div className="flex gap-1 flex-wrap">
@@ -690,6 +732,8 @@ const MyNotes = () => {
                                 <NoteEditor
                                     note={selectedNote}
                                     allTags={allTags}
+                                    clients={clients}
+                                    projects={projects}
                                     onSave={handleSaveNote}
                                     onDelete={handleDeleteNote}
                                     onShare={handleShareNote}
@@ -787,11 +831,13 @@ const RichTextToolbar = ({ editorRef, isDark }) => {
 };
 
 // Note Editor Component
-const NoteEditor = ({ note, allTags = [], onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark }) => {
+const NoteEditor = ({ note, allTags = [], clients = [], projects = [], onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark }) => {
     const [title, setTitle] = useState(note.title || '');
     const [content, setContent] = useState(note.content || '');
     const [tags, setTags] = useState(note.tags || []);
     const [newTag, setNewTag] = useState('');
+    const [clientId, setClientId] = useState(note.clientId ?? note.client?.id ?? '');
+    const [projectId, setProjectId] = useState(note.projectId ?? note.project?.id ?? '');
     const saveTimeoutRef = useRef(null);
     const noteRef = useRef(note);
     const editorRef = useRef(null);
@@ -803,6 +849,8 @@ const NoteEditor = ({ note, allTags = [], onSave, onDelete, onShare, onTogglePin
         setTitle(note.title || '');
         setContent(note.content || '');
         setTags(note.tags || []);
+        setClientId(note.clientId ?? note.client?.id ?? '');
+        setProjectId(note.projectId ?? note.project?.id ?? '');
     }, [note.id]);
 
     React.useLayoutEffect(() => {
@@ -821,10 +869,12 @@ const NoteEditor = ({ note, allTags = [], onSave, onDelete, onShare, onTogglePin
                 title: title.trim() || 'Untitled Note',
                 content: html || '',
                 tags,
-                pinned: currentNote.pinned
+                pinned: currentNote.pinned,
+                clientId: clientId && String(clientId).trim() ? clientId : null,
+                projectId: projectId && String(projectId).trim() ? projectId : null
             });
         }
-    }, [title, content, tags, onSave]);
+    }, [title, content, tags, clientId, projectId, onSave]);
 
     // Auto-save after 2 seconds of inactivity
     useEffect(() => {
@@ -837,7 +887,7 @@ const NoteEditor = ({ note, allTags = [], onSave, onDelete, onShare, onTogglePin
                 clearTimeout(saveTimeoutRef.current);
             }
         };
-    }, [title, content, tags, performSave]);
+    }, [title, content, tags, clientId, projectId, performSave]);
 
     const handleEditorInput = () => {
         if (!editorRef.current) return;
@@ -895,7 +945,7 @@ const NoteEditor = ({ note, allTags = [], onSave, onDelete, onShare, onTogglePin
                     {canPin && onTogglePin && (
                         <button
                             type="button"
-                            onClick={() => onTogglePin({ ...note, title, content: editorRef.current?.innerHTML ?? content, tags, pinned: note.pinned })}
+                            onClick={() => onTogglePin({ ...note, title, content: editorRef.current?.innerHTML ?? content, tags, pinned: note.pinned, clientId: clientId || null, projectId: projectId || null })}
                             className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
                             title={note.pinned ? 'Unpin' : 'Pin note'}
                             aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
@@ -999,6 +1049,56 @@ const NoteEditor = ({ note, allTags = [], onSave, onDelete, onShare, onTogglePin
                     >
                         Add
                     </button>
+                </div>
+            </div>
+
+            {/* Client & Project */}
+            <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex flex-wrap items-center gap-4`}>
+                <div className="flex items-center gap-2">
+                    <label htmlFor="note-client" className={`text-xs font-medium whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Client
+                    </label>
+                    <select
+                        id="note-client"
+                        value={clientId}
+                        onChange={(e) => {
+                            const newClientId = e.target.value;
+                            setClientId(newClientId);
+                            if (!newClientId) setProjectId('');
+                            else {
+                                const proj = projects.find(p => p.id === projectId);
+                                if (proj && proj.clientId !== newClientId) setProjectId('');
+                            }
+                        }}
+                        className={`px-2 py-1.5 rounded text-sm border min-w-[140px] ${
+                            isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'
+                        } focus:outline-none focus:ring-1 focus:ring-primary-500`}
+                        aria-label="Assign note to client"
+                    >
+                        <option value="">None</option>
+                        {clients.map(c => (
+                            <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex items-center gap-2">
+                    <label htmlFor="note-project" className={`text-xs font-medium whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Project
+                    </label>
+                    <select
+                        id="note-project"
+                        value={projectId}
+                        onChange={(e) => setProjectId(e.target.value)}
+                        className={`px-2 py-1.5 rounded text-sm border min-w-[140px] ${
+                            isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'
+                        } focus:outline-none focus:ring-1 focus:ring-primary-500`}
+                        aria-label="Assign note to project"
+                    >
+                        <option value="">None</option>
+                        {(clientId ? projects.filter(p => p.clientId === clientId) : projects).map(p => (
+                            <option key={p.id} value={p.id}>{p.name || 'Unnamed'}</option>
+                        ))}
+                    </select>
                 </div>
             </div>
 

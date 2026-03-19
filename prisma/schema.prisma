@@ -208,6 +208,7 @@ model Client {
   clientProposals ClientProposal[]
   clientFollowUps ClientFollowUp[]
   clientServices  ClientService[]
+  userNotes       UserNote[]
 
   @@index([createdAt])
   @@index([type])
@@ -489,6 +490,7 @@ model Project {
   projectTeamMembers            ProjectTeamMember[]
   projectCustomFieldDefinitions ProjectCustomFieldDefinition[]
   projectActivityLogs           ProjectActivityLog[]
+  userNotes                     UserNote[]
 
   @@index([clientId])
   @@index([status])
@@ -2287,12 +2289,18 @@ model UserNote {
   tags       String          @default("[]") // JSON array of tag strings
   pinned     Boolean         @default(false)
   ownerId    String
+  clientId   String?
+  projectId  String?
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   owner      User            @relation("UserNoteOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   sharedWith UserNoteShare[]
+  client     Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project    Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
+  @@index([clientId])
+  @@index([projectId])
   @@index([createdAt])
   @@index([updatedAt])
 }

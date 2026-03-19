@@ -5,6 +5,18 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
+const noteInclude = {
+  sharedWith: {
+    include: {
+      user: {
+        select: { id: true, name: true, email: true }
+      }
+    }
+  },
+  client: { select: { id: true, name: true } },
+  project: { select: { id: true, name: true } }
+}
+
 // Helper function to parse JSON fields from database responses
 function parseUserNoteJsonFields(note) {
   try {
@@ -38,7 +50,19 @@ function parseUserNoteJsonFields(note) {
     } else {
       parsed.sharedWith = []
     }
-    
+
+    // Include client and project summary if present
+    if (note.client) {
+      parsed.client = { id: note.client.id, name: note.client.name }
+    } else {
+      parsed.client = parsed.clientId ? { id: parsed.clientId, name: null } : null
+    }
+    if (note.project) {
+      parsed.project = { id: note.project.id, name: note.project.name }
+    } else {
+      parsed.project = parsed.projectId ? { id: parsed.projectId, name: null } : null
+    }
+
     return parsed
   } catch (error) {
     console.error(`❌ Error parsing note ${note.id}:`, error.message)
@@ -100,19 +124,7 @@ async function handler(req, res) {
         // Return updated note
         const updatedNote = await prisma.userNote.findUnique({
           where: { id: noteId },
-          include: {
-            sharedWith: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              }
-            }
-          }
+          include: noteInclude
         })
 
         return ok(res, { note: parseUserNoteJsonFields(updatedNote) })
@@ -128,19 +140,7 @@ async function handler(req, res) {
         // Get notes owned by user
         const ownedNotes = await prisma.userNote.findMany({
           where: { ownerId: userId },
-          include: {
-            sharedWith: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              }
-            }
-          },
+          include: noteInclude,
           orderBy: {
             updatedAt: 'desc'
           }
@@ -152,23 +152,9 @@ async function handler(req, res) {
           include: {
             note: {
               include: {
+                ...noteInclude,
                 owner: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                },
-                sharedWith: {
-                  include: {
-                    user: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  }
+                  select: { id: true, name: true, email: true }
                 }
               }
             }
@@ -212,19 +198,7 @@ async function handler(req, res) {
             id: noteId,
             ownerId: userId
           },
-          include: {
-            sharedWith: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              }
-            }
-          }
+          include: noteInclude
         })
 
         if (ownedNote) {
@@ -240,24 +214,8 @@ async function handler(req, res) {
           include: {
             note: {
               include: {
-                owner: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                },
-                sharedWith: {
-                  include: {
-                    user: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true
-                      }
-                    }
-                  }
-                }
+                ...noteInclude,
+                owner: { select: { id: true, name: true, email: true } }
               }
             }
           }
@@ -288,7 +246,9 @@ async function handler(req, res) {
           title,
           content = '',
           tags = [],
-          pinned = false
+          pinned = false,
+          clientId = null,
+          projectId = null
         } = payload
 
         if (!title || !title.trim()) {
@@ -300,24 +260,14 @@ async function handler(req, res) {
           content: content.trim(),
           tags: JSON.stringify(Array.isArray(tags) ? tags : []),
           pinned: Boolean(pinned),
-          ownerId: userId
+          ownerId: userId,
+          clientId: clientId && String(clientId).trim() ? String(clientId).trim() : null,
+          projectId: projectId && String(projectId).trim() ? String(projectId).trim() : null
         }
 
         const note = await prisma.userNote.create({
           data: noteData,
-          include: {
-            sharedWith: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              }
-            }
-          }
+          include: noteInclude
         })
 
         return created(res, { note: parseUserNoteJsonFields(note) })
@@ -335,7 +285,9 @@ async function handler(req, res) {
           title,
           content,
           tags,
-          pinned
+          pinned,
+          clientId,
+          projectId
         } = payload
 
         // Verify note exists and belongs to user
@@ -355,23 +307,13 @@ async function handler(req, res) {
         if (content !== undefined) updateData.content = content.trim()
         if (tags !== undefined) updateData.tags = JSON.stringify(Array.isArray(tags) ? tags : [])
         if (pinned !== undefined) updateData.pinned = Boolean(pinned)
+        if (clientId !== undefined) updateData.clientId = clientId && String(clientId).trim() ? String(clientId).trim() : null
+        if (projectId !== undefined) updateData.projectId = projectId && String(projectId).trim() ? String(projectId).trim() : null
 
         const note = await prisma.userNote.update({
           where: { id: noteId },
           data: updateData,
-          include: {
-            sharedWith: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true
-                  }
-                }
-              }
-            }
-          }
+          include: noteInclude
         })
 
         return ok(res, { note: parseUserNoteJsonFields(note) })
