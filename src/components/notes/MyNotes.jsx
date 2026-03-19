@@ -50,6 +50,7 @@ const MyNotes = () => {
     const [toast, setToast] = useState(null);
     const [clients, setClients] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [clientProjects, setClientProjects] = useState([]);
 
     const showToast = useCallback((message, type = 'info') => {
         setToast({ message, type });
@@ -97,6 +98,37 @@ const MyNotes = () => {
         }
     }, []);
 
+    const loadProjectsForClient = useCallback(async (clientId) => {
+        if (!clientId || !storage?.getToken?.()) {
+            setClientProjects([]);
+            return;
+        }
+        try {
+            const token = storage.getToken();
+            const response = await fetch(`/api/projects?clientId=${encodeURIComponent(clientId)}&limit=500`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                const list = Array.isArray(data?.data?.projects)
+                    ? data.data.projects
+                    : Array.isArray(data?.projects)
+                        ? data.projects
+                        : Array.isArray(data?.data)
+                            ? data.data
+                            : Array.isArray(data?.items)
+                                ? data.items
+                                : [];
+                setClientProjects(list);
+            } else {
+                setClientProjects([]);
+            }
+        } catch (e) {
+            console.error('Error loading projects for client:', e);
+            setClientProjects([]);
+        }
+    }, []);
+
     // Load notes, users, clients, projects
     useEffect(() => {
         loadNotes();
@@ -104,6 +136,16 @@ const MyNotes = () => {
         loadClients();
         loadProjects();
     }, []);
+
+    // When selected note has a client, load that client's projects for the Project dropdown
+    useEffect(() => {
+        const cid = selectedNote?.clientId ?? selectedNote?.client?.id;
+        if (cid) {
+            loadProjectsForClient(cid);
+        } else {
+            setClientProjects([]);
+        }
+    }, [selectedNote?.id, selectedNote?.clientId, selectedNote?.client?.id, loadProjectsForClient]);
 
     // Filter notes: search + tag, sort pinned first then updatedAt
     useEffect(() => {
@@ -750,6 +792,8 @@ const MyNotes = () => {
                                     allTags={allTags}
                                     clients={clients}
                                     projects={projects}
+                                    clientProjects={clientProjects}
+                                    onClientChange={loadProjectsForClient}
                                     onSave={handleSaveNote}
                                     onDelete={handleDeleteNote}
                                     onShare={handleShareNote}
@@ -847,7 +891,7 @@ const RichTextToolbar = ({ editorRef, isDark }) => {
 };
 
 // Note Editor Component
-const NoteEditor = ({ note, allTags = [], clients = [], projects = [], onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark }) => {
+const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientProjects = [], onClientChange, onSave, onDelete, onShare, onTogglePin, onExport, isSaving, lastSavedAt, isDark }) => {
     const [title, setTitle] = useState(note.title || '');
     const [content, setContent] = useState(note.content || '');
     const [tags, setTags] = useState(note.tags || []);
@@ -1082,9 +1126,10 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], onSave, o
                             setClientId(newClientId);
                             if (!newClientId) setProjectId('');
                             else {
-                                const proj = projects.find(p => p.id === projectId);
+                                const proj = (clientProjects?.length ? clientProjects : projects).find(p => p.id === projectId);
                                 if (proj && proj.clientId !== newClientId) setProjectId('');
                             }
+                            onClientChange?.(newClientId || null);
                         }}
                         className={`px-2 py-1.5 rounded text-sm border min-w-[140px] ${
                             isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'
@@ -1111,7 +1156,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], onSave, o
                         aria-label="Assign note to project"
                     >
                         <option value="">None</option>
-                        {(clientId ? projects.filter(p => p.clientId === clientId) : projects).map(p => (
+                        {((clientId && clientProjects?.length > 0) ? clientProjects : (clientId ? projects.filter(p => p.clientId === clientId) : projects)).map(p => (
                             <option key={p.id} value={p.id}>{p.name || 'Unnamed'}</option>
                         ))}
                     </select>
