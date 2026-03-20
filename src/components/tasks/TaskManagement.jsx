@@ -110,6 +110,7 @@ const TaskManagement = () => {
     const [filterTag, setFilterTag] = useState('all');
     const [filterPriority, setFilterPriority] = useState('all');
     const [filterSource, setFilterSource] = useState('all'); // 'all' | 'user' | 'project'
+    const [filterListId, setFilterListId] = useState('all'); // 'all' | list id | 'unassigned'
     const [quickDateFilter, setQuickDateFilter] = useState(null); // null | 'overdue' | 'today' | 'week'
     const [searchQuery, setSearchQuery] = useState('');
     const [showTaskModal, setShowTaskModal] = useState(false);
@@ -198,6 +199,7 @@ const TaskManagement = () => {
                 if (parsed.filterTag) setFilterTag(parsed.filterTag);
                 if (parsed.filterPriority) setFilterPriority(parsed.filterPriority);
                 if (parsed.filterSource && ['all', 'user', 'project'].includes(parsed.filterSource)) setFilterSource(parsed.filterSource);
+                if (parsed.filterListId) setFilterListId(parsed.filterListId);
             }
         } catch (e) {
             console.warn('Failed to load preferences from localStorage:', e);
@@ -212,12 +214,13 @@ const TaskManagement = () => {
                 filterCategory,
                 filterTag,
                 filterPriority,
-                filterSource
+                filterSource,
+                filterListId
             }));
         } catch (e) {
             console.warn('Failed to save filters to localStorage:', e);
         }
-    }, [filterStatus, filterCategory, filterTag, filterPriority, filterSource]);
+    }, [filterStatus, filterCategory, filterTag, filterPriority, filterSource, filterListId]);
 
     const loadUserTaskLists = useCallback(async () => {
         try {
@@ -228,7 +231,13 @@ const TaskManagement = () => {
             });
             if (!response.ok) return;
             const data = await response.json();
-            const lists = Array.isArray(data?.data?.lists) ? data.data.lists : [];
+            const lists = Array.isArray(data?.data?.lists)
+                ? data.data.lists
+                : Array.isArray(data?.data?.data?.lists)
+                    ? data.data.data.lists
+                    : Array.isArray(data?.lists)
+                        ? data.lists
+                        : [];
             setUserTaskLists(lists);
         } catch (e) {
             console.warn('TaskManagement: Failed to load user task lists', e);
@@ -629,6 +638,37 @@ const TaskManagement = () => {
             });
         }
 
+        if (filterListId !== 'all') {
+            const orderedLists = [...(userTaskLists || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            const normalizeStatusLocal = (status) => {
+                if (!status) return 'todo';
+                const normalized = String(status).toLowerCase().trim();
+                if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') return 'todo';
+                if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') return 'in-progress';
+                if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') return 'completed';
+                if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
+                return 'todo';
+            };
+            const listStatusMatches = (list, taskStatus) => {
+                const ls = (list.status || 'todo').toLowerCase().replace(/\s/g, '-');
+                return (ls === 'in-progress' || ls === 'inprogress') ? taskStatus === 'in-progress' : ls === taskStatus;
+            };
+            const projectListIdForTask = (task) => {
+                const taskStatus = normalizeStatusLocal(task.status);
+                const firstMatchingList = orderedLists.find(l => listStatusMatches(l, taskStatus));
+                return firstMatchingList?.id || orderedLists[0]?.id || null;
+            };
+            filtered = filtered.filter(task => {
+                if (task.type === 'project') {
+                    const mappedId = projectListIdForTask(task);
+                    return filterListId === 'unassigned' ? !mappedId : String(mappedId || '') === String(filterListId);
+                }
+                const taskListId = task.listId || null;
+                if (filterListId === 'unassigned') return !taskListId;
+                return String(taskListId || '') === String(filterListId);
+            });
+        }
+
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             filtered = filtered.filter(task => {
@@ -640,7 +680,7 @@ const TaskManagement = () => {
         }
 
         return filtered;
-    }, [tasks, searchQuery, filterSource, quickDateFilter]);
+    }, [tasks, searchQuery, filterSource, quickDateFilter, filterListId, userTaskLists]);
 
     // Sort tasks for List view (uses display values like client/lead names)
     const sortedListTasks = useMemo(() => {
@@ -704,6 +744,49 @@ const TaskManagement = () => {
 
         return list;
     }, [filteredTasks, sortKey, sortDir, clients, leads]);
+
+    const listViewSections = useMemo(() => {
+        if (!userTaskLists || userTaskLists.length === 0) {
+            return [{ id: 'all', name: 'All tasks', tasks: sortedListTasks }];
+        }
+
+        const orderedLists = [...userTaskLists].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const normalizeStatusLocal = (status) => {
+            if (!status) return 'todo';
+            const normalized = String(status).toLowerCase().trim();
+            if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') return 'todo';
+            if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') return 'in-progress';
+            if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') return 'completed';
+            if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
+            return 'todo';
+        };
+        const listStatusMatches = (list, taskStatus) => {
+            const ls = (list.status || 'todo').toLowerCase().replace(/\s/g, '-');
+            return (ls === 'in-progress' || ls === 'inprogress') ? taskStatus === 'in-progress' : ls === taskStatus;
+        };
+
+        const sections = orderedLists.map(list => {
+            const userTasksInList = sortedListTasks.filter(t => t.type !== 'project' && String(t.listId || '') === String(list.id));
+            const projectTasksInList = sortedListTasks.filter(t => {
+                if (t.type !== 'project') return false;
+                const taskStatus = normalizeStatusLocal(t.status);
+                if (!listStatusMatches(list, taskStatus)) return false;
+                const firstMatchingList = orderedLists.find(l => listStatusMatches(l, taskStatus));
+                return firstMatchingList && firstMatchingList.id === list.id;
+            });
+            return {
+                id: list.id,
+                name: list.name || 'Unnamed',
+                tasks: [...userTasksInList, ...projectTasksInList]
+            };
+        });
+
+        const unassignedTasks = sortedListTasks.filter(t => t.type !== 'project' && !t.listId);
+        if (unassignedTasks.length > 0) {
+            sections.push({ id: 'unassigned', name: 'Unassigned', tasks: unassignedTasks });
+        }
+        return sections;
+    }, [userTaskLists, sortedListTasks]);
 
     // Normalize task status for grouping (shared)
     const normalizeStatus = useCallback((status) => {
@@ -1073,13 +1156,14 @@ const TaskManagement = () => {
         return colors[status] || colors.todo;
     };
 
-    const hasActiveFilters = filterStatus !== 'all' || filterCategory !== 'all' || filterTag !== 'all' || filterPriority !== 'all' || filterSource !== 'all' || quickDateFilter || searchQuery.trim();
+    const hasActiveFilters = filterStatus !== 'all' || filterCategory !== 'all' || filterTag !== 'all' || filterPriority !== 'all' || filterSource !== 'all' || filterListId !== 'all' || quickDateFilter || searchQuery.trim();
     const clearFilters = useCallback(() => {
         setFilterStatus('all');
         setFilterCategory('all');
         setFilterTag('all');
         setFilterPriority('all');
         setFilterSource('all');
+        setFilterListId('all');
         setQuickDateFilter(null);
         setSearchQuery('');
     }, []);
@@ -1278,6 +1362,20 @@ const TaskManagement = () => {
                             <option value="high">High</option>
                             <option value="urgent">Urgent</option>
                         </select>
+                        <select
+                            value={filterListId}
+                            onChange={(e) => setFilterListId(e.target.value)}
+                            className={`px-3 py-1.5 rounded-lg border text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        >
+                            <option value="all">All Lists</option>
+                            {userTaskLists
+                                .slice()
+                                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                                .map(list => (
+                                    <option key={list.id} value={list.id}>{list.name || 'Unnamed'}</option>
+                                ))}
+                            <option value="unassigned">Unassigned</option>
+                        </select>
                         <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>|</span>
                         <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Source:</span>
                         <div className="flex gap-1">
@@ -1430,23 +1528,32 @@ const TaskManagement = () => {
                                 </div>
                             </div>
 
-                            {/* Rows */}
-                            <div className="divide-y divide-gray-200/10">
-                                {sortedListTasks.map(task => (
-                                    <TaskListRow
-                                        key={task.id}
-                                        task={task}
-                                        isDark={isDark}
-                                        onEdit={handleEditTask}
-                                        onDelete={handleDeleteTask}
-                                        onQuickStatusToggle={handleQuickStatusToggle}
-                                        clients={clients}
-                                        leads={leads}
-                                        projects={projects}
-                                        getPriorityColor={getPriorityColor}
-                                        getPriorityTextColor={getPriorityTextColor}
-                                        getStatusColor={getStatusColor}
-                                    />
+                            {/* Rows grouped by list */}
+                            <div>
+                                {listViewSections.map((section) => (
+                                    <div key={section.id} className="border-t border-gray-200/10 first:border-t-0">
+                                        <div className={`${isDark ? 'bg-gray-900/30 text-gray-300' : 'bg-gray-50 text-gray-700'} px-4 py-2 text-sm font-semibold`}>
+                                            {section.name} <span className="opacity-70">({section.tasks.length})</span>
+                                        </div>
+                                        <div className="divide-y divide-gray-200/10">
+                                            {section.tasks.map(task => (
+                                                <TaskListRow
+                                                    key={`${section.id}-${task.id}`}
+                                                    task={task}
+                                                    isDark={isDark}
+                                                    onEdit={handleEditTask}
+                                                    onDelete={handleDeleteTask}
+                                                    onQuickStatusToggle={handleQuickStatusToggle}
+                                                    clients={clients}
+                                                    leads={leads}
+                                                    projects={projects}
+                                                    getPriorityColor={getPriorityColor}
+                                                    getPriorityTextColor={getPriorityTextColor}
+                                                    getStatusColor={getStatusColor}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
