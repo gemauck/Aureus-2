@@ -339,6 +339,7 @@ const TaskManagement = () => {
 
   const openEditTask = (task) => {
     setEditingTaskId(task.id);
+    const tags = Array.isArray(task.tags) ? task.tags : [];
     setTaskForm({
       title: task.title || '',
       description: task.description || '',
@@ -347,12 +348,98 @@ const TaskManagement = () => {
       category: task.category || '',
       dueDate: task.dueDate ? String(task.dueDate).slice(0, 16) : '',
       listId: task.listId || '',
-      tagIds: task.tags.map((tag) => tag.id),
+      tagIds: tags.map((tag) => tag.id),
       checklist: Array.isArray(task.checklist) ? task.checklist : [],
       newChecklistItem: ''
     });
     setShowTaskModal(true);
   };
+
+  const openEditTaskRef = React.useRef(openEditTask);
+  const tasksRef = React.useRef(tasks);
+  const loadingRef = React.useRef(loading);
+  const pendingOpenUserTaskIdRef = React.useRef(null);
+  const lastHandledUserTaskSegmentRef = React.useRef(null);
+
+  React.useEffect(() => {
+    openEditTaskRef.current = openEditTask;
+    tasksRef.current = tasks;
+    loadingRef.current = loading;
+  });
+
+  const resumePendingUserTaskOpen = useCallback(() => {
+    const id = pendingOpenUserTaskIdRef.current;
+    if (!id || !token) return;
+    const local = tasksRef.current.find((t) => String(t.id) === id);
+    if (local) {
+      openEditTaskRef.current(local);
+      pendingOpenUserTaskIdRef.current = null;
+      lastHandledUserTaskSegmentRef.current = id;
+      return;
+    }
+    if (loadingRef.current) return;
+    (async () => {
+      try {
+        const response = await fetch(`/api/user-tasks/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) {
+          pendingOpenUserTaskIdRef.current = null;
+          return;
+        }
+        const payload = await response.json();
+        const fetched = payload?.data?.task;
+        if (!fetched) {
+          pendingOpenUserTaskIdRef.current = null;
+          return;
+        }
+        const normalized = {
+          ...fetched,
+          status: normalizeStatus(fetched.status),
+          tags: Array.isArray(fetched.tags) ? fetched.tags : [],
+          checklist: Array.isArray(fetched.checklist) ? fetched.checklist : []
+        };
+        openEditTaskRef.current(normalized);
+        pendingOpenUserTaskIdRef.current = null;
+        lastHandledUserTaskSegmentRef.current = id;
+      } catch (e) {
+        console.error('resumePendingUserTaskOpen', e);
+        pendingOpenUserTaskIdRef.current = null;
+      }
+    })();
+  }, [token]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e.detail;
+      if (!d || String(d.entityType || '').toLowerCase() !== 'usertask' || !d.entityId) return;
+      pendingOpenUserTaskIdRef.current = String(d.entityId);
+      resumePendingUserTaskOpen();
+    };
+    window.addEventListener('openEntityDetail', handler);
+    return () => window.removeEventListener('openEntityDetail', handler);
+  }, [resumePendingUserTaskOpen]);
+
+  useEffect(() => {
+    const syncFromRoute = (route) => {
+      if (!route || route.page !== 'my-tasks') return;
+      if (!route.segments?.[0]) {
+        lastHandledUserTaskSegmentRef.current = null;
+        return;
+      }
+      const seg = String(route.segments[0]);
+      if (lastHandledUserTaskSegmentRef.current === seg) return;
+      pendingOpenUserTaskIdRef.current = seg;
+      resumePendingUserTaskOpen();
+    };
+    syncFromRoute(window.RouteState?.getRoute?.());
+    const unsub = window.RouteState?.subscribe?.(syncFromRoute);
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [resumePendingUserTaskOpen]);
+
+  useEffect(() => {
+    resumePendingUserTaskOpen();
+  }, [tasks, loading, resumePendingUserTaskOpen]);
 
   const toggleTag = (tagId, checked) => {
     setTaskForm((prev) => {
@@ -572,7 +659,16 @@ const TaskManagement = () => {
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className={`font-semibold leading-snug ${isDark ? 'text-white' : 'text-gray-900'} ${normalizeStatus(task.status) === 'completed' ? 'line-through opacity-70' : ''}`}>{task.title}</p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openEditTask(task);
+              }}
+              className={`font-semibold leading-snug text-left w-full rounded-lg -m-0.5 p-0.5 transition ${isDark ? 'text-white hover:bg-white/10' : 'text-gray-900 hover:bg-slate-100'} ${normalizeStatus(task.status) === 'completed' ? 'line-through opacity-70' : ''}`}
+            >
+              {task.title}
+            </button>
             {task.category ? <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>{task.category}</p> : null}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
               <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize ${priorityPillClass(task.priority)}`}>{task.priority || 'medium'}</span>
@@ -868,7 +964,13 @@ const TaskManagement = () => {
                     return (
                       <tr key={task.id} className={`border-t transition ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-slate-100 hover:bg-slate-50/80'}`}>
                         <td className="px-4 py-3">
-                          <span className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{task.title}</span>
+                          <button
+                            type="button"
+                            onClick={() => openEditTask(task)}
+                            className={`font-medium text-left rounded-lg -m-0.5 p-0.5 transition hover:underline ${isDark ? 'text-white hover:bg-white/10' : 'text-slate-900 hover:bg-slate-100'}`}
+                          >
+                            {task.title}
+                          </button>
                           {task.category ? <span className={`ml-2 text-[10px] uppercase tracking-wide ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{task.category}</span> : null}
                         </td>
                         <td className="px-4 py-3">

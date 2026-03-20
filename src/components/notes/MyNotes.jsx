@@ -224,15 +224,6 @@ const MyNotes = () => {
         return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
     }, [notes]);
 
-    const noteStats = React.useMemo(() => {
-        const total = notes.length;
-        const pinned = notes.filter((n) => Boolean(n.pinned)).length;
-        const shared = notes.filter((n) => n.sharedWith && n.sharedWith.length > 0).length;
-        const withTags = notes.filter((n) => n.tags && n.tags.length > 0).length;
-        const linked = notes.filter((n) => n.clientId || n.projectId || n.client?.id || n.project?.id).length;
-        return { total, pinned, shared, withTags, linked };
-    }, [notes]);
-
     const loadNotes = useCallback(async (opts = {}) => {
         const { silent = false } = opts;
         try {
@@ -692,30 +683,6 @@ const MyNotes = () => {
             </div>
 
             <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-6 space-y-6">
-                {/* Stats */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                    {[
-                        { key: 'total', label: 'Total', value: noteStats.total, icon: 'fa-sticky-note', grad: 'from-slate-500 to-slate-600' },
-                        { key: 'pinned', label: 'Pinned', value: noteStats.pinned, icon: 'fa-thumbtack', grad: 'from-amber-500 to-orange-500' },
-                        { key: 'shared', label: 'Shared', value: noteStats.shared, icon: 'fa-share-alt', grad: 'from-sky-500 to-blue-600' },
-                        { key: 'tags', label: 'With tags', value: noteStats.withTags, icon: 'fa-tags', grad: 'from-emerald-500 to-teal-500' },
-                        { key: 'linked', label: 'Linked', value: noteStats.linked, icon: 'fa-link', grad: 'from-fuchsia-500 to-purple-600' }
-                    ].map((card) => (
-                        <div key={card.key} className={`relative overflow-hidden rounded-2xl border p-4 ${isDark ? 'border-gray-700/80 bg-gray-900/60' : 'border-slate-200/90 bg-white shadow-sm'}`}>
-                            <div className={`absolute -right-4 -top-4 h-16 w-16 rounded-full bg-gradient-to-br ${card.grad} opacity-20`} />
-                            <div className="relative flex items-start justify-between gap-2">
-                                <div>
-                                    <p className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>{card.label}</p>
-                                    <p className={`text-2xl font-bold tabular-nums mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{card.value}</p>
-                                </div>
-                                <div className={`h-10 w-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${card.grad} text-white shadow-md`}>
-                                    <i className={`fas ${card.icon} text-sm`} />
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
                 {/* Toolbar */}
                 <div className={`rounded-2xl border shadow-sm p-4 md:p-5 ${isDark ? 'border-gray-700/80 bg-gray-900/40 backdrop-blur' : 'border-slate-200/90 bg-white/80 backdrop-blur'}`}>
                     <div className="flex flex-col lg:flex-row lg:items-center gap-4">

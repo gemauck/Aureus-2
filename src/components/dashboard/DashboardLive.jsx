@@ -425,10 +425,14 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                 window.RouteState.setPageSubpath('projects', [task.projectId]);
             }
         } else if (task.type === 'user') {
-            // Navigate to My Tasks page
-            window.dispatchEvent(new CustomEvent('navigateToPage', { 
-                detail: { page: 'my-tasks' } 
-            }));
+            const userTaskId = task.id || task.taskId;
+            if (userTaskId && window.RouteState?.setPageSubpath) {
+                window.RouteState.setPageSubpath('my-tasks', [String(userTaskId)]);
+            } else {
+                window.dispatchEvent(new CustomEvent('navigateToPage', {
+                    detail: { page: 'my-tasks' }
+                }));
+            }
         }
     };
 
