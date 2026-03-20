@@ -78,7 +78,7 @@ async function handler(req, res) {
     if (req.method === 'POST' && !listId) {
       try {
         const payload = await parseJsonBody(req)
-        const { name, color = '#3B82F6', order, status } = payload || {}
+        const { name, color = '#3B82F6', status } = payload || {}
 
         if (!name || !String(name).trim()) {
           return badRequest(res, 'List name is required')
@@ -88,7 +88,7 @@ async function handler(req, res) {
           where: { ownerId: userId },
           _max: { order: true }
         })
-        const nextOrder = typeof order === 'number' ? order : (maxOrder._max.order ?? -1) + 1
+        const nextOrder = (maxOrder._max.order ?? -1) + 1
 
         const list = await prisma.userTaskList.create({
           data: {
@@ -103,6 +103,29 @@ async function handler(req, res) {
       } catch (error) {
         console.error('Error creating list:', error)
         return serverError(res, 'Failed to create list', error.message)
+      }
+    }
+
+    // DELETE /api/user-task-lists?all=true - Delete all lists for current user
+    if (req.method === 'DELETE' && !listId) {
+      try {
+        const deleteAll = String(req.query?.all || '').toLowerCase() === 'true'
+        if (!deleteAll) return badRequest(res, 'Missing all=true for bulk delete')
+
+        await prisma.$transaction([
+          prisma.userTask.updateMany({
+            where: { ownerId: userId },
+            data: { listId: null }
+          }),
+          prisma.userTaskList.deleteMany({
+            where: { ownerId: userId }
+          })
+        ])
+
+        return ok(res, { data: { deletedAll: true } })
+      } catch (error) {
+        console.error('Error deleting all lists:', error)
+        return serverError(res, 'Failed to delete all lists', error.message)
       }
     }
 

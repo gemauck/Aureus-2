@@ -419,7 +419,7 @@ const TaskManagement = () => {
             const response = await fetch('/api/user-task-lists', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ name, color: newListColor || undefined, order: userTaskLists.length })
+                body: JSON.stringify({ name, color: newListColor || undefined })
             });
             if (!response.ok) {
                 let details = '';
@@ -467,10 +467,6 @@ const TaskManagement = () => {
     }, [userTaskLists, editingListName, loadUserTaskLists]);
 
     const handleDeleteList = useCallback(async (listId) => {
-        if (userTaskLists.length <= 1) {
-            window.alert('You must keep at least one list.');
-            return;
-        }
         if (!window.confirm('Delete this list? Tasks in it will be moved to the first remaining list.')) return;
         try {
             const token = storage?.getToken?.();
@@ -496,7 +492,36 @@ const TaskManagement = () => {
             console.warn('TaskManagement: Failed to delete list', e);
             window.alert(e?.message || 'Could not delete list. Please try again.');
         }
-    }, [userTaskLists.length, loadUserTaskLists, loadTasks]);
+    }, [loadUserTaskLists, loadTasks]);
+
+    const handleDeleteAllLists = useCallback(async () => {
+        if (!window.confirm('Delete ALL lists? This will remove all columns and unassign all user tasks from lists.')) return;
+        try {
+            const token = storage?.getToken?.();
+            if (!token) throw new Error('You are not logged in.');
+            const response = await fetch('/api/user-task-lists?all=true', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                let details = '';
+                try {
+                    const errData = await response.json();
+                    details = errData?.error?.message || errData?.error || errData?.message || '';
+                } catch (_) {
+                    details = '';
+                }
+                throw new Error(details || `Failed to delete all lists (HTTP ${response.status})`);
+            }
+            setListMenuOpenId(null);
+            await loadUserTaskLists();
+            await loadTasks();
+            window.alert('All lists deleted.');
+        } catch (e) {
+            console.warn('TaskManagement: Failed to delete all lists', e);
+            window.alert(e?.message || 'Could not delete all lists. Please try again.');
+        }
+    }, [loadUserTaskLists, loadTasks]);
 
     // Load data
     useEffect(() => {
@@ -1679,6 +1704,13 @@ const TaskManagement = () => {
                                                 <>
                                                     <div className="fixed inset-0 z-10" onClick={() => setListMenuOpenId(null)} aria-hidden="true" />
                                                     <div className={`absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg z-20 min-w-[140px] ${isDark ? 'bg-gray-700 border border-gray-600' : 'bg-white border border-gray-200'}`}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDeleteAllLists}
+                                                            className={`w-full text-left px-3 py-2 text-sm ${isDark ? 'text-orange-300 hover:bg-gray-600' : 'text-orange-700 hover:bg-gray-50'}`}
+                                                        >
+                                                            Delete all lists
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDeleteList(list.id)}
