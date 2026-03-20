@@ -80,7 +80,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1774014955680'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1774015318785'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload so Chrome gets fresh JS (fixes cached bundle) -->
     <script>
@@ -106,7 +106,7 @@
     <!-- VERSION: 20260129-doc-collection-cache-bust - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1774014955680';
+            var APP_VERSION = '1774015318785';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -1128,8 +1128,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1774014955680" as="script">
-    <script defer src="/dist/core-bundle.js?v=1774014955680"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1774015318785" as="script">
+    <script defer src="/dist/core-bundle.js?v=1774015318785"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1500,23 +1500,16 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1774014955680" as="script">
-    <script defer src="/lazy-load-components.js?v=1774014955680"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1774015318785" as="script">
+    <script defer src="/lazy-load-components.js?v=1774015318785"></script>
     <script>
         (function setupLeadConvertHardFallback() {
             if (window.__leadConvertHardFallbackInstalled) return;
             window.__leadConvertHardFallbackInstalled = true;
             let inFlight = false;
 
-            document.addEventListener('click', async function(event) {
+            const executeConversion = async (event) => {
                 if (inFlight) return;
-                const target = event && event.target;
-                if (!target || !target.closest) return;
-                const button = target.closest('button');
-                if (!button) return;
-                const label = String(button.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                if (label !== 'convert to client') return;
-
                 const path = String(window.location.pathname || '');
                 const match = path.match(/^\/clients\/([^\/?#]+)/);
                 if (!match || !match[1]) return;
@@ -1525,9 +1518,9 @@
 
                 try {
                     inFlight = true;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    event.stopImmediatePropagation?.();
+                    event?.preventDefault?.();
+                    event?.stopPropagation?.();
+                    event?.stopImmediatePropagation?.();
 
                     const token = window.storage?.getToken?.() || null;
                     const response = await fetch(`/api/leads/${encodeURIComponent(leadId)}`, {
@@ -1540,9 +1533,7 @@
                         body: JSON.stringify({ type: 'client' })
                     });
                     const payload = await response.json().catch(() => ({}));
-                    if (!response.ok) {
-                        throw new Error(payload?.message || payload?.error || 'Conversion failed');
-                    }
+                    if (!response.ok) throw new Error(payload?.message || payload?.error || 'Conversion failed');
                     alert('Lead converted to client successfully!');
                     window.location.assign('/clients');
                 } catch (error) {
@@ -1550,7 +1541,32 @@
                 } finally {
                     inFlight = false;
                 }
+            };
+
+            // Delegate in capture phase
+            document.addEventListener('click', (event) => {
+                const target = event && event.target;
+                if (!target || !target.closest) return;
+                const button = target.closest('button');
+                if (!button) return;
+                const label = String(button.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if (label !== 'convert to client') return;
+                executeConversion(event);
             }, true);
+
+            // Directly bind to matching buttons to bypass any event retargeting issues.
+            const bindConvertButtons = () => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                buttons.forEach((button) => {
+                    const label = String(button.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                    if (label !== 'convert to client') return;
+                    if (button.dataset.convertBound === 'true') return;
+                    button.dataset.convertBound = 'true';
+                    button.addEventListener('click', executeConversion, true);
+                });
+            };
+            bindConvertButtons();
+            setInterval(bindConvertButtons, 1000);
         })();
     </script>
     
