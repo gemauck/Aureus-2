@@ -100,7 +100,8 @@ const useEnsureGlobalComponent = (globalName) => {
             if (cancelled) return;
             const globalComponent = window[globalName];
             if (globalComponent) {
-                setComponent(globalComponent);
+                // Store function-valued components without invoking them as state updaters
+                setComponent(() => globalComponent);
             }
         };
 
