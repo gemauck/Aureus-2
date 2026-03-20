@@ -89,8 +89,9 @@ const useEnsureGlobalComponent = (globalName) => {
         if (typeof window === 'undefined' || typeof document === 'undefined') {
             return;
         }
+        const shouldForceReloadScript = globalName === 'ClientDetailModal';
 
-        if (component) {
+        if (component && !shouldForceReloadScript) {
             return;
         }
 
@@ -104,7 +105,7 @@ const useEnsureGlobalComponent = (globalName) => {
         };
 
         // Already registered?
-        if (window[globalName]) {
+        if (window[globalName] && !shouldForceReloadScript) {
             updateComponent();
             return;
         }
@@ -125,7 +126,7 @@ const useEnsureGlobalComponent = (globalName) => {
             return cleaned === normalisedSrc.split('?')[0] || script.dataset?.componentName === globalName;
         });
 
-        if (existingScript) {
+        if (existingScript && !shouldForceReloadScript) {
             existingScript.dataset.componentName = existingScript.dataset.componentName || globalName;
             existingScript.addEventListener('load', updateComponent, { once: true });
             existingScript.addEventListener('error', () => {
@@ -1165,9 +1166,33 @@ const Clients = React.memo(() => {
     });
     // Sites loaded via GET /api/sites/client/:id when "Show sites" is on (so list always shows sites even if list API omits them)
     const [sitesForList, setSitesForList] = useState({});
-    const [clientsPage, setClientsPage] = useState(1);
-    const [leadsPage, setLeadsPage] = useState(1);
-    const [groupsPage, setGroupsPage] = useState(1);
+    const [clientsPage, setClientsPage] = useState(() => {
+        try {
+            const saved = parseInt(localStorage.getItem('clients.clientsPage'), 10);
+            return Number.isFinite(saved) && saved > 0 ? saved : 1;
+        } catch {
+            return 1;
+        }
+    });
+    const [leadsPage, setLeadsPage] = useState(() => {
+        try {
+            const saved = parseInt(localStorage.getItem('clients.leadsPage'), 10);
+            return Number.isFinite(saved) && saved > 0 ? saved : 1;
+        } catch {
+            return 1;
+        }
+    });
+    const [groupsPage, setGroupsPage] = useState(() => {
+        try {
+            const saved = parseInt(localStorage.getItem('clients.groupsPage'), 10);
+            return Number.isFinite(saved) && saved > 0 ? saved : 1;
+        } catch {
+            return 1;
+        }
+    });
+    const hasAppliedClientsFilterResetRef = useRef(false);
+    const hasAppliedLeadsFilterResetRef = useRef(false);
+    const hasAppliedGroupsFilterResetRef = useRef(false);
     const [clientsListDegraded, setClientsListDegraded] = useState(false); // true when API returned empty list in degraded/error fallback
     const ITEMS_PER_PAGE = 25;
     
@@ -1186,6 +1211,21 @@ const Clients = React.memo(() => {
             localStorage.setItem('clients.showStarredOnly', String(showStarredOnly));
         } catch (_) {}
     }, [showStarredOnly]);
+    useEffect(() => {
+        try {
+            localStorage.setItem('clients.clientsPage', String(clientsPage));
+        } catch (_) {}
+    }, [clientsPage]);
+    useEffect(() => {
+        try {
+            localStorage.setItem('clients.leadsPage', String(leadsPage));
+        } catch (_) {}
+    }, [leadsPage]);
+    useEffect(() => {
+        try {
+            localStorage.setItem('clients.groupsPage', String(groupsPage));
+        } catch (_) {}
+    }, [groupsPage]);
 
     // Persist filterServices to localStorage whenever it changes
     useEffect(() => {
@@ -1199,18 +1239,30 @@ const Clients = React.memo(() => {
     // Reset pagination only when filters change, not when switching view mode.
     // This preserves the page users were on when opening/closing detail views.
     useEffect(() => {
+        if (!hasAppliedClientsFilterResetRef.current) {
+            hasAppliedClientsFilterResetRef.current = true;
+            return;
+        }
         if (clientsPage > 1) {
             setClientsPage(1);
         }
     }, [searchTerm, filterIndustry, filterServices, showStarredOnly]);
     
     useEffect(() => {
+        if (!hasAppliedLeadsFilterResetRef.current) {
+            hasAppliedLeadsFilterResetRef.current = true;
+            return;
+        }
         if (leadsPage > 1) {
             setLeadsPage(1);
         }
     }, [searchTerm, filterIndustry, filterEngagementStage, filterAidaStatus, showStarredOnly]);
     
     useEffect(() => {
+        if (!hasAppliedGroupsFilterResetRef.current) {
+            hasAppliedGroupsFilterResetRef.current = true;
+            return;
+        }
         if (groupsPage > 1) {
             setGroupsPage(1);
         }
@@ -6308,13 +6360,6 @@ const Clients = React.memo(() => {
         allIndustriesFromData.forEach(ind => industrySet.add(ind));
         return Array.from(industrySet).sort();
     }, [industries, allIndustriesFromData]);
-
-    // Reset page to 1 when filters or sort changes
-    useEffect(() => {
-        setClientsPage(1);
-        setLeadsPage(1);
-        setGroupsPage(1);
-    }, [searchTerm, filterIndustry, filterEngagementStage, filterAidaStatus, filterServices, showStarredOnly, sortField, sortDirection, leadSortField, leadSortDirection]);
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
