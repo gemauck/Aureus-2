@@ -4922,7 +4922,7 @@ function initializeProjectDetail() {
                             <span className={`inline-block px-2 py-0.5 text-xs rounded font-medium ${
                                 project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
                                 project.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
+                                project.status === 'Completed' ? 'bg-indigo-100 text-indigo-700' :
                                 project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
                                 project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
                                 'bg-gray-100 text-gray-700'
@@ -4999,8 +4999,8 @@ function initializeProjectDetail() {
                                     {daysUntilDue === null ? 'N/A' : daysUntilDue < 0 ? `${Math.abs(daysUntilDue)} overdue` : daysUntilDue}
                                 </p>
                             </div>
-                            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-calendar-alt text-purple-600"></i>
+                            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                                <i className="fas fa-calendar-alt text-indigo-600"></i>
                             </div>
                         </div>
                     </div>
@@ -7856,7 +7856,7 @@ function initializeProjectDetail() {
         switch(status) {
             case 'Done': return 'bg-green-100 text-green-800 border-green-500';
             case 'In Progress': return 'bg-blue-100 text-blue-800 border-blue-500';
-            case 'Review': return 'bg-purple-100 text-purple-800 border-purple-500';
+            case 'Review': return 'bg-indigo-100 text-indigo-800 border-indigo-500';
             case 'Blocked': return 'bg-red-100 text-red-800 border-red-500';
             case 'Archived': return 'bg-gray-200 text-gray-600 border-gray-400';
             case 'To Do': return 'bg-gray-100 text-gray-800 border-gray-500';
