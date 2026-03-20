@@ -56,7 +56,8 @@ async function handler(req, res) {
         return ok(res, { lists })
       } catch (error) {
         console.error('Error fetching user task lists:', error)
-        return serverError(res, 'Failed to fetch lists', error.message)
+        // Keep the Tasks UI usable even if list read hits transient DB/query issues.
+        return ok(res, { lists: [] })
       }
     }
 
