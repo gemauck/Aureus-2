@@ -1412,9 +1412,12 @@ async function handler(req, res) {
           // Don't block update if duplicate check fails
         }
         
-        // Build updateData - only include fields that are actually provided in body
-        const updateData = {
-          type: 'lead' // Always preserve lead type to prevent conversion to client
+        // Build updateData - only include fields that are actually provided in body.
+        // Do not force type:'lead' when body requests conversion — otherwise the "only type"
+        // early-return returns the lead unchanged and body.type === 'client' never runs.
+        const updateData = {}
+        if (body.type !== 'client') {
+          updateData.type = 'lead'
         }
         
         // Only include fields if they're explicitly provided in the body
@@ -1730,7 +1733,7 @@ async function handler(req, res) {
       console.log(`📝 [LEADS] Fields in body:`, Object.keys(body || {}))
       
       // Check if updateData is empty (only has type) and no groupIds - nothing to do
-      if (Object.keys(updateData).length === 1 && updateData.type && groupIdsToSet === undefined) {
+      if (body.type !== 'client' && Object.keys(updateData).length === 1 && updateData.type && groupIdsToSet === undefined) {
         console.warn(`⚠️ [LEADS] Update data is empty (only type field) - no fields to update for lead ${id}`)
         // Return the existing lead without updating
         const existing = await prisma.client.findUnique({ 
@@ -1768,7 +1771,7 @@ async function handler(req, res) {
       }
       
       // When only groupIds are being updated, replace ClientCompanyGroup and return lead
-      if (Object.keys(updateData).length === 1 && updateData.type && groupIdsToSet !== undefined) {
+      if (body.type !== 'client' && Object.keys(updateData).length === 1 && updateData.type && groupIdsToSet !== undefined) {
         try {
           const existing = await prisma.client.findUnique({ where: { id } })
           if (!existing || existing.type !== 'lead') {

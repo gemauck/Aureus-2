@@ -406,8 +406,12 @@ async function handler(req, res) {
         console.log(`📝 [LEADS ID] Updating followUps JSON field for lead ${id}, count: ${Array.isArray(body.followUps) ? body.followUps.length : 0}`)
       }
       
-      // CRITICAL: Preserve lead type - always set type to 'lead' to prevent accidental conversion
-      updateData.type = 'lead'
+      // Preserve lead type on normal PATCH updates — but do NOT force 'lead' when the body
+      // requests lead→client conversion (body.type === 'client'), or the early-return below
+      // runs and conversion code never executes.
+      if (body.type !== 'client') {
+        updateData.type = 'lead'
+      }
       // Never send dropped columns (Client uses engagementStage/aidaStatus only)
       delete updateData.status
       delete updateData.stage
@@ -422,7 +426,7 @@ async function handler(req, res) {
       const hasPhaseOnlyUpdates = body.sites !== undefined || body.contacts !== undefined ||
         body.groupIds !== undefined || body.contracts !== undefined || body.proposals !== undefined ||
         body.followUps !== undefined || body.services !== undefined
-      if (Object.keys(updateData).length === 1 && updateData.type && !hasPhaseOnlyUpdates) {
+      if (body.type !== 'client' && Object.keys(updateData).length === 1 && updateData.type && !hasPhaseOnlyUpdates) {
         console.warn(`⚠️ [LEADS ID] Update data is empty (only type field) - no fields to update for lead ${id}`)
         // Return the existing lead without updating (minimal include to avoid relation errors)
         let existing = await prisma.client.findUnique({
