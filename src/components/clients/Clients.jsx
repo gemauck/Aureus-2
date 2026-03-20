@@ -1114,6 +1114,10 @@ const Clients = React.memo(() => {
     const [openSiteIdForLead, setOpenSiteIdForLead] = useState(null);
     const [openSiteIdForClient, setOpenSiteIdForClient] = useState(null);
     const [entityNotFoundId, setEntityNotFoundId] = useState(null); // When URL points to a lead/client that no longer exists (404)
+    const editingClientIdRef = useRef(null);
+    const editingLeadIdRef = useRef(null);
+    const entityNotFoundIdRef = useRef(null);
+    const lastHandledRouteKeyRef = useRef(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterEngagementStage, setFilterEngagementStage] = useState('All Engagement Stages');
@@ -4332,31 +4336,38 @@ const Clients = React.memo(() => {
     
     // Leads are now database-only, no localStorage sync needed
 
+    const navigateToCrmListView = useCallback((targetView = 'clients', { replace = true } = {}) => {
+        const safeTargetView = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'].includes(targetView)
+            ? targetView
+            : 'clients';
+        setViewMode(safeTargetView);
+        setEditingClientId(null);
+        setEditingLeadId(null);
+        setFullClientForDetail(null);
+        selectedClientRef.current = null;
+        selectedLeadRef.current = null;
+        isFormOpenRef.current = false;
+        if (window.RouteState?.navigate) {
+            try {
+                window.RouteState.navigate({
+                    page: 'clients',
+                    segments: [],
+                    search: '',
+                    hash: '',
+                    replace,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+            } catch (_routeError) {
+                // URL normalization is non-critical for state transition
+            }
+        }
+    }, []);
+
     const handleClientModalClose = async (skipReload = false) => {
         try {
-            setViewMode('clients');
-            setEditingClientId(null);
-            setFullClientForDetail(null);
-            selectedClientRef.current = null;
-            isFormOpenRef.current = false;
+            navigateToCrmListView('clients', { replace: true });
             setCurrentTab('overview');
-            
-            // Clear the URL path to go back to clients list
-            if (window.RouteState && window.RouteState.navigate) {
-                try {
-                    window.RouteState.navigate({
-                        page: 'clients',
-                        segments: [],
-                        search: '',
-                        hash: '',
-                        replace: false,
-                        preserveSearch: false,
-                        preserveHash: false
-                    });
-                } catch (routeError) {
-                    // Silently fail - URL update is non-critical
-                }
-            }
             
             // CRITICAL: Don't reload immediately after deletion - it overwrites the optimistic update
             // Only reload if skipReload is false (normal close, not after deletion)
@@ -4375,10 +4386,7 @@ const Clients = React.memo(() => {
             }
         } catch (error) {
             // Still try to close the modal even if there's an error
-            setViewMode('clients');
-            setEditingClientId(null);
-            selectedClientRef.current = null;
-            isFormOpenRef.current = false;
+            navigateToCrmListView('clients', { replace: true });
         }
     };
 
@@ -4390,37 +4398,16 @@ const Clients = React.memo(() => {
             // Silently fail - sessionStorage access is non-critical
         }
         
-        // Clear URL segments to prevent route handler from reopening the detail view
-        if (window.RouteState && window.RouteState.navigate) {
-            try {
-                const targetView = returnToPipeline ? 'pipeline' : 'leads';
-                window.RouteState.navigate({
-                    page: 'clients',
-                    segments: [],
-                    search: '',
-                    hash: '',
-                    replace: false,
-                    preserveSearch: false,
-                    preserveHash: false
-                });
-            } catch (error) {
-                // Silently fail - URL update is non-critical
-            }
-        }
-        
         if (returnToPipeline) {
             try {
                 sessionStorage.removeItem('returnToPipeline');
             } catch (error) {
                 // Silently fail - sessionStorage clear is non-critical
             }
-            setViewMode('pipeline');
+            navigateToCrmListView('pipeline', { replace: true });
         } else {
-            setViewMode('leads');
+            navigateToCrmListView('leads', { replace: true });
         }
-        setEditingLeadId(null);
-        selectedLeadRef.current = null;
-        isFormOpenRef.current = false;
         setCurrentLeadTab('overview');
         
         // Only refresh data if skipReload is false (to prevent overwriting optimistic updates)
@@ -6842,16 +6829,30 @@ const Clients = React.memo(() => {
             const token = window.storage?.getToken?.();
             if (token && window.api?.updateLead) {
                 // Convert in-place so the same record id keeps all associated data.
-                await window.api.updateLead(lead.id, { type: 'client' });
+                const convertResponse = await window.api.updateLead(lead.id, { type: 'client' });
+                const convertedClient = convertResponse?.data?.client || convertResponse?.client || null;
 
                 // Refresh data from API
                 await Promise.all([
                     loadClients(true).catch(() => {}),
                     loadLeads(true).catch(() => {})
                 ]);
-                
-                setViewMode('clients');
+
+                // Close lead detail and force route back to clients list.
+                setEditingLeadId(null);
+                setEditingClientId(null);
                 selectedLeadRef.current = null;
+                selectedClientRef.current = null;
+                setViewMode('clients');
+                if (window.RouteState) {
+                    window.RouteState.setPageSubpath('clients', [], {
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                }
+                // Show converted client in list context immediately.
+                setSearchTerm((convertedClient?.name || lead.name || '').trim());
                 alert('Lead converted to client successfully!');
             } else {
                 alert('Please log in to convert lead');

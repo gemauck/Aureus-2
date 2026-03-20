@@ -346,6 +346,14 @@ const ClientsDatabaseFirst = () => {
                 loadClients().catch(() => {}),
                 loadLeads().catch(() => {})
             ]);
+            // Force list view after conversion
+            if (window.RouteState) {
+                window.RouteState.setPageSubpath('clients', [], {
+                    replace: false,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+            }
             setViewMode('clients');
             setSelectedLead(null);
             
