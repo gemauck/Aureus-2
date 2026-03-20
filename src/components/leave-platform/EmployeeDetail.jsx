@@ -7,8 +7,7 @@ try {
         ReactHooks = {
             useState: React.useState,
             useEffect: React.useEffect,
-            useCallback: React.useCallback,
-            useRef: React.useRef
+            useCallback: React.useCallback
         };
     } else {
         throw new Error('React not available');
@@ -19,28 +18,22 @@ try {
     ReactHooks = {
         useState: () => [null, () => {}],
         useEffect: () => {},
-        useCallback: (fn) => fn,
-        useRef: () => ({ current: null })
+        useCallback: (fn) => fn
     };
 }
 
-const { useState, useEffect, useCallback, useRef } = ReactHooks;
-
-const _employeeIdWarned = { current: false };
+const { useState, useEffect, useCallback } = ReactHooks;
 
 const EmployeeDetail = (props) => {
     // Safely destructure props with defaults
     const { employeeId, onBack, user, isAdmin } = props || {};
     
-    // Early return if required props are missing (e.g. parent rendered before employee selected)
-    if (employeeId == null || (typeof employeeId === 'string' && employeeId.trim() === '')) {
-        if (!_employeeIdWarned.current) {
-            _employeeIdWarned.current = true;
-            console.warn('⚠️ EmployeeDetail: employeeId is required but not provided. Show employee list or pass a valid employeeId.');
-        }
+    // Early return if required props are missing
+    if (!employeeId) {
+        console.warn('⚠️ EmployeeDetail: employeeId is required but not provided', props);
         return (
             <div className="text-center py-12">
-                <p className="text-gray-600">Select an employee from the list to view details.</p>
+                <p className="text-red-600">Error: Employee ID is required</p>
                 {onBack && (
                     <button
                         onClick={onBack}
@@ -74,13 +67,12 @@ const EmployeeDetail = (props) => {
         try {
             const headers = getAuthHeaders();
             
-            // Load employee profile data
-            const employeeResponse = await fetch(`/api/employees/${employeeId}`, { headers });
-            if (employeeResponse.ok) {
-                const employeeData = await employeeResponse.json();
-                const profile = employeeData.data?.employee || employeeData.employee || null;
-                setEmployee(profile);
-                setFormData(profile || {});
+            // Load employee/user data
+            const userResponse = await fetch(`/api/users/${employeeId}`, { headers });
+            if (userResponse.ok) {
+                const userData = await userResponse.json();
+                setEmployee(userData.data?.user || userData.user || null);
+                setFormData(userData.data?.user || userData.user || {});
             }
 
             // Load leave balances
@@ -131,15 +123,13 @@ const EmployeeDetail = (props) => {
             
             // Basic info
             if (formData.name !== undefined) updateData.name = formData.name;
-            if (formData.email !== undefined) updateData.email = formData.email;
             if (formData.phone !== undefined) updateData.phone = formData.phone;
             
-            // Employment info (including role – API allows admins to update)
+            // Employment info
             if (formData.employeeNumber !== undefined) updateData.employeeNumber = formData.employeeNumber;
             if (formData.position !== undefined) updateData.position = formData.position;
             if (formData.jobTitle !== undefined) updateData.jobTitle = formData.jobTitle;
             if (formData.department !== undefined) updateData.department = formData.department;
-            if (formData.role !== undefined) updateData.role = formData.role;
             if (formData.employmentStatus !== undefined) updateData.employmentStatus = formData.employmentStatus;
             
             // Employment date - convert to proper format if provided
@@ -170,15 +160,15 @@ const EmployeeDetail = (props) => {
             if (formData.emergencyContact !== undefined) updateData.emergencyContact = formData.emergencyContact || null;
             
             
-            const response = await fetch(`/api/employees/${employeeId}`, {
-                method: 'PATCH',
+            const response = await fetch(`/api/users/${employeeId}`, {
+                method: 'PUT',
                 headers,
                 body: JSON.stringify(updateData)
             });
 
             if (response.ok) {
                 const result = await response.json();
-                setEmployee(result.data?.employee || result.employee || employee);
+                setEmployee(result.data?.user || result.user || employee);
                 setEditing(false);
                 // Reload to ensure consistency
                 loadEmployeeData();
@@ -282,25 +272,14 @@ const EmployeeDetail = (props) => {
                             </p>
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 items-center">
+                    <div className="flex gap-2">
                         {isAdmin && (
                             <button
                                 onClick={() => setEditing(!editing)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                                    editing ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-primary-600 text-white hover:bg-primary-700'
-                                }`}
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                             >
                                 <i className={`fas ${editing ? 'fa-times' : 'fa-edit'} mr-2`}></i>
                                 {editing ? 'Cancel' : 'Edit'}
-                            </button>
-                        )}
-                        {isAdmin && editing && (
-                            <button
-                                onClick={handleSave}
-                                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-                            >
-                                <i className="fas fa-save mr-2"></i>
-                                Save
                             </button>
                         )}
                         {onBack && (
@@ -445,25 +424,6 @@ const EmployeeDetail = (props) => {
                         />
                     ) : (
                         <p className="text-sm text-gray-900">{employee.department || 'N/A'}</p>
-                    )}
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Role
-                    </label>
-                    {editing ? (
-                        <select
-                            value={formData.role || employee.role || 'user'}
-                            onChange={(e) => setFormData({...formData, role: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                        >
-                            <option value="user">User</option>
-                            <option value="manager">Manager</option>
-                            <option value="admin">Admin</option>
-                            <option value="superadmin">Super Administrator</option>
-                        </select>
-                    ) : (
-                        <p className="text-sm text-gray-900 capitalize">{employee.role || 'N/A'}</p>
                     )}
                 </div>
                 <div>
@@ -701,16 +661,7 @@ const EmployeeDetail = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                    {editing ? (
-                        <input
-                            type="email"
-                            value={formData.email || ''}
-                            onChange={(e) => setFormData({...formData, email: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                        />
-                    ) : (
-                        <p className="text-sm text-gray-900">{employee.email || 'N/A'}</p>
-                    )}
+                    <p className="text-sm text-gray-900">{employee.email || 'N/A'}</p>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
@@ -781,49 +732,23 @@ const EmployeeDetail = (props) => {
 
     return (
         <div className="space-y-6">
-            {/* Section Navigation + Edit (visible on all tabs) */}
+            {/* Section Navigation */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap gap-2 min-w-0">
-                        {sections.map(section => (
-                            <button
-                                key={section.id}
-                                onClick={() => setActiveSection(section.id)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                    activeSection === section.id
-                                        ? 'bg-primary-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                            >
-                                <i className={`fas ${section.icon} mr-2`}></i>
-                                {section.label}
-                            </button>
-                        ))}
-                    </div>
-                    {isAdmin && (
-                        <div className="flex gap-2 flex-shrink-0">
-                            <button
-                                onClick={() => setEditing(!editing)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                    editing
-                                        ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                        : 'bg-primary-600 text-white hover:bg-primary-700'
-                                }`}
-                            >
-                                <i className={`fas ${editing ? 'fa-times' : 'fa-edit'} mr-2`}></i>
-                                {editing ? 'Cancel' : 'Edit'}
-                            </button>
-                            {editing && (
-                                <button
-                                    onClick={handleSave}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-                                >
-                                    <i className="fas fa-save mr-2"></i>
-                                    Save
-                                </button>
-                            )}
-                        </div>
-                    )}
+                <div className="flex flex-wrap gap-2">
+                    {sections.map(section => (
+                        <button
+                            key={section.id}
+                            onClick={() => setActiveSection(section.id)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                activeSection === section.id
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            <i className={`fas ${section.icon} mr-2`}></i>
+                            {section.label}
+                        </button>
+                    ))}
                 </div>
             </div>
 

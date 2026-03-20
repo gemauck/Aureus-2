@@ -4,15 +4,30 @@ import { badRequest, ok, serverError } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { isAdminRole } from '../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
+    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
     const currentUserId = req.user?.sub || req.user?.id
+    if (currentUserId) {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: currentUserId },
+        select: { id: true, email: true, role: true }
+      })
+      
+      if (currentUser) {
+        const userEmail = currentUser.email?.toLowerCase()
+        if (userEmail !== 'garethm@abcotronics.co.za') {
+          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
+        }
+      }
+    }
 
     if (req.method === 'GET') {
       try {
         // Get current user ID and role
+        const userRole = req.user?.role?.toLowerCase()
+
         // If no user ID, return unauthorized
         if (!currentUserId) {
           return badRequest(res, 'User not authenticated')
@@ -28,7 +43,7 @@ async function handler(req, res) {
           return badRequest(res, 'User not found')
         }
 
-        const isAdmin = isAdminRole(currentUser.role)
+        const isAdmin = currentUser.role?.toLowerCase() === 'admin'
         const currentYear = new Date().getFullYear()
 
         // Build where clause: admins see all, regular users see only their own
@@ -78,14 +93,6 @@ async function handler(req, res) {
     if (req.method === 'POST') {
       // Create or update leave balance
       try {
-        const currentUser = await prisma.user.findUnique({
-          where: { id: currentUserId },
-          select: { id: true, role: true }
-        })
-        if (!currentUser || !isAdminRole(currentUser.role)) {
-          return badRequest(res, 'Only administrators can manage leave balances')
-        }
-
         const body = await parseJsonBody(req)
         const { userId, leaveType, available, used, year, notes } = body
 

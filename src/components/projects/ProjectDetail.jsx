@@ -1567,6 +1567,273 @@ function initializeProjectDetail() {
 
     const serializeDocumentSections = (data) => JSON.stringify(parseDocumentSections(data));
 
+    /**
+     * Online Drive links — MUST be a stable component (defined once here), not inside ProjectDetail.
+     * Inline `const OverviewSection = () => {}` creates a new component type every parent render,
+     * which remounts all children and breaks controlled inputs (focus loss / "can't type").
+     */
+    const OnlineDriveLinksEditor = ({ projectId, initialSerialized, onProjectUpdate }) => {
+        const row = (url) => ({
+            id:
+                typeof crypto !== 'undefined' && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : `row-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+            url: String(url ?? '')
+        });
+
+        const parseOnlineDriveLinks = useCallback((rawValue) => {
+            const mk = (u) => ({
+                id:
+                    typeof crypto !== 'undefined' && crypto.randomUUID
+                        ? crypto.randomUUID()
+                        : `row-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+                url: String(u ?? '')
+            });
+            const empty = { googleDrive: [mk('')], oneDrive: [mk('')] };
+            if (!rawValue) return empty;
+            try {
+                const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+                if (!parsed || typeof parsed !== 'object') return empty;
+                const g = Array.isArray(parsed.googleDrive) ? parsed.googleDrive : [];
+                const o = Array.isArray(parsed.oneDrive) ? parsed.oneDrive : [];
+                return {
+                    googleDrive: g.length > 0 ? g.map((s) => mk(s)) : [mk('')],
+                    oneDrive: o.length > 0 ? o.map((s) => mk(s)) : [mk('')]
+                };
+            } catch (e) {
+                console.warn('Failed to parse onlineDriveLinks:', e);
+                return empty;
+            }
+        }, []);
+
+        const [links, setLinks] = useState(() => parseOnlineDriveLinks(initialSerialized));
+        const [saving, setSaving] = useState(false);
+        const [saveHint, setSaveHint] = useState(null);
+        const lastProjectIdRef = useRef(null);
+        const dirtyRef = useRef(false);
+        const lastSeedRawRef = useRef('');
+
+        useEffect(() => {
+            if (!projectId) return;
+            const raw = String(initialSerialized ?? '');
+            if (lastProjectIdRef.current !== projectId) {
+                lastProjectIdRef.current = projectId;
+                dirtyRef.current = false;
+                lastSeedRawRef.current = raw;
+                setLinks(parseOnlineDriveLinks(initialSerialized));
+                setSaveHint(null);
+                return;
+            }
+            if (dirtyRef.current) return;
+            if (raw !== lastSeedRawRef.current && raw !== '') {
+                lastSeedRawRef.current = raw;
+                setLinks(parseOnlineDriveLinks(initialSerialized));
+            }
+        }, [projectId, initialSerialized, parseOnlineDriveLinks]);
+
+        const normalizeForApi = useCallback((state) => ({
+            googleDrive: (state?.googleDrive || []).map((r) => String(r?.url || '').trim()),
+            oneDrive: (state?.oneDrive || []).map((r) => String(r?.url || '').trim())
+        }), []);
+
+        const updateUrl = (provider, index, value) => {
+            dirtyRef.current = true;
+            setLinks((prev) => {
+                const arr = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [];
+                while (arr.length <= index) arr.push(row(''));
+                const next = [...arr];
+                next[index] = { ...next[index], url: value };
+                return { ...prev, [provider]: next };
+            });
+            setSaveHint(null);
+        };
+
+        const addSpot = (provider) => {
+            dirtyRef.current = true;
+            setLinks((prev) => {
+                const cur = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [];
+                cur.push(row(''));
+                return { ...prev, [provider]: cur };
+            });
+            setSaveHint(null);
+        };
+
+        const removeSpot = (provider, index) => {
+            dirtyRef.current = true;
+            setLinks((prev) => {
+                const cur = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [];
+                const next = cur.filter((_, i) => i !== index);
+                return { ...prev, [provider]: next.length > 0 ? next : [row('')] };
+            });
+            setSaveHint(null);
+        };
+
+        const handleSave = async () => {
+            if (!projectId || !window.DatabaseAPI?.updateProject || saving) return;
+            const normalized = normalizeForApi(links);
+            setSaving(true);
+            setSaveHint(null);
+            try {
+                const payload = JSON.stringify(normalized);
+                const apiResponse = await window.DatabaseAPI.updateProject(projectId, {
+                    onlineDriveLinks: payload
+                });
+                const updatedProject =
+                    apiResponse?.data?.project ||
+                    apiResponse?.project ||
+                    { id: projectId, onlineDriveLinks: payload };
+                dirtyRef.current = false;
+                lastSeedRawRef.current = payload;
+                if (typeof onProjectUpdate === 'function') onProjectUpdate(updatedProject);
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject(updatedProject);
+                }
+                setSaveHint('saved');
+                window.setTimeout(() => setSaveHint(null), 2500);
+            } catch (err) {
+                console.error('Failed to save online drive links:', err);
+                setSaveHint('error');
+                alert('Failed to save online drive links. Please try again.');
+            } finally {
+                setSaving(false);
+            }
+        };
+
+        // Render helper (not a nested component) so React does not remount the list on each render.
+        const renderDriveBlock = (provider, title, subtitle, iconClass, placeholder, accentClass) => (
+            <div className={`rounded-xl border p-3 sm:p-4 ${accentClass}`}>
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                    <div className="flex items-start gap-2 min-w-0">
+                        <div
+                            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/80 shadow-sm border border-gray-100"
+                            aria-hidden
+                        >
+                            <i className={`${iconClass} text-lg`} />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => addSpot(provider)}
+                        className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                    >
+                        <i className="fas fa-plus text-[10px]" />
+                        Add link
+                    </button>
+                </div>
+                <ul className="space-y-2">
+                    {(links[provider] || []).map((entry, index) => (
+                        <li key={entry.id} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <input
+                                type="text"
+                                inputMode="url"
+                                autoComplete="off"
+                                spellCheck={false}
+                                value={entry.url}
+                                onChange={(e) => updateUrl(provider, index, e.target.value)}
+                                placeholder={placeholder}
+                                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                            />
+                            <div className="flex shrink-0 items-center gap-2">
+                                {entry.url?.trim() ? (
+                                    <a
+                                        href={
+                                            /^https?:\/\//i.test(entry.url.trim())
+                                                ? entry.url.trim()
+                                                : `https://${entry.url.trim()}`
+                                        }
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                    >
+                                        <i className="fas fa-external-link-alt mr-1.5 text-[10px]" />
+                                        Open
+                                    </a>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={() => removeSpot(provider, index)}
+                                    className="inline-flex items-center justify-center rounded-lg border border-red-100 bg-red-50/80 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100"
+                                    title="Remove this row"
+                                >
+                                    <i className="fas fa-times" />
+                                </button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        );
+
+        if (!projectId) return null;
+
+        return (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-slate-50/80 to-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-white/90 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-700">
+                            <i className="fas fa-cloud" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-semibold text-gray-900">Online drive</h2>
+                            <p className="text-xs text-gray-500">Folder or share links for this project</p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {saveHint === 'saved' && (
+                            <span className="text-xs font-medium text-emerald-600">
+                                <i className="fas fa-check-circle mr-1" />
+                                Saved
+                            </span>
+                        )}
+                        {saveHint === 'error' && (
+                            <span className="text-xs font-medium text-red-600">Save failed</span>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin" />
+                                    Saving…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fas fa-save" />
+                                    Save links
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+                <div className="grid gap-4 p-4 md:grid-cols-2">
+                    {renderDriveBlock(
+                        'googleDrive',
+                        'Google Drive',
+                        'Shared drives or folder links',
+                        'fab fa-google-drive text-green-600',
+                        'https://drive.google.com/...',
+                        'border-green-100 bg-green-50/40'
+                    )}
+                    {renderDriveBlock(
+                        'oneDrive',
+                        'OneDrive',
+                        'SharePoint or personal OneDrive',
+                        'fab fa-microsoft text-blue-600',
+                        'https://onedrive.live.com/...',
+                        'border-blue-100 bg-blue-50/40'
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     const ProjectDetail = ({ project, onBack, onDelete, onProjectUpdate }) => {
         const ReactHooks = window.React;
         if (!ReactHooks || typeof ReactHooks.useState !== 'function') {
@@ -2136,26 +2403,6 @@ function initializeProjectDetail() {
     const [isSavingNote, setIsSavingNote] = useState(false);
     const [showNoteShareModal, setShowNoteShareModal] = useState(false);
     const [noteShareSelectedUsers, setNoteShareSelectedUsers] = useState([]);
-    const parseOnlineDriveLinks = useCallback((rawValue) => {
-        const fallback = { googleDrive: [''], oneDrive: [''] };
-        if (!rawValue) return fallback;
-        try {
-            const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
-            if (!parsed || typeof parsed !== 'object') return fallback;
-            const googleDrive = Array.isArray(parsed.googleDrive) ? parsed.googleDrive : [];
-            const oneDrive = Array.isArray(parsed.oneDrive) ? parsed.oneDrive : [];
-            return {
-                googleDrive: googleDrive.length > 0 ? googleDrive : [''],
-                oneDrive: oneDrive.length > 0 ? oneDrive : ['']
-            };
-        } catch (error) {
-            console.warn('Failed to parse onlineDriveLinks:', error);
-            return fallback;
-        }
-    }, []);
-    const [onlineDriveLinksInput, setOnlineDriveLinksInput] = useState(() => parseOnlineDriveLinks(project?.onlineDriveLinks));
-    const [isSavingOnlineDriveLinks, setIsSavingOnlineDriveLinks] = useState(false);
-    const onlineDriveInitializedProjectIdRef = useRef(null);
     // Per-note activity: when editing a note, activity for that note; in list, expanded note's activity
     const [noteActivityForEditor, setNoteActivityForEditor] = useState([]);
     const [expandedNoteActivityId, setExpandedNoteActivityId] = useState(null);
@@ -2179,12 +2426,7 @@ function initializeProjectDetail() {
         setExpandedNoteActivityId(null);
         setNoteActivityByNoteId({});
         setEditorActivityPanelOpen(false);
-        const currentProjectId = project?.id || null;
-        if (!currentProjectId) return;
-        if (onlineDriveInitializedProjectIdRef.current === currentProjectId) return;
-        setOnlineDriveLinksInput(parseOnlineDriveLinks(project?.onlineDriveLinks));
-        onlineDriveInitializedProjectIdRef.current = currentProjectId;
-    }, [project?.id, parseOnlineDriveLinks]);
+    }, [project?.id]);
 
     const loadActivityLog = useCallback(async () => {
         if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
@@ -4647,64 +4889,6 @@ function initializeProjectDetail() {
         return parsed.toLocaleString(undefined, options);
     };
 
-    const normalizeDriveLinksForSave = useCallback((links) => ({
-        googleDrive: (links?.googleDrive || []).map(link => String(link || '').trim()),
-        oneDrive: (links?.oneDrive || []).map(link => String(link || '').trim())
-    }), []);
-
-    const handleUpdateDriveLink = (provider, index, value) => {
-        setOnlineDriveLinksInput(prev => {
-            const current = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [''];
-            while (current.length <= index) current.push('');
-            current[index] = value;
-            return { ...prev, [provider]: current };
-        });
-    };
-
-    const handleAddDriveSpot = (provider) => {
-        setOnlineDriveLinksInput(prev => {
-            const current = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [];
-            current.push('');
-            return { ...prev, [provider]: current };
-        });
-    };
-
-    const handleRemoveDriveSpot = (provider, index) => {
-        setOnlineDriveLinksInput(prev => {
-            const current = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [''];
-            const next = current.filter((_, i) => i !== index);
-            return { ...prev, [provider]: next.length > 0 ? next : [''] };
-        });
-    };
-
-    const handleSaveOnlineDriveLinks = async () => {
-        if (!project?.id || !window.DatabaseAPI?.updateProject || isSavingOnlineDriveLinks) return;
-
-        const normalized = normalizeDriveLinksForSave(onlineDriveLinksInput);
-        setIsSavingOnlineDriveLinks(true);
-        try {
-            const apiResponse = await window.DatabaseAPI.updateProject(project.id, {
-                onlineDriveLinks: JSON.stringify(normalized)
-            });
-            const updatedProject = apiResponse?.data?.project || apiResponse?.project || {
-                ...project,
-                onlineDriveLinks: JSON.stringify(normalized)
-            };
-
-            if (typeof onProjectUpdate === 'function') {
-                onProjectUpdate(updatedProject);
-            }
-            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                window.updateViewingProject(updatedProject);
-            }
-        } catch (error) {
-            console.error('❌ Failed to save online drive links:', error);
-            alert('Failed to save online drive links. Please try again.');
-        } finally {
-            setIsSavingOnlineDriveLinks(false);
-        }
-    };
-
     // Overview Section
     const OverviewSection = () => {
         // CRITICAL: Ensure tasks is always an array
@@ -4822,104 +5006,12 @@ function initializeProjectDetail() {
                     </div>
                 </div>
 
-                {/* Online Drive Section */}
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-semibold text-gray-900">Online Drive</h2>
-                        <button
-                            type="button"
-                            onClick={handleSaveOnlineDriveLinks}
-                            disabled={isSavingOnlineDriveLinks}
-                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                        >
-                            {isSavingOnlineDriveLinks ? 'Saving...' : 'Save Links'}
-                        </button>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div>
-                            <div className="flex items-center justify-between mb-2">
-                                <label className="text-xs font-medium text-gray-600">Google Drive Links</label>
-                                <button
-                                    type="button"
-                                    onClick={() => handleAddDriveSpot('googleDrive')}
-                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                                >
-                                    + Add Spot
-                                </button>
-                            </div>
-                            {(onlineDriveLinksInput.googleDrive || []).map((link, index) => (
-                                <div key={`gdrive-${index}`} className="flex items-center gap-2 mb-2">
-                                    <input
-                                        type="url"
-                                        value={link}
-                                        onChange={(e) => handleUpdateDriveLink('googleDrive', index, e.target.value)}
-                                        placeholder="https://drive.google.com/drive/folders/..."
-                                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                    />
-                                    {link && (
-                                        <a
-                                            href={link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
-                                        >
-                                            Open
-                                        </a>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemoveDriveSpot('googleDrive', index)}
-                                        className="px-2 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div>
-                            <div className="flex items-center justify-between mb-2">
-                                <label className="text-xs font-medium text-gray-600">OneDrive Links</label>
-                                <button
-                                    type="button"
-                                    onClick={() => handleAddDriveSpot('oneDrive')}
-                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                                >
-                                    + Add Spot
-                                </button>
-                            </div>
-                            {(onlineDriveLinksInput.oneDrive || []).map((link, index) => (
-                                <div key={`onedrive-${index}`} className="flex items-center gap-2 mb-2">
-                                    <input
-                                        type="url"
-                                        value={link}
-                                        onChange={(e) => handleUpdateDriveLink('oneDrive', index, e.target.value)}
-                                        placeholder="https://onedrive.live.com/..."
-                                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                    />
-                                    {link && (
-                                        <a
-                                            href={link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
-                                        >
-                                            Open
-                                        </a>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemoveDriveSpot('oneDrive', index)}
-                                        className="px-2 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
+                {/* Online Drive — stable sub-component so inputs are not remounted on every ProjectDetail render */}
+                <OnlineDriveLinksEditor
+                    projectId={project?.id}
+                    initialSerialized={project?.onlineDriveLinks}
+                    onProjectUpdate={onProjectUpdate}
+                />
 
                 {/* Team Members */}
                 {activeUsers.length > 0 && (

@@ -246,7 +246,16 @@ export class PermissionChecker {
     hasPermission(permission) {
         const role = this.userRole?.toLowerCase();
         const isAdminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(role);
-        
+        const userEmail = this.user?.email?.toLowerCase();
+
+        // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
+        if (permission === PERMISSIONS.ACCESS_LEAVE_PLATFORM) {
+            if (userEmail === 'garethm@abcotronics.co.za') {
+                return true;
+            }
+            return false;
+        }
+
         // Admin-only permissions: Users
         const adminOnlyPermissions = [
             PERMISSIONS.ACCESS_USERS,
@@ -266,7 +275,7 @@ export class PermissionChecker {
         }
         
         // All users (including non-admins) have access to these modules by default
-        // ACCESS_LEAVE_PLATFORM is not in this list - grant via User Management permissions only
+        // NOTE: ACCESS_LEAVE_PLATFORM is NOT in this list - it's restricted to garethm@abcotronics.co.za only
         const publicPermissions = [
             PERMISSIONS.ACCESS_CRM,
             PERMISSIONS.ACCESS_PROJECTS,

@@ -6,14 +6,31 @@ import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
   try {
+    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
+    const currentUserId = req.user?.sub || req.user?.id
+    if (currentUserId) {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: currentUserId },
+        select: { id: true, email: true, role: true }
+      })
+      
+      if (currentUser) {
+        const userEmail = currentUser.email?.toLowerCase()
+        if (userEmail !== 'garethm@abcotronics.co.za') {
+          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
+        }
+      }
+    }
+
     if (req.method !== 'POST') {
       return badRequest(res, 'Method not allowed')
     }
 
     // TODO: Implement CSV/Excel file parsing and import
-    // For now, use the Leave Balances tab to add or update balances per employee,
-    // or use POST /api/leave-platform/balances to create balances via API.
-    return badRequest(res, 'Bulk import is not yet implemented. Use the Leave Balances tab to add or update balances per employee, or use the API to create balances individually.')
+    // This is a placeholder - you'll need to implement file upload handling
+    // and parsing logic based on your file format requirements
+
+    return badRequest(res, 'Import functionality not yet implemented. Please use the API to create balances individually.')
   } catch (error) {
     console.error('❌ Import balances error:', error)
     return serverError(res, 'Internal server error', error.message)

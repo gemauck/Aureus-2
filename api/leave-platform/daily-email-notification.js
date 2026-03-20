@@ -70,7 +70,7 @@ async function sendDailyLeaveNotifications() {
     // Create email content
     let emailContent = `
       <h2>Daily Leave Notification</h2>
-      <p>Good morning! Here's who is on leave today (${today.toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}):</p>
+      <p>Good morning! Here's who is on leave today (${today.toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}):</p>
       <br/>
     `
 
@@ -78,8 +78,8 @@ async function sendDailyLeaveNotifications() {
     Object.keys(leaveByDepartment).forEach(dept => {
       emailContent += `<h3>${dept}</h3><ul>`
       leaveByDepartment[dept].forEach(app => {
-        const startDate = new Date(app.startDate).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })
-        const endDate = new Date(app.endDate).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })
+        const startDate = new Date(app.startDate).toLocaleDateString('en-ZA')
+        const endDate = new Date(app.endDate).toLocaleDateString('en-ZA')
         const dateRange = startDate === endDate ? startDate : `${startDate} - ${endDate}`
         emailContent += `<li><strong>${app.user.name}</strong> - ${app.leaveType} (${dateRange}) - ${app.days} day(s)</li>`
       })

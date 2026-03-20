@@ -8,8 +8,7 @@ try {
             useState: React.useState,
             useEffect: React.useEffect,
             useMemo: React.useMemo,
-            useCallback: React.useCallback,
-            useRef: React.useRef
+            useCallback: React.useCallback
         };
     } else {
         throw new Error('React not available');
@@ -21,12 +20,11 @@ try {
         useState: () => [null, () => {}],
         useEffect: () => {},
         useMemo: (fn) => fn(),
-        useCallback: (fn) => fn(),
-        useRef: () => ({ current: null })
+        useCallback: (fn) => fn()
     };
 }
 
-const { useState, useEffect, useMemo, useCallback, useRef } = ReactHooks;
+const { useState, useEffect, useMemo, useCallback } = ReactHooks;
 
 const matchUserRecord = (record, user) => {
     if (!record || !user) return false;
@@ -109,42 +107,39 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     let isAdmin = false;
     
     try {
-        // Same source as sidebar: useAuth or storage
+        // Only use useAuth if we're in a proper React component context
+        // Check if React is available and if we can safely use hooks
         if (typeof window !== 'undefined' && window.useAuth && typeof window.useAuth === 'function') {
             try {
                 const authResult = window.useAuth();
                 user = authResult?.user || authResult || null;
+                isAdmin = user?.role?.toLowerCase() === 'admin' || false;
             } catch (e) {
+                console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
+                // Fallback: try to get user from storage
                 if (window.storage?.getUser) {
-                    try { user = window.storage.getUser(); } catch (err) {}
+                    try {
+                        user = window.storage.getUser();
+                        isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                    } catch (storageError) {
+                        console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
+                    }
                 }
             }
-        }
-        if (!user && window.storage?.getUser) {
-            try { user = window.storage.getUser(); } catch (err) {}
-        }
-        // Admin for Leave & HR: use same rule as sidebar (Users link) – PermissionChecker.ACCESS_USERS, else role list
-        if (user && typeof window !== 'undefined') {
-            if (window.PermissionChecker && window.PERMISSIONS && window.PERMISSIONS.ACCESS_USERS) {
+        } else {
+            // Fallback: try to get user from storage
+            if (window.storage?.getUser) {
                 try {
-                    const checker = new window.PermissionChecker(user);
-                    isAdmin = checker.hasPermission(window.PERMISSIONS.ACCESS_USERS) === true;
-                } catch (e) {
-                    isAdmin = false;
+                    user = window.storage.getUser();
+                    isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                } catch (storageError) {
+                    console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
                 }
-            }
-            if (!isAdmin) {
-                const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'super_user', 'system_admin'];
-                const r = user?.role && String(user.role).toLowerCase().replace(/\s+/g, '_');
-                isAdmin = !!r && adminRoles.includes(r);
             }
         }
     } catch (e) {
         console.warn('⚠️ LeavePlatform: Error initializing auth:', e);
     }
-    // Keep isAdmin in state so we can update when PermissionChecker loads after this component (e.g. lazy scripts)
-    const [resolvedAdmin, setResolvedAdmin] = useState(isAdmin);
-    if (isAdmin && !resolvedAdmin) setResolvedAdmin(true);
     
     const [currentTab, setCurrentTab] = useState(initialTab);
     const [loading, setLoading] = useState(false);
@@ -162,36 +157,10 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         const [selectedEmployee, setSelectedEmployee] = useState(null);
         const [showEmployeeModal, setShowEmployeeModal] = useState(false);
         const [viewingEmployeeId, setViewingEmployeeId] = useState(null);
-    const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
-    const [addEmployeeForm, setAddEmployeeForm] = useState({ name: '', email: '', role: 'user', department: '', phone: '' });
-    const [addEmployeeSaving, setAddEmployeeSaving] = useState(false);
         
         useEffect(() => {
             setCurrentTab(initialTab);
         }, [initialTab]);
-
-        // Re-check admin when PermissionChecker may have loaded after this component (e.g. lazy scripts)
-        useEffect(() => {
-            const u = user || (typeof window !== 'undefined' && window.storage?.getUser && window.storage.getUser()) || null;
-            if (!u) return;
-            const check = () => {
-                let admin = false;
-                if (typeof window !== 'undefined' && window.PermissionChecker && window.PERMISSIONS?.ACCESS_USERS) {
-                    try {
-                        admin = new window.PermissionChecker(u).hasPermission(window.PERMISSIONS.ACCESS_USERS);
-                    } catch (e) {}
-                }
-                if (!admin && u?.role) {
-                    const roles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'super_administrator', 'super_user', 'system_admin'];
-                    const r = String(u.role).toLowerCase().replace(/\s+/g, '_');
-                    admin = roles.includes(r);
-                }
-                setResolvedAdmin(prev => admin || prev);
-            };
-            check();
-            const t = setTimeout(check, 1500);
-            return () => clearTimeout(t);
-        }, [user?.id, user?.role]);
 
         useEffect(() => {
             const handleTabEvent = (event) => {
@@ -206,7 +175,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         // State for dynamically loaded components - these update when components load
         const [EmployeeDetailComponent, setEmployeeDetailComponent] = useState(() => window.EmployeeDetail);
         const [EmployeeManagementComponent, setEmployeeManagementComponent] = useState(() => window.EmployeeManagement);
-        const employeeDetailUnavailableLogged = useRef(false);
 
         // Listen for component loaded events to update component references
         useEffect(() => {
@@ -275,55 +243,12 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             };
         }, []);
 
-        const loadEmployeeDetailComponent = useCallback(() => {
-            if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
-                setEmployeeDetailComponent(window.EmployeeDetail);
-                return Promise.resolve(true);
-            }
-
-            const existingScript = document.querySelector('script[data-component="employee-detail"]');
-            if (existingScript) {
-                return new Promise((resolve) => {
-                    const complete = () => {
-                        if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
-                            setEmployeeDetailComponent(window.EmployeeDetail);
-                            window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'EmployeeDetail' } }));
-                            resolve(true);
-                            return;
-                        }
-                        resolve(false);
-                    };
-                    existingScript.addEventListener('load', complete, { once: true });
-                    setTimeout(complete, 1200);
-                });
-            }
-
-            const scriptSrc = '/dist/src/components/leave-platform/EmployeeDetail.js';
-            return new Promise((resolve) => {
-                const script = document.createElement('script');
-                script.dataset.component = 'employee-detail';
-                script.src = scriptSrc + (window.__BUILD_VERSION__ ? '?v=' + window.__BUILD_VERSION__ : '');
-                script.onload = () => {
-                    if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
-                        setEmployeeDetailComponent(window.EmployeeDetail);
-                        window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'EmployeeDetail' } }));
-                        resolve(true);
-                        return;
-                    }
-                    resolve(false);
-                };
-                script.onerror = () => resolve(false);
-                document.head.appendChild(script);
-            });
-        }, []);
-
-        // Proactively load EmployeeDetail when user is on Employees tab and component not yet on window
-        useEffect(() => {
-            if (currentTab !== 'employees') return;
-            loadEmployeeDetailComponent();
-        }, [currentTab, loadEmployeeDetailComponent]);
-
         const leaveUtils = window.leaveUtils || {};
+        // Update isAdmin if user role is available
+        if (user?.role) {
+            isAdmin = user.role.toLowerCase() === 'admin';
+        }
+
         // South African BCEA leave types (centralised in leaveUtils)
         const leaveTypes = leaveUtils.BCEA_LEAVE_TYPES || [
         { value: 'annual', label: 'Annual Leave', days: 21, color: 'blue' },
@@ -470,7 +395,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             const startTime = performance.now();
             
             const [employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
-                fetch('/api/employees', { headers }).catch(e => ({ ok: false, status: 0 })),
+                fetch('/api/users', { headers }).catch(e => ({ ok: false, status: 0 })),
                 fetch('/api/leave-platform/departments', { headers }).catch(e => ({ ok: false, status: 0 })),
                 fetch('/api/leave-platform/approvers', { headers }).catch(e => ({ ok: false, status: 0 })),
                 fetch('/api/leave-platform/birthdays', { headers }).catch(e => ({ ok: false, status: 0 }))
@@ -479,7 +404,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             if (employeesResponse.status === 'fulfilled' && employeesResponse.value.ok) {
                 try {
                     const users = await employeesResponse.value.json();
-                    const employeesData = users.employees || users.data?.employees || [];
+                    const employeesData = users.users || users.data?.users || [];
                     setEmployees(employeesData);
                     if (employeesData.length === 0) {
                         console.warn('⚠️ Leave Platform: No employees found in API response. Response structure:', users);
@@ -550,7 +475,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             const [appsResponse, balancesResponse, employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
                 fetch('/api/leave-platform/applications', { headers }),
                 fetch('/api/leave-platform/balances', { headers }),
-                fetch('/api/employees', { headers }),
+                fetch('/api/users', { headers }),
                 fetch('/api/leave-platform/departments', { headers }),
                 fetch('/api/leave-platform/approvers', { headers }),
                 fetch('/api/leave-platform/birthdays', { headers })
@@ -590,7 +515,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     setLeaveBalances(balances);
                 }
 
-                const users = await parseArray(employeesResponse, ['employees', 'data.employees']);
+                const users = await parseArray(employeesResponse, ['users', 'data.users']);
                 if (users.length || employeesResponse.status === 'fulfilled') {
                     setEmployees(users);
                     if (users.length === 0 && employeesResponse.status === 'fulfilled' && employeesResponse.value?.ok) {
@@ -781,13 +706,10 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         { id: 'apply', label: 'Apply for Leave', icon: 'fa-plus-circle' },
         { id: 'balances', label: 'Leave Balances', icon: 'fa-chart-pie' },
         { id: 'calendar', label: 'Leave Calendar', icon: 'fa-calendar' },
-                { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' },
-                { id: 'attendance', label: 'Attendance', icon: 'fa-clock' },
-                { id: 'payroll', label: 'Payroll', icon: 'fa-money-check-alt' },
-                { id: 'rules-policies', label: 'Rules & Policies', icon: 'fa-file-contract' }
+                { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' }
             ];
 
-            if (resolvedAdmin) {
+            if (isAdmin) {
                 sharedTabs.splice(1, 0, { id: 'employees', label: 'Employees', icon: 'fa-users' });
                 sharedTabs.splice(3, 0, { id: 'team', label: 'Team Leave', icon: 'fa-people-arrows' });
                 sharedTabs.push(
@@ -798,7 +720,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             }
 
             return sharedTabs;
-        }, [resolvedAdmin]);
+        }, [isAdmin]);
 
         // Employee filtering and sorting - moved to top level (hooks must be at component level)
         const filteredAndSortedEmployees = useMemo(() => {
@@ -844,55 +766,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             setViewingEmployeeId(null);
         }, []);
 
-        const handleAddEmployee = useCallback(async () => {
-            const { name, email, role, department, phone } = addEmployeeForm;
-            if (!name?.trim() || !email?.trim()) {
-                alert('Name and email are required.');
-                return;
-            }
-            setAddEmployeeSaving(true);
-            try {
-                const token = window.storage?.getToken?.();
-                if (!token) {
-                    alert('You must be logged in to add an employee.');
-                    return;
-                }
-                const response = await fetch('/api/employees', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        name: name.trim(),
-                        email: email.trim(),
-                        role: role || 'user',
-                        department: (department || '').trim(),
-                        phone: (phone || '').trim(),
-                        status: 'active'
-                    })
-                });
-                const data = await response.json().catch(() => ({}));
-                if (response.ok) {
-                    setShowAddEmployeeModal(false);
-                    setAddEmployeeForm({ name: '', email: '', role: 'user', department: '', phone: '' });
-                    loadData();
-                    if (data.tempPassword) {
-                        alert(`Employee added. Temporary password: ${data.tempPassword}`);
-                    } else {
-                        alert('Employee added successfully.');
-                    }
-                } else {
-                    alert(data.message || data.error || 'Failed to add employee.');
-                }
-            } catch (e) {
-                console.error('Add employee error:', e);
-                alert('Failed to add employee. Try again.');
-            } finally {
-                setAddEmployeeSaving(false);
-            }
-        }, [addEmployeeForm, loadData]);
-
         const handleSaveEmployee = useCallback(async (employeeData) => {
             if (!selectedEmployee) return;
             
@@ -902,19 +775,22 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     throw new Error('No authentication token available');
                 }
                 
-                const response = await fetch(`/api/employees/${selectedEmployee.id}`, {
-                    method: 'PATCH',
+                const response = await fetch('/api/users', {
+                    method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify(employeeData)
+                    body: JSON.stringify({
+                        userId: selectedEmployee.id,
+                        ...employeeData
+                    })
                 });
                 
                 if (response.ok) {
                     const result = await response.json();
                     const updatedEmployees = employees.map(emp =>
-                        emp.id === selectedEmployee.id ? (result.data?.employee || result.employee || { ...emp, ...employeeData }) : emp
+                        emp.id === selectedEmployee.id ? (result.data?.user || { ...emp, ...employeeData }) : emp
                     );
                     setEmployees(updatedEmployees);
                     setShowEmployeeModal(false);
@@ -943,87 +819,76 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             birthdays={birthdays}
                             leaveTypes={leaveTypes}
                             calculateWorkingDays={calculateWorkingDays}
-                            isAdmin={resolvedAdmin || isAdmin}
+                            isAdmin={isAdmin}
                             getLeaveTypeInfo={getLeaveTypeInfo}
                             getStatusLabel={getStatusLabel}
                             onRefresh={() => loadData()}
-                            onOpenApprovers={() => setCurrentTab('approvers')}
-                            onOpenEmployees={() => setCurrentTab('employees')}
                         />
                     );
                 case 'employees':
-                    if (!resolvedAdmin && !isAdmin) {
+                    if (!isAdmin) {
                         return <AccessNotice />;
                     }
-                    // Valid employeeId: non-empty string or number (never render detail with undefined)
-                    const hasValidEmployeeId = viewingEmployeeId != null &&
-                        ((typeof viewingEmployeeId === 'string' && viewingEmployeeId.length > 0) ||
-                         (typeof viewingEmployeeId === 'number' && !Number.isNaN(viewingEmployeeId)));
-                    const canShowDetail = hasValidEmployeeId && EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function';
-                    if (viewingEmployeeId != null && !canShowDetail && !(EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function')) {
-                        if (!employeeDetailUnavailableLogged.current) {
-                            employeeDetailUnavailableLogged.current = true;
-                            console.warn('⚠️ EmployeeDetailComponent not available, showing employee list');
-                        }
-                    }
-                    if (canShowDetail && hasValidEmployeeId) {
-                        try {
-                            const Component = EmployeeDetailComponent;
-                            return (
-                                <Component
-                                    employeeId={viewingEmployeeId}
-                                    onBack={handleBackFromEmployeeDetail}
-                                    user={user || null}
-                                    isAdmin={resolvedAdmin || isAdmin}
-                                />
-                            );
-                        } catch (err) {
-                            console.error('LeavePlatform: error rendering EmployeeDetail component', err);
+                    // Show employee detail view if an employee is selected
+                    if (viewingEmployeeId) {
+                        
+                        if (EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function') {
+                            try {
+                                const Component = EmployeeDetailComponent;
+                                // Ensure all props are defined before rendering
+                                if (!viewingEmployeeId) {
+                                    console.warn('⚠️ LeavePlatform: viewingEmployeeId is not set');
+                                    return (
+                                        <div className="text-center py-12">
+                                            <p className="text-gray-600">No employee selected</p>
+                                            <button
+                                                onClick={handleBackFromEmployeeDetail}
+                                                className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                            >
+                                                Go Back
+                                            </button>
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <Component
+                                        employeeId={viewingEmployeeId}
+                                        onBack={handleBackFromEmployeeDetail}
+                                        user={user || null}
+                                        isAdmin={isAdmin || false}
+                                    />
+                                );
+                            } catch (err) {
+                                console.error('LeavePlatform: error rendering EmployeeDetail component', err);
+                                // Return error UI instead of crashing
+                                return (
+                                    <div className="text-center py-12">
+                                        <p className="text-red-600">Error loading employee details</p>
+                                        <button
+                                            onClick={handleBackFromEmployeeDetail}
+                                            className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                        >
+                                            Go Back
+                                        </button>
+                                    </div>
+                                );
+                            }
+                        } else {
+                            console.warn('⚠️ EmployeeDetailComponent not available, showing loading message');
                             return (
                                 <div className="text-center py-12">
-                                    <p className="text-red-600">Error loading employee details</p>
+                                    <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-4"></i>
+                                    <p className="text-gray-600">Loading employee details...</p>
                                     <button
                                         onClick={handleBackFromEmployeeDetail}
                                         className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                                     >
-                                        Go Back
+                                        <i className="fas fa-arrow-left mr-2"></i>
+                                        Back to Employees
                                     </button>
                                 </div>
                             );
                         }
-                    }
-                    // Fallback when user clicked an employee but EmployeeDetail not loaded yet
-                    if (hasValidEmployeeId && viewingEmployeeId != null) {
-                        const selectedEmp = employees.find(e => e.id === viewingEmployeeId || String(e.id) === String(viewingEmployeeId));
-                        return (
-                            <div className="space-y-4">
-                                <button
-                                    type="button"
-                                    onClick={handleBackFromEmployeeDetail}
-                                    className="text-sm text-primary-600 hover:text-primary-800 flex items-center gap-1"
-                                >
-                                    <i className="fas fa-arrow-left"></i> Back to list
-                                </button>
-                                <div className="bg-white border border-gray-200 rounded-lg p-6">
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedEmp?.name || 'Employee'}</h3>
-                                    <p className="text-sm text-gray-600 mb-1">{selectedEmp?.email || '—'}</p>
-                                    <p className="text-sm text-gray-600 mb-4">{selectedEmp?.role || '—'} · {selectedEmp?.department || '—'}</p>
-                                    <p className="text-sm text-gray-500 mb-4">The detail module is still loading. Click below to load employee detail without refreshing the page.</p>
-                                    <button
-                                        type="button"
-                                        onClick={async () => {
-                                            const loaded = await loadEmployeeDetailComponent();
-                                            if (!loaded) {
-                                                alert('Employee detail is still unavailable. Please try again in a few seconds.');
-                                            }
-                                        }}
-                                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                                    >
-                                        <i className="fas fa-sync-alt mr-2"></i>Load employee detail
-                                    </button>
-                                </div>
-                            </div>
-                        );
                     }
                     // Skip EmployeeManagement component and use our own table with click handlers
                     // This allows us to navigate to the full EmployeeDetail page
@@ -1051,109 +916,15 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                     <h3 className="text-lg font-semibold text-gray-900">Employees</h3>
                                     <p className="text-sm text-gray-500">View and manage employee information</p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    {(resolvedAdmin || isAdmin) && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowAddEmployeeModal(true)}
-                                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                                        >
-                                            <i className="fas fa-user-plus mr-1.5"></i>
-                                            Add employee
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => loadData()}
-                                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                                    >
-                                        <i className="fas fa-sync-alt mr-1.5"></i>
-                                        Refresh
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => loadData()}
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                >
+                                    <i className="fas fa-sync-alt mr-1.5"></i>
+                                    Refresh
+                                </button>
                             </div>
-
-                            {showAddEmployeeModal && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !addEmployeeSaving && setShowAddEmployeeModal(false)}>
-                                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add employee</h3>
-                                        <p className="text-sm text-gray-500 mb-4">New staff are managed here in Leave and HR. They can sign in with the email you provide.</p>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                                                <input
-                                                    type="text"
-                                                    value={addEmployeeForm.name}
-                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, name: e.target.value }))}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                                                    placeholder="Full name"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                                                <input
-                                                    type="email"
-                                                    value={addEmployeeForm.email}
-                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, email: e.target.value }))}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                                                    placeholder="email@company.com"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                                                <select
-                                                    value={addEmployeeForm.role}
-                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, role: e.target.value }))}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                                                >
-                                                    <option value="user">User</option>
-                                                    <option value="manager">Manager</option>
-                                                    <option value="admin">Admin</option>
-                                                    <option value="superadmin">Super Administrator</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                                                <input
-                                                    type="text"
-                                                    value={addEmployeeForm.department}
-                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, department: e.target.value }))}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                                                    placeholder="e.g. Operations"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                                                <input
-                                                    type="text"
-                                                    value={addEmployeeForm.phone}
-                                                    onChange={e => setAddEmployeeForm(f => ({ ...f, phone: e.target.value }))}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                                                    placeholder="Optional"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="mt-6 flex justify-end gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => !addEmployeeSaving && setShowAddEmployeeModal(false)}
-                                                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                                                disabled={addEmployeeSaving}
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleAddEmployee}
-                                                disabled={addEmployeeSaving}
-                                                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-                                            >
-                                                {addEmployeeSaving ? 'Adding…' : 'Add employee'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
+                            
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-1 relative">
                                     <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
@@ -1169,7 +940,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             
                             {filteredAndSortedEmployees.length > 0 ? (
                                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                                    <div className="table-responsive overflow-x-auto">
+                                    <div className="overflow-x-auto">
                                         <table className="min-w-full divide-y divide-gray-200">
                                             <thead className="bg-gray-50">
                                                 <tr>
@@ -1177,7 +948,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                                     <SortableHeader columnKey="email" label="Email" />
                                                     <SortableHeader columnKey="role" label="Role" />
                                                     <SortableHeader columnKey="status" label="Status" />
-                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-28">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
@@ -1194,15 +964,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                                             <span className={`px-2 py-1 text-xs rounded ${(emp.status === 'active' || emp.employmentStatus === 'Active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                                                                 {emp.employmentStatus || emp.status || 'active'}
                                                             </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm" onClick={e => e.stopPropagation()}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleEmployeeClick(emp)}
-                                                                className="text-primary-600 hover:text-primary-800 font-medium"
-                                                            >
-                                                                View
-                                                            </button>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -1243,7 +1004,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         </div>
                     );
                 case 'team':
-                    return (resolvedAdmin || isAdmin) ? (
+                    return isAdmin ? (
                         <TeamLeaveView
                             applications={leaveApplications}
                             employees={employees}
@@ -1314,7 +1075,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         />
                     );
             case 'approvals':
-                    return (resolvedAdmin || isAdmin) ? (
+                    return isAdmin ? (
                         <ApprovalsView
                     applications={leaveApplications}
                     user={user}
@@ -1326,7 +1087,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         <AccessNotice />
                     );
             case 'approvers':
-                    return (resolvedAdmin || isAdmin) ? (
+                    return isAdmin ? (
                         <ApproversView
                     approvers={leaveApprovers}
                     departments={departments}
@@ -1344,39 +1105,13 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         />
                     );
             case 'import':
-                    return (resolvedAdmin || isAdmin) ? (
+                    return isAdmin ? (
                         <ImportBalancesView
                             onImport={() => loadData()}
                         />
                     ) : (
                         <AccessNotice />
                     );
-            case 'attendance':
-                    if (window.Attendance && typeof window.Attendance === 'function') {
-                        const AttendanceComponent = window.Attendance;
-                        return <AttendanceComponent />;
-                    }
-                    return (
-                        <div className="text-center py-12">
-                            <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-4"></i>
-                            <p className="text-gray-600">Loading Attendance...</p>
-                            <p className="text-xs text-gray-400 mt-2">If this does not load, refresh the page.</p>
-                        </div>
-                    );
-            case 'payroll':
-                    if (window.Payroll && typeof window.Payroll === 'function') {
-                        const PayrollComponent = window.Payroll;
-                        return <PayrollComponent />;
-                    }
-                    return (
-                        <div className="text-center py-12">
-                            <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-4"></i>
-                            <p className="text-gray-600">Loading Payroll...</p>
-                            <p className="text-xs text-gray-400 mt-2">If this does not load, refresh the page.</p>
-                        </div>
-                    );
-            case 'rules-policies':
-                    return <RulesPoliciesView />;
             default:
                     return (
                         <OverviewView
@@ -1400,8 +1135,8 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Leave and HR</h2>
-                    <p className="text-sm text-gray-500 mt-0.5">Manage leave and HR – BCEA Compliant</p>
+                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Leave Platform</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">Manage your leave applications and balances - BCEA Compliant</p>
                 </div>
             </div>
 
@@ -1455,9 +1190,7 @@ const OverviewView = ({
     isAdmin,
     getLeaveTypeInfo,
     getStatusLabel,
-    onRefresh,
-    onOpenApprovers,
-    onOpenEmployees
+    onRefresh
 }) => {
     const myApplications = useMemo(() => applications.filter(app => matchUserRecord(app, user)), [applications, user]);
     const myPending = useMemo(() => myApplications.filter(app => app.status === 'pending').length, [myApplications]);
@@ -1510,40 +1243,6 @@ const OverviewView = ({
                     Refresh
                 </button>
             </div>
-
-            {isAdmin && (onOpenApprovers || onOpenEmployees) && (
-                <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-primary-900 mb-2 flex items-center gap-2">
-                        <i className="fas fa-cog"></i>
-                        Manage employees & leave approvers
-                    </h4>
-                    <p className="text-sm text-primary-800 mb-3">
-                        Employee management is here in Leave and HR. Use <strong>Employees</strong> to add or edit staff (role, department, leave). Use <strong>Approvers</strong> to set who approves leave per department.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                        {onOpenEmployees && (
-                            <button
-                                type="button"
-                                onClick={onOpenEmployees}
-                                className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
-                            >
-                                <i className="fas fa-users mr-1.5"></i>
-                                Manage employees
-                            </button>
-                        )}
-                        {onOpenApprovers && (
-                            <button
-                                type="button"
-                                onClick={onOpenApprovers}
-                                className="px-3 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
-                            >
-                                <i className="fas fa-user-shield mr-1.5"></i>
-                                Manage leave approvers
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -2745,7 +2444,7 @@ const LeaveCalendarView = ({ applications, view, onViewChange, getLeaveTypeInfo 
                         <i className="fas fa-chevron-left"></i>
                     </button>
                     <span className="px-4 py-1 text-sm font-medium">
-                        {currentDate.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}
+                        {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </span>
                     <button
                         onClick={() => {
@@ -2926,67 +2625,6 @@ const BirthdaysView = ({ birthdays, onRefresh }) => {
     );
 };
 
-// Rules and Policies View – display area for leave/HR rules and company policies
-const RulesPoliciesView = () => {
-    const [customContent, setCustomContent] = useState('');
-    useEffect(() => {
-        try {
-            const stored = localStorage.getItem('leave_hr_rules_policies_content');
-            if (stored) setCustomContent(stored);
-        } catch (e) {
-            console.warn('RulesPoliciesView: could not read stored content', e);
-        }
-    }, []);
-
-    return (
-        <div className="space-y-6 max-w-4xl">
-            <div>
-                <h3 className="text-lg font-semibold text-gray-900">Rules and Policies</h3>
-                <p className="text-sm text-gray-500 mt-0.5">Leave, HR and company policies for your reference.</p>
-            </div>
-
-            {customContent ? (
-                <div
-                    className="prose prose-sm max-w-none p-4 bg-white border border-gray-200 rounded-lg"
-                    dangerouslySetInnerHTML={{ __html: customContent }}
-                />
-            ) : null}
-
-            <div className="space-y-4">
-                <section className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <i className="fas fa-umbrella-beach text-primary-600"></i>
-                        Leave policy
-                    </h4>
-                    <p className="text-sm text-gray-600 mt-2">
-                        Leave is managed in line with the Basic Conditions of Employment Act (BCEA). Annual leave, sick leave, family responsibility leave, maternity and paternity leave, and other types are available as per the Leave Balances and Apply for Leave sections. Approval is required from your designated leave approver.
-                    </p>
-                </section>
-
-                <section className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <i className="fas fa-clock text-primary-600"></i>
-                        Attendance and working hours
-                    </h4>
-                    <p className="text-sm text-gray-600 mt-2">
-                        Attendance and working hours are recorded in the Attendance section. Ensure you clock in and out as required. Contact your manager or HR for local attendance rules and any flexible-working arrangements.
-                    </p>
-                </section>
-
-                <section className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <i className="fas fa-file-contract text-primary-600"></i>
-                        General policies
-                    </h4>
-                    <p className="text-sm text-gray-600 mt-2">
-                        Company-wide rules and policies (code of conduct, grievance procedure, etc.) are published here when provided by HR. If you do not see a specific policy, please contact HR or your manager.
-                    </p>
-                </section>
-            </div>
-        </div>
-    );
-};
-
 // Import Balances View
 const ImportBalancesView = ({ onImport }) => {
     const [file, setFile] = useState(null);
@@ -3020,9 +2658,7 @@ const ImportBalancesView = ({ onImport }) => {
                 setFile(null);
                 onImport();
             } else {
-                const data = await response.json().catch(() => ({}));
-                const message = data.message || data.error || 'Failed to import leave balances';
-                alert(message);
+                alert('Failed to import leave balances');
             }
         } catch (error) {
             console.error('Error importing:', error);
@@ -3035,10 +2671,6 @@ const ImportBalancesView = ({ onImport }) => {
     return (
         <div className="max-w-2xl space-y-4">
             <h3 className="text-lg font-semibold">Import Leave Balances</h3>
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                <p className="font-medium mb-1">Bulk CSV/Excel import is not yet available.</p>
-                <p className="text-amber-700">Use the <strong>Leave Balances</strong> tab to add or update balances per employee, or use the API (<code className="bg-amber-100 px-1 rounded">POST /api/leave-platform/balances</code>) to create balances individually.</p>
-            </div>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                 <input
                     type="file"

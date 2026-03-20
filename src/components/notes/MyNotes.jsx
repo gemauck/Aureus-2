@@ -224,6 +224,15 @@ const MyNotes = () => {
         return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
     }, [notes]);
 
+    const noteStats = React.useMemo(() => {
+        const total = notes.length;
+        const pinned = notes.filter((n) => Boolean(n.pinned)).length;
+        const shared = notes.filter((n) => n.sharedWith && n.sharedWith.length > 0).length;
+        const withTags = notes.filter((n) => n.tags && n.tags.length > 0).length;
+        const linked = notes.filter((n) => n.clientId || n.projectId || n.client?.id || n.project?.id).length;
+        return { total, pinned, shared, withTags, linked };
+    }, [notes]);
+
     const loadNotes = useCallback(async (opts = {}) => {
         const { silent = false } = opts;
         try {
@@ -602,16 +611,25 @@ const MyNotes = () => {
 
     if (isLoading) {
         return (
-            <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen p-4`} aria-busy="true" aria-label="Loading notes">
-                <div className="max-w-7xl mx-auto flex gap-4">
-                    <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm w-1/3 p-4`}>
-                        <div className={`h-6 rounded w-24 mb-4 ${isDark ? 'bg-gray-600' : 'bg-gray-200'}`} />
-                        <NotesListSkeleton isDark={isDark} count={6} />
+            <div className={isDark ? 'min-h-[calc(100vh-4rem)] bg-[#0c0f14]' : 'min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-slate-100'} aria-busy="true" aria-label="Loading notes">
+                <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-pulse">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className={`rounded-2xl border p-6 h-40 ${isDark ? 'border-gray-700 bg-gray-900/50' : 'border-slate-200 bg-white'}`}>
+                                <div className={`h-4 w-1/3 rounded mb-4 ${isDark ? 'bg-gray-700' : 'bg-slate-200'}`} />
+                                <div className={`h-8 w-1/2 rounded ${isDark ? 'bg-gray-800' : 'bg-slate-100'}`} />
+                            </div>
+                        ))}
                     </div>
-                    <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm flex-1 p-4`}>
-                        <div className={`h-8 rounded w-3/4 mb-4 ${isDark ? 'bg-gray-600' : 'bg-gray-200'}`} />
-                        <div className={`h-4 rounded w-full mb-2 ${isDark ? 'bg-gray-600' : 'bg-gray-200'}`} />
-                        <div className={`h-64 rounded ${isDark ? 'bg-gray-600' : 'bg-gray-200'}`} />
+                    <div className="mt-6 flex gap-4">
+                        <div className={`${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-white border-slate-200'} rounded-2xl border shadow-sm w-full md:w-1/3 p-4`}>
+                            <div className={`h-6 rounded w-24 mb-4 ${isDark ? 'bg-gray-700' : 'bg-slate-200'}`} />
+                            <NotesListSkeleton isDark={isDark} count={6} />
+                        </div>
+                        <div className={`${isDark ? 'bg-gray-900/50 border-gray-700' : 'bg-white border-slate-200'} rounded-2xl border shadow-sm flex-1 p-4 hidden md:block`}>
+                            <div className={`h-8 rounded w-3/4 mb-4 ${isDark ? 'bg-gray-700' : 'bg-slate-200'}`} />
+                            <div className={`h-64 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-slate-100'}`} />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -619,94 +637,143 @@ const MyNotes = () => {
     }
 
     return (
-        <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen p-4`} role="main" aria-label="My Notes">
-            <div className="max-w-7xl mx-auto">
-                {/* Header */}
-                <header className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm p-6 mb-4`}>
-                    <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className={isDark ? 'min-h-[calc(100vh-4rem)] bg-[#0c0f14]' : 'min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-slate-100'} role="main" aria-label="My Notes">
+            {/* Hero — matches Task workspace */}
+            <div className={`relative overflow-hidden border-b ${isDark ? 'border-gray-800 bg-gradient-to-br from-slate-900 via-[#111827] to-slate-900' : 'border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-violet-50/30'}`}>
+                <div className="absolute inset-0 opacity-[0.07] pointer-events-none text-current" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+                <div className="relative max-w-[1600px] mx-auto px-4 md:px-8 py-8 md:py-10">
+                    <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
                         <div>
-                            <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                <i className="fas fa-sticky-note mr-2 text-primary-500" aria-hidden="true"></i>
-                                My Notes
-                            </h1>
-                            <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                Personal notes — {notes.length} note{notes.length !== 1 ? 's' : ''}
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mb-3 border bg-white/5 border-white/10 text-violet-200">
+                                <i className="fas fa-book-open text-violet-300" />
+                                Workspace
+                            </div>
+                            <h1 className={`text-3xl md:text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Notes workspace</h1>
+                            <p className={`mt-2 text-sm md:text-base max-w-xl ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                Capture ideas, organize with tags, share with your team, and link notes to clients & projects.
                             </p>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                <div className={`text-xs px-3 py-1.5 rounded-lg border ${isDark ? 'border-violet-800/50 bg-violet-950/30 text-violet-300' : 'border-violet-200 bg-violet-50 text-violet-800'}`}>
+                                    <i className="fas fa-keyboard mr-1.5" />
+                                    ⌘/Ctrl+N new · ⌘/Ctrl+S save
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-                                className={`px-4 py-2 rounded-lg ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} transition-colors`}
-                                title={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'}
-                                aria-label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+                                onClick={() => loadNotes()}
+                                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition ${isDark ? 'border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50'}`}
                             >
-                                <i className={`fas fa-${viewMode === 'list' ? 'th' : 'list'}`} aria-hidden="true"></i>
+                                <i className="fas fa-sync-alt" />
+                                Refresh
                             </button>
                             {filteredNotes.length > 0 && (
                                 <button
                                     type="button"
                                     onClick={handleExportAll}
-                                    className={`px-4 py-2 rounded-lg ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} transition-colors`}
-                                    aria-label="Export all notes"
+                                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition ${isDark ? 'border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50'}`}
                                 >
-                                    <i className="fas fa-download mr-2" aria-hidden="true"></i>
+                                    <i className="fas fa-download" />
                                     Export all
                                 </button>
                             )}
                             <button
                                 type="button"
                                 onClick={handleCreateNote}
-                                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                                aria-label="Create new note"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/25 hover:from-violet-500 hover:to-indigo-500"
                             >
-                                <i className="fas fa-plus mr-2" aria-hidden="true"></i>
-                                New Note
+                                <i className="fas fa-plus" />
+                                New note
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
 
-                    {/* Search */}
-                    <div className="relative mb-3">
-                        <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" aria-hidden="true"></i>
-                        <input
-                            type="search"
-                            placeholder="Search notes..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className={`w-full pl-10 pr-4 py-2 rounded-lg border ${
-                                isDark 
-                                    ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400' 
-                                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                            } focus:outline-none focus:ring-2 focus:ring-primary-500`}
-                            aria-label="Search notes"
-                        />
+            <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-6 space-y-6">
+                {/* Stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {[
+                        { key: 'total', label: 'Total', value: noteStats.total, icon: 'fa-sticky-note', grad: 'from-slate-500 to-slate-600' },
+                        { key: 'pinned', label: 'Pinned', value: noteStats.pinned, icon: 'fa-thumbtack', grad: 'from-amber-500 to-orange-500' },
+                        { key: 'shared', label: 'Shared', value: noteStats.shared, icon: 'fa-share-alt', grad: 'from-sky-500 to-blue-600' },
+                        { key: 'tags', label: 'With tags', value: noteStats.withTags, icon: 'fa-tags', grad: 'from-emerald-500 to-teal-500' },
+                        { key: 'linked', label: 'Linked', value: noteStats.linked, icon: 'fa-link', grad: 'from-fuchsia-500 to-purple-600' }
+                    ].map((card) => (
+                        <div key={card.key} className={`relative overflow-hidden rounded-2xl border p-4 ${isDark ? 'border-gray-700/80 bg-gray-900/60' : 'border-slate-200/90 bg-white shadow-sm'}`}>
+                            <div className={`absolute -right-4 -top-4 h-16 w-16 rounded-full bg-gradient-to-br ${card.grad} opacity-20`} />
+                            <div className="relative flex items-start justify-between gap-2">
+                                <div>
+                                    <p className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>{card.label}</p>
+                                    <p className={`text-2xl font-bold tabular-nums mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{card.value}</p>
+                                </div>
+                                <div className={`h-10 w-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${card.grad} text-white shadow-md`}>
+                                    <i className={`fas ${card.icon} text-sm`} />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Toolbar */}
+                <div className={`rounded-2xl border shadow-sm p-4 md:p-5 ${isDark ? 'border-gray-700/80 bg-gray-900/40 backdrop-blur' : 'border-slate-200/90 bg-white/80 backdrop-blur'}`}>
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                        <div className="relative flex-1 min-w-0">
+                            <i className={`fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-sm ${isDark ? 'text-gray-500' : 'text-slate-400'}`} />
+                            <input
+                                type="search"
+                                placeholder="Search titles, content, tags..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'}`}
+                                aria-label="Search notes"
+                            />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('list')}
+                                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'list' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md' : isDark ? 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700' : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80'}`}
+                                title="Split view with editor"
+                            >
+                                <i className="fas fa-columns" />
+                                Split
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('grid')}
+                                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'grid' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md' : isDark ? 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700' : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80'}`}
+                                title="Grid only — switch to Split to edit"
+                            >
+                                <i className="fas fa-th-large" />
+                                Grid
+                            </button>
+                        </div>
                     </div>
-
-                    {/* Tag filter chips */}
                     {allTags.length > 0 && (
-                        <div className="flex flex-wrap gap-2 items-center">
-                            <span className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Filter by tag:</span>
+                        <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-dashed border-gray-600/40">
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>Tags</span>
                             <button
                                 type="button"
                                 onClick={() => setSelectedTagFilter('')}
-                                className={`px-2 py-1 rounded text-sm ${!selectedTagFilter ? (isDark ? 'bg-primary-600 text-white' : 'bg-primary-100 text-primary-800') : (isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200')}`}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium ${!selectedTagFilter ? (isDark ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-900') : (isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}
                             >
                                 All
                             </button>
-                            {allTags.map(tag => (
+                            {allTags.map((tag) => (
                                 <button
                                     key={tag}
                                     type="button"
                                     onClick={() => setSelectedTagFilter(selectedTagFilter === tag ? '' : tag)}
-                                    className={`px-2 py-1 rounded text-sm ${selectedTagFilter === tag ? (isDark ? 'bg-primary-600 text-white' : 'bg-primary-100 text-primary-800') : (isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200')}`}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium ${selectedTagFilter === tag ? (isDark ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-900') : (isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}
                                 >
                                     {tag}
                                 </button>
                             ))}
                         </div>
                     )}
-                </header>
+                </div>
 
                 <div className="flex flex-col md:flex-row gap-4">
                     {/* Notes List + optional right-hand activity panel */}
