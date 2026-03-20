@@ -2136,8 +2136,25 @@ function initializeProjectDetail() {
     const [isSavingNote, setIsSavingNote] = useState(false);
     const [showNoteShareModal, setShowNoteShareModal] = useState(false);
     const [noteShareSelectedUsers, setNoteShareSelectedUsers] = useState([]);
-    const [googleDriveLinkInput, setGoogleDriveLinkInput] = useState(project?.googleDriveLink || '');
-    const [isSavingGoogleDriveLink, setIsSavingGoogleDriveLink] = useState(false);
+    const parseOnlineDriveLinks = useCallback((rawValue) => {
+        const fallback = { googleDrive: [''], oneDrive: [''] };
+        if (!rawValue) return fallback;
+        try {
+            const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+            if (!parsed || typeof parsed !== 'object') return fallback;
+            const googleDrive = Array.isArray(parsed.googleDrive) ? parsed.googleDrive : [];
+            const oneDrive = Array.isArray(parsed.oneDrive) ? parsed.oneDrive : [];
+            return {
+                googleDrive: googleDrive.length > 0 ? googleDrive : [''],
+                oneDrive: oneDrive.length > 0 ? oneDrive : ['']
+            };
+        } catch (error) {
+            console.warn('Failed to parse onlineDriveLinks:', error);
+            return fallback;
+        }
+    }, []);
+    const [onlineDriveLinksInput, setOnlineDriveLinksInput] = useState(() => parseOnlineDriveLinks(project?.onlineDriveLinks));
+    const [isSavingOnlineDriveLinks, setIsSavingOnlineDriveLinks] = useState(false);
     // Per-note activity: when editing a note, activity for that note; in list, expanded note's activity
     const [noteActivityForEditor, setNoteActivityForEditor] = useState([]);
     const [expandedNoteActivityId, setExpandedNoteActivityId] = useState(null);
@@ -2161,8 +2178,8 @@ function initializeProjectDetail() {
         setExpandedNoteActivityId(null);
         setNoteActivityByNoteId({});
         setEditorActivityPanelOpen(false);
-        setGoogleDriveLinkInput(project?.googleDriveLink || '');
-    }, [project?.id, project?.googleDriveLink]);
+        setOnlineDriveLinksInput(parseOnlineDriveLinks(project?.onlineDriveLinks));
+    }, [project?.id, project?.onlineDriveLinks, parseOnlineDriveLinks]);
 
     const loadActivityLog = useCallback(async () => {
         if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
@@ -4625,16 +4642,49 @@ function initializeProjectDetail() {
         return parsed.toLocaleString(undefined, options);
     };
 
-    const handleSaveGoogleDriveLink = async () => {
-        if (!project?.id || !window.DatabaseAPI?.updateProject || isSavingGoogleDriveLink) return;
+    const normalizeDriveLinksForSave = useCallback((links) => ({
+        googleDrive: (links?.googleDrive || []).map(link => String(link || '').trim()),
+        oneDrive: (links?.oneDrive || []).map(link => String(link || '').trim())
+    }), []);
 
-        const trimmedLink = (googleDriveLinkInput || '').trim();
-        setIsSavingGoogleDriveLink(true);
+    const handleUpdateDriveLink = (provider, index, value) => {
+        setOnlineDriveLinksInput(prev => {
+            const current = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [''];
+            while (current.length <= index) current.push('');
+            current[index] = value;
+            return { ...prev, [provider]: current };
+        });
+    };
+
+    const handleAddDriveSpot = (provider) => {
+        setOnlineDriveLinksInput(prev => {
+            const current = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [];
+            current.push('');
+            return { ...prev, [provider]: current };
+        });
+    };
+
+    const handleRemoveDriveSpot = (provider, index) => {
+        setOnlineDriveLinksInput(prev => {
+            const current = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [''];
+            const next = current.filter((_, i) => i !== index);
+            return { ...prev, [provider]: next.length > 0 ? next : [''] };
+        });
+    };
+
+    const handleSaveOnlineDriveLinks = async () => {
+        if (!project?.id || !window.DatabaseAPI?.updateProject || isSavingOnlineDriveLinks) return;
+
+        const normalized = normalizeDriveLinksForSave(onlineDriveLinksInput);
+        setIsSavingOnlineDriveLinks(true);
         try {
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, {
-                googleDriveLink: trimmedLink
+                onlineDriveLinks: JSON.stringify(normalized)
             });
-            const updatedProject = apiResponse?.data?.project || apiResponse?.project || { ...project, googleDriveLink: trimmedLink };
+            const updatedProject = apiResponse?.data?.project || apiResponse?.project || {
+                ...project,
+                onlineDriveLinks: JSON.stringify(normalized)
+            };
 
             if (typeof onProjectUpdate === 'function') {
                 onProjectUpdate(updatedProject);
@@ -4643,10 +4693,10 @@ function initializeProjectDetail() {
                 window.updateViewingProject(updatedProject);
             }
         } catch (error) {
-            console.error('❌ Failed to save Google Drive link:', error);
-            alert('Failed to save Google Drive link. Please try again.');
+            console.error('❌ Failed to save online drive links:', error);
+            alert('Failed to save online drive links. Please try again.');
         } finally {
-            setIsSavingGoogleDriveLink(false);
+            setIsSavingOnlineDriveLinks(false);
         }
     };
 
@@ -4702,37 +4752,6 @@ function initializeProjectDetail() {
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-0.5">Due Date</label>
                             <p className="text-sm text-gray-900">{formatProjectDate(project.dueDate) || 'Not set'}</p>
-                        </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Google Drive Folder Link</label>
-                            <div className="flex flex-col sm:flex-row gap-2">
-                                <input
-                                    type="url"
-                                    value={googleDriveLinkInput}
-                                    onChange={(e) => setGoogleDriveLinkInput(e.target.value)}
-                                    placeholder="https://drive.google.com/drive/folders/..."
-                                    className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleSaveGoogleDriveLink}
-                                    disabled={isSavingGoogleDriveLink}
-                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                                >
-                                    {isSavingGoogleDriveLink ? 'Saving...' : 'Save Link'}
-                                </button>
-                                {project.googleDriveLink && (
-                                    <a
-                                        href={project.googleDriveLink}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 flex items-center justify-center gap-1"
-                                    >
-                                        <i className="fas fa-external-link-alt text-[10px]"></i>
-                                        Open
-                                    </a>
-                                )}
-                            </div>
                         </div>
                         {project.description && (
                             <div className="md:col-span-2">
@@ -4798,111 +4817,103 @@ function initializeProjectDetail() {
                     </div>
                 </div>
 
-                {/* Documents Section */}
+                {/* Online Drive Section */}
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
                     <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-semibold text-gray-900">Documents</h2>
+                        <h2 className="text-sm font-semibold text-gray-900">Online Drive</h2>
                         <button
-                            onClick={() => {
-                                const input = document.createElement('input');
-                                input.type = 'file';
-                                input.multiple = true;
-                                input.onchange = (e) => {
-                                    // Get current user info
-                                    const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
-                                    
-                                    const files = Array.from(e.target.files);
-                                    const newDocs = files.map(file => ({
-                                        id: Date.now() + Math.random(),
-                                        name: file.name,
-                                        size: file.size,
-                                        type: file.type,
-                                        uploadedAt: new Date().toISOString(),
-                                        uploadedBy: currentUser.name,
-                                        uploadedByEmail: currentUser.email,
-                                        uploadedById: currentUser.id
-                                    }));
-                                    setDocuments(prev => [...prev, ...newDocs]);
-                                };
-                                input.click();
-                            }}
-                            className="px-2 py-0.5 bg-primary-600 text-white text-xs rounded hover:bg-primary-700 transition-colors font-medium flex items-center gap-1"
+                            type="button"
+                            onClick={handleSaveOnlineDriveLinks}
+                            disabled={isSavingOnlineDriveLinks}
+                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                         >
-                            <i className="fas fa-upload text-[10px]"></i>
-                            <span>Upload</span>
+                            {isSavingOnlineDriveLinks ? 'Saving...' : 'Save Links'}
                         </button>
                     </div>
-                    
-                    {documents.length === 0 ? (
-                        <div className="text-center py-6 text-gray-400">
-                            <i className="fas fa-file text-3xl mb-2 opacity-50"></i>
-                            <p className="text-xs">No documents yet</p>
-                            <button
-                                onClick={() => {
-                                    const input = document.createElement('input');
-                                    input.type = 'file';
-                                    input.multiple = true;
-                                    input.onchange = (e) => {
-                                        // Get current user info
-                                        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
-                                        
-                                        const files = Array.from(e.target.files);
-                                        const newDocs = files.map(file => ({
-                                            id: Date.now() + Math.random(),
-                                            name: file.name,
-                                            size: file.size,
-                                            type: file.type,
-                                            uploadedAt: new Date().toISOString(),
-                                            uploadedBy: currentUser.name,
-                                            uploadedByEmail: currentUser.email,
-                                            uploadedById: currentUser.id
-                                        }));
-                                        setDocuments(prev => [...prev, ...newDocs]);
-                                    };
-                                    input.click();
-                                }}
-                                className="mt-2 px-2 py-0.5 bg-primary-600 text-white text-xs rounded hover:bg-primary-700 font-medium flex items-center gap-1 mx-auto"
-                            >
-                                <i className="fas fa-upload text-[10px]"></i>
-                                <span>Upload Documents</span>
-                            </button>
+
+                    <div className="space-y-4">
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs font-medium text-gray-600">Google Drive Links</label>
+                                <button
+                                    type="button"
+                                    onClick={() => handleAddDriveSpot('googleDrive')}
+                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                                >
+                                    + Add Spot
+                                </button>
+                            </div>
+                            {(onlineDriveLinksInput.googleDrive || []).map((link, index) => (
+                                <div key={`gdrive-${index}`} className="flex items-center gap-2 mb-2">
+                                    <input
+                                        type="url"
+                                        value={link}
+                                        onChange={(e) => handleUpdateDriveLink('googleDrive', index, e.target.value)}
+                                        placeholder="https://drive.google.com/drive/folders/..."
+                                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    />
+                                    {link && (
+                                        <a
+                                            href={link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+                                        >
+                                            Open
+                                        </a>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveDriveSpot('googleDrive', index)}
+                                        className="px-2 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ))}
                         </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {documents.map(doc => {
-                                const fileIcon = doc.type?.includes('pdf') ? 'fa-file-pdf text-red-600' :
-                                               doc.type?.includes('word') || doc.type?.includes('document') ? 'fa-file-word text-blue-600' :
-                                               doc.type?.includes('excel') || doc.type?.includes('spreadsheet') ? 'fa-file-excel text-green-600' :
-                                               doc.type?.includes('image') ? 'fa-file-image text-purple-600' :
-                                               'fa-file text-gray-600';
-                                const fileSize = doc.size ? (doc.size / 1024).toFixed(1) + ' KB' : 'Unknown size';
-                                
-                                return (
-                                    <div key={doc.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group">
-                                        <i className={`fas ${fileIcon} text-xl`}></i>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-900 truncate">{doc.name}</p>
-                                            <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                                                <span>{fileSize}</span>
-                                                <span>•</span>
-                                                <span>{new Date(doc.uploadedAt).toLocaleDateString()}</span>
-                                                <span>•</span>
-                                                <span>{doc.uploadedBy}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button
-                                                className="text-primary-600 hover:text-primary-800 p-1"
-                                                title="Download"
-                                            >
-                                                <i className="fas fa-download text-xs"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs font-medium text-gray-600">OneDrive Links</label>
+                                <button
+                                    type="button"
+                                    onClick={() => handleAddDriveSpot('oneDrive')}
+                                    className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                                >
+                                    + Add Spot
+                                </button>
+                            </div>
+                            {(onlineDriveLinksInput.oneDrive || []).map((link, index) => (
+                                <div key={`onedrive-${index}`} className="flex items-center gap-2 mb-2">
+                                    <input
+                                        type="url"
+                                        value={link}
+                                        onChange={(e) => handleUpdateDriveLink('oneDrive', index, e.target.value)}
+                                        placeholder="https://onedrive.live.com/..."
+                                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    />
+                                    {link && (
+                                        <a
+                                            href={link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+                                        >
+                                            Open
+                                        </a>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveDriveSpot('oneDrive', index)}
+                                        className="px-2 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ))}
                         </div>
-                    )}
+                    </div>
                 </div>
 
                 {/* Team Members */}

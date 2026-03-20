@@ -501,6 +501,7 @@ model Project {
   type                         String                   @default("Project")
   assignedTo                   String                   @default("")
   googleDriveLink              String                   @default("")
+  onlineDriveLinks             String                   @default("{\"googleDrive\":[\"\"],\"oneDrive\":[\"\"]}")
   tasksList                    String                   @default("[]") // Legacy - deprecated, use Task table
   notes                        String                   @default("")
   hasTimeProcess               Boolean                  @default(false)
