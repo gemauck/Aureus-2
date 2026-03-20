@@ -6832,12 +6832,23 @@ const Clients = React.memo(() => {
         }
 
         try {
-            if (!window.api?.updateLead) {
-                alert('Lead conversion is currently unavailable. Please refresh and try again.');
-                return;
-            }
+            const updateLeadFn = window.api?.updateLead || window.DatabaseAPI?.updateLead || (async (id, payload) => {
+                const token = window.storage?.getToken?.();
+                const response = await fetch(`/api/leads/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(payload || {})
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data?.message || data?.error || 'Conversion request failed');
+                return data;
+            });
             // Convert in-place so the same record id keeps all associated data.
-            const convertResponse = await window.api.updateLead(lead.id, { type: 'client' });
+            const convertResponse = await updateLeadFn(lead.id, { type: 'client' });
             const convertedClient = convertResponse?.data?.client || convertResponse?.client || null;
 
             // Refresh data from API
@@ -6865,15 +6876,26 @@ const Clients = React.memo(() => {
             const user = window.storage?.getUser?.() || {};
             const normalizedRole = (user?.role || '').toString().trim().toLowerCase();
             const canRevert = normalizedRole === 'admin' || normalizedRole === 'superadmin' || normalizedRole === 'super-admin' || normalizedRole === 'super_admin';
-            if (!window.api?.updateClient) {
-                alert('Lead reversion is currently unavailable. Please refresh and try again.');
-                return;
-            }
+            const updateClientFn = window.api?.updateClient || window.DatabaseAPI?.updateClient || (async (id, payload) => {
+                const token = window.storage?.getToken?.();
+                const response = await fetch(`/api/clients/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(payload || {})
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data?.message || data?.error || 'Reversion request failed');
+                return data;
+            });
             if (!canRevert) {
                 alert('Only Admin/SuperAdmin can move a client back to lead.');
                 return;
             }
-            await window.api.updateClient(client.id, { type: 'lead' });
+            await updateClientFn(client.id, { type: 'lead' });
             await Promise.all([
                 loadClients(true).catch(() => {}),
                 loadLeads(true).catch(() => {})

@@ -332,13 +332,24 @@ const ClientsDatabaseFirst = () => {
     // Convert lead to client
     const convertLeadToClient = async (lead) => {
         try {
-            if (!window.api?.updateLead) {
-                alert('Lead conversion is currently unavailable. Please refresh and try again.');
-                return;
-            }
+            const updateLeadFn = window.api?.updateLead || window.DatabaseAPI?.updateLead || (async (id, payload) => {
+                const token = window.storage?.getToken?.();
+                const response = await fetch(`/api/leads/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(payload || {})
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data?.message || data?.error || 'Conversion request failed');
+                return data;
+            });
 
             // Convert in-place so all related data remains attached to same record id.
-            await window.api.updateLead(lead.id, { type: 'client' });
+            await updateLeadFn(lead.id, { type: 'client' });
 
             // Refresh local state from API
             await Promise.all([
