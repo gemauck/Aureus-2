@@ -332,9 +332,8 @@ const ClientsDatabaseFirst = () => {
     // Convert lead to client
     const convertLeadToClient = async (lead) => {
         try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                alert('Please log in to convert lead');
+            if (!window.api?.updateLead) {
+                alert('Lead conversion is currently unavailable. Please refresh and try again.');
                 return;
             }
 

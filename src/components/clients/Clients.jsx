@@ -1829,6 +1829,11 @@ const Clients = React.memo(() => {
         
         const handleRouteChange = async (route) => {
             if (route?.page !== 'clients') return;
+            const routeKey = `${route?.page || 'clients'}:${JSON.stringify(route?.segments || [])}:${route?.search?.toString?.() || ''}`;
+            if (lastHandledRouteKeyRef.current === routeKey) {
+                return;
+            }
+            lastHandledRouteKeyRef.current = routeKey;
             
             // If no segments, ensure we're showing a valid list view
             // CRITICAL: Don't reset detail views if they were opened programmatically (via handleOpenClient/handleOpenLead)
@@ -1837,7 +1842,8 @@ const Clients = React.memo(() => {
                 setEntityNotFoundId(null); // Clear not-found state when navigating to list
                 const validListViews = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'];
                 const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
-                const isValidView = validListViews.includes(viewMode) || validDetailViews.includes(viewMode);
+                const currentViewMode = viewModeRef.current;
+                const isValidView = validListViews.includes(currentViewMode) || validDetailViews.includes(currentViewMode);
                 
                 // If viewMode is invalid, reset to 'clients' (the default list view)
                 if (!isValidView) {
@@ -1862,7 +1868,7 @@ const Clients = React.memo(() => {
             if (!entityId) return;
             
             // If we already know this entity doesn't exist (404), show not-found state and avoid repeated API calls
-            if (entityId === entityNotFoundId) {
+            if (entityId === entityNotFoundIdRef.current) {
                 setEditingLeadId(null);
                 setEditingClientId(null);
                 selectedClientRef.current = null;
@@ -1915,12 +1921,12 @@ const Clients = React.memo(() => {
             let entityType = null;
             
             // Try to find in clients first
-            entity = clients.find(c => String(c.id) === String(entityId));
+            entity = (clientsRef.current || []).find(c => String(c.id) === String(entityId));
             if (entity) {
                 entityType = 'client';
             } else {
                 // Try to find in leads
-                const leadFromList = leads.find(l => String(l.id) === String(entityId));
+                const leadFromList = (leadsRef.current || []).find(l => String(l.id) === String(entityId));
                 if (leadFromList) {
                     entityType = 'lead';
                     // Always refetch lead from API when opening from URL so we get sites (list rarely has clientSites)
@@ -1987,10 +1993,10 @@ const Clients = React.memo(() => {
                 // When opening an entity: set tab to overview only if we're not already viewing this entity.
                 // If we're already on this lead/client (e.g. we added a contact and leads refetched), leave
                 // the current tab so we don't revert from Contacts/Sites/Calendar back to Overview.
-                const alreadyViewingThisLead = entityType === 'lead' && viewMode === 'lead-detail' &&
-                    (String(editingLeadId) === String(entity.id) || String(selectedLeadRef.current?.id) === String(entity.id));
-                const alreadyViewingThisClient = entityType === 'client' && viewMode === 'client-detail' &&
-                    (String(editingClientId) === String(entity.id) || String(selectedClientRef.current?.id) === String(entity.id));
+                const alreadyViewingThisLead = entityType === 'lead' && viewModeRef.current === 'lead-detail' &&
+                    (String(editingLeadIdRef.current) === String(entity.id) || String(selectedLeadRef.current?.id) === String(entity.id));
+                const alreadyViewingThisClient = entityType === 'client' && viewModeRef.current === 'client-detail' &&
+                    (String(editingClientIdRef.current) === String(entity.id) || String(selectedClientRef.current?.id) === String(entity.id));
 
                 if (entityType === 'client') {
                     const tabFromUrl = route.search?.get('tab');
@@ -2051,7 +2057,7 @@ const Clients = React.memo(() => {
                 unsubscribe();
             }
         };
-    }, [viewMode, clients, leads, handleOpenClient, handleOpenLead, editingLeadId, editingClientId]);
+    }, [handleOpenClient, handleOpenLead]);
 
     // Modal callbacks no longer needed - modals own their state
     
@@ -6826,37 +6832,25 @@ const Clients = React.memo(() => {
         }
 
         try {
-            const token = window.storage?.getToken?.();
-            if (token && window.api?.updateLead) {
-                // Convert in-place so the same record id keeps all associated data.
-                const convertResponse = await window.api.updateLead(lead.id, { type: 'client' });
-                const convertedClient = convertResponse?.data?.client || convertResponse?.client || null;
-
-                // Refresh data from API
-                await Promise.all([
-                    loadClients(true).catch(() => {}),
-                    loadLeads(true).catch(() => {})
-                ]);
-
-                // Close lead detail and force route back to clients list.
-                setEditingLeadId(null);
-                setEditingClientId(null);
-                selectedLeadRef.current = null;
-                selectedClientRef.current = null;
-                setViewMode('clients');
-                if (window.RouteState) {
-                    window.RouteState.setPageSubpath('clients', [], {
-                        replace: false,
-                        preserveSearch: false,
-                        preserveHash: false
-                    });
-                }
-                // Show converted client in list context immediately.
-                setSearchTerm((convertedClient?.name || lead.name || '').trim());
-                alert('Lead converted to client successfully!');
-            } else {
-                alert('Please log in to convert lead');
+            if (!window.api?.updateLead) {
+                alert('Lead conversion is currently unavailable. Please refresh and try again.');
+                return;
             }
+            // Convert in-place so the same record id keeps all associated data.
+            const convertResponse = await window.api.updateLead(lead.id, { type: 'client' });
+            const convertedClient = convertResponse?.data?.client || convertResponse?.client || null;
+
+            // Refresh data from API
+            await Promise.all([
+                loadClients(true).catch(() => {}),
+                loadLeads(true).catch(() => {})
+            ]);
+
+            // Close lead detail and force route back to clients list.
+            navigateToCrmListView('clients', { replace: true });
+            // Show converted client in list context immediately.
+            setSearchTerm((convertedClient?.name || lead.name || '').trim());
+            alert('Lead converted to client successfully!');
         } catch (error) {
             alert('Failed to convert lead to client: ' + (error.message || 'Unknown error'));
         }
@@ -6868,12 +6862,11 @@ const Clients = React.memo(() => {
             return;
         }
         try {
-            const token = window.storage?.getToken?.();
             const user = window.storage?.getUser?.() || {};
             const normalizedRole = (user?.role || '').toString().trim().toLowerCase();
             const canRevert = normalizedRole === 'admin' || normalizedRole === 'superadmin' || normalizedRole === 'super-admin' || normalizedRole === 'super_admin';
-            if (!token || !window.api?.updateClient) {
-                alert('Please log in to revert to lead');
+            if (!window.api?.updateClient) {
+                alert('Lead reversion is currently unavailable. Please refresh and try again.');
                 return;
             }
             if (!canRevert) {
@@ -9648,30 +9641,7 @@ const Clients = React.memo(() => {
                 <button
                     type="button"
                     onClick={() => {
-                        // Only update if viewMode is actually changing
-                        if (viewMode !== 'groups') {
-                            // Clear selected entities and close any open modals
-                            selectedClientRef.current = null;
-                            selectedLeadRef.current = null;
-                            isFormOpenRef.current = false;
-                            setViewMode('groups');
-                            // Clear URL segments to prevent route handler from reopening entities
-                            if (window.RouteState && window.RouteState.navigate) {
-                                try {
-                                    window.RouteState.navigate({
-                                        page: 'clients',
-                                        segments: [],
-                                        search: '',
-                                        hash: '',
-                                        replace: false,
-                                        preserveSearch: false,
-                                        preserveHash: false
-                                    });
-                                } catch (routeError) {
-                                    // Silently fail - URL update is non-critical
-                                }
-                            }
-                        }
+                        if (viewMode !== 'groups') navigateToCrmListView('groups', { replace: true });
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'groups' 
@@ -9687,27 +9657,7 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={() => {
-                        // Clear selected entities and close any open modals
-                        selectedClientRef.current = null;
-                        selectedLeadRef.current = null;
-                        isFormOpenRef.current = false;
-                        setViewMode('clients');
-                        // Clear URL segments to prevent route handler from reopening entities
-                        if (window.RouteState && window.RouteState.navigate) {
-                            try {
-                                window.RouteState.navigate({
-                                    page: 'clients',
-                                    segments: [],
-                                    search: '',
-                                    hash: '',
-                                    replace: false,
-                                    preserveSearch: false,
-                                    preserveHash: false
-                                });
-                            } catch (routeError) {
-                                // Silently fail - URL update is non-critical
-                            }
-                        }
+                        navigateToCrmListView('clients', { replace: true });
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'clients' 
@@ -9723,27 +9673,7 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={() => {
-                        // Clear selected entities and close any open modals
-                        selectedClientRef.current = null;
-                        selectedLeadRef.current = null;
-                        isFormOpenRef.current = false;
-                        setViewMode('leads');
-                        // Clear URL segments to prevent route handler from reopening entities
-                        if (window.RouteState && window.RouteState.navigate) {
-                            try {
-                                window.RouteState.navigate({
-                                    page: 'clients',
-                                    segments: [],
-                                    search: '',
-                                    hash: '',
-                                    replace: false,
-                                    preserveSearch: false,
-                                    preserveHash: false
-                                });
-                            } catch (routeError) {
-                                // Silently fail - URL update is non-critical
-                            }
-                        }
+                        navigateToCrmListView('leads', { replace: true });
                     }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'leads' 
@@ -9759,27 +9689,7 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={() => {
-                        // Clear selected entities and close any open modals
-                        selectedClientRef.current = null;
-                        selectedLeadRef.current = null;
-                        isFormOpenRef.current = false;
-                        setViewMode('pipeline');
-                        // Clear URL segments to prevent route handler from reopening entities
-                        if (window.RouteState && window.RouteState.navigate) {
-                            try {
-                                window.RouteState.navigate({
-                                    page: 'clients',
-                                    segments: [],
-                                    search: '',
-                                    hash: '',
-                                    replace: false,
-                                    preserveSearch: false,
-                                    preserveHash: false
-                                });
-                            } catch (routeError) {
-                                // Silently fail - URL update is non-critical
-                            }
-                        }
+                        navigateToCrmListView('pipeline', { replace: true });
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
@@ -9794,27 +9704,7 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={() => {
-                        // Clear selected entities and close any open modals
-                        selectedClientRef.current = null;
-                        selectedLeadRef.current = null;
-                        isFormOpenRef.current = false;
-                        setViewMode('news-feed');
-                        // Clear URL segments to prevent route handler from reopening entities
-                        if (window.RouteState && window.RouteState.navigate) {
-                            try {
-                                window.RouteState.navigate({
-                                    page: 'clients',
-                                    segments: [],
-                                    search: '',
-                                    hash: '',
-                                    replace: false,
-                                    preserveSearch: false,
-                                    preserveHash: false
-                                });
-                            } catch (routeError) {
-                                // Silently fail - URL update is non-critical
-                            }
-                        }
+                        navigateToCrmListView('news-feed', { replace: true });
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'news-feed' 
