@@ -7556,11 +7556,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 {isLead && onConvertToClient && client && (
                                     <button 
                                         type="button" 
-                                        onClick={() => {
-                                            if (onConvertToClient) {
-                                                const dataToConvert = (formDataRef.current && formDataRef.current.id === client.id) ? formDataRef.current : client;
-                                                onConvertToClient(dataToConvert);
+                                        onClick={async () => {
+                                            if (!onConvertToClient) return;
+                                            const formData = formDataRef.current || null;
+                                            const resolvedId = client?.id || formData?.id || null;
+                                            if (!resolvedId) {
+                                                alert('Cannot convert lead: missing lead identifier.');
+                                                return;
                                             }
+                                            const dataToConvert = {
+                                                ...(client || {}),
+                                                ...(formData || {}),
+                                                id: String(resolvedId)
+                                            };
+                                            await Promise.resolve(onConvertToClient(dataToConvert));
                                         }}
                                         className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
                                     >
@@ -7575,11 +7584,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     return wasConvertedFromLead ? (
                                         <button 
                                             type="button" 
-                                            onClick={() => {
-                                                if (onRevertToLead) {
-                                                    const dataToRevert = (formDataRef.current && formDataRef.current.id === client.id) ? formDataRef.current : client;
-                                                    onRevertToLead(dataToRevert);
+                                            onClick={async () => {
+                                                if (!onRevertToLead) return;
+                                                const formData = formDataRef.current || null;
+                                                const resolvedId = client?.id || formData?.id || null;
+                                                if (!resolvedId) {
+                                                    alert('Cannot revert client: missing client identifier.');
+                                                    return;
                                                 }
+                                                const dataToRevert = {
+                                                    ...(client || {}),
+                                                    ...(formData || {}),
+                                                    id: String(resolvedId)
+                                                };
+                                                await Promise.resolve(onRevertToLead(dataToRevert));
                                             }}
                                             className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium flex items-center gap-2"
                                         >
