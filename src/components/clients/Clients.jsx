@@ -89,7 +89,9 @@ const useEnsureGlobalComponent = (globalName) => {
         if (typeof window === 'undefined' || typeof document === 'undefined') {
             return;
         }
-        const shouldForceReloadScript = globalName === 'ClientDetailModal';
+        // Do not force-reload ClientDetailModal on every mount/update.
+        // Re-registering the component script during active renders can trigger React hook-order/runtime errors.
+        const shouldForceReloadScript = false;
 
         if (component && !shouldForceReloadScript) {
             return;

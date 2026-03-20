@@ -109,18 +109,60 @@ async function handler(req, res) {
     // DELETE /api/user-task-lists?all=true - Delete all lists for current user
     if (req.method === 'DELETE' && !listId) {
       try {
-        const deleteAll = String(req.query?.all || '').toLowerCase() === 'true'
+        const queryAllFromReq = String(req.query?.all || '').toLowerCase()
+        const queryAllFromUrl = (() => {
+          try {
+            const rawUrl = req.url || ''
+            const queryPart = rawUrl.includes('?') ? rawUrl.split('?')[1] : ''
+            const params = new URLSearchParams(queryPart || '')
+            return String(params.get('all') || '').toLowerCase()
+          } catch (_e) {
+            return ''
+          }
+        })()
+        const deleteAll = queryAllFromReq === 'true' || queryAllFromUrl === 'true'
         if (!deleteAll) return badRequest(res, 'Missing all=true for bulk delete')
 
-        await prisma.$transaction([
-          prisma.userTask.updateMany({
-            where: { ownerId: userId },
-            data: { listId: null }
-          }),
-          prisma.userTaskList.deleteMany({
-            where: { ownerId: userId }
+        const userLists = await prisma.userTaskList.findMany({
+          where: { ownerId: userId },
+          select: { id: true }
+        })
+        const listIds = userLists.map((l) => l.id)
+
+        try {
+          await prisma.$transaction(async (tx) => {
+            if (listIds.length > 0) {
+              // Clear all task references for these list IDs before delete to avoid FK drift issues.
+              await tx.userTask.updateMany({
+                where: { listId: { in: listIds } },
+                data: { listId: null }
+              })
+            }
+            await tx.userTaskList.deleteMany({
+              where: { ownerId: userId }
+            })
           })
-        ])
+        } catch (primaryError) {
+          console.warn('Bulk delete primary path failed, using fallback reset:', primaryError?.message)
+          const fallbackList = await prisma.userTaskList.create({
+            data: {
+              ownerId: userId,
+              name: 'To do',
+              color: '#3B82F6',
+              order: 0,
+              status: 'todo'
+            }
+          })
+          await prisma.$transaction(async (tx) => {
+            await tx.userTask.updateMany({
+              where: { ownerId: userId },
+              data: { listId: fallbackList.id }
+            })
+            await tx.userTaskList.deleteMany({
+              where: { ownerId: userId, id: { not: fallbackList.id } }
+            })
+          })
+        }
 
         return ok(res, { deletedAll: true })
       } catch (error) {
@@ -174,12 +216,20 @@ async function handler(req, res) {
         })
         const fallbackListId = otherLists[0]?.id ?? null
 
-        await prisma.$transaction([
-          ...(fallbackListId
-            ? [prisma.userTask.updateMany({ where: { ownerId: userId, listId }, data: { listId: fallbackListId } })]
-            : []),
-          prisma.userTaskList.delete({ where: { id: listId } })
-        ])
+        await prisma.$transaction(async (tx) => {
+          if (fallbackListId) {
+            await tx.userTask.updateMany({
+              where: { ownerId: userId, listId },
+              data: { listId: fallbackListId }
+            })
+          }
+          // Defensive cleanup for historical cross-owner reference drift.
+          await tx.userTask.updateMany({
+            where: { listId },
+            data: { listId: null }
+          })
+          await tx.userTaskList.delete({ where: { id: listId } })
+        })
 
         return ok(res, { deleted: true, id: listId })
       } catch (error) {

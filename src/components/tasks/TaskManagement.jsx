@@ -497,6 +497,13 @@ const TaskManagement = () => {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            if (response.status === 404) {
+                // If the list is already gone (stale UI), refresh and continue.
+                setListMenuOpenId(null);
+                await loadUserTaskLists();
+                await loadTasks();
+                return;
+            }
             if (!response.ok) {
                 let details = '';
                 try {
