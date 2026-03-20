@@ -4906,12 +4906,28 @@ Abcotronics`;
             saveNoticeTimeoutRef.current = setTimeout(() => setSaveNotice(null), 2500);
         };
 
+        const isDefaultLikeTemplate = (template) => {
+            if (!template || typeof template !== 'object') return true;
+            const normalized = normalizeTemplate(template);
+            const sameRecipients = (normalized.recipients || []).length === 0;
+            const sameCc = (normalized.cc || []).length === 0;
+            const sameRecipientName = !normalized.recipientName;
+            const sameSubject = (normalized.subject || '').trim() === (defaultSubject || '').trim();
+            const sameBody = (normalized.body || '').trim() === (defaultBody || '').trim();
+            const samePlainText = !!normalized.sendPlainTextOnly === false;
+            const sameSchedule = !normalized.schedule || normalized.schedule.frequency === 'none';
+            return sameRecipients && sameCc && sameRecipientName && sameSubject && sameBody && samePlainText && sameSchedule;
+        };
+
         const autoSaveTemplateIfChanged = async () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
             const current = buildTemplateFromState();
             const saved = lastSavedTemplate || buildTemplateFromSaved(getLatestEmailRequest());
             const hasInput = current.recipients.length > 0 || current.cc.length > 0 || current.subject || current.body;
             if (!hasInput) return;
+            // Guard against accidental overwrite when modal opened before latest saved template finished loading.
+            // In that case, "current" may only contain generated defaults and should not replace persisted data.
+            if (isDefaultLikeTemplate(current) && !isDefaultLikeTemplate(saved)) return;
             if (JSON.stringify(current) === JSON.stringify(saved)) return;
             await saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, current);
         };
