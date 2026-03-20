@@ -126,7 +126,10 @@ const EmployeeDetail = (props) => {
             if (formData.phone !== undefined) updateData.phone = formData.phone;
             
             // Employment info
-            if (formData.employeeNumber !== undefined) updateData.employeeNumber = formData.employeeNumber;
+            if (formData.employeeNumber !== undefined) {
+                const en = formData.employeeNumber
+                updateData.employeeNumber = en === '' || en == null ? null : en
+            }
             if (formData.position !== undefined) updateData.position = formData.position;
             if (formData.jobTitle !== undefined) updateData.jobTitle = formData.jobTitle;
             if (formData.department !== undefined) updateData.department = formData.department;
@@ -145,19 +148,25 @@ const EmployeeDetail = (props) => {
                 }
             }
             
-            // Financial info
+            // Financial info (salary is non-nullable Float in DB — never send null)
             if (formData.salary !== undefined) {
-                updateData.salary = formData.salary ? parseFloat(formData.salary) : null;
+                const raw = formData.salary
+                if (raw === '' || raw === null || raw === undefined) {
+                    updateData.salary = 0
+                } else {
+                    const n = parseFloat(raw)
+                    updateData.salary = Number.isNaN(n) ? 0 : n
+                }
             }
             if (formData.taxNumber !== undefined) updateData.taxNumber = formData.taxNumber || null;
             if (formData.bankName !== undefined) updateData.bankName = formData.bankName || null;
             if (formData.accountNumber !== undefined) updateData.accountNumber = formData.accountNumber || null;
             if (formData.branchCode !== undefined) updateData.branchCode = formData.branchCode || null;
             
-            // Personal info
-            if (formData.idNumber !== undefined) updateData.idNumber = formData.idNumber || null;
-            if (formData.address !== undefined) updateData.address = formData.address || null;
-            if (formData.emergencyContact !== undefined) updateData.emergencyContact = formData.emergencyContact || null;
+            // Personal info (idNumber/address/emergencyContact are non-nullable strings in schema)
+            if (formData.idNumber !== undefined) updateData.idNumber = formData.idNumber ?? '';
+            if (formData.address !== undefined) updateData.address = formData.address ?? '';
+            if (formData.emergencyContact !== undefined) updateData.emergencyContact = formData.emergencyContact ?? '';
             
             
             const response = await fetch(`/api/users/${employeeId}`, {

@@ -202,6 +202,10 @@ async function handler(req, res) {
 
             const allowedUpdates = sanitizeUserUpdatePayload(pickAllowedUserFields(rest))
 
+            if (Object.keys(allowedUpdates).length === 0) {
+                return badRequest(res, 'No valid fields to update')
+            }
+
             // Update user
             const user = await prisma.user.update({
                 where: { id: userId },
