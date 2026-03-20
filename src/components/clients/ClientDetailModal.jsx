@@ -7557,7 +7557,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <button 
                                         type="button" 
                                         onClick={async () => {
-                                            if (!onConvertToClient) return;
                                             const formData = formDataRef.current || null;
                                             const resolvedId = client?.id || formData?.id || null;
                                             if (!resolvedId) {
@@ -7569,7 +7568,28 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 ...(formData || {}),
                                                 id: String(resolvedId)
                                             };
-                                            await Promise.resolve(onConvertToClient(dataToConvert));
+                                            try {
+                                                const token = window.storage?.getToken?.();
+                                                const response = await fetch(`/api/leads/${String(resolvedId)}`, {
+                                                    method: 'PATCH',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                                                    },
+                                                    credentials: 'include',
+                                                    body: JSON.stringify({ type: 'client' })
+                                                });
+                                                const payload = await response.json().catch(() => ({}));
+                                                if (!response.ok) {
+                                                    throw new Error(payload?.message || payload?.error || 'Conversion failed');
+                                                }
+                                                if (onConvertToClient) {
+                                                    try { await Promise.resolve(onConvertToClient(dataToConvert)); } catch (_) {}
+                                                }
+                                                window.location.assign('/clients');
+                                            } catch (error) {
+                                                alert(`Failed to convert lead to client: ${error?.message || 'Unknown error'}`);
+                                            }
                                         }}
                                         className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
                                     >
