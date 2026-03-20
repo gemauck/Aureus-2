@@ -275,26 +275,53 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             };
         }, []);
 
+        const loadEmployeeDetailComponent = useCallback(() => {
+            if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
+                setEmployeeDetailComponent(window.EmployeeDetail);
+                return Promise.resolve(true);
+            }
+
+            const existingScript = document.querySelector('script[data-component="employee-detail"]');
+            if (existingScript) {
+                return new Promise((resolve) => {
+                    const complete = () => {
+                        if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
+                            setEmployeeDetailComponent(window.EmployeeDetail);
+                            window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'EmployeeDetail' } }));
+                            resolve(true);
+                            return;
+                        }
+                        resolve(false);
+                    };
+                    existingScript.addEventListener('load', complete, { once: true });
+                    setTimeout(complete, 1200);
+                });
+            }
+
+            const scriptSrc = '/dist/src/components/leave-platform/EmployeeDetail.js';
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.dataset.component = 'employee-detail';
+                script.src = scriptSrc + (window.__BUILD_VERSION__ ? '?v=' + window.__BUILD_VERSION__ : '');
+                script.onload = () => {
+                    if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
+                        setEmployeeDetailComponent(window.EmployeeDetail);
+                        window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'EmployeeDetail' } }));
+                        resolve(true);
+                        return;
+                    }
+                    resolve(false);
+                };
+                script.onerror = () => resolve(false);
+                document.head.appendChild(script);
+            });
+        }, []);
+
         // Proactively load EmployeeDetail when user is on Employees tab and component not yet on window
         useEffect(() => {
             if (currentTab !== 'employees') return;
-            if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
-                setEmployeeDetailComponent(window.EmployeeDetail);
-                return;
-            }
-            const scriptSrc = '/dist/src/components/leave-platform/EmployeeDetail.js';
-            if (document.querySelector(`script[src*="EmployeeDetail.js"]`)) return;
-            const script = document.createElement('script');
-            script.src = scriptSrc + (window.__BUILD_VERSION__ ? '?v=' + window.__BUILD_VERSION__ : '');
-            script.onload = () => {
-                if (window.EmployeeDetail && typeof window.EmployeeDetail === 'function') {
-                    setEmployeeDetailComponent(window.EmployeeDetail);
-                    window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'EmployeeDetail' } }));
-                }
-            };
-            document.head.appendChild(script);
-            return () => {};
-        }, [currentTab]);
+            loadEmployeeDetailComponent();
+        }, [currentTab, loadEmployeeDetailComponent]);
 
         const leaveUtils = window.leaveUtils || {};
         // South African BCEA leave types (centralised in leaveUtils)
@@ -981,13 +1008,18 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                     <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedEmp?.name || 'Employee'}</h3>
                                     <p className="text-sm text-gray-600 mb-1">{selectedEmp?.email || '—'}</p>
                                     <p className="text-sm text-gray-600 mb-4">{selectedEmp?.role || '—'} · {selectedEmp?.department || '—'}</p>
-                                    <p className="text-sm text-gray-500 mb-4">Refresh the page to load the full employee view and edit here. Employee management is done in Leave and HR → Employees.</p>
+                                    <p className="text-sm text-gray-500 mb-4">The detail module is still loading. Click below to load employee detail without refreshing the page.</p>
                                     <button
                                         type="button"
-                                        onClick={() => window.location.reload()}
+                                        onClick={async () => {
+                                            const loaded = await loadEmployeeDetailComponent();
+                                            if (!loaded) {
+                                                alert('Employee detail is still unavailable. Please try again in a few seconds.');
+                                            }
+                                        }}
                                         className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                                     >
-                                        <i className="fas fa-sync-alt mr-2"></i>Refresh page
+                                        <i className="fas fa-sync-alt mr-2"></i>Load employee detail
                                     </button>
                                 </div>
                             </div>
