@@ -2155,6 +2155,7 @@ function initializeProjectDetail() {
     }, []);
     const [onlineDriveLinksInput, setOnlineDriveLinksInput] = useState(() => parseOnlineDriveLinks(project?.onlineDriveLinks));
     const [isSavingOnlineDriveLinks, setIsSavingOnlineDriveLinks] = useState(false);
+    const onlineDriveInitializedProjectIdRef = useRef(null);
     // Per-note activity: when editing a note, activity for that note; in list, expanded note's activity
     const [noteActivityForEditor, setNoteActivityForEditor] = useState([]);
     const [expandedNoteActivityId, setExpandedNoteActivityId] = useState(null);
@@ -2178,7 +2179,11 @@ function initializeProjectDetail() {
         setExpandedNoteActivityId(null);
         setNoteActivityByNoteId({});
         setEditorActivityPanelOpen(false);
+        const currentProjectId = project?.id || null;
+        if (!currentProjectId) return;
+        if (onlineDriveInitializedProjectIdRef.current === currentProjectId) return;
         setOnlineDriveLinksInput(parseOnlineDriveLinks(project?.onlineDriveLinks));
+        onlineDriveInitializedProjectIdRef.current = currentProjectId;
     }, [project?.id, parseOnlineDriveLinks]);
 
     const loadActivityLog = useCallback(async () => {
