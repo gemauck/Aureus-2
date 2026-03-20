@@ -2,8 +2,76 @@
 import { authRequired } from '../_lib/authRequired.js'
 import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized, notFound } from '../_lib/response.js'
+import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+
+/** Fields allowed on PUT /api/users/:id (must match Prisma User model). */
+const ALLOWED_USER_UPDATE_KEYS = new Set([
+    'name', 'email', 'role', 'permissions', 'accessibleProjectIds', 'status',
+    'department', 'jobTitle', 'phone', 'position', 'employeeNumber', 'employmentDate',
+    'idNumber', 'taxNumber', 'bankName', 'accountNumber', 'branchCode', 'salary',
+    'employmentStatus', 'address', 'emergencyContact', 'avatar'
+])
+
+function pickAllowedUserFields(data) {
+    const out = {}
+    if (!data || typeof data !== 'object') return out
+    for (const key of ALLOWED_USER_UPDATE_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+            out[key] = data[key]
+        }
+    }
+    return out
+}
+
+/**
+ * Coerce values so Prisma never receives null for non-nullable User columns
+ * (common cause of 500s from HR/profile forms).
+ */
+function sanitizeUserUpdatePayload(data) {
+    const out = { ...data }
+
+    if ('salary' in out) {
+        if (out.salary === null || out.salary === undefined || out.salary === '') {
+            out.salary = 0
+        } else {
+            const n = Number(out.salary)
+            out.salary = Number.isFinite(n) ? n : 0
+        }
+    }
+
+    // Schema: String (non-optional) — use empty string instead of null
+    for (const key of ['department', 'jobTitle', 'phone', 'position', 'idNumber', 'address', 'emergencyContact', 'avatar']) {
+        if (key in out && out[key] === null) {
+            out[key] = ''
+        }
+    }
+    if ('status' in out && out.status === null) {
+        out.status = 'active'
+    }
+    if ('employmentStatus' in out && out.employmentStatus === null) {
+        out.employmentStatus = 'Active'
+    }
+    if ('role' in out && out.role === null) {
+        delete out.role
+    }
+
+    // Optional unique: avoid duplicate '' collisions
+    if ('employeeNumber' in out && (out.employeeNumber === '' || out.employeeNumber === undefined)) {
+        out.employeeNumber = null
+    }
+
+    // Stored as JSON strings in DB
+    if (Array.isArray(out.permissions)) {
+        out.permissions = JSON.stringify(out.permissions)
+    }
+    if (Array.isArray(out.accessibleProjectIds)) {
+        out.accessibleProjectIds = JSON.stringify(out.accessibleProjectIds)
+    }
+
+    return out
+}
 
 async function handler(req, res) {
     // Extract user ID from URL (strip query parameters)
@@ -97,7 +165,8 @@ async function handler(req, res) {
                 return unauthorized(res, 'Unauthorized to update this user')
             }
 
-            const updateData = req.body || {}
+            const rawBody = await parseJsonBody(req)
+            const updateData = rawBody && typeof rawBody === 'object' ? rawBody : {}
 
             // Only admins can change roles
             if (updateData.role !== undefined && updateData.role !== null) {
@@ -128,9 +197,10 @@ async function handler(req, res) {
                 mustChangePassword,
                 createdAt,
                 updatedAt,
-                ...allowedUpdates
+                ...rest
             } = updateData
 
+            const allowedUpdates = sanitizeUserUpdatePayload(pickAllowedUserFields(rest))
 
             // Update user
             const user = await prisma.user.update({

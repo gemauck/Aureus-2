@@ -650,21 +650,15 @@ const TaskManagement = () => {
       <div
         draggable
         onDragStart={(e) => e.dataTransfer.setData('taskId', String(task.id))}
-        className={`group rounded-xl border p-3 shadow-sm transition hover:shadow-md ${isDark ? 'bg-gray-800/90 border-gray-600/80 hover:border-gray-500' : 'bg-white border-gray-200/90 hover:border-gray-300'}`}
+        onClick={() => openEditTask(task)}
+        className={`group rounded-xl border p-3 shadow-sm transition hover:shadow-md cursor-pointer ${isDark ? 'bg-gray-800/90 border-gray-600/80 hover:border-gray-500' : 'bg-white border-gray-200/90 hover:border-gray-300'}`}
         style={accentColor ? { borderLeftWidth: 3, borderLeftColor: accentColor } : undefined}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openEditTask(task);
-              }}
-              className={`font-semibold leading-snug text-left w-full rounded-lg -m-0.5 p-0.5 transition ${isDark ? 'text-white hover:bg-white/10' : 'text-gray-900 hover:bg-slate-100'} ${normalizeStatus(task.status) === 'completed' ? 'line-through opacity-70' : ''}`}
-            >
+            <p className={`font-semibold leading-snug text-left w-full ${isDark ? 'text-white' : 'text-gray-900'} ${normalizeStatus(task.status) === 'completed' ? 'line-through opacity-70' : ''}`}>
               {task.title}
-            </button>
+            </p>
             {task.category ? <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>{task.category}</p> : null}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
               <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize ${priorityPillClass(task.priority)}`}>{task.priority || 'medium'}</span>
@@ -697,7 +691,10 @@ const TaskManagement = () => {
               </div>
             ) : null}
           </div>
-          <div className="flex flex-col gap-1 shrink-0 opacity-80 group-hover:opacity-100">
+          <div
+            className="flex flex-col gap-1 shrink-0 opacity-80 group-hover:opacity-100"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button type="button" onClick={() => toggleTaskCompletion(task)} className={`p-1.5 rounded-lg ${normalizeStatus(task.status) === 'completed' ? 'text-emerald-400' : 'text-gray-400 hover:text-emerald-400'}`} title="Toggle complete">
               <i className="fas fa-check-circle" />
             </button>
@@ -930,15 +927,13 @@ const TaskManagement = () => {
                     const list = lists.find((l) => String(l.id) === String(task.listId));
                     const due = formatDueShort(task);
                     return (
-                      <tr key={task.id} className={`border-t transition ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-slate-100 hover:bg-slate-50/80'}`}>
+                      <tr
+                        key={task.id}
+                        onClick={() => openEditTask(task)}
+                        className={`border-t transition cursor-pointer ${isDark ? 'border-gray-800 hover:bg-gray-800/50' : 'border-slate-100 hover:bg-slate-50/80'}`}
+                      >
                         <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => openEditTask(task)}
-                            className={`font-medium text-left rounded-lg -m-0.5 p-0.5 transition hover:underline ${isDark ? 'text-white hover:bg-white/10' : 'text-slate-900 hover:bg-slate-100'}`}
-                          >
-                            {task.title}
-                          </button>
+                          <span className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{task.title}</span>
                           {task.category ? <span className={`ml-2 text-[10px] uppercase tracking-wide ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{task.category}</span> : null}
                         </td>
                         <td className="px-4 py-3">
@@ -959,7 +954,7 @@ const TaskManagement = () => {
                             ))}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <button type="button" onClick={() => toggleTaskCompletion(task)} className={`p-2 rounded-lg mr-1 ${normalizeStatus(task.status) === 'completed' ? 'text-emerald-400' : 'text-gray-400 hover:text-emerald-400'}`}><i className="fas fa-check-circle" /></button>
                           <button type="button" onClick={() => openEditTask(task)} className="p-2 rounded-lg text-blue-400 hover:bg-blue-500/10 mr-1"><i className="fas fa-pen" /></button>
                           <button type="button" onClick={() => deleteTask(task.id)} className="p-2 rounded-lg text-rose-400 hover:bg-rose-500/10"><i className="fas fa-trash-alt" /></button>
