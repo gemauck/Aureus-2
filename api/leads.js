@@ -19,6 +19,11 @@ function blankStagesForLead(parsed) {
   return parsed
 }
 
+function hasAdminOrSuperAdminRole(user) {
+  const role = (user?.role || '').toString().trim().toLowerCase()
+  return role === 'admin' || role === 'superadmin' || role === 'super-admin' || role === 'super_admin'
+}
+
 // Phase 2: JSON field parsing and dual-write utilities moved to shared module
 // See: api/_lib/clientJsonFields.js
 
@@ -1812,6 +1817,71 @@ async function handler(req, res) {
             console.error('❌ Lead not found:', id)
             return notFound(res)
           }
+
+          // In-place lead -> client conversion (same record id, preserve all linked data)
+          if (body.type === 'client') {
+            if (!hasAdminOrSuperAdminRole(req.user)) {
+              return res.status(403).json({ error: 'Forbidden', message: 'Only Admin/SuperAdmin can convert leads to clients' })
+            }
+            if (existing.type !== 'lead') {
+              return badRequest(res, 'Only leads can be converted to clients')
+            }
+
+            const existingActivityLog = Array.isArray(existing.activityLogJsonb)
+              ? existing.activityLogJsonb
+              : (typeof existing.activityLog === 'string' && existing.activityLog.trim()
+                ? (() => { try { return JSON.parse(existing.activityLog) } catch (_) { return [] } })()
+                : [])
+
+            const conversionSnapshot = {
+              engagementStage: existing.engagementStage ?? 'Potential',
+              aidaStatus: existing.aidaStatus ?? 'Awareness',
+              value: existing.value ?? existing.revenue ?? 0,
+              probability: existing.probability ?? 0
+            }
+
+            const conversionEntry = {
+              id: Date.now(),
+              type: 'Lead Converted',
+              description: `Converted from lead: ${existing.name || id}`,
+              timestamp: new Date().toISOString(),
+              user: req.user?.name || req.user?.email || 'System',
+              userId: req.user?.sub || 'system',
+              userEmail: req.user?.email || 'system',
+              snapshot: conversionSnapshot
+            }
+
+            const converted = await prisma.client.update({
+              where: { id },
+              data: {
+                type: 'client',
+                activityLog: JSON.stringify([...(existingActivityLog || []), conversionEntry]),
+                activityLogJsonb: [...(existingActivityLog || []), conversionEntry],
+                engagementStage: existing.engagementStage ?? 'Potential',
+                aidaStatus: existing.aidaStatus ?? 'Awareness'
+              },
+              include: {
+                clientContacts: true,
+                clientComments: true,
+                clientSites: true,
+                clientContracts: true,
+                clientProposals: true,
+                clientFollowUps: true,
+                clientServices: true,
+                projects: { select: { id: true, name: true, status: true } },
+                externalAgent: true,
+                groupMemberships: {
+                  include: {
+                    group: { select: { id: true, name: true, type: true, industry: true } }
+                  }
+                }
+              }
+            })
+
+            const parsedClient = parseClientJsonFields(converted)
+            return ok(res, { client: parsedClient, converted: true })
+          }
+
           if (existing.type !== 'lead') {
             console.error('❌ Record is not a lead:', id, 'type:', existing.type)
             return badRequest(res, 'Not a lead')
