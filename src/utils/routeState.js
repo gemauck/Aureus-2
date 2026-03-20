@@ -9,13 +9,9 @@
     let isNavigating = false;
     let navigationLockTimeout = null;
     let lastNavigationUrl = null;
-    let navigationCallCount = 0;
+    let pendingNavigationArgs = null;
     
-    // Debounce for notifySubscribers to prevent rapid-fire notifications
-    let notifyTimeout = null;
     let lastNotifiedRoute = null;
-    let notifyRetryCount = 0;
-    const MAX_NOTIFY_RETRIES = 10;
 
     const sanitizeSegments = (segments = []) => {
         if (!Array.isArray(segments)) {
@@ -150,53 +146,13 @@
     };
 
     const notifySubscribers = () => {
-        // If we're currently navigating, defer notification slightly to prevent loops
-        if (isNavigating) {
-            notifyRetryCount++;
-            if (notifyRetryCount > MAX_NOTIFY_RETRIES) {
-                console.warn('🚨 Too many notifySubscribers retries, forcing notification');
-                notifyRetryCount = 0;
-                // Force notification even if navigating
-            } else {
-                // Defer notification until navigation lock is released
-                if (notifyTimeout) {
-                    clearTimeout(notifyTimeout);
-                }
-                notifyTimeout = setTimeout(() => {
-                    notifySubscribers();
-                }, 100);
-                return;
-            }
-        } else {
-            notifyRetryCount = 0; // Reset counter when not navigating
-        }
-        
         const route = getRoute();
-        const routeKey = `${route?.page || 'dashboard'}-${JSON.stringify(route?.segments || [])}`;
-        
-        // Prevent notifying about the same route twice in quick succession (within 100ms)
+        const routeKey = `${route?.page || 'dashboard'}-${JSON.stringify(route?.segments || [])}-${route?.search?.toString?.() || ''}-${route?.hash || ''}`;
         if (lastNotifiedRoute === routeKey) {
-            // Clear any pending timeout and reset after a short delay
-            if (notifyTimeout) {
-                clearTimeout(notifyTimeout);
-            }
-            notifyTimeout = setTimeout(() => {
-                lastNotifiedRoute = null;
-            }, 100);
             return;
         }
         
         lastNotifiedRoute = routeKey;
-        
-        // Clear any pending timeout
-        if (notifyTimeout) {
-            clearTimeout(notifyTimeout);
-        }
-        
-        // Reset lastNotifiedRoute after a delay to allow legitimate route changes
-        notifyTimeout = setTimeout(() => {
-            lastNotifiedRoute = null;
-        }, 100);
         
         subscribers.forEach((callback) => {
             try {
@@ -222,39 +178,6 @@
         preserveSearch = true,
         preserveHash = true
     } = {}) => {
-        // CRITICAL: Global navigation lock to prevent concurrent calls
-        if (isNavigating) {
-            // If we're already navigating, check if this is the same navigation
-            const currentRoute = getRoute();
-            const targetPage = page || currentRoute.page || 'dashboard';
-            const targetSegments = sanitizeSegments(segments);
-            const searchValue = search !== undefined ? search : (preserveSearch ? window.location.search : '');
-            const hashValue = hash !== undefined ? hash : (preserveHash ? window.location.hash : '');
-            const nextUrl = `${buildPath(targetPage, targetSegments)}${buildSearch(searchValue)}${buildHash(hashValue)}`;
-            
-            // If it's the same URL we're already navigating to, ignore
-            if (nextUrl === lastNavigationUrl) {
-                return;
-            }
-            
-            // If it's a different URL but we're still navigating, wait a bit
-            // This prevents rapid-fire navigation calls
-            navigationCallCount++;
-            if (navigationCallCount > 10) {
-                console.warn('🚨 Too many navigation calls detected, ignoring:', { nextUrl, callCount: navigationCallCount });
-                return;
-            }
-        }
-        
-        // Set navigation lock
-        isNavigating = true;
-        navigationCallCount = 0;
-        
-        // Clear any existing timeout
-        if (navigationLockTimeout) {
-            clearTimeout(navigationLockTimeout);
-        }
-        
         const currentRoute = getRoute();
         const targetPage = page || currentRoute.page || 'dashboard';
         const targetSegments = sanitizeSegments(segments);
@@ -262,6 +185,23 @@
         const hashValue = hash !== undefined ? hash : (preserveHash ? window.location.hash : '');
 
         const nextUrl = `${buildPath(targetPage, targetSegments)}${buildSearch(searchValue)}${buildHash(hashValue)}`;
+
+        if (isNavigating) {
+            if (nextUrl === lastNavigationUrl) {
+                return;
+            }
+            pendingNavigationArgs = { page, segments, search, hash, replace, preserveSearch, preserveHash };
+            return;
+        }
+        
+        // Set navigation lock
+        isNavigating = true;
+        
+        // Clear any existing timeout
+        if (navigationLockTimeout) {
+            clearTimeout(navigationLockTimeout);
+        }
+        
         lastNavigationUrl = nextUrl;
         
         // CRITICAL: Prevent infinite loops by checking if URL actually changed
@@ -319,15 +259,19 @@
             navigationLockTimeout = setTimeout(() => {
                 isNavigating = false;
                 lastNavigationUrl = null;
-                navigationCallCount = 0;
-            }, 500); // Increased to 500ms for more stability and to prevent rapid-fire calls
+                const pending = pendingNavigationArgs;
+                pendingNavigationArgs = null;
+                if (pending) {
+                    navigate(pending);
+                }
+            }, 120);
 
             notifySubscribers();
         } catch (error) {
             // Release lock on error
             isNavigating = false;
             lastNavigationUrl = null;
-            navigationCallCount = 0;
+            pendingNavigationArgs = null;
             
             // Prevent stack overflow by catching navigation errors
             if (error.message && error.message.includes('Maximum call stack size exceeded')) {

@@ -588,6 +588,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (isAutoSavingRef.current) {
             return;
         }
+        // Prefer current user-selected tab over a generic parent "overview" update.
+        if (initialTab === 'overview') {
+            return;
+        }
         if (initialTab === 'overview' && (Date.now() - lastInlineSaveAtRef.current) < TAB_PRESERVE_AFTER_INLINE_SAVE_MS) {
             return;
         }

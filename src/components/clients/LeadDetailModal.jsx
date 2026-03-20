@@ -1099,6 +1099,10 @@ const LeadDetailModal = ({
         if (isAutoSavingRef.current) {
             return;
         }
+        // Prefer current user-selected tab over generic fallback updates.
+        if (initialTab === 'overview') {
+            return;
+        }
         
         let nextTab = initialTab;
         
