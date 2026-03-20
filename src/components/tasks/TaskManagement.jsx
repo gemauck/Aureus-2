@@ -177,16 +177,12 @@ const TaskManagement = () => {
       (acc, task) => {
         const status = normalizeStatus(task.status);
         acc.total += 1;
-        if (status === 'todo') acc.todo += 1;
-        if (status === 'in-progress') acc.inProgress += 1;
         if (status === 'completed') acc.completed += 1;
-        if (status === 'cancelled') acc.cancelled += 1;
         const b = getDueBucket(task);
         if (b === 'overdue') acc.overdue += 1;
-        if (b === 'today') acc.dueToday += 1;
         return acc;
       },
-      { total: 0, todo: 0, inProgress: 0, completed: 0, cancelled: 0, overdue: 0, dueToday: 0 }
+      { total: 0, completed: 0, overdue: 0 }
     );
   }, [tasks]);
 
@@ -762,34 +758,6 @@ const TaskManagement = () => {
       </div>
 
       <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-6 space-y-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-          {[
-            { key: 'total', label: 'Total', value: stats.total, icon: 'fa-inbox', grad: 'from-slate-500 to-slate-600' },
-            { key: 'todo', label: 'To do', value: stats.todo, icon: 'fa-circle', grad: 'from-slate-400 to-slate-500' },
-            { key: 'inProgress', label: 'Active', value: stats.inProgress, icon: 'fa-bolt', grad: 'from-amber-500 to-orange-500' },
-            { key: 'completed', label: 'Done', value: stats.completed, icon: 'fa-check', grad: 'from-emerald-500 to-teal-500' },
-            { key: 'overdue', label: 'Overdue', value: stats.overdue, icon: 'fa-clock', grad: 'from-rose-500 to-red-600' },
-            { key: 'dueToday', label: 'Due today', value: stats.dueToday, icon: 'fa-sun', grad: 'from-amber-400 to-yellow-500' },
-            { key: 'cancelled', label: 'Cancelled', value: stats.cancelled, icon: 'fa-ban', grad: 'from-gray-500 to-gray-600' }
-          ].map((card) => (
-            <div
-              key={card.key}
-              className={`relative overflow-hidden rounded-2xl border p-4 ${isDark ? 'border-gray-700/80 bg-gray-900/60' : 'border-slate-200/90 bg-white shadow-sm'}`}
-            >
-              <div className={`absolute -right-4 -top-4 h-16 w-16 rounded-full bg-gradient-to-br ${card.grad} opacity-20`} />
-              <div className="relative flex items-start justify-between gap-2">
-                <div>
-                  <p className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>{card.label}</p>
-                  <p className={`text-2xl font-bold tabular-nums mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{card.value}</p>
-                </div>
-                <div className={`h-10 w-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${card.grad} text-white shadow-md`}>
-                  <i className={`fas ${card.icon} text-sm`} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
         <div className={`rounded-2xl border shadow-sm p-4 md:p-5 ${isDark ? 'border-gray-700/80 bg-gray-900/40 backdrop-blur' : 'border-slate-200/90 bg-white/80 backdrop-blur'}`}>
           <div className="flex flex-col xl:flex-row xl:items-center gap-4 mb-4">
             <div className="relative flex-1 min-w-0">
