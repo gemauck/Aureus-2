@@ -500,6 +500,7 @@ model Project {
   priority                     String                   @default("Medium")
   type                         String                   @default("Project")
   assignedTo                   String                   @default("")
+  googleDriveLink              String                   @default("")
   tasksList                    String                   @default("[]") // Legacy - deprecated, use Task table
   notes                        String                   @default("")
   hasTimeProcess               Boolean                  @default(false)

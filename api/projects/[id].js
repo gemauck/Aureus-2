@@ -964,7 +964,8 @@ async function handler(req, res) {
         ['monthlyDataReviewSections', "TEXT DEFAULT '{}'"],
         ['hasComplianceReviewProcess', 'BOOLEAN DEFAULT false'],
         ['complianceReviewChecklist', "TEXT DEFAULT '[]'"],
-        ['complianceReviewSections', "TEXT DEFAULT '{}'"]
+        ['complianceReviewSections', "TEXT DEFAULT '{}'"],
+        ['googleDriveLink', "TEXT DEFAULT ''"]
       ];
       for (const [col, def] of optionalColumns) {
         try {
@@ -1069,6 +1070,7 @@ async function handler(req, res) {
         priority: body.priority,
         type: body.type,
         assignedTo: body.assignedTo,
+        googleDriveLink: body.googleDriveLink !== undefined ? String(body.googleDriveLink || '').trim() : undefined,
         // JSON fields completely removed - data now stored ONLY in separate tables:
         // - tasksList → Task table (via /api/tasks)
         // - taskLists → ProjectTaskList table (via /api/project-task-lists)

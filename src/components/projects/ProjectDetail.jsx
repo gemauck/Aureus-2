@@ -2136,6 +2136,8 @@ function initializeProjectDetail() {
     const [isSavingNote, setIsSavingNote] = useState(false);
     const [showNoteShareModal, setShowNoteShareModal] = useState(false);
     const [noteShareSelectedUsers, setNoteShareSelectedUsers] = useState([]);
+    const [googleDriveLinkInput, setGoogleDriveLinkInput] = useState(project?.googleDriveLink || '');
+    const [isSavingGoogleDriveLink, setIsSavingGoogleDriveLink] = useState(false);
     // Per-note activity: when editing a note, activity for that note; in list, expanded note's activity
     const [noteActivityForEditor, setNoteActivityForEditor] = useState([]);
     const [expandedNoteActivityId, setExpandedNoteActivityId] = useState(null);
@@ -2159,7 +2161,8 @@ function initializeProjectDetail() {
         setExpandedNoteActivityId(null);
         setNoteActivityByNoteId({});
         setEditorActivityPanelOpen(false);
-    }, [project?.id]);
+        setGoogleDriveLinkInput(project?.googleDriveLink || '');
+    }, [project?.id, project?.googleDriveLink]);
 
     const loadActivityLog = useCallback(async () => {
         if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
@@ -4622,6 +4625,31 @@ function initializeProjectDetail() {
         return parsed.toLocaleString(undefined, options);
     };
 
+    const handleSaveGoogleDriveLink = async () => {
+        if (!project?.id || !window.DatabaseAPI?.updateProject || isSavingGoogleDriveLink) return;
+
+        const trimmedLink = (googleDriveLinkInput || '').trim();
+        setIsSavingGoogleDriveLink(true);
+        try {
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, {
+                googleDriveLink: trimmedLink
+            });
+            const updatedProject = apiResponse?.data?.project || apiResponse?.project || { ...project, googleDriveLink: trimmedLink };
+
+            if (typeof onProjectUpdate === 'function') {
+                onProjectUpdate(updatedProject);
+            }
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject(updatedProject);
+            }
+        } catch (error) {
+            console.error('❌ Failed to save Google Drive link:', error);
+            alert('Failed to save Google Drive link. Please try again.');
+        } finally {
+            setIsSavingGoogleDriveLink(false);
+        }
+    };
+
     // Overview Section
     const OverviewSection = () => {
         // CRITICAL: Ensure tasks is always an array
@@ -4674,6 +4702,37 @@ function initializeProjectDetail() {
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-0.5">Due Date</label>
                             <p className="text-sm text-gray-900">{formatProjectDate(project.dueDate) || 'Not set'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Google Drive Folder Link</label>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                    type="url"
+                                    value={googleDriveLinkInput}
+                                    onChange={(e) => setGoogleDriveLinkInput(e.target.value)}
+                                    placeholder="https://drive.google.com/drive/folders/..."
+                                    className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleSaveGoogleDriveLink}
+                                    disabled={isSavingGoogleDriveLink}
+                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                                >
+                                    {isSavingGoogleDriveLink ? 'Saving...' : 'Save Link'}
+                                </button>
+                                {project.googleDriveLink && (
+                                    <a
+                                        href={project.googleDriveLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 flex items-center justify-center gap-1"
+                                    >
+                                        <i className="fas fa-external-link-alt text-[10px]"></i>
+                                        Open
+                                    </a>
+                                )}
+                            </div>
                         </div>
                         {project.description && (
                             <div className="md:col-span-2">
