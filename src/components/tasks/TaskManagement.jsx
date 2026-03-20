@@ -406,24 +406,34 @@ const TaskManagement = () => {
         setIsAddingList(true);
         try {
             const token = storage?.getToken?.();
-            if (!token) return;
+            if (!token) throw new Error('You are not logged in.');
             const response = await fetch('/api/user-task-lists', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ name, color: newListColor || undefined, order: userTaskLists.length })
             });
-            if (!response.ok) throw new Error('Failed to create list');
+            if (!response.ok) {
+                let details = '';
+                try {
+                    const errData = await response.json();
+                    details = errData?.error || errData?.message || '';
+                } catch (_) {
+                    details = '';
+                }
+                throw new Error(details || `Failed to create list (HTTP ${response.status})`);
+            }
             await loadUserTaskLists();
+            await loadTasks();
             setShowAddListModal(false);
             setNewListName('');
             setNewListColor('#3B82F6');
         } catch (e) {
             console.warn('TaskManagement: Failed to add list', e);
-            window.alert('Could not create list. Please try again.');
+            window.alert(e?.message || 'Could not create list. Please try again.');
         } finally {
             setIsAddingList(false);
         }
-    }, [newListName, newListColor, userTaskLists.length, loadUserTaskLists]);
+    }, [newListName, newListColor, userTaskLists.length, loadUserTaskLists, loadTasks]);
 
     const handleSaveListEdit = useCallback(async (listId) => {
         const list = userTaskLists.find(l => l.id === listId);
@@ -1205,6 +1215,14 @@ const TaskManagement = () => {
                                 <i className="fas fa-calendar mr-2"></i>Calendar
                             </button>
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => { setShowAddListModal(true); setNewListName(''); setNewListColor('#3B82F6'); }}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
+                        >
+                            <i className="fas fa-plus" />
+                            Add list
+                        </button>
                     </div>
 
                     {/* Filter bar: active chips + dropdowns + source + quick date */}
