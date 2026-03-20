@@ -224,7 +224,9 @@ const ProjectsDatabaseFirst = () => {
             // Fetch and open project immediately (summary first for fast paint, then full in background)
             const fetchAndOpen = async () => {
                 const api = window.DatabaseAPI || window.api;
-                const getProject = api?.getProject;
+                const getProject = typeof api?.getProject === 'function'
+                    ? api.getProject.bind(api)
+                    : null;
                 if (!getProject) return;
                 try {
                     console.log('📡 ProjectsDatabaseFirst: IMMEDIATE - Fetching project (summary):', projectId);
@@ -573,7 +575,9 @@ const ProjectsDatabaseFirst = () => {
     // Open project from list/grid: fetch summary first for fast paint, then full in background
     const openProject = useCallback(async (project) => {
         const api = window.DatabaseAPI || window.api;
-        const getProject = api?.getProject;
+        const getProject = typeof api?.getProject === 'function'
+            ? api.getProject.bind(api)
+            : null;
         if (!getProject) {
             setSelectedProject(project);
             return;
