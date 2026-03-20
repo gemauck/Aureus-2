@@ -142,6 +142,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
     const [listSortColumn, setListSortColumn] = useState('name'); // Default to alphabetical by name
     const [listSortDirection, setListSortDirection] = useState('asc');
     const [usingCachedOpportunities, setUsingCachedOpportunities] = useState(false);
+    const hasAppliedFilterResetRef = useRef(false);
     const [listPage, setListPage] = useState(() => {
         try {
             const saved = parseInt(localStorage.getItem('pipelineListPage'), 10);
@@ -210,6 +211,10 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
 
     // Reset to page 1 when filters or sort change
     useEffect(() => {
+        if (!hasAppliedFilterResetRef.current) {
+            hasAppliedFilterResetRef.current = true;
+            return;
+        }
         setListPage(1);
     }, [filters.search, filters.industry, filters.engagementStage, filters.aidaStatus, filters.source, showStarredOnly, listSortColumn, listSortDirection]);
 
