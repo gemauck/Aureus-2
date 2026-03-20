@@ -51,15 +51,6 @@ async function handler(req, res) {
       return badRequest(res, 'User not authenticated')
     }
 
-    // Ensure database schema supports leadId on UserTask (runtime safe)
-    try {
-      await prisma.$executeRaw`ALTER TABLE "UserTask" ADD COLUMN IF NOT EXISTS "leadId" TEXT`
-      // Best-effort index creation
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "UserTask_leadId_idx" ON "UserTask"("leadId")`)
-    } catch (schemaError) {
-      // Non-fatal if this fails; subsequent operations may still work if column already exists
-    }
-
     // GET /api/user-tasks - List all tasks for the user
     if (req.method === 'GET' && !taskId) {
       try {
@@ -218,6 +209,7 @@ async function handler(req, res) {
           clientId,
           projectId,
           leadId,
+          listId,
           checklist = [],
           photos = [],
           files = [],
@@ -246,6 +238,15 @@ async function handler(req, res) {
           ...(leadId && { leadId }),
           ...(googleEventId && { googleEventId }),
           ...(googleEventUrl && { googleEventUrl })
+        }
+
+        if (listId) {
+          const list = await prisma.userTaskList.findFirst({
+            where: { id: listId, ownerId: userId }
+          })
+          if (!list) return badRequest(res, 'List not found or access denied')
+          taskData.listId = listId
+          if (list.status) taskData.status = list.status
         }
 
         const task = await prisma.userTask.create({
@@ -424,14 +425,16 @@ async function handler(req, res) {
           where: { id: taskId }
         })
 
-        return ok(res, { message: 'Task deleted successfully' })
+        return ok(res, { deleted: true, id: taskId })
       } catch (error) {
         console.error('Error deleting task:', error)
         return serverError(res, 'Failed to delete task', error.message)
       }
     }
 
-    return badRequest(res, 'Method not allowed')
+    if (res.headersSent || res.writableEnded) return
+    res.setHeader('Allow', 'GET,POST,PUT,DELETE')
+    return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } })
   } catch (error) {
     console.error('User tasks API error:', error)
     return serverError(res, 'Internal server error', error.message)

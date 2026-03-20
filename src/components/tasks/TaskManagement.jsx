@@ -92,6 +92,28 @@ const TasksEmptyState = ({ isDark, hasFilters, onClearFilters, onCreateTask }) =
     );
 };
 
+const normalizeTaskStatus = (status) => {
+    if (!status) return 'todo';
+    const normalized = String(status).toLowerCase().trim();
+    if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') return 'todo';
+    if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') return 'in-progress';
+    if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') return 'completed';
+    if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
+    return 'todo';
+};
+
+const getOrderedLists = (lists) => [...(lists || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+const listStatusMatches = (list, taskStatus) => {
+    const ls = (list?.status || 'todo').toLowerCase().replace(/\s/g, '-');
+    return (ls === 'in-progress' || ls === 'inprogress') ? taskStatus === 'in-progress' : ls === taskStatus;
+};
+const getProjectFirstMatchingListId = (task, lists) => {
+    const orderedLists = getOrderedLists(lists);
+    const taskStatus = normalizeTaskStatus(task?.status);
+    const firstMatchingList = orderedLists.find(l => listStatusMatches(l, taskStatus));
+    return firstMatchingList?.id || orderedLists[0]?.id || null;
+};
+
 const TaskManagement = () => {
     const { isDark } = window.useTheme();
     const authHook = window.useAuth || (() => ({ user: null }));
@@ -673,28 +695,9 @@ const TaskManagement = () => {
         }
 
         if (filterListId !== 'all') {
-            const orderedLists = [...(userTaskLists || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-            const normalizeStatusLocal = (status) => {
-                if (!status) return 'todo';
-                const normalized = String(status).toLowerCase().trim();
-                if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') return 'todo';
-                if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') return 'in-progress';
-                if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') return 'completed';
-                if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
-                return 'todo';
-            };
-            const listStatusMatches = (list, taskStatus) => {
-                const ls = (list.status || 'todo').toLowerCase().replace(/\s/g, '-');
-                return (ls === 'in-progress' || ls === 'inprogress') ? taskStatus === 'in-progress' : ls === taskStatus;
-            };
-            const projectListIdForTask = (task) => {
-                const taskStatus = normalizeStatusLocal(task.status);
-                const firstMatchingList = orderedLists.find(l => listStatusMatches(l, taskStatus));
-                return firstMatchingList?.id || orderedLists[0]?.id || null;
-            };
             filtered = filtered.filter(task => {
                 if (task.type === 'project') {
-                    const mappedId = projectListIdForTask(task);
+                    const mappedId = getProjectFirstMatchingListId(task, userTaskLists);
                     return filterListId === 'unassigned' ? !mappedId : String(mappedId || '') === String(filterListId);
                 }
                 const taskListId = task.listId || null;
@@ -784,26 +787,13 @@ const TaskManagement = () => {
             return [{ id: 'all', name: 'All tasks', tasks: sortedListTasks }];
         }
 
-        const orderedLists = [...userTaskLists].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        const normalizeStatusLocal = (status) => {
-            if (!status) return 'todo';
-            const normalized = String(status).toLowerCase().trim();
-            if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') return 'todo';
-            if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') return 'in-progress';
-            if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') return 'completed';
-            if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
-            return 'todo';
-        };
-        const listStatusMatches = (list, taskStatus) => {
-            const ls = (list.status || 'todo').toLowerCase().replace(/\s/g, '-');
-            return (ls === 'in-progress' || ls === 'inprogress') ? taskStatus === 'in-progress' : ls === taskStatus;
-        };
+        const orderedLists = getOrderedLists(userTaskLists);
 
         const sections = orderedLists.map(list => {
             const userTasksInList = sortedListTasks.filter(t => t.type !== 'project' && String(t.listId || '') === String(list.id));
             const projectTasksInList = sortedListTasks.filter(t => {
                 if (t.type !== 'project') return false;
-                const taskStatus = normalizeStatusLocal(t.status);
+                const taskStatus = normalizeTaskStatus(t.status);
                 if (!listStatusMatches(list, taskStatus)) return false;
                 const firstMatchingList = orderedLists.find(l => listStatusMatches(l, taskStatus));
                 return firstMatchingList && firstMatchingList.id === list.id;
@@ -837,15 +827,7 @@ const TaskManagement = () => {
     }, [userTaskLists, sortedListTasks, filterListId]);
 
     // Normalize task status for grouping (shared)
-    const normalizeStatus = useCallback((status) => {
-        if (!status) return 'todo';
-        const normalized = String(status).toLowerCase().trim();
-        if (normalized === 'todo' || normalized === 'to do' || normalized === 'pending') return 'todo';
-        if (normalized === 'in-progress' || normalized === 'inprogress' || normalized === 'in progress') return 'in-progress';
-        if (normalized === 'completed' || normalized === 'complete' || normalized === 'done' || normalized === 'finished') return 'completed';
-        if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
-        return 'todo';
-    }, []);
+    const normalizeStatus = useCallback((status) => normalizeTaskStatus(status), []);
 
     // Fallback: group by status when no custom lists (legacy kanban)
     const kanbanTasks = useMemo(() => {
@@ -860,16 +842,12 @@ const TaskManagement = () => {
     // List-based Kanban: for each user list, which tasks belong (user by listId, project by first list whose status matches)
     const kanbanTasksByList = useMemo(() => {
         if (!userTaskLists || userTaskLists.length === 0) return [];
-        const orderedLists = [...userTaskLists].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        const listStatusMatches = (list, taskStatus) => {
-            const ls = (list.status || 'todo').toLowerCase().replace(/\s/g, '-');
-            return (ls === 'in-progress' || ls === 'inprogress') ? taskStatus === 'in-progress' : ls === taskStatus;
-        };
+        const orderedLists = getOrderedLists(userTaskLists);
         return orderedLists.map(list => {
             const userTasksInList = filteredTasks.filter(t => t.type !== 'project' && String(t.listId || '') === String(list.id));
             const projectTasksForThisList = filteredTasks.filter(t => {
                 if (t.type !== 'project') return false;
-                const taskStatus = normalizeStatus(t.status);
+                const taskStatus = normalizeTaskStatus(t.status);
                 if (!listStatusMatches(list, taskStatus)) return false;
                 const firstMatchingList = orderedLists.find(l => listStatusMatches(l, taskStatus));
                 return firstMatchingList && firstMatchingList.id === list.id;
@@ -1576,42 +1554,19 @@ const TaskManagement = () => {
                                 </div>
                             </div>
 
-                            {/* Rows grouped by list */}
-                            <div>
-                                {listViewSections.map((section) => (
-                                    <div key={section.id} className="border-t border-gray-200/10 first:border-t-0">
-                                        <div className={`${isDark ? 'bg-gray-900/30 text-gray-200' : 'bg-gray-50 text-gray-800'} px-4 py-2.5 text-sm font-semibold flex items-center justify-between`}>
-                                            <span className="truncate">{section.name}</span>
-                                            <span className={`ml-3 px-2 py-0.5 rounded-full text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>
-                                                {section.tasks.length}
-                                            </span>
-                                        </div>
-                                        <div className="divide-y divide-gray-200/10">
-                                            {section.tasks.length === 0 && (
-                                                <div className={`px-4 py-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    No tasks in this list yet.
-                                                </div>
-                                            )}
-                                            {section.tasks.map(task => (
-                                                <TaskListRow
-                                                    key={`${section.id}-${task.id}`}
-                                                    task={task}
-                                                    isDark={isDark}
-                                                    onEdit={handleEditTask}
-                                                    onDelete={handleDeleteTask}
-                                                    onQuickStatusToggle={handleQuickStatusToggle}
-                                                    clients={clients}
-                                                    leads={leads}
-                                                    projects={projects}
-                                                    getPriorityColor={getPriorityColor}
-                                                    getPriorityTextColor={getPriorityTextColor}
-                                                    getStatusColor={getStatusColor}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            <TaskListSections
+                                listViewSections={listViewSections}
+                                isDark={isDark}
+                                onEdit={handleEditTask}
+                                onDelete={handleDeleteTask}
+                                onQuickStatusToggle={handleQuickStatusToggle}
+                                clients={clients}
+                                leads={leads}
+                                projects={projects}
+                                getPriorityColor={getPriorityColor}
+                                getPriorityTextColor={getPriorityTextColor}
+                                getStatusColor={getStatusColor}
+                            />
                         </div>
                     )}
                 </div>
@@ -1899,6 +1854,44 @@ const TaskManagement = () => {
         </div>
     );
 };
+
+const TaskListSections = ({ listViewSections, isDark, onEdit, onDelete, onQuickStatusToggle, clients, leads, projects, getPriorityColor, getPriorityTextColor, getStatusColor }) => (
+    <div>
+        {listViewSections.map((section) => (
+            <div key={section.id} className="border-t border-gray-200/10 first:border-t-0">
+                <div className={`${isDark ? 'bg-gray-900/30 text-gray-200' : 'bg-gray-50 text-gray-800'} px-4 py-2.5 text-sm font-semibold flex items-center justify-between`}>
+                    <span className="truncate">{section.name}</span>
+                    <span className={`ml-3 px-2 py-0.5 rounded-full text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>
+                        {section.tasks.length}
+                    </span>
+                </div>
+                <div className="divide-y divide-gray-200/10">
+                    {section.tasks.length === 0 && (
+                        <div className={`px-4 py-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            No tasks in this list yet.
+                        </div>
+                    )}
+                    {section.tasks.map(task => (
+                        <TaskListRow
+                            key={`${section.id}-${task.id}`}
+                            task={task}
+                            isDark={isDark}
+                            onEdit={onEdit}
+                            onDelete={onDelete}
+                            onQuickStatusToggle={onQuickStatusToggle}
+                            clients={clients}
+                            leads={leads}
+                            projects={projects}
+                            getPriorityColor={getPriorityColor}
+                            getPriorityTextColor={getPriorityTextColor}
+                            getStatusColor={getStatusColor}
+                        />
+                    ))}
+                </div>
+            </div>
+        ))}
+    </div>
+);
 
 // Task Card Component
 const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients, projects, tags, getPriorityColor, getPriorityTextColor, getStatusColor, compact = false, draggable = false }) => {

@@ -53,7 +53,7 @@ async function handler(req, res) {
         if (lists.length === 0) {
           lists = await ensureDefaultLists(userId)
         }
-        return ok(res, { data: { lists } })
+        return ok(res, { lists })
       } catch (error) {
         console.error('Error fetching user task lists:', error)
         return serverError(res, 'Failed to fetch lists', error.message)
@@ -67,7 +67,7 @@ async function handler(req, res) {
           where: { id: listId, ownerId: userId }
         })
         if (!list) return notFound(res, 'List not found')
-        return ok(res, { data: { list } })
+        return ok(res, { list })
       } catch (error) {
         console.error('Error fetching list:', error)
         return serverError(res, 'Failed to fetch list', error.message)
@@ -99,7 +99,7 @@ async function handler(req, res) {
             status: status != null ? String(status) : null
           }
         })
-        return created(res, { data: { list } })
+        return created(res, { list })
       } catch (error) {
         console.error('Error creating list:', error)
         return serverError(res, 'Failed to create list', error.message)
@@ -122,7 +122,7 @@ async function handler(req, res) {
           })
         ])
 
-        return ok(res, { data: { deletedAll: true } })
+        return ok(res, { deletedAll: true })
       } catch (error) {
         console.error('Error deleting all lists:', error)
         return serverError(res, 'Failed to delete all lists', error.message)
@@ -141,14 +141,18 @@ async function handler(req, res) {
         const updateData = {}
         if (payload?.name !== undefined) updateData.name = String(payload.name).trim() || existing.name
         if (payload?.color !== undefined) updateData.color = String(payload.color)
-        if (payload?.order !== undefined) updateData.order = parseInt(payload.order, 10)
+        if (payload?.order !== undefined) {
+          const parsedOrder = parseInt(payload.order, 10)
+          if (Number.isNaN(parsedOrder)) return badRequest(res, 'Order must be a valid integer')
+          updateData.order = parsedOrder
+        }
         if (payload?.status !== undefined) updateData.status = payload.status == null ? null : String(payload.status)
 
         const list = await prisma.userTaskList.update({
           where: { id: listId },
           data: updateData
         })
-        return ok(res, { data: { list } })
+        return ok(res, { list })
       } catch (error) {
         console.error('Error updating list:', error)
         return serverError(res, 'Failed to update list', error.message)
@@ -172,19 +176,21 @@ async function handler(req, res) {
 
         await prisma.$transaction([
           ...(fallbackListId
-            ? [prisma.userTask.updateMany({ where: { listId }, data: { listId: fallbackListId } })]
+            ? [prisma.userTask.updateMany({ where: { ownerId: userId, listId }, data: { listId: fallbackListId } })]
             : []),
           prisma.userTaskList.delete({ where: { id: listId } })
         ])
 
-        return ok(res, { data: { deleted: true } })
+        return ok(res, { deleted: true, id: listId })
       } catch (error) {
         console.error('Error deleting list:', error)
         return serverError(res, 'Failed to delete list', error.message)
       }
     }
 
-    return notFound(res, 'Method or route not found')
+    if (res.headersSent || res.writableEnded) return
+    res.setHeader('Allow', 'GET,POST,PUT,PATCH,DELETE')
+    return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } })
   } catch (error) {
     console.error('User task lists handler error:', error)
     return serverError(res, 'Internal server error', error.message)
