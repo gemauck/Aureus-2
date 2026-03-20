@@ -320,6 +320,11 @@
                 applyDynamicCacheBust(`doc-collection-tracker-${buildVersion}`);
             }
 
+            if (path.includes('components/tasks/TaskManagement.jsx')) {
+                const version = sanitizeVersion(buildVersion || window.__APP_BUILD_VERSION__ || window.BUILD_VERSION) || Date.now();
+                applyDynamicCacheBust(`task-management-${version}`);
+            }
+
             if (path.includes('components/manufacturing/JobCards.jsx')) {
                 applyDynamicCacheBust('jobcards-mobile-toggle-v20251111');
             }
