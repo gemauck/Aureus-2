@@ -199,7 +199,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 if (taskTitle) enhancedMessage += `<p style="color:#555;margin:5px 0;"><strong>Task:</strong> ${escapeHtml(taskTitle)}</p>`;
                 enhancedMessage += '</div>';
             }
-            // Source heading: where the comment comes from (e.g. Projects, Document collection, May 2026)
+            // Source heading: where the comment comes from (e.g. Projects, Monthly FMS review, May 2026)
             const hasPeriod = metadataObj && (metadataObj.month != null || metadataObj.docYear != null || metadataObj.year != null);
             const hasDocCollectionMeta = metadataObj && (metadataObj.sectionId || metadataObj.documentId || metadataObj.projectId) && hasPeriod;
             if (hasDocCollectionMeta) {
@@ -207,8 +207,35 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 const monthNum = metadataObj.month != null ? Number(metadataObj.month) : null;
                 const year = metadataObj.docYear != null ? metadataObj.docYear : metadataObj.year;
                 const monthLabel = monthNum >= 1 && monthNum <= 12 ? monthNames[monthNum - 1] : (metadataObj.month != null && metadataObj.month !== '' ? String(metadataObj.month) : '');
-                const periodLabel = monthLabel && year ? `${monthLabel} ${year}` : (year != null && year !== '' ? String(year) : 'Document collection');
-                const sourceLabel = `Projects, Document collection${periodLabel ? `, ${periodLabel}` : ''}`;
+
+                const sourceValue = String(metadataObj.source || '').trim();
+                const weeklyLabelFromMeta = metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth;
+                const hasWeeklyHint = (
+                    sourceValue === 'weeklyFMSReview' ||
+                    metadataObj.weeklySectionId != null ||
+                    metadataObj.weeklyDocumentId != null ||
+                    weeklyLabelFromMeta != null
+                );
+                const hasMonthlyHint = (
+                    sourceValue === 'monthlyFMSReview' ||
+                    metadataObj.month != null
+                );
+
+                const sourceTypeLabel = hasWeeklyHint
+                    ? 'Weekly FMS review'
+                    : (hasMonthlyHint ? 'Monthly FMS review' : 'Document collection');
+
+                const periodLabel = hasWeeklyHint
+                    ? (weeklyLabelFromMeta && year
+                        ? `${String(weeklyLabelFromMeta)} ${year}`
+                        : (weeklyLabelFromMeta != null
+                            ? String(weeklyLabelFromMeta)
+                            : (year != null && year !== '' ? String(year) : sourceTypeLabel)))
+                    : (monthLabel && year
+                        ? `${monthLabel} ${year}`
+                        : (year != null && year !== '' ? String(year) : sourceTypeLabel));
+
+                const sourceLabel = `Projects, ${sourceTypeLabel}${periodLabel ? `, ${periodLabel}` : ''}`;
                 enhancedMessage += `<div style="background:#f0f4f8;border-left:4px solid #64748b;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📍 Where</h3><p style="color:#555;margin:5px 0;">${escapeHtml(sourceLabel)}</p></div>`;
             }
             if (commentText) {
