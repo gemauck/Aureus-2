@@ -7569,24 +7569,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 id: String(resolvedId)
                                             };
                                             try {
-                                                const token = window.storage?.getToken?.();
-                                                const response = await fetch(`/api/leads/${String(resolvedId)}`, {
-                                                    method: 'PATCH',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                        ...(token ? { Authorization: `Bearer ${token}` } : {})
-                                                    },
-                                                    credentials: 'include',
-                                                    body: JSON.stringify({ type: 'client' })
-                                                });
-                                                const payload = await response.json().catch(() => ({}));
-                                                if (!response.ok) {
-                                                    throw new Error(payload?.message || payload?.error || 'Conversion failed');
-                                                }
-                                                if (onConvertToClient) {
-                                                    try { await Promise.resolve(onConvertToClient(dataToConvert)); } catch (_) {}
-                                                }
-                                                window.location.assign('/clients');
+                                                // Parent (e.g. Clients.jsx) performs PATCH + SPA navigation — no full page reload.
+                                                await Promise.resolve(onConvertToClient(dataToConvert));
                                             } catch (error) {
                                                 alert(`Failed to convert lead to client: ${error?.message || 'Unknown error'}`);
                                             }

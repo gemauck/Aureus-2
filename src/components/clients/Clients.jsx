@@ -6910,45 +6910,10 @@ const Clients = React.memo(() => {
             navigateToCrmListView('clients', { replace: true });
             // Show converted client in list context immediately.
             setSearchTerm((convertedClient?.name || lead.name || '').trim());
-            alert('Lead converted to client successfully!');
         } catch (error) {
             alert('Failed to convert lead to client: ' + (error.message || 'Unknown error'));
         }
     };
-
-    // Hard fallback: if modal wiring fails, still execute conversion from lead-detail button click.
-    useEffect(() => {
-        let inFlight = false;
-        const onCaptureClick = (event) => {
-            if (inFlight) return;
-            if (viewMode !== 'lead-detail') return;
-            const target = event?.target;
-            if (!(target instanceof Element)) return;
-            const button = target.closest('button');
-            if (!button) return;
-            const label = (button.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-            if (label !== 'convert to client') return;
-
-            const leadId = editingLeadId || selectedLeadRef.current?.id || null;
-            if (!leadId) return;
-            const lead = (Array.isArray(leads) ? leads.find((item) => item?.id === leadId) : null)
-                || selectedLeadRef.current
-                || { id: leadId, name: 'Lead' };
-
-            inFlight = true;
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation?.();
-            Promise.resolve(convertLeadToClient(lead)).finally(() => {
-                inFlight = false;
-            });
-        };
-
-        document.addEventListener('click', onCaptureClick, true);
-        return () => {
-            document.removeEventListener('click', onCaptureClick, true);
-        };
-    }, [viewMode, editingLeadId, leads, convertLeadToClient]);
 
     const convertClientToLead = async (client) => {
         if (!client || !client.id) {
