@@ -474,18 +474,27 @@ const TaskManagement = () => {
         if (!window.confirm('Delete this list? Tasks in it will be moved to the first remaining list.')) return;
         try {
             const token = storage?.getToken?.();
-            if (!token) return;
+            if (!token) throw new Error('You are not logged in.');
             const response = await fetch(`/api/user-task-lists/${listId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!response.ok) throw new Error('Failed to delete list');
+            if (!response.ok) {
+                let details = '';
+                try {
+                    const errData = await response.json();
+                    details = errData?.error?.message || errData?.error || errData?.message || '';
+                } catch (_) {
+                    details = '';
+                }
+                throw new Error(details || `Failed to delete list (HTTP ${response.status})`);
+            }
             setListMenuOpenId(null);
             await loadUserTaskLists();
             await loadTasks();
         } catch (e) {
             console.warn('TaskManagement: Failed to delete list', e);
-            window.alert('Could not delete list. Please try again.');
+            window.alert(e?.message || 'Could not delete list. Please try again.');
         }
     }, [userTaskLists.length, loadUserTaskLists, loadTasks]);
 
@@ -785,8 +794,22 @@ const TaskManagement = () => {
         if (unassignedTasks.length > 0) {
             sections.push({ id: 'unassigned', name: 'Unassigned', tasks: unassignedTasks });
         }
-        return sections;
-    }, [userTaskLists, sortedListTasks]);
+
+        // Keep list view focused: by default only show sections that actually contain tasks.
+        if (filterListId === 'all') {
+            const nonEmptySections = sections.filter(section => section.tasks.length > 0);
+            if (nonEmptySections.length > 0) return nonEmptySections;
+            return [{ id: 'all-empty', name: 'All tasks', tasks: [] }];
+        }
+
+        // When filtering by a specific list, show that list section even if empty.
+        if (filterListId === 'unassigned') {
+            return [{ id: 'unassigned', name: 'Unassigned', tasks: unassignedTasks }];
+        }
+
+        const selected = sections.find(section => String(section.id) === String(filterListId));
+        return selected ? [selected] : [];
+    }, [userTaskLists, sortedListTasks, filterListId]);
 
     // Normalize task status for grouping (shared)
     const normalizeStatus = useCallback((status) => {
@@ -1532,10 +1555,18 @@ const TaskManagement = () => {
                             <div>
                                 {listViewSections.map((section) => (
                                     <div key={section.id} className="border-t border-gray-200/10 first:border-t-0">
-                                        <div className={`${isDark ? 'bg-gray-900/30 text-gray-300' : 'bg-gray-50 text-gray-700'} px-4 py-2 text-sm font-semibold`}>
-                                            {section.name} <span className="opacity-70">({section.tasks.length})</span>
+                                        <div className={`${isDark ? 'bg-gray-900/30 text-gray-200' : 'bg-gray-50 text-gray-800'} px-4 py-2.5 text-sm font-semibold flex items-center justify-between`}>
+                                            <span className="truncate">{section.name}</span>
+                                            <span className={`ml-3 px-2 py-0.5 rounded-full text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>
+                                                {section.tasks.length}
+                                            </span>
                                         </div>
                                         <div className="divide-y divide-gray-200/10">
+                                            {section.tasks.length === 0 && (
+                                                <div className={`px-4 py-4 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    No tasks in this list yet.
+                                                </div>
+                                            )}
                                             {section.tasks.map(task => (
                                                 <TaskListRow
                                                     key={`${section.id}-${task.id}`}
