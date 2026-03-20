@@ -2179,7 +2179,7 @@ function initializeProjectDetail() {
         setNoteActivityByNoteId({});
         setEditorActivityPanelOpen(false);
         setOnlineDriveLinksInput(parseOnlineDriveLinks(project?.onlineDriveLinks));
-    }, [project?.id, project?.onlineDriveLinks, parseOnlineDriveLinks]);
+    }, [project?.id, parseOnlineDriveLinks]);
 
     const loadActivityLog = useCallback(async () => {
         if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
