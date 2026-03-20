@@ -142,7 +142,14 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
     const [listSortColumn, setListSortColumn] = useState('name'); // Default to alphabetical by name
     const [listSortDirection, setListSortDirection] = useState('asc');
     const [usingCachedOpportunities, setUsingCachedOpportunities] = useState(false);
-    const [listPage, setListPage] = useState(1);
+    const [listPage, setListPage] = useState(() => {
+        try {
+            const saved = parseInt(localStorage.getItem('pipelineListPage'), 10);
+            return Number.isFinite(saved) && saved > 0 ? saved : 1;
+        } catch (e) {
+            return 1;
+        }
+    });
     const [listPageSize, setListPageSize] = useState(() => {
         try {
             const saved = parseInt(localStorage.getItem('pipelineListPageSize'), 10);
@@ -182,6 +189,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             console.warn('⚠️ Pipeline: Failed to save list page size:', error);
         }
     }, [listPageSize]);
+
+    // Persist current list page so returning from detail keeps user context.
+    useEffect(() => {
+        try {
+            localStorage.setItem('pipelineListPage', String(listPage));
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Failed to save current list page:', error);
+        }
+    }, [listPage]);
 
     // Persist Starred Only preference
     useEffect(() => {

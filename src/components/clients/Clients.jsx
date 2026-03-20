@@ -1196,24 +1196,25 @@ const Clients = React.memo(() => {
         }
     }, [filterServices]);
     
-    // PERFORMANCE FIX: Reset pagination to page 1 when filters change
+    // Reset pagination only when filters change, not when switching view mode.
+    // This preserves the page users were on when opening/closing detail views.
     useEffect(() => {
-        if (viewMode === 'clients' && clientsPage > 1) {
+        if (clientsPage > 1) {
             setClientsPage(1);
         }
-    }, [searchTerm, filterIndustry, filterServices, showStarredOnly, viewMode]);
+    }, [searchTerm, filterIndustry, filterServices, showStarredOnly]);
     
     useEffect(() => {
-        if (viewMode === 'leads' && leadsPage > 1) {
+        if (leadsPage > 1) {
             setLeadsPage(1);
         }
-    }, [searchTerm, filterIndustry, filterEngagementStage, filterAidaStatus, showStarredOnly, viewMode]);
+    }, [searchTerm, filterIndustry, filterEngagementStage, filterAidaStatus, showStarredOnly]);
     
     useEffect(() => {
-        if (viewMode === 'groups' && groupsPage > 1) {
+        if (groupsPage > 1) {
             setGroupsPage(1);
         }
-    }, [searchTerm, viewMode]);
+    }, [searchTerm]);
     
     // Get current user and check if admin
     const currentUser = window.storage?.getUser?.();
