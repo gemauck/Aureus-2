@@ -76,7 +76,7 @@ const logClientsDebug = (...args) => {
 
 // Map of critical modal bundles to ensure they can be recovered if the initial script tag failed to load
 const CRITICAL_COMPONENT_SCRIPTS = {
-    ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
+    ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1764013200',
     // LeadDetailModal removed - now using unified ClientDetailModal with entityType='lead'
     OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js',
     Pipeline: './dist/src/components/clients/Pipeline.js?v=remove-kanban-1764388650'
