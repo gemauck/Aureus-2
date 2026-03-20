@@ -1,9 +1,10 @@
-import { authRequired } from '../../../_lib/authRequired.js'
-import { prisma } from '../../../_lib/prisma.js'
-import { badRequest, ok, serverError, notFound } from '../../../_lib/response.js'
-import { parseJsonBody } from '../../../_lib/body.js'
-import { withHttp } from '../../../_lib/withHttp.js'
-import { withLogging } from '../../../_lib/logger.js'
+import { authRequired } from '../../_lib/authRequired.js'
+import { prisma } from '../../_lib/prisma.js'
+import { badRequest, ok, serverError, notFound } from '../../_lib/response.js'
+import { parseJsonBody } from '../../_lib/body.js'
+import { withHttp } from '../../_lib/withHttp.js'
+import { withLogging } from '../../_lib/logger.js'
+import { isLeavePlatformAdminRole } from '../../_lib/leavePlatformRoles.js'
 
 async function handler(req, res) {
   try {
@@ -43,7 +44,7 @@ async function handler(req, res) {
       return badRequest(res, 'User not found')
     }
 
-    const isAdmin = currentUser.role?.toLowerCase() === 'admin'
+    const isAdmin = isLeavePlatformAdminRole(currentUser.role)
 
     // Get the application
     const application = await prisma.leaveApplication.findUnique({

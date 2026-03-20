@@ -101,6 +101,10 @@ const getApplicationDays = (application, calculateWorkingDays) => {
     return calculateWorkingDays(application.startDate, application.endDate);
 };
 
+const LEAVE_PLATFORM_ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
+const isLeavePlatformAdminRole = (role) =>
+    !!role && typeof role === 'string' && LEAVE_PLATFORM_ADMIN_ROLES.includes(role.toLowerCase());
+
 const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     // Get auth hook safely - only call it if it's available and we're in a React component context
     let user = null;
@@ -113,14 +117,14 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             try {
                 const authResult = window.useAuth();
                 user = authResult?.user || authResult || null;
-                isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                isAdmin = isLeavePlatformAdminRole(user?.role);
             } catch (e) {
                 console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
                 // Fallback: try to get user from storage
                 if (window.storage?.getUser) {
                     try {
                         user = window.storage.getUser();
-                        isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                        isAdmin = isLeavePlatformAdminRole(user?.role);
                     } catch (storageError) {
                         console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
                     }
@@ -131,7 +135,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             if (window.storage?.getUser) {
                 try {
                     user = window.storage.getUser();
-                    isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                    isAdmin = isLeavePlatformAdminRole(user?.role);
                 } catch (storageError) {
                     console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
                 }
@@ -246,7 +250,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         const leaveUtils = window.leaveUtils || {};
         // Update isAdmin if user role is available
         if (user?.role) {
-            isAdmin = user.role.toLowerCase() === 'admin';
+            isAdmin = isLeavePlatformAdminRole(user.role);
         }
 
         // South African BCEA leave types (centralised in leaveUtils)

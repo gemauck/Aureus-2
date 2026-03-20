@@ -1208,6 +1208,7 @@ const MainLayout = () => {
     
     const menuItems = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
+        const adminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
         const hasUser = !!user && user !== null && user !== undefined;
         
         if (hasUser && !user.role && window.useAuth && !refreshingRole) {
@@ -1236,9 +1237,9 @@ const MainLayout = () => {
                 return true;
             }
 
-            // Leave Platform: match legacy behavior — only literal `admin` bypasses; superadmin/others use PermissionChecker (email gate)
+            // Leave Platform: elevated roles bypass; others use PermissionChecker (email gate for non-admins)
             if (item.id === 'leave-platform') {
-                if (userRole === 'admin') {
+                if (adminOrSuperAdmin) {
                     return true;
                 }
                 if (permissionChecker && window.PERMISSIONS) {
@@ -1251,7 +1252,6 @@ const MainLayout = () => {
             }
 
             // Admin and SuperAdmin users always have access to everything
-            const adminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
             if (adminOrSuperAdmin) {
                 return true;
             }

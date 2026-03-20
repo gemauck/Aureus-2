@@ -248,8 +248,11 @@ export class PermissionChecker {
         const isAdminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(role);
         const userEmail = this.user?.email?.toLowerCase();
 
-        // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
+        // LEAVE PLATFORM: admins/superadmins always; else beta allowlist
         if (permission === PERMISSIONS.ACCESS_LEAVE_PLATFORM) {
+            if (isAdminOrSuperAdmin) {
+                return true;
+            }
             if (userEmail === 'garethm@abcotronics.co.za') {
                 return true;
             }
@@ -416,7 +419,6 @@ export class PermissionChecker {
     }
 
     canAccessLeavePlatform() {
-        // Restricted to garethm@abcotronics.co.za only until completion
         return this.hasPermission(PERMISSIONS.ACCESS_LEAVE_PLATFORM);
     }
 
