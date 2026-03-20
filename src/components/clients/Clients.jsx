@@ -6840,62 +6840,10 @@ const Clients = React.memo(() => {
 
         try {
             const token = window.storage?.getToken?.();
-            const existingActivityLog = Array.isArray(lead.activityLog) ? lead.activityLog : (typeof lead.activityLog === 'string' ? (() => { try { return JSON.parse(lead.activityLog || '[]'); } catch (_) { return []; } })() : []);
-            const leadSnapshot = {
-                engagementStage: lead.engagementStage ?? lead.status ?? 'Potential',
-                aidaStatus: lead.aidaStatus ?? lead.stage ?? 'Awareness',
-                value: lead.value ?? lead.revenue ?? 0,
-                probability: lead.probability ?? 0
-            };
-            const convertedEntry = {
-                id: Date.now(),
-                type: 'Lead Converted',
-                description: `Converted from lead: ${lead.name}`,
-                timestamp: new Date().toISOString(),
-                user: (window.storage?.getUser?.() || {}).name || 'System',
-                userId: (window.storage?.getUser?.() || {}).id || 'system',
-                userEmail: (window.storage?.getUser?.() || {}).email || 'system',
-                snapshot: leadSnapshot
-            };
-            const newClientData = {
-                name: lead.name,
-                industry: lead.industry || 'Other',
-                status: 'active',
-                type: 'client',
-                revenue: lead.value ?? lead.revenue ?? 0,
-                value: lead.value ?? lead.revenue ?? 0,
-                probability: lead.probability ?? 0,
-                engagementStage: leadSnapshot.engagementStage,
-                aidaStatus: leadSnapshot.aidaStatus,
-                lastContact: lead.lastContact ? (typeof lead.lastContact === 'string' ? lead.lastContact : new Date(lead.lastContact).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
-                address: lead.address || '',
-                website: lead.website || '',
-                notes: lead.notes || '',
-                thumbnail: lead.thumbnail || '',
-                externalAgentId: lead.externalAgentId || (lead.externalAgent?.id) || null,
-                ownerId: lead.ownerId || null,
-                rssSubscribed: lead.rssSubscribed !== false,
-                contacts: lead.contacts || lead.clientContacts || [],
-                followUps: lead.followUps || [],
-                projectIds: lead.projectIds || [],
-                comments: lead.comments || [],
-                sites: lead.sites || lead.clientSites || [],
-                contracts: lead.contracts || [],
-                proposals: lead.proposals || [],
-                services: lead.services || [],
-                billingTerms: lead.billingTerms || undefined,
-                kyc: lead.kyc !== undefined ? lead.kyc : undefined,
-                activityLog: [...existingActivityLog, convertedEntry]
-            };
+            if (token && window.api?.updateLead) {
+                // Convert in-place so the same record id keeps all associated data.
+                await window.api.updateLead(lead.id, { type: 'client' });
 
-            if (token && window.api?.createClient && window.api?.deleteLead) {
-                // Create client from lead data
-                const clientResponse = await window.api.createClient(newClientData);
-                const newClient = clientResponse?.data?.client || clientResponse?.client || clientResponse?.data;
-                
-                // Delete the original lead
-                await window.api.deleteLead(lead.id);
-                
                 // Refresh data from API
                 await Promise.all([
                     loadClients(true).catch(() => {}),
@@ -6906,19 +6854,7 @@ const Clients = React.memo(() => {
                 selectedLeadRef.current = null;
                 alert('Lead converted to client successfully!');
             } else {
-                // Fallback: local conversion only
-                const newClient = {
-                    id: Date.now().toString(),
-                    ...newClientData,
-                    type: 'client'
-                };
-                setClients([...clients, newClient]);
-                const normalizedLeadId = String(lead.id);
-                setLeads(prevLeads => prevLeads.filter(l => String(l.id) !== normalizedLeadId));
-                // leadsCount now calculated from leads.length via useMemo
-                setViewMode('clients');
-                selectedLeadRef.current = null;
-                alert('Lead converted to client (local only - not saved to server)');
+                alert('Please log in to convert lead');
             }
         } catch (error) {
             alert('Failed to convert lead to client: ' + (error.message || 'Unknown error'));
@@ -6932,8 +6868,15 @@ const Clients = React.memo(() => {
         }
         try {
             const token = window.storage?.getToken?.();
+            const user = window.storage?.getUser?.() || {};
+            const normalizedRole = (user?.role || '').toString().trim().toLowerCase();
+            const canRevert = normalizedRole === 'admin' || normalizedRole === 'superadmin' || normalizedRole === 'super-admin' || normalizedRole === 'super_admin';
             if (!token || !window.api?.updateClient) {
                 alert('Please log in to revert to lead');
+                return;
+            }
+            if (!canRevert) {
+                alert('Only Admin/SuperAdmin can move a client back to lead.');
                 return;
             }
             await window.api.updateClient(client.id, { type: 'lead' });

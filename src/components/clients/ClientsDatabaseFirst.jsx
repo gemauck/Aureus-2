@@ -338,54 +338,14 @@ const ClientsDatabaseFirst = () => {
                 return;
             }
 
-            const newClient = {
-                id: Date.now().toString(),
-                name: lead.name,
-                industry: lead.industry,
-                status: 'Active',
-                type: 'client',
-                revenue: lead.value || 0,
-                lastContact: new Date().toISOString().split('T')[0],
-                address: lead.address || '',
-                website: lead.website || '',
-                notes: lead.notes || '',
-                contacts: lead.contacts || lead.clientContacts || [],
-                followUps: lead.followUps || [],
-                projectIds: lead.projectIds || [],
-                comments: lead.comments || [],
-                sites: lead.sites || lead.clientSites || [],
-                opportunities: lead.opportunities || [],
-                contracts: lead.contracts || [],
-                proposals: lead.proposals || [],
-                services: lead.services || [],
-                activityLog: [{
-                    id: Date.now(),
-                    type: 'Lead Converted',
-                    description: `Converted from lead: ${lead.name}`,
-                    timestamp: new Date().toISOString(),
-                    user: (window.storage?.getUserInfo() || { name: 'System' }).name,
-                    userId: (window.storage?.getUserInfo() || { id: 'system' }).id,
-                    userEmail: (window.storage?.getUserInfo() || { email: 'system' }).email
-                }],
-                billingTerms: {
-                    paymentTerms: 'Net 30',
-                    billingFrequency: 'Monthly',
-                    currency: 'ZAR',
-                    retainerAmount: 0,
-                    taxExempt: false,
-                    notes: ''
-                }
-            };
-            
-            // Create client in database
-            await window.api.createClient(newClient);
-            
-            // Delete lead from database
-            await window.api.deleteLead(lead.id);
-            
-            // Update local state
-            setClients(prev => [...prev, newClient]);
-            setLeads(prev => prev.filter(l => l.id !== lead.id));
+            // Convert in-place so all related data remains attached to same record id.
+            await window.api.updateLead(lead.id, { type: 'client' });
+
+            // Refresh local state from API
+            await Promise.all([
+                loadClients().catch(() => {}),
+                loadLeads().catch(() => {})
+            ]);
             setViewMode('clients');
             setSelectedLead(null);
             

@@ -9,6 +9,11 @@ import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_KYC } from '../_lib/clientJsonFields.js'
 import { notifyCommentParticipants } from '../_lib/notifyCommentParticipants.js'
 
+function hasAdminOrSuperAdminRole(user) {
+  const role = (user?.role || '').toString().trim().toLowerCase()
+  return role === 'admin' || role === 'superadmin' || role === 'super-admin' || role === 'super_admin'
+}
+
 async function handler(req, res) {
   try {
     
@@ -421,15 +426,33 @@ async function handler(req, res) {
         // Convert client back to lead: body.type === 'lead' and current type is client
         const convertingToLead = existing.type === 'client' && body.type === 'lead'
         if (convertingToLead) {
+          if (!hasAdminOrSuperAdminRole(req.user)) {
+            return res.status(403).json({ error: 'Forbidden', message: 'Only Admin/SuperAdmin can revert clients to leads' })
+          }
           const activityLog = Array.isArray(existing.activityLogJsonb) ? existing.activityLogJsonb : (typeof existing.activityLog === 'string' && existing.activityLog.trim() ? (() => { try { return JSON.parse(existing.activityLog); } catch (_) { return []; } })() : [])
           const convertedEntry = activityLog.find(e => e && e.type === 'Lead Converted' && e.snapshot && typeof e.snapshot === 'object')
+          if (!convertedEntry) {
+            return badRequest(res, 'Only clients created from leads can be reverted to lead')
+          }
           const snapshot = convertedEntry && convertedEntry.snapshot ? convertedEntry.snapshot : {}
+          const revertedEntry = {
+            id: Date.now(),
+            type: 'Client Reverted',
+            description: `Reverted back to lead: ${existing.name || id}`,
+            timestamp: new Date().toISOString(),
+            user: req.user?.name || req.user?.email || 'System',
+            userId: req.user?.sub || 'system',
+            userEmail: req.user?.email || 'system',
+            snapshot
+          }
           const revertData = {
             type: 'lead',
             engagementStage: (snapshot.engagementStage != null && String(snapshot.engagementStage).trim() !== '') ? String(snapshot.engagementStage) : (body.engagementStage ?? existing.engagementStage ?? 'Potential'),
             aidaStatus: (snapshot.aidaStatus != null && String(snapshot.aidaStatus).trim() !== '') ? String(snapshot.aidaStatus) : (body.aidaStatus ?? existing.aidaStatus ?? 'Awareness'),
             value: snapshot.value != null ? Number(snapshot.value) : (body.value != null ? Number(body.value) : existing.value),
-            probability: snapshot.probability != null ? parseInt(snapshot.probability, 10) : (body.probability != null ? parseInt(body.probability, 10) : existing.probability)
+            probability: snapshot.probability != null ? parseInt(snapshot.probability, 10) : (body.probability != null ? parseInt(body.probability, 10) : existing.probability),
+            activityLog: JSON.stringify([...(activityLog || []), revertedEntry]),
+            activityLogJsonb: [...(activityLog || []), revertedEntry]
           }
           await prisma.client.update({
             where: { id },

@@ -136,7 +136,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // Check if current user is admin
     const user = window.storage?.getUser?.() || {};
-    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    const normalizedUserRole = (user?.role || '').toString().trim().toLowerCase();
+    const isAdmin = normalizedUserRole === 'admin';
+    const isSuperAdmin = normalizedUserRole === 'superadmin' || normalizedUserRole === 'super-admin' || normalizedUserRole === 'super_admin';
+    const canManageLeadClientConversion = isAdmin || isSuperAdmin;
     const canViewContracts = isAdmin;
     
     // Now initialize other state and refs AFTER formData
@@ -7561,7 +7564,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         Convert to Client
                                     </button>
                                 )}
-                                {!isLead && onRevertToLead && client && (() => {
+                                {!isLead && canManageLeadClientConversion && onRevertToLead && client && (() => {
                                     const log = client.activityLog || (client.activityLogJsonb ?? []);
                                     const arr = Array.isArray(log) ? log : (typeof log === 'string' && log.trim() ? (() => { try { return JSON.parse(log); } catch (_) { return []; } })() : []);
                                     const wasConvertedFromLead = arr.some(e => e && e.type === 'Lead Converted');
