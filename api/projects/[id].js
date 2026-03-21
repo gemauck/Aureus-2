@@ -340,11 +340,14 @@ async function handler(req, res) {
                   hasWeeklyFMSReviewProcess: true,
                   hasMonthlyFMSReviewProcess: true,
                   hasMonthlyDataReviewProcess: true,
+                  hasComplianceReviewProcess: true,
                   ownerId: true,
                   createdAt: true,
                   updatedAt: true,
                   monthlyDataReviewChecklist: true,
-                  monthlyDataReviewSections: true
+                  monthlyDataReviewSections: true,
+                  complianceReviewChecklist: true,
+                  complianceReviewSections: true
                 }
               }),
               prisma.task.findMany({

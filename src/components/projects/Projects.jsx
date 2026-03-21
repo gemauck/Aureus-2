@@ -2833,6 +2833,18 @@ const Projects = () => {
                     if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                     return false;
                 })(),
+                hasMonthlyDataReviewProcess: (() => {
+                    const value = fullProject.hasMonthlyDataReviewProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })(),
+                hasComplianceReviewProcess: (() => {
+                    const value = fullProject.hasComplianceReviewProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })(),
                 // API returns year-map object { "2024": [...], "2025": [...] }; preserve it so Weekly FMS comments/status survive refresh
                 weeklyFMSReviewSections: (fullProject.weeklyFMSReviewSections != null && typeof fullProject.weeklyFMSReviewSections === 'object') ? fullProject.weeklyFMSReviewSections : {}
             };
@@ -2856,6 +2868,8 @@ const Projects = () => {
                         hasWeeklyFMSReviewProcess: !!(full.hasWeeklyFMSReviewProcess === true || full.hasWeeklyFMSReviewProcess === 'true' || full.hasWeeklyFMSReviewProcess === 1),
                         hasTimeProcess: !!(full.hasTimeProcess === true || full.hasTimeProcess === 'true' || full.hasTimeProcess === 1),
                         hasMonthlyFMSReviewProcess: !!(full.hasMonthlyFMSReviewProcess === true || full.hasMonthlyFMSReviewProcess === 'true' || full.hasMonthlyFMSReviewProcess === 1),
+                        hasMonthlyDataReviewProcess: !!(full.hasMonthlyDataReviewProcess === true || full.hasMonthlyDataReviewProcess === 'true' || full.hasMonthlyDataReviewProcess === 1),
+                        hasComplianceReviewProcess: !!(full.hasComplianceReviewProcess === true || full.hasComplianceReviewProcess === 'true' || full.hasComplianceReviewProcess === 1),
                         weeklyFMSReviewSections: (full.weeklyFMSReviewSections != null && typeof full.weeklyFMSReviewSections === 'object') ? full.weeklyFMSReviewSections : {}
                     };
                     setViewingProject(prev => prev && String(prev.id) === String(full.id) ? normalizedFull : prev);

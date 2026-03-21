@@ -148,6 +148,21 @@ export function notFound(res, message = 'Not found') {
   res.end(serialized)
 }
 
+/** 503 — e.g. optional integration not configured (OAuth env vars missing). */
+export function serviceUnavailable(res, message = 'Service unavailable', code = 'SERVICE_UNAVAILABLE') {
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ serviceUnavailable: Response already sent, skipping response')
+    return
+  }
+  const safeCode = typeof code === 'string' && code ? code : 'SERVICE_UNAVAILABLE'
+  const safeMessage = typeof message === 'string' ? message : String(message ?? 'Service unavailable')
+  const serialized = JSON.stringify({ error: { code: safeCode, message: safeMessage } })
+  res.statusCode = 503
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
+  res.end(serialized)
+}
+
 export function serverError(res, message = 'Server error', details) {
   // Prevent sending response if already sent
   if (res.headersSent || res.writableEnded) {

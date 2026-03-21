@@ -3,49 +3,66 @@
  */
 import { authRequired } from '../_lib/authRequired.js'
 import { signErpCalendarOAuthState } from '../_lib/jwt.js'
-import { ok, serverError, badRequest } from '../_lib/response.js'
+import { ok, serverError, badRequest, serviceUnavailable } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { createOAuth2Client } from '../_lib/erpGoogleCalendar.js'
 import { requireErpCalendarAccess } from '../_lib/erpCalendarAccess.js'
 
 async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return badRequest(res, 'Method not allowed')
+  try {
+    if (req.method !== 'GET') {
+      return badRequest(res, 'Method not allowed')
+    }
+
+    const userId = req.user?.sub
+    if (!userId) {
+      return badRequest(res, 'User required')
+    }
+
+    if (!requireErpCalendarAccess(req, res)) {
+      return
+    }
+
+    const oauth2 = createOAuth2Client(req)
+    if (!oauth2) {
+      return serviceUnavailable(
+        res,
+        'Google Calendar OAuth is not configured on this server. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. For production, also set ERP_GOOGLE_REDIRECT_URI to https://<your-host>/api/erp-calendar/oauth-callback and add that exact URL in Google Cloud Console → OAuth client → Authorized redirect URIs.',
+        'ERP_CALENDAR_GOOGLE_NOT_CONFIGURED'
+      )
+    }
+
+    const state = signErpCalendarOAuthState(userId)
+    if (!state) {
+      return serviceUnavailable(
+        res,
+        'Could not create OAuth state (check JWT_SECRET is set on the server).',
+        'ERP_CALENDAR_OAUTH_STATE_FAILED'
+      )
+    }
+
+    const scopes = [
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ]
+
+    const authUrl = oauth2.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: scopes,
+      state
+    })
+
+    return ok(res, { authUrl })
+  } catch (err) {
+    console.error('erp-calendar auth-url:', err)
+    return serverError(
+      res,
+      'Failed to build Google Calendar auth URL',
+      err?.message || String(err)
+    )
   }
-
-  const userId = req.user?.sub
-  if (!userId) {
-    return badRequest(res, 'User required')
-  }
-
-  if (!requireErpCalendarAccess(req, res)) {
-    return
-  }
-
-  const oauth2 = createOAuth2Client(req)
-  if (!oauth2) {
-    return serverError(res, 'Google Calendar is not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).')
-  }
-
-  const state = signErpCalendarOAuthState(userId)
-  if (!state) {
-    return serverError(res, 'Could not create OAuth state')
-  }
-
-  const scopes = [
-    'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/userinfo.email'
-  ]
-
-  const authUrl = oauth2.generateAuthUrl({
-    access_type: 'offline',
-    prompt: 'consent',
-    scope: scopes,
-    state
-  })
-
-  return ok(res, { authUrl })
 }
 
 export default withHttp(withLogging(authRequired(handler)))

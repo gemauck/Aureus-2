@@ -157,9 +157,19 @@ const ErpCalendar = () => {
       const r = await fetch('/api/erp-calendar/auth-url', {
         headers: { Authorization: `Bearer ${token()}` }
       });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg =
+          j?.error?.message ||
+          j?.error?.details ||
+          j?.message ||
+          (r.status === 503
+            ? 'Calendar Google integration is not configured on the server (missing OAuth env vars).'
+            : `Request failed (${r.status})`);
+        throw new Error(msg);
+      }
       const d = j.data || j;
-      if (!d.authUrl) throw new Error('No auth URL');
+      if (!d.authUrl) throw new Error('No auth URL in response');
       const w = window.open(d.authUrl, 'erp-cal-google', 'width=560,height=720,scrollbars=yes');
       if (!w) setErr('Popup blocked — allow popups for this site.');
     } catch (e) {

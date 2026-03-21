@@ -1420,8 +1420,13 @@ const MainLayout = () => {
         if (userRole === 'guest' && currentPage !== 'projects') {
             console.warn(`Access denied: Guest users can only access Projects`);
             navigateToPage('projects');
+            return;
         }
-    }, [currentPage, isAdmin, user?.role, permissionChecker]);
+
+        if (currentPage === 'erp-calendar' && user && !canAccessErpCalendar(user)) {
+            navigateToPage('dashboard');
+        }
+    }, [currentPage, isAdmin, user?.role, user?.email, user, permissionChecker, navigateToPage]);
 
     const renderPage = React.useMemo(() => {
         try {
@@ -1429,6 +1434,27 @@ const MainLayout = () => {
                 case 'dashboard': 
                     return <ErrorBoundary key="dashboard"><Dashboard /></ErrorBoundary>;
                 case 'erp-calendar': {
+                    if (!user) {
+                        return (
+                            <div key="erp-calendar-auth-wait" className="flex flex-col items-center justify-center min-h-[320px] text-gray-500">
+                                <i className="fas fa-spinner fa-spin text-3xl mb-3" />
+                                <p>Loading…</p>
+                            </div>
+                        );
+                    }
+                    if (!canAccessErpCalendar(user)) {
+                        return (
+                            <div key="erp-calendar-access-denied" className="flex items-center justify-center min-h-[400px]">
+                                <div className="text-center max-w-md px-4">
+                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4" />
+                                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Not available</h2>
+                                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                                        The Calendar page is not enabled for your account.
+                                    </p>
+                                </div>
+                            </div>
+                        );
+                    }
                     const ErpCal = window.ErpCalendar;
                     if (!erpCalendarReady || !ErpCal || typeof ErpCal !== 'function') {
                         return (
@@ -1541,7 +1567,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Helpdesk, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker, erpCalendarReady]);
+    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Helpdesk, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker, erpCalendarReady, user, isDark]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
