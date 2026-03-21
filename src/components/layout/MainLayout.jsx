@@ -1772,9 +1772,15 @@ const MainLayout = () => {
                     </div>
                 </header>
 
-                {/* Page Content - scrollable, no horizontal overflow */}
-                <main className={`flex-1 overflow-y-auto overflow-x-hidden min-w-0 ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : 'px-3 py-4 sm:p-6'}`} style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
-                    <div className={`erp-module-root w-full ${currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`} style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
+                {/* Page Content — mobile CRM uses inner scroll only so tabs/search are not in the same scrollport as the list (fixes content bleeding through sticky chrome). */}
+                <main
+                    className={`flex-1 min-w-0 overflow-x-hidden ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-col min-h-0 overflow-y-hidden' : 'overflow-y-auto'} ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : 'px-3 py-4 sm:p-6'}`}
+                    style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}
+                >
+                    <div
+                        className={`erp-module-root w-full ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-1 flex-col min-h-0 px-2 lg:px-3 py-4' : currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`}
+                        style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}
+                    >
                         {renderPage}
                     </div>
                 </main>

@@ -336,7 +336,7 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized header
     const MobileHeader = ({ title, onBack, showFilters = false }) => (
-        <div className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 sticky top-16 z-[28] isolate`}>
+        <div className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 shrink-0`}>
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                     {onBack && (
@@ -523,7 +523,7 @@ const ClientsMobileOptimized = () => {
     const MainContent = () => {
         if (viewMode === 'client-detail') {
             return (
-                <div className="flex-1 overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <MobileHeader 
                         title={selectedClient ? selectedClient.name : 'Add Client'} 
                         onBack={() => {
@@ -531,7 +531,7 @@ const ClientsMobileOptimized = () => {
                             setSelectedClient(null);
                         }}
                     />
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="min-h-0 flex-1 overflow-y-auto">
                         {(() => {
                             const Modal = window.ClientDetailModal;
                             return Modal ? (
@@ -565,7 +565,7 @@ const ClientsMobileOptimized = () => {
 
         if (viewMode === 'lead-detail') {
             return (
-                <div className="flex-1 overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <MobileHeader 
                         title={selectedLead ? selectedLead.name : 'Add Lead'} 
                         onBack={() => {
@@ -573,7 +573,7 @@ const ClientsMobileOptimized = () => {
                             setSelectedLead(null);
                         }}
                     />
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="min-h-0 flex-1 overflow-y-auto">
                         {(() => {
                             const Modal = window.ClientDetailModal;
                             return Modal ? (
@@ -690,13 +690,12 @@ const ClientsMobileOptimized = () => {
     const showListChrome = viewMode === 'clients' || viewMode === 'leads';
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-gray-50 dark:bg-gray-900 relative">
+        <div className="flex min-h-0 flex-1 flex-col bg-gray-50 dark:bg-gray-900 relative">
             {showListChrome && (
                 <div
-                    className={`sticky top-16 z-[28] isolate shrink-0 border-b shadow-sm ${
+                    className={`shrink-0 border-b shadow-sm ${
                         isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
                     }`}
-                    style={{ WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' }}
                 >
                     <MobileTabs />
                     <MobileSearchFilters />
