@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 const DEEPLINK_DEBUG = false; // Set true to log deep-link checks (noisy)
@@ -249,6 +249,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     }, [project?.id]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
+    const [stickyColWidthPx, setStickyColWidthPx] = useState(() =>
+        typeof window !== 'undefined' && window.innerWidth <= 1023 ? 200 : 300
+    );
+    useEffect(() => {
+        const mq = window.matchMedia('(max-width: 1023px)');
+        const apply = () => setStickyColWidthPx(mq.matches ? 200 : 300);
+        apply();
+        mq.addEventListener('change', apply);
+        return () => mq.removeEventListener('change', apply);
+    }, []);
+    const stickyFirstColStyle = useMemo(
+        () => ({
+            boxShadow: STICKY_COLUMN_SHADOW,
+            width: `${stickyColWidthPx}px`,
+            minWidth: `${stickyColWidthPx}px`,
+            maxWidth: `${stickyColWidthPx}px`,
+        }),
+        [stickyColWidthPx]
+    );
     // Close section Actions dropdown when clicking outside (effect lives near state to avoid TDZ)
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -7150,7 +7169,7 @@ Abcotronics`;
                                                     <th
                                                         rowSpan={2}
                                                         className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 z-20 border-r-2 border-gray-300 dark:border-gray-600"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
+                                                        style={stickyFirstColStyle}
                                                     >
                                                         Document / Data
                                                     </th>
@@ -7208,8 +7227,8 @@ Abcotronics`;
                                         <tr>
                                             <th
                                                 className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 z-20 border-r-2 border-gray-300 dark:border-gray-600"
-style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
-                                                >
+                                                style={stickyFirstColStyle}
+                                            >
                                                 Document / Data
                                             </th>
                                             {months.map((month, idx) => (
@@ -7275,7 +7294,7 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                 >
                                                     <td
                                                         className={`px-4 py-2 sticky left-0 z-20 border-r-2 border-gray-300 dark:border-gray-600 ${isSubRow ? 'pl-10 bg-gray-50 dark:bg-gray-700/50' : 'bg-white dark:bg-gray-800'}`}
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
+                                                        style={stickyFirstColStyle}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
                                                             <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 mt-0.5" title={isSubRow ? 'Drag to reorder sub-document' : 'Drag to reorder'}>

@@ -19,7 +19,9 @@ const Users = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
-    const [viewMode, setViewMode] = useState('table'); // 'grid' or 'table'
+    const [viewMode, setViewMode] = useState(() =>
+        typeof window !== 'undefined' && window.innerWidth < 1024 ? 'grid' : 'table'
+    ); // 'grid' or 'table' — default grid on compact shell
     const [forceUpdate, setForceUpdate] = useState(0);
     const [loading, setLoading] = useState(true);
     

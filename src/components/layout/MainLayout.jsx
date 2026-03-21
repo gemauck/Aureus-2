@@ -361,6 +361,15 @@ const MainLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [isMobile, setIsMobile] = useState(false);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+    /** User opt-in: mini desktop layout + zoomed viewport on phones (localStorage erpPreferDesktopLayout) */
+    const [preferDesktopSite, setPreferDesktopSite] = useState(() => {
+        try {
+            return localStorage.getItem('erpPreferDesktopLayout') === 'true';
+        } catch {
+            return false;
+        }
+    });
+    const effectiveIsMobile = isMobile && !preferDesktopSite;
     
     // Initialize mobile state on mount only and set initial sidebar state
     React.useEffect(() => {
@@ -369,11 +378,17 @@ const MainLayout = () => {
         setIsMobile(mobile);
         setWindowWidth(width);
         
-        // Set initial sidebar state based on screen size
-        if (mobile) {
-            setSidebarOpen(false); // Always start closed on mobile
+        let preferDesktop = false;
+        try {
+            preferDesktop = localStorage.getItem('erpPreferDesktopLayout') === 'true';
+        } catch {
+            preferDesktop = false;
+        }
+        const effectiveMobileShell = mobile && !preferDesktop;
+
+        if (effectiveMobileShell) {
+            setSidebarOpen(false); // Overlay sidebar: start closed
         } else {
-            // Desktop: respect user preference
             const manuallyCollapsed = localStorage.getItem('sidebarManuallyCollapsed') === 'true';
             setSidebarOpen(!manuallyCollapsed);
         }
@@ -383,6 +398,39 @@ const MainLayout = () => {
         document.body.classList.add('erp-app');
         return () => document.body.classList.remove('erp-app');
     }, []);
+
+    React.useEffect(() => {
+        document.documentElement.classList.toggle('erp-desktop-site', preferDesktopSite);
+    }, [preferDesktopSite]);
+
+    /** Zoomed-out “desktop site” viewport on narrow devices */
+    React.useEffect(() => {
+        const meta = document.querySelector('meta[name="viewport"]');
+        if (!meta) return undefined;
+        const defaultContent =
+            'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
+        const desktopSiteContent =
+            'width=1280, initial-scale=1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
+        meta.setAttribute('content', preferDesktopSite ? desktopSiteContent : defaultContent);
+        return () => {
+            meta.setAttribute('content', defaultContent);
+        };
+    }, [preferDesktopSite]);
+
+    // Toggling “desktop site” on a narrow viewport switches shell between overlay and in-flow sidebar
+    React.useEffect(() => {
+        if (!isMobile) return;
+        if (preferDesktopSite) {
+            try {
+                const manuallyCollapsed = localStorage.getItem('sidebarManuallyCollapsed') === 'true';
+                setSidebarOpen(!manuallyCollapsed);
+            } catch {
+                setSidebarOpen(true);
+            }
+        } else {
+            setSidebarOpen(false);
+        }
+    }, [preferDesktopSite, isMobile]);
     
     // Handle resize events separately to avoid conflicts
     React.useEffect(() => {
@@ -437,10 +485,10 @@ const MainLayout = () => {
 
     // Close mobile menu when page changes
     React.useEffect(() => {
-        if (isMobile) {
+        if (effectiveIsMobile) {
             setSidebarOpen(false);
         }
-    }, [currentPage, isMobile]);
+    }, [currentPage, effectiveIsMobile]);
 
     // Listen for navigation events from child components
     React.useEffect(() => {
@@ -713,10 +761,10 @@ const MainLayout = () => {
 
     // Always check at render time - only use main Clients component
     const getClientsComponent = React.useCallback(() => {
-        if (isMobile && window.ClientsMobileOptimized) {
+        if (effectiveIsMobile && window.ClientsMobileOptimized) {
             return window.ClientsMobileOptimized;
         }
-        if (isMobile && window.ClientsMobile) {
+        if (effectiveIsMobile && window.ClientsMobile) {
             return window.ClientsMobile;
         }
         // Use main Clients component (has Groups tab)
@@ -730,7 +778,7 @@ const MainLayout = () => {
         }
         // Loading state if main component not available yet
         return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
-    }, [isMobile, mainClientsAvailable]); // Add mainClientsAvailable to force re-evaluation
+    }, [effectiveIsMobile, mainClientsAvailable]); // Add mainClientsAvailable to force re-evaluation
     
     // Continuously check for main Clients component and update state when it becomes available
     React.useEffect(() => {
@@ -1477,7 +1525,7 @@ const MainLayout = () => {
                     }));
                 }
                 
-                if (isMobile) {
+                if (effectiveIsMobile) {
                     setSidebarOpen(false);
                 }
             }}
@@ -1497,7 +1545,7 @@ const MainLayout = () => {
         </button>
     );
 
-    /* Layout: isMobile (sidebar overlay) uses 1024px; CSS mobile visuals use 768px — see main.css breakpoint comment */
+    /* Layout: effectiveIsMobile = width < 1024 && !preferDesktopSite; aligns with main.css max-width 1023px */
     return (
         <div 
             className={`flex h-screen overflow-hidden overflow-x-hidden ${isDark ? 'bg-gray-950' : 'bg-[#f8fafc]'}`} 
@@ -1513,7 +1561,7 @@ const MainLayout = () => {
             }}
         >
             {/* Mobile Sidebar Overlay - FIXED positioning */}
-            {isMobile && sidebarOpen && (
+            {effectiveIsMobile && sidebarOpen && (
                 <div 
                     className="fixed inset-0 bg-black bg-opacity-50 z-40"
                     onClick={() => setSidebarOpen(false)}
@@ -1527,13 +1575,13 @@ const MainLayout = () => {
                 className={`
                     ${isDark ? 'bg-gray-900 border-r border-gray-800 shadow-xl shadow-black/20' : 'bg-white border-r border-gray-200/80 shadow-[4px_0_24px_-12px_rgba(15,23,42,0.06)]'} 
                     transition-all duration-300 flex flex-col
-                    ${isMobile ? 'fixed z-50' : 'relative z-10'}
-                    ${isMobile ? 'main-layout-sidebar' : ''}
-                    ${isMobile ? (sidebarOpen ? 'sidebar-open' : 'sidebar-closed') : ''}
+                    ${effectiveIsMobile ? 'fixed z-50' : 'relative z-10'}
+                    ${effectiveIsMobile ? 'main-layout-sidebar' : ''}
+                    ${effectiveIsMobile ? (sidebarOpen ? 'sidebar-open' : 'sidebar-closed') : ''}
                 `}
                 style={{
                     // Mobile: Fixed positioning, slide in from left
-                    ...(isMobile ? {
+                    ...(effectiveIsMobile ? {
                         position: 'fixed',
                         top: 0,
                         left: sidebarOpen ? 0 : '-280px',
@@ -1610,12 +1658,12 @@ const MainLayout = () => {
                     className={`
                         ${isDark ? 'bg-gray-900/95 backdrop-blur-md border-b border-gray-800 shadow-lg shadow-black/10' : 'bg-white/90 backdrop-blur-md border-b border-gray-200/90 shadow-sm shadow-gray-900/5'} 
                         h-16 flex items-center justify-between px-4 sm:px-6 flex-shrink-0
-                        ${isMobile ? 'sticky top-0 z-30' : ''}
+                        ${effectiveIsMobile ? 'sticky top-0 z-30' : ''}
                     `}
                 >
                     <div className="flex items-center space-x-4 flex-1 min-w-0 gap-3">
-                        {/* Hamburger - MOBILE ONLY */}
-                        {isMobile && (
+                        {/* Hamburger - compact shell only */}
+                        {effectiveIsMobile && (
                             <button 
                                 onClick={() => setSidebarOpen(true)}
                                 className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-xl transition-all duration-200`}
@@ -1625,15 +1673,15 @@ const MainLayout = () => {
                             </button>
                         )}
                         
-                        {/* Logo - MOBILE ONLY */}
-                        {isMobile && (
+                        {/* Logo - compact shell only */}
+                        {effectiveIsMobile && (
                             <h1 className={`abcotronics-logo font-semibold text-lg truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {companyName}
                             </h1>
                         )}
                         
                         {/* Search - DESKTOP ONLY */}
-                        {!isMobile && window.GlobalSearch && (
+                        {!effectiveIsMobile && window.GlobalSearch && (
                             <window.GlobalSearch isMobile={false} isDark={isDark} />
                         )}
                     </div>
@@ -1663,8 +1711,37 @@ const MainLayout = () => {
                             </button>
                             
                             {showThemeMenu && (
-                                <div className={`absolute right-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
+                                <div className={`absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
                                     <div className="p-2">
+                                        {isMobile && (
+                                            <>
+                                                <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
+                                                    Layout
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const next = !preferDesktopSite;
+                                                        setPreferDesktopSite(next);
+                                                        try {
+                                                            localStorage.setItem('erpPreferDesktopLayout', next ? 'true' : 'false');
+                                                        } catch {
+                                                            /* ignore */
+                                                        }
+                                                        setShowThemeMenu(false);
+                                                    }}
+                                                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors`}
+                                                >
+                                                    <i className={`fas fa-${preferDesktopSite ? 'mobile-alt' : 'desktop'} mt-0.5`}></i>
+                                                    <span className="leading-snug">
+                                                        {preferDesktopSite
+                                                            ? 'Use mobile-friendly layout'
+                                                            : 'Desktop site (zoomed out, full features)'}
+                                                    </span>
+                                                </button>
+                                                <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
+                                            </>
+                                        )}
                                         <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
                                             Theme
                                         </div>
@@ -1696,8 +1773,8 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content - scrollable, no horizontal overflow */}
-                <main className={`flex-1 overflow-y-auto overflow-x-hidden min-w-0 ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : 'p-6'}`} style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
-                    <div className={`w-full max-w-full min-w-0 ${currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`} style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
+                <main className={`flex-1 overflow-y-auto overflow-x-hidden min-w-0 ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : 'px-3 py-4 sm:p-6'}`} style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
+                    <div className={`erp-module-root w-full ${currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`} style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
                         {renderPage}
                     </div>
                 </main>

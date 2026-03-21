@@ -3,11 +3,10 @@
 @tailwind utilities;
 
 /*
- * ERP Responsive breakpoint strategy (use in CSS and when aligning with JS):
- * - Mobile:  max-width: 767px (phone) — tables→cards, modals full-screen, touch targets
- * - Tablet:  768px–1023px — MainLayout uses "mobile" sidebar behavior below 1024px (JS)
- * - Desktop: 1024px+
- * CSS mobile visual changes use 768px; MainLayout isMobile uses 1024px for sidebar only.
+ * ERP Responsive breakpoint strategy (aligned with MainLayout.jsx isMobile: width < 1024):
+ * - Compact shell: max-width 1023px — same mobile/touch rules as MainLayout sidebar overlay
+ * - Desktop: min-width 1024px
+ * Phone-specific extra density: max-width 640px (optional overrides below)
  */
 
 /* Custom Primary Colors (blue — shared with Tailwind theme.extend.primary) */
@@ -95,17 +94,18 @@ body.erp-app :where(a, button, input, textarea, select, [tabindex]):focus-visibl
     outline-offset: 2px;
 }
 
-/* Mobile-specific optimizations */
-@media (max-width: 768px) {
+/* Compact viewport: matches MainLayout isMobile (<1024px) */
+@media (max-width: 1023px) {
     body {
         font-size: 16px; /* Prevents zoom on iOS */
         line-height: 1.5;
     }
     
-    /* Prevent horizontal scroll */
+    /* Shell: avoid page-level horizontal drift; wide tables use overflow-x-auto inside main */
     html, body {
         overflow-x: hidden;
         width: 100%;
+        max-width: 100%;
     }
     
     /* Touch-friendly buttons */
@@ -219,7 +219,7 @@ html.dark {
     --progress-track: #374151;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 1024px) {
     .table-mobile {
         display: none;
     }
@@ -475,4 +475,10 @@ h6:hover {
 
 .dark .crm-leads-table-dark-body > tr + tr > td {
     border-top: 1px solid rgba(75, 85, 99, 0.35);
+}
+
+/* Shared stack helper for module roots (flex children need min-w-0 to allow inner overflow-x) */
+.erp-module-root {
+    min-width: 0;
+    max-width: 100%;
 }

@@ -336,7 +336,7 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized header
     const MobileHeader = ({ title, onBack, showFilters = false }) => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 sticky top-14 z-30`}>
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 sticky top-16 z-20`}>
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                     {onBack && (
@@ -382,14 +382,14 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized search and filters
     const MobileSearchFilters = () => (
-        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} border-b px-4 py-3 space-y-3 sticky top-[calc(56px+49px)] z-20`}>
+        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 py-2.5 space-y-2`}>
             <div className="relative">
                 <input
                     type="text"
                     placeholder="Search clients and leads..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className={`w-full px-4 py-3 pl-10 ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-gray-50 text-gray-900 border-gray-200'} border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                    className={`w-full px-3 py-2.5 pl-9 ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-gray-50 text-gray-900 border-gray-200'} border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary-500`}
                 />
                 <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
             </div>
@@ -439,7 +439,7 @@ const ClientsMobileOptimized = () => {
     const MobileCard = ({ item, type, onClick }) => (
         <div 
             onClick={() => onClick(item)}
-            className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-xl p-4 mb-3 cursor-pointer transition-all duration-200 active:scale-98`}
+            className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-lg p-3 mb-2 cursor-pointer transition-all duration-200 active:scale-98`}
         >
             <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
@@ -487,8 +487,8 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized tabs
     const MobileTabs = () => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 sticky top-14 z-40`}>
-            <div className="flex space-x-0">
+        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 pt-1`}>
+            <div className="flex border-b border-gray-200 dark:border-gray-600">
                 <button
                     onClick={() => setViewMode('clients')}
                     className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -607,8 +607,7 @@ const ClientsMobileOptimized = () => {
         }
 
         return (
-            <div className="flex-1 overflow-y-auto">
-                <MobileSearchFilters />
+            <div className="flex-1 overflow-y-auto min-h-0">
                 <div className="px-4 py-3 pb-6">
                     {isLoading ? (
                         <div className="flex items-center justify-center py-8">
@@ -688,10 +687,21 @@ const ClientsMobileOptimized = () => {
         );
     };
 
+    const showListChrome = viewMode === 'clients' || viewMode === 'leads';
+
     return (
-        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 relative">
-            <MobileTabs />
-            <div className="flex-1 overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 bg-gray-50 dark:bg-gray-900 relative">
+            {showListChrome && (
+                <div
+                    className={`sticky top-16 z-20 shrink-0 border-b shadow-sm ${
+                        isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+                    }`}
+                >
+                    <MobileTabs />
+                    <MobileSearchFilters />
+                </div>
+            )}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                 <MainContent />
             </div>
         </div>

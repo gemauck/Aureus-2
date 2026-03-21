@@ -8814,8 +8814,8 @@ function initializeProjectDetail() {
     return (
         <div className="space-y-4">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 min-w-0 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-3 min-w-0">
                     <button 
                         type="button"
                         onClick={(e) => {
@@ -8853,12 +8853,12 @@ function initializeProjectDetail() {
                     >
                         <i className="fas fa-arrow-left text-lg pointer-events-none"></i>
                     </button>
-                    <div>
-                        <h1 className="text-xl font-semibold text-gray-900">{project.name}</h1>
-                        <p className="text-sm text-gray-500">{project.client} • {project.type}</p>
+                    <div className="min-w-0">
+                        <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">{project.name}</h1>
+                        <p className="text-sm text-gray-500 truncate">{project.client} • {project.type}</p>
                     </div>
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-wrap gap-2 items-center">
                     <button
                         type="button"
                         onClick={() => requestAnimationFrame(() => switchSection('notes'))}
@@ -8900,12 +8900,16 @@ function initializeProjectDetail() {
                 </div>
             </div>
 
-            {/* Tab Navigation */}
-            <div className="bg-white rounded-lg border border-gray-200 p-1">
-                <div className="flex gap-1">
+            {/* Tab Navigation — horizontal scroll on narrow viewports */}
+            <div className="bg-white rounded-lg border border-gray-200 p-1 min-w-0">
+                <p className="px-2 pt-1 text-[10px] text-gray-500 lg:hidden" aria-hidden>
+                    <i className="fas fa-arrows-alt-h mr-1 opacity-70" /> Swipe tabs for more sections
+                </p>
+                <div className="overflow-x-auto overflow-y-visible -mx-0.5 px-0.5 pb-0.5" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex gap-1 flex-nowrap min-w-0">
                     <button
                         onClick={() => requestAnimationFrame(() => switchSection('overview'))}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'overview'
                                 ? 'bg-primary-600 text-white hover:bg-primary-700'
                                 : 'text-gray-700 hover:bg-gray-100'
@@ -8932,7 +8936,7 @@ function initializeProjectDetail() {
                                 }
                             });
                         }}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'tasks'
                                 ? 'bg-primary-600 text-white hover:bg-primary-700'
                                 : 'text-gray-700 hover:bg-gray-100'
@@ -8944,7 +8948,7 @@ function initializeProjectDetail() {
                     {hasTimeProcess && (
                         <button
                             onClick={() => requestAnimationFrame(() => switchSection('time'))}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'time'
                                     ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
@@ -8958,7 +8962,7 @@ function initializeProjectDetail() {
                         <button
                             type="button"
                             onClick={() => requestAnimationFrame(() => switchSection('documentCollection'))}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'documentCollection'
                                     ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
@@ -8972,7 +8976,7 @@ function initializeProjectDetail() {
                         <button
                             type="button"
                             onClick={() => requestAnimationFrame(() => switchSection('weeklyFMSReview'))}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'weeklyFMSReview'
                                     ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
@@ -8986,7 +8990,7 @@ function initializeProjectDetail() {
                         <button
                             type="button"
                             onClick={() => requestAnimationFrame(() => switchSection('monthlyFMSReview'))}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'monthlyFMSReview'
                                     ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
@@ -9000,7 +9004,7 @@ function initializeProjectDetail() {
                         <button
                             type="button"
                             onClick={() => requestAnimationFrame(() => switchSection('monthlyDataReview'))}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'monthlyDataReview'
                                     ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
@@ -9014,7 +9018,7 @@ function initializeProjectDetail() {
                         <button
                             type="button"
                             onClick={() => requestAnimationFrame(() => switchSection('complianceReview'))}
-                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'complianceReview'
                                     ? 'bg-primary-600 text-white hover:bg-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
@@ -9126,6 +9130,7 @@ function initializeProjectDetail() {
                             </>
                         )}
                     </div>
+                </div>
                 </div>
             </div>
 

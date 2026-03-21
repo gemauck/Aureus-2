@@ -118,11 +118,11 @@
         // 'components/clients/ClientDetailModal.jsx',
         // 'components/clients/LeadDetailModal.jsx',
         'components/clients/Clients.jsx',
+        'components/clients/ClientsMobileOptimized.jsx', // next: compact CRM for mobile shell (before heavy client bundles)
         // 'components/clients/ClientsCached.jsx', // DISABLED: Loads after Clients and overrides pagination
         'components/clients/ClientsDatabaseFirst.jsx',
         'components/clients/ClientDetailModalMobile.jsx',
         'components/clients/ClientsMobile.jsx',
-        'components/clients/ClientsMobileOptimized.jsx',
         'components/clients/BulkOperations.jsx',
         'components/clients/Pipeline.jsx',
         

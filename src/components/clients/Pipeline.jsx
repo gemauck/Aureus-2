@@ -2877,14 +2877,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const renderSortableHeader = (label, column) => {
             const isActive = listSortColumn === column;
             const iconClass = !isActive
-                ? 'fas fa-sort text-gray-300'
+                ? 'fas fa-sort text-gray-300 dark:text-gray-600'
                 : listSortDirection === 'asc'
-                    ? 'fas fa-sort-up text-blue-600'
-                    : 'fas fa-sort-down text-blue-600';
+                    ? 'fas fa-sort-up text-blue-600 dark:text-blue-400'
+                    : 'fas fa-sort-down text-blue-600 dark:text-blue-400';
 
             return (
                 <th
-                    className="px-6 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500"
+                    className="px-6 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
                     aria-sort={getAriaSort(column)}
                     scope="col"
                 >
@@ -2895,7 +2895,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             handleListSort(column);
                         }}
                         className={`flex items-center gap-2 transition-colors ${
-                            isActive ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                            isActive ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                         }`}
                     >
                         <span>{label}</span>
@@ -2907,10 +2907,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         return (
             <div className="space-y-4">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200" data-pipeline-list-table>
-                            <thead className="bg-gray-50">
+                        <table
+                            className="min-w-full divide-y divide-gray-200 dark:divide-gray-800/80"
+                            data-pipeline-list-table
+                        >
+                            <thead className="bg-gray-50 dark:bg-gray-900">
                                 <tr>
                                     {renderSortableHeader('Name', 'name')}
                                     {renderSortableHeader('Type', 'type')}
@@ -2918,13 +2921,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     {renderSortableHeader('Engagement Stage', 'engagementStage')}
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800/60">
                                 {rows.length === 0 ? (
                                     <tr>
-                                        <td colSpan="5" className="px-4 py-12 text-center text-sm text-gray-500">
-                                            <i className="fas fa-list-ul text-3xl text-gray-300 mb-3"></i>
+                                        <td colSpan="5" className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                                            <i className="fas fa-list-ul text-3xl text-gray-300 dark:text-gray-600 mb-3"></i>
                                             <p>No leads or opportunities match your filters.</p>
-                                            <p className="text-xs text-gray-400 mt-1">Adjust filters to see more results.</p>
+                                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Adjust filters to see more results.</p>
                                         </td>
                                     </tr>
                                 ) : (
@@ -2941,16 +2944,16 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                         return (
                                             <tr
                                                 key={`${item.type}-${item.id}`}
-                                                className={`hover:bg-gray-50 cursor-pointer transition ${isNested ? 'bg-gray-50/50' : ''}`}
+                                                className={`hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer transition ${isNested ? 'bg-gray-50/50 dark:bg-gray-950/50' : ''}`}
                                                 onClick={() => openDealDetail(item)}
                                             >
-                                                <td className={`${rowPadding} ${(isLead || isClient) && !isNested ? 'px-6 border-l-4 border-l-amber-200' : isNested ? 'pl-12 pr-6' : 'px-6'}`}>
+                                                <td className={`${rowPadding} ${(isLead || isClient) && !isNested ? 'px-6 border-l-4 border-l-amber-200 dark:border-l-amber-700/60' : isNested ? 'pl-12 pr-6' : 'px-6'}`}>
                                                     <div className="flex items-center gap-3">
                                                         {!isNested && (
                                                             <button
                                                                 type="button"
                                                                 aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
-                                                                className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full hover:bg-yellow-50 transition"
+                                                                className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full hover:bg-yellow-50 dark:hover:bg-yellow-900/25 transition"
                                                                 onClick={(e) => handleToggleStar(e, item)}
                                                                 onMouseDown={(e) => {
                                                                     e.stopPropagation();
@@ -2961,21 +2964,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                                     e.preventDefault();
                                                                 }}
                                                             >
-                                                                <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-sm`}></i>
+                                                                <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300 dark:text-gray-600'} fa-star text-sm`}></i>
                                                             </button>
                                                         )}
                                                         {isNested && <span className="w-7 shrink-0" aria-hidden />}
                                                         {!(isSite && isNested) && item.type !== 'opportunity' && (
                                                             item.thumbnail ? (
-                                                                <img src={item.thumbnail} alt={item.name || ''} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" />
+                                                                <img src={item.thumbnail} alt={item.name || ''} className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0" />
                                                             ) : (
-                                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-600 shrink-0" aria-hidden>
+                                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 shrink-0" aria-hidden>
                                                                     {(item.name || item.site?.name || '?').toString().charAt(0).toUpperCase()}
                                                                 </div>
                                                             )
                                                         )}
                                                         <div className="min-w-0">
-                                                            <span className={`font-medium text-gray-900 block ${isNested ? 'text-xs' : 'text-sm'}`}>
+                                                            <span className={`font-medium text-gray-900 dark:text-gray-100 block ${isNested ? 'text-xs' : 'text-sm'}`}>
                                                                 {isSite && isNested ? (item.site?.name || item.name?.replace?.(`${parentName} · `, '') || item.name) : item.name}
                                                             </span>
                                                         </div>
@@ -2988,7 +2991,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 </td>
                                                 <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => e.stopPropagation()}>
                                                     {(isClient || hasSiteInPipeline) ? (
-                                                        <span className="text-gray-400 text-xs">—</span>
+                                                        <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                                     ) : (
                                                         <select
                                                             id={`pipeline-aida-${item.type}-${String(item.id).replace(/[^a-zA-Z0-9-_]/g, '-')}`}
@@ -3010,7 +3013,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 </td>
                                                 <td className={`px-6 ${rowPadding} ${hasSiteInPipeline ? 'cursor-default' : ''}`} onClick={e => e.stopPropagation()}>
                                                     {(isClient || hasSiteInPipeline) ? (
-                                                        <span className="text-gray-400 text-xs">—</span>
+                                                        <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                                     ) : (
                                                         <select
                                                             id={`pipeline-engagement-${item.type}-${String(item.id).replace(/[^a-zA-Z0-9-_]/g, '-')}`}
@@ -3032,12 +3035,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     </div>
                     {/* Pagination */}
                     {totalRows > 0 && (
-                        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+                        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/90 rounded-b-lg">
                             <div className="flex items-center gap-4">
-                                <span className="text-sm text-gray-600">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
                                     Showing {start + 1}&ndash;{Math.min(start + listPageSize, totalRows)} of {totalRows} deals
                                 </span>
-                                <label className="flex items-center gap-2 text-sm text-gray-600">
+                                <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                                     <span>Per page</span>
                                     <select
                                         value={listPageSize}
@@ -3045,7 +3048,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                             setListPageSize(Number(e.target.value));
                                             setListPage(1);
                                         }}
-                                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     >
                                         <option value={25}>25</option>
                                         <option value={50}>50</option>
@@ -3058,7 +3061,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     type="button"
                                     onClick={() => setListPage(1)}
                                     disabled={currentPage <= 1}
-                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label="First page"
                                 >
                                     <i className="fas fa-angle-double-left"></i>
@@ -3067,19 +3070,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     type="button"
                                     onClick={() => setListPage((p) => Math.max(1, p - 1))}
                                     disabled={currentPage <= 1}
-                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label="Previous page"
                                 >
                                     <i className="fas fa-angle-left"></i>
                                 </button>
-                                <span className="px-3 py-1.5 text-sm text-gray-600 min-w-[7rem] text-center">
+                                <span className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 min-w-[7rem] text-center">
                                     Page {currentPage} of {totalPages}
                                 </span>
                                 <button
                                     type="button"
                                     onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
                                     disabled={currentPage >= totalPages}
-                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label="Next page"
                                 >
                                     <i className="fas fa-angle-right"></i>
@@ -3088,7 +3091,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     type="button"
                                     onClick={() => setListPage(totalPages)}
                                     disabled={currentPage >= totalPages}
-                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label="Last page"
                                 >
                                     <i className="fas fa-angle-double-right"></i>
@@ -3106,8 +3109,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Sales Pipeline</h1>
-                    <p className="text-sm text-gray-500 mt-0.5">Track deals through AIDA framework</p>
+                    <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">Sales Pipeline</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Track deals through AIDA framework</p>
                 </div>
                 <div className="flex gap-3">
                     <button
@@ -3132,7 +3135,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             )}
 
             {/* View Toggle & Filters */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
+            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-4 sm:p-6 space-y-4">
                 {/* Search and Filters */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-5">
                     {/* Search Bar */}
@@ -3143,13 +3146,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 placeholder="Search by name, industry, contact, or services..."
                                 value={filters.search}
                                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                                className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                                className="w-full pl-10 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-800"
                             />
-                            <i className="fas fa-search absolute left-3 top-3.5 text-sm text-gray-400"></i>
+                            <i className="fas fa-search absolute left-3 top-3.5 text-sm text-gray-400 dark:text-gray-500"></i>
                             {filters.search && (
                                 <button
                                     onClick={() => setFilters({ ...filters, search: '' })}
-                                    className="absolute right-3 top-3.5 transition-colors text-gray-400 hover:text-gray-600"
+                                    className="absolute right-3 top-3.5 transition-colors text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                                     title="Clear search"
                                 >
                                     <i className="fas fa-times text-sm"></i>
@@ -3163,7 +3166,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         <select
                             value={filters.industry}
                             onChange={(e) => setFilters({ ...filters, industry: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-800"
                         >
                             <option value="All">All Industries</option>
                             <option value="Mining">Mining</option>
@@ -3181,7 +3184,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         <select
                             value={filters.aidaStatus}
                             onChange={(e) => setFilters({ ...filters, aidaStatus: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-800"
                         >
                             <option value="All">All AIDA Status</option>
                             <option value="No Engagement">No Engagement</option>
@@ -3197,7 +3200,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         <select
                             value={filters.engagementStage}
                             onChange={(e) => setFilters({ ...filters, engagementStage: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white"
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors bg-gray-50 focus:bg-white dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-800"
                         >
                             <option value="All">All Engagement Stages</option>
                             {statusOptions.map(status => (
@@ -3213,9 +3216,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 type="checkbox"
                                 checked={showStarredOnly}
                                 onChange={(e) => setShowStarredOnly(e.target.checked)}
-                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-800"
                             />
-                            <span className="text-sm text-gray-700">
+                            <span className="text-sm text-gray-700 dark:text-gray-300">
                                 <i className="fas fa-star text-yellow-500 mr-1"></i>
                                 Starred Only
                             </span>
@@ -3224,16 +3227,16 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 </div>
 
                 {/* View Toggle & Kanban Options */}
-                <div className="flex items-center justify-between pt-2 border-t border-gray-200 flex-wrap gap-4">
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-800 flex-wrap gap-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">View:</span>
-                        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">View:</span>
+                        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
                             <button
                                 onClick={() => setViewMode('list')}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                                     viewMode === 'list'
-                                        ? 'bg-white text-gray-900 shadow-sm'
-                                        : 'text-gray-600 hover:text-gray-900'
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
                                 }`}
                             >
                                 <i className="fas fa-list mr-1.5"></i>
@@ -3243,8 +3246,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 onClick={() => setViewMode('kanban')}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                                     viewMode === 'kanban'
-                                        ? 'bg-white text-gray-900 shadow-sm'
-                                        : 'text-gray-600 hover:text-gray-900'
+                                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
                                 }`}
                             >
                                 <i className="fas fa-columns mr-1.5"></i>
@@ -3253,11 +3256,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         </div>
                         {viewMode === 'kanban' && (
                             <div className="flex items-center gap-2 ml-4">
-                                <span className="text-sm text-gray-600">Group by:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Group by:</span>
                                 <select
                                     value={kanbanGroupBy}
                                     onChange={(e) => setKanbanGroupBy(e.target.value)}
-                                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
+                                    className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="aidaStatus">AIDA Status</option>
                                     <option value="engagementStage">Engagement Stage</option>
@@ -3267,11 +3270,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     </div>
                     {viewMode === 'list' && (
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600">Sort by:</span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">Sort by:</span>
                             <select
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
+                                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-800"
                             >
                                 <option value="value-desc">Value: High to Low</option>
                                 <option value="value-asc">Value: Low to High</option>
@@ -3287,8 +3290,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 {/* Active Filters Count */}
                 {(filters.search || 
                   filters.industry !== 'All' || filters.engagementStage !== 'All' || filters.aidaStatus !== 'All' || showStarredOnly) && (
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-800">
+                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                             <span>
                                 {(() => {
@@ -3310,7 +3313,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 });
                                 setShowStarredOnly(false);
                             }}
-                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                            className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
                         >
                             Clear all filters
                         </button>
