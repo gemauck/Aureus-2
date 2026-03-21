@@ -43,6 +43,21 @@ if (existsSync(join(__dirname, '.env.local'))) {
     console.log('✅ Loaded .env.local for local development')
   }
 }
+
+// ERP Calendar (Google OAuth): warn once at boot if credentials missing (avoids hunting 503s in the browser)
+;(function erpCalendarOAuthEnvHint() {
+  const g =
+    (process.env.GOOGLE_CLIENT_ID || '').trim() &&
+    (process.env.GOOGLE_CLIENT_SECRET || '').trim()
+  const m =
+    (process.env.GMAIL_CLIENT_ID || '').trim() &&
+    (process.env.GMAIL_CLIENT_SECRET || '').trim()
+  if (!g && !m) {
+    console.warn(
+      '⚠️ ERP Calendar: Google OAuth not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (or GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET) and ERP_GOOGLE_REDIRECT_URI in .env beside server.js; then pm2 restart --update-env. /api/erp-calendar/auth-url returns 503 until then.'
+    )
+  }
+})()
 // Allow test script to force port (e.g. TEST_PORT=3001) so dev-auth server doesn't conflict with main app
 if (process.env.TEST_PORT) {
   process.env.PORT = process.env.TEST_PORT
