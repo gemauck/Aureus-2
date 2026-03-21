@@ -336,7 +336,7 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized header
     const MobileHeader = ({ title, onBack, showFilters = false }) => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 sticky top-16 z-20`}>
+        <div className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 sticky top-16 z-[28] isolate`}>
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                     {onBack && (
@@ -382,7 +382,7 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized search and filters
     const MobileSearchFilters = () => (
-        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 py-2.5 space-y-2`}>
+        <div className={`${isDark ? 'bg-gray-900' : 'bg-white'} px-4 py-2.5 space-y-2`}>
             <div className="relative">
                 <input
                     type="text"
@@ -487,7 +487,7 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized tabs
     const MobileTabs = () => (
-        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} px-4 pt-1`}>
+        <div className={`${isDark ? 'bg-gray-900' : 'bg-white'} px-4 pt-1`}>
             <div className="flex border-b border-gray-200 dark:border-gray-600">
                 <button
                     onClick={() => setViewMode('clients')}
@@ -607,7 +607,7 @@ const ClientsMobileOptimized = () => {
         }
 
         return (
-            <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="flex-1 overflow-y-auto min-h-0 relative z-0">
                 <div className="px-4 py-3 pb-6">
                     {isLoading ? (
                         <div className="flex items-center justify-center py-8">
@@ -693,9 +693,10 @@ const ClientsMobileOptimized = () => {
         <div className="flex flex-col h-full min-h-0 bg-gray-50 dark:bg-gray-900 relative">
             {showListChrome && (
                 <div
-                    className={`sticky top-16 z-20 shrink-0 border-b shadow-sm ${
+                    className={`sticky top-16 z-[28] isolate shrink-0 border-b shadow-sm ${
                         isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
                     }`}
+                    style={{ WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' }}
                 >
                     <MobileTabs />
                     <MobileSearchFilters />
