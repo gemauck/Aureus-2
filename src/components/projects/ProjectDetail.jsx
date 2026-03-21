@@ -1612,24 +1612,21 @@ function initializeProjectDetail() {
         const lastProjectIdRef = useRef(null);
         const dirtyRef = useRef(false);
         const lastSeedRawRef = useRef('');
+        // Always read latest serialized value without putting it in effect deps (parent re-fetches would reset inputs).
+        const initialSerializedRef = useRef(initialSerialized);
+        initialSerializedRef.current = initialSerialized;
 
         useEffect(() => {
             if (!projectId) return;
-            const raw = String(initialSerialized ?? '');
             if (lastProjectIdRef.current !== projectId) {
                 lastProjectIdRef.current = projectId;
                 dirtyRef.current = false;
+                const raw = String(initialSerializedRef.current ?? '');
                 lastSeedRawRef.current = raw;
-                setLinks(parseOnlineDriveLinks(initialSerialized));
+                setLinks(parseOnlineDriveLinks(initialSerializedRef.current));
                 setSaveHint(null);
-                return;
             }
-            if (dirtyRef.current) return;
-            if (raw !== lastSeedRawRef.current && raw !== '') {
-                lastSeedRawRef.current = raw;
-                setLinks(parseOnlineDriveLinks(initialSerialized));
-            }
-        }, [projectId, initialSerialized, parseOnlineDriveLinks]);
+        }, [projectId, parseOnlineDriveLinks]);
 
         const normalizeForApi = useCallback((state) => ({
             googleDrive: (state?.googleDrive || []).map((r) => String(r?.url || '').trim()),
@@ -1830,6 +1827,175 @@ function initializeProjectDetail() {
                         'border-blue-100 bg-blue-50/40'
                     )}
                 </div>
+            </div>
+        );
+    };
+
+    /**
+     * Overview tab — stable component (defined once next to OnlineDriveLinksEditor).
+     * Do NOT use `const OverviewSection = () => {}` inside ProjectDetail: a new function each render
+     * remounts all children so link inputs lose focus and the UI flashes.
+     */
+    const ProjectOverviewSection = ({ project, tasks, users, onProjectUpdate, formatProjectDate }) => {
+        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        const totalTasks = safeTasks.length;
+        const completedTasks = safeTasks.filter((t) => t.status === 'Done').length;
+        const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        const activeUsers = users.filter((u) => u.status === 'Active');
+
+        const today = new Date();
+        const dueDate = project.dueDate ? new Date(project.dueDate) : null;
+        const daysUntilDue = dueDate ? Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)) : null;
+
+        return (
+            <div className="space-y-4">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 mb-3">Project Information</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Client</label>
+                            <p className="text-sm text-gray-900">{project.client || 'Not assigned'}</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Project Type</label>
+                            <p className="text-sm text-gray-900">{project.type}</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Status</label>
+                            <span
+                                className={`inline-block px-2 py-0.5 text-xs rounded font-medium ${
+                                    project.status === 'In Progress'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : project.status === 'Active'
+                                          ? 'bg-green-100 text-green-700'
+                                          : project.status === 'Completed'
+                                            ? 'bg-indigo-100 text-indigo-700'
+                                            : project.status === 'On Hold'
+                                              ? 'bg-yellow-100 text-yellow-700'
+                                              : project.status === 'Cancelled'
+                                                ? 'bg-red-100 text-red-700'
+                                                : 'bg-gray-100 text-gray-700'
+                                }`}
+                            >
+                                {project.status}
+                            </span>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Assigned To</label>
+                            <p className="text-sm text-gray-900">{project.assignedTo || 'Not assigned'}</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Start Date</label>
+                            <p className="text-sm text-gray-900">{formatProjectDate(project.startDate) || 'Not set'}</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Due Date</label>
+                            <p className="text-sm text-gray-900">{formatProjectDate(project.dueDate) || 'Not set'}</p>
+                        </div>
+                        {project.description && (
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-medium text-gray-500 mb-0.5">Description</label>
+                                <p className="text-sm text-gray-700">{project.description}</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs text-gray-600 mb-0.5">Total Tasks</p>
+                                <p className="text-xl font-bold text-gray-900">{totalTasks}</p>
+                            </div>
+                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <i className="fas fa-tasks text-blue-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs text-gray-600 mb-0.5">Completed</p>
+                                <p className="text-xl font-bold text-green-600">{completedTasks}</p>
+                            </div>
+                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                <i className="fas fa-check-circle text-green-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs text-gray-600 mb-0.5">Completion</p>
+                                <p className="text-xl font-bold text-primary-600">{completionPercentage}%</p>
+                            </div>
+                            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                                <i className="fas fa-chart-pie text-primary-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs text-gray-600 mb-0.5">Days Until Due</p>
+                                <p
+                                    className={`text-xl font-bold ${
+                                        daysUntilDue === null
+                                            ? 'text-gray-400'
+                                            : daysUntilDue < 0
+                                              ? 'text-red-600'
+                                              : daysUntilDue <= 7
+                                                ? 'text-yellow-600'
+                                                : 'text-gray-900'
+                                    }`}
+                                >
+                                    {daysUntilDue === null
+                                        ? 'N/A'
+                                        : daysUntilDue < 0
+                                          ? `${Math.abs(daysUntilDue)} overdue`
+                                          : daysUntilDue}
+                                </p>
+                            </div>
+                            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                                <i className="fas fa-calendar-alt text-indigo-600"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <OnlineDriveLinksEditor
+                    projectId={project?.id}
+                    initialSerialized={project?.onlineDriveLinks}
+                    onProjectUpdate={onProjectUpdate}
+                />
+
+                {activeUsers.length > 0 && (
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        <h2 className="text-sm font-semibold text-gray-900 mb-3">Team Members</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {activeUsers.map((user) => (
+                                <div key={user.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                                    <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-sm">
+                                        {user.name.charAt(0)}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                                        <p className="text-xs text-gray-500">
+                                            {user.role} • {user.department}
+                                        </p>
+                                    </div>
+                                    <a
+                                        href={`mailto:${user.email}`}
+                                        className="text-primary-600 hover:text-primary-700 text-xs"
+                                    >
+                                        <i className="fas fa-envelope"></i>
+                                    </a>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
@@ -4887,156 +5053,6 @@ function initializeProjectDetail() {
             : { year: 'numeric', month: 'short', day: 'numeric' };
 
         return parsed.toLocaleString(undefined, options);
-    };
-
-    // Overview Section
-    const OverviewSection = () => {
-        // CRITICAL: Ensure tasks is always an array
-        const safeTasks = Array.isArray(tasks) ? tasks : [];
-        const totalTasks = safeTasks.length;
-        const completedTasks = safeTasks.filter(t => t.status === 'Done').length;
-        const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-        const activeUsers = users.filter(u => u.status === 'Active');
-
-        // Calculate days until due
-        const today = new Date();
-        const dueDate = project.dueDate ? new Date(project.dueDate) : null;
-        const daysUntilDue = dueDate ? Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)) : null;
-
-        return (
-            <div className="space-y-4">
-                {/* Project Info Card */}
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <h2 className="text-sm font-semibold text-gray-900 mb-3">Project Information</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Client</label>
-                            <p className="text-sm text-gray-900">{project.client || 'Not assigned'}</p>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Project Type</label>
-                            <p className="text-sm text-gray-900">{project.type}</p>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Status</label>
-                            <span className={`inline-block px-2 py-0.5 text-xs rounded font-medium ${
-                                project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                project.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                project.status === 'Completed' ? 'bg-indigo-100 text-indigo-700' :
-                                project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
-                                project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
-                                'bg-gray-100 text-gray-700'
-                            }`}>
-                                {project.status}
-                            </span>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Assigned To</label>
-                            <p className="text-sm text-gray-900">{project.assignedTo || 'Not assigned'}</p>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Start Date</label>
-                            <p className="text-sm text-gray-900">{formatProjectDate(project.startDate) || 'Not set'}</p>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Due Date</label>
-                            <p className="text-sm text-gray-900">{formatProjectDate(project.dueDate) || 'Not set'}</p>
-                        </div>
-                        {project.description && (
-                            <div className="md:col-span-2">
-                                <label className="block text-xs font-medium text-gray-500 mb-0.5">Description</label>
-                                <p className="text-sm text-gray-700">{project.description}</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Quick Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Total Tasks</p>
-                                <p className="text-xl font-bold text-gray-900">{totalTasks}</p>
-                            </div>
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-tasks text-blue-600"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Completed</p>
-                                <p className="text-xl font-bold text-green-600">{completedTasks}</p>
-                            </div>
-                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-check-circle text-green-600"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Completion</p>
-                                <p className="text-xl font-bold text-primary-600">{completionPercentage}%</p>
-                            </div>
-                            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-chart-pie text-primary-600"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Days Until Due</p>
-                                <p className={`text-xl font-bold ${
-                                    daysUntilDue === null ? 'text-gray-400' :
-                                    daysUntilDue < 0 ? 'text-red-600' :
-                                    daysUntilDue <= 7 ? 'text-yellow-600' :
-                                    'text-gray-900'
-                                }`}>
-                                    {daysUntilDue === null ? 'N/A' : daysUntilDue < 0 ? `${Math.abs(daysUntilDue)} overdue` : daysUntilDue}
-                                </p>
-                            </div>
-                            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-calendar-alt text-indigo-600"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Online Drive — stable sub-component so inputs are not remounted on every ProjectDetail render */}
-                <OnlineDriveLinksEditor
-                    projectId={project?.id}
-                    initialSerialized={project?.onlineDriveLinks}
-                    onProjectUpdate={onProjectUpdate}
-                />
-
-                {/* Team Members */}
-                {activeUsers.length > 0 && (
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <h2 className="text-sm font-semibold text-gray-900 mb-3">Team Members</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {activeUsers.map(user => (
-                                <div key={user.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                                    <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-sm">
-                                        {user.name.charAt(0)}
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                                        <p className="text-xs text-gray-500">{user.role} • {user.department}</p>
-                                    </div>
-                                    <a href={`mailto:${user.email}`} className="text-primary-600 hover:text-primary-700 text-xs">
-                                        <i className="fas fa-envelope"></i>
-                                    </a>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
     };
 
     // Comment handling function
@@ -9118,7 +9134,15 @@ function initializeProjectDetail() {
                 return null;
             })()}
             
-            {activeSection === 'overview' && <OverviewSection />}
+            {activeSection === 'overview' && (
+                <ProjectOverviewSection
+                    project={project}
+                    tasks={tasks}
+                    users={users}
+                    onProjectUpdate={onProjectUpdate}
+                    formatProjectDate={formatProjectDate}
+                />
+            )}
 
             {activeSection === 'notes' && (
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
