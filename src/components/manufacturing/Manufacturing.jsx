@@ -1886,7 +1886,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const prodStats = getProductionStats();
 
     return (
-      <div className="space-y-4">
+      <div className="erp-module-root space-y-4 min-w-0">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
@@ -2321,7 +2321,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     };
 
     return (
-      <div className="space-y-4">
+      <div className="erp-module-root space-y-4 min-w-0">
         {/* Controls */}
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">

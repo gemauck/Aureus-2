@@ -709,7 +709,7 @@ const TaskManagement = () => {
   const shell = isDark ? 'min-h-[calc(100vh-4rem)]' : 'min-h-[calc(100vh-4rem)]';
 
   return (
-    <div className={`${shell} ${isDark ? 'bg-[#0c0f14]' : 'bg-gradient-to-b from-slate-50 via-white to-slate-100'}`}>
+    <div className={`erp-module-root min-w-0 max-w-full ${shell} ${isDark ? 'bg-[#0c0f14]' : 'bg-gradient-to-b from-slate-50 via-white to-slate-100'}`}>
       <div className={`relative overflow-hidden border-b ${isDark ? 'border-gray-800 bg-gradient-to-br from-slate-900 via-[#111827] to-slate-900' : 'border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/40'}`}>
         <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }} />
         <div className="relative max-w-[1600px] mx-auto px-4 md:px-8 py-8 md:py-10">

@@ -4625,7 +4625,7 @@ const Projects = () => {
     }
 
     return (
-        <div className="space-y-6 max-w-[1600px] mx-auto">
+        <div className="erp-module-root space-y-6 max-w-[1600px] mx-auto min-w-0">
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 xl:gap-6">
                     <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">

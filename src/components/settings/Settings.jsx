@@ -816,7 +816,7 @@ const Settings = () => {
 
     if (isLoadingData) {
         return (
-            <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
+            <div className={`erp-module-root min-w-0 min-h-[40vh] ${isDark ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
                 <div className="text-center">
                     <i className="fas fa-spinner fa-spin text-4xl text-gray-400 mb-4"></i>
                     <p className="text-gray-500">Loading settings...</p>
@@ -826,8 +826,8 @@ const Settings = () => {
     }
 
     return (
-        <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className={`erp-module-root min-w-0 max-w-full ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
@@ -874,12 +874,12 @@ const Settings = () => {
                     <div className="lg:col-span-3">
                         <div className={`rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div className="p-6">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-6">
+                                    <h2 className={`text-lg sm:text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                         {tabs.find(tab => tab.id === activeTab)?.label}
                                     </h2>
                                     {saveStatus && (
-                                        <span className={`text-sm ${saveStatus.includes('successfully') ? 'text-green-600' : 'text-red-600'}`}>
+                                        <span className={`text-sm shrink-0 ${saveStatus.includes('successfully') ? 'text-green-600' : 'text-red-600'}`}>
                                             {saveStatus}
                                         </span>
                                     )}
@@ -888,17 +888,17 @@ const Settings = () => {
                                 {renderTabContent()}
 
                                 {/* Action Buttons */}
-                                <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+                                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-6 border-t border-gray-200 dark:border-gray-600">
                                     <button
                                         onClick={handleReset}
-                                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[44px] sm:min-h-0"
                                     >
                                         Reset to Default
                                     </button>
                                     <button
                                         onClick={handleSave}
                                         disabled={isLoading}
-                                        className="px-6 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] sm:min-h-0"
                                     >
                                         {isLoading ? (
                                             <>

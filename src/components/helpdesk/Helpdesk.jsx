@@ -424,7 +424,7 @@ const Helpdesk = () => {
     const TicketDetailModal = window.TicketDetailModal;
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="erp-module-root min-w-0 max-w-full bg-gray-50 dark:bg-gray-900">
             {/* Inline success/error message */}
             {toastMessage && (
                 <div

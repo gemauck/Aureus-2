@@ -628,7 +628,7 @@ const MyNotes = () => {
     }
 
     return (
-        <div className={isDark ? 'min-h-[calc(100vh-4rem)] bg-[#0c0f14]' : 'min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-slate-100'} role="main" aria-label="My Notes">
+        <div className={isDark ? 'erp-module-root min-w-0 max-w-full min-h-[calc(100vh-4rem)] bg-[#0c0f14]' : 'erp-module-root min-w-0 max-w-full min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-slate-100'} role="main" aria-label="My Notes">
             {/* Hero — matches Task workspace */}
             <div className={`relative overflow-hidden border-b ${isDark ? 'border-gray-800 bg-gradient-to-br from-slate-900 via-[#111827] to-slate-900' : 'border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/30'}`}>
                 <div className="absolute inset-0 opacity-[0.07] pointer-events-none text-current" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }} />

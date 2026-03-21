@@ -856,7 +856,7 @@ const JobCardFormsSection = ({ jobCard }) => {
   };
 
   return (
-    <div className="relative p-6 min-h-[calc(100vh-56px)]">
+    <div className="erp-module-root relative min-w-0 max-w-full px-3 py-4 sm:p-6">
       <div className="flex flex-col gap-6 mb-6">
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

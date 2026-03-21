@@ -9097,7 +9097,7 @@ const Clients = React.memo(() => {
 
     const LeadsListView = () => (
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full`}>
-            <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Leads</span>
                 <div className="flex items-center gap-4">
                     <button
@@ -9399,7 +9399,7 @@ const Clients = React.memo(() => {
             </div>
             {/* Pagination Controls */}
             {sortedLeads.length > 0 && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32 flex-shrink-0`}>
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32 flex-shrink-0`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Showing {leadsStartIndex + 1} to {Math.min(leadsEndIndex, sortedLeads.length)} of {sortedLeads.length} leads
                     </div>

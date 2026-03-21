@@ -376,8 +376,8 @@ const Account = () => {
     };
 
     return (
-        <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className={`erp-module-root min-w-0 max-w-full ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
@@ -424,12 +424,12 @@ const Account = () => {
                     <div className="lg:col-span-3">
                         <div className={`rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div className="p-6">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-6">
+                                    <h2 className={`text-lg sm:text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                         {tabs.find(tab => tab.id === activeTab)?.label}
                                     </h2>
                                     {saveStatus && (
-                                        <span className={`text-sm ${saveStatus.includes('successfully') ? 'text-green-600' : 'text-red-600'}`}>
+                                        <span className={`text-sm shrink-0 ${saveStatus.includes('successfully') ? 'text-green-600' : 'text-red-600'}`}>
                                             {saveStatus}
                                         </span>
                                     )}

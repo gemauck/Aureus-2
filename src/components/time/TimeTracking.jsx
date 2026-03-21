@@ -145,15 +145,15 @@ const TimeTracking = () => {
     });
 
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <div>
+        <div className="erp-module-root space-y-4">
+            <div className="flex flex-col gap-3 min-w-0 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                     <h1 className="text-lg font-semibold text-gray-900">Time Tracking</h1>
                     <p className="text-xs text-gray-600">Track time spent on projects and tasks</p>
                 </div>
                 <button 
                     onClick={handleAddTimeEntry}
-                    className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 transition flex items-center font-medium"
+                    className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 transition flex items-center justify-center font-medium shrink-0 min-h-[44px] sm:min-h-0 self-start sm:self-auto"
                 >
                     <i className="fas fa-plus mr-1.5"></i>
                     Log Time

@@ -701,7 +701,7 @@ const Teams = () => {
     // Show minimal loading state to prevent renderer crash
     if (!isReady) {
         return (
-            <div className="space-y-6">
+            <div className="erp-module-root space-y-6">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                     <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
                         <i className={`fas fa-users ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
@@ -722,7 +722,7 @@ const Teams = () => {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="erp-module-root space-y-6">
             {/* Header - minimal theme matching Dashboard/Projects */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">

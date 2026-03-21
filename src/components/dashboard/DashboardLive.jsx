@@ -1314,8 +1314,8 @@ const DashboardLive = () => {
 
     // Customizable widgets UI
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="erp-module-root space-y-6">
+            <div className="flex flex-col gap-3 min-w-0 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Welcome, {userName}</h2>
                     <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Here's what's happening today</p>
@@ -1323,9 +1323,8 @@ const DashboardLive = () => {
             </div>
 
             <div 
-                className="grid gap-5"
+                className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
                 style={{
-                    gridTemplateColumns: 'repeat(3, 1fr)',
                     gridAutoRows: 'minmax(200px, auto)'
                 }}
             >

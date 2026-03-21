@@ -467,14 +467,21 @@ h6:hover {
     color: #6b7280;
 }
 
-/* CRM leads table: soften dark-mode row separators for readability */
-.dark .crm-leads-table-dark {
+/* CRM leads table: soften dark-mode row separators for readability (match Pipeline list) */
+.dark .crm-leads-table-dark,
+html.dark .crm-leads-table-dark {
     border-collapse: separate;
     border-spacing: 0;
 }
 
-.dark .crm-leads-table-dark-body > tr + tr > td {
-    border-top: 1px solid rgba(75, 85, 99, 0.35);
+.dark .crm-leads-table-dark thead th,
+html.dark .crm-leads-table-dark thead th {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dark .crm-leads-table-dark-body > tr + tr > td,
+html.dark .crm-leads-table-dark-body > tr + tr > td {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Shared stack helper for module roots (flex children need min-w-0 to allow inner overflow-x) */

@@ -73,7 +73,7 @@ const Reports = () => {
     const MyFeedbackViewer = window.MyFeedbackViewer;
 
     return (
-        <div className="space-y-3">
+        <div className="erp-module-root space-y-3 min-w-0">
             {/* Header */}
             <div>
                 <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Reports & Feedback</h1>
@@ -83,12 +83,12 @@ const Reports = () => {
             </div>
 
             {/* Tabs */}
-            <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                <nav className="flex space-x-4">
+            <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} overflow-x-auto`}>
+                <nav className="flex flex-nowrap gap-4 min-w-0 pb-px">
                     {canViewAuditTrail && (
                         <button
                             onClick={() => setActiveTab('audit')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                            className={`shrink-0 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                                 activeTab === 'audit'
                                     ? 'border-primary-500 text-primary-600'
                                     : isDark
@@ -101,7 +101,7 @@ const Reports = () => {
                     )}
                     <button
                         onClick={() => setActiveTab('my-queries')}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                        className={`shrink-0 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                             activeTab === 'my-queries'
                                 ? 'border-primary-500 text-primary-600'
                                 : isDark
@@ -114,7 +114,7 @@ const Reports = () => {
                     {canViewFeedback && (
                         <button
                             onClick={() => setActiveTab('feedback')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                            className={`shrink-0 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                                 activeTab === 'feedback'
                                     ? 'border-primary-500 text-primary-600'
                                     : isDark
