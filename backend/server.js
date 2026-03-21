@@ -178,12 +178,12 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "blob:"],
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https://unpkg.com"],
-      fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com"],
+      fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com", "https://fonts.gstatic.com"],
     },
   },
   crossOriginEmbedderPolicy: false, // Allow embedding
