@@ -1508,18 +1508,42 @@ const JobCardFormsSection = ({ jobCard }) => {
                     </div>
                   ) : Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {selectedJobCard.photos.map((photo, idx) => (
-                        <figure
-                          key={idx}
-                          className={`group relative overflow-hidden rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
-                        >
-                          <img
-                            src={typeof photo === 'string' ? photo : photo.url}
-                            alt={`Job card photo ${idx + 1}`}
-                            className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                          />
-                        </figure>
-                      ))}
+                      {selectedJobCard.photos.map((photo, idx) => {
+                        const url = typeof photo === 'string' ? photo : photo?.url;
+                        const isVoice =
+                          typeof photo === 'object' &&
+                          photo &&
+                          photo.kind === 'voice';
+                        if (isVoice && url) {
+                          const sec = photo.section ? String(photo.section) : '';
+                          const secLabel =
+                            sec.startsWith('form_') ? 'Checklist field' : sec.replace(/_/g, ' ');
+                          return (
+                            <div
+                              key={idx}
+                              className={`rounded-xl border p-3 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}
+                            >
+                              <p className={`mb-2 text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                <i className="fa-solid fa-microphone mr-1.5 text-pink-400" />
+                                Voice note{secLabel ? ` · ${secLabel}` : ''}
+                              </p>
+                              <audio controls className="h-9 w-full" src={url} />
+                            </div>
+                          );
+                        }
+                        return (
+                          <figure
+                            key={idx}
+                            className={`group relative overflow-hidden rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
+                          >
+                            <img
+                              src={url}
+                              alt={`Job card photo ${idx + 1}`}
+                              className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                            />
+                          </figure>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'}`}>

@@ -462,6 +462,12 @@ const VoiceNoteInput = ({
     });
   };
 
+  useEffect(() => {
+    return () => {
+      stopRecording();
+    };
+  }, [stopRecording]);
+
   return (
     <div className="relative">
       <input
@@ -2137,14 +2143,13 @@ const JobCardFormPublic = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Vehicle Used
                 </label>
-                <input
-                  type="text"
+                <VoiceNoteInput
+                  sectionId="vehicleUsed"
                   name="vehicleUsed"
                   value={formData.vehicleUsed}
                   onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., AB12 CD GP"
-                style={{ fontSize: '16px' }}
+                  placeholder="e.g., AB12 CD GP"
+                  onVoiceSaved={addVoiceClip}
                 />
               </div>
               <div>
