@@ -2385,17 +2385,18 @@ const JobCardFormPublic = () => {
                           }
                         }
 
-                        const commonProps = {
-                          id: `${form.id}_${fieldId}`,
-                          value,
-                          onChange: (e) => handleFormAnswerChange(form.id, fieldId, e.target.value),
-                          className: 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
-                        };
+                        const controlId = `${form.id}_${fieldId}`;
+                        const selectOptionsFromField = [
+                          { value: '', label: 'Select…' },
+                          ...(Array.isArray(field.options)
+                            ? field.options.filter(Boolean).map(opt => ({ value: opt, label: opt }))
+                            : [])
+                        ];
 
                         return (
                           <div key={fieldId} className="space-y-1">
                             <label
-                              htmlFor={commonProps.id}
+                              htmlFor={controlId}
                               className="flex items-center justify-between gap-2 text-xs font-medium text-gray-700"
                             >
                               <span>{field.label || 'Field'}</span>
@@ -2406,36 +2407,49 @@ const JobCardFormPublic = () => {
                               )}
                             </label>
                             {field.type === 'textarea' ? (
-                              <textarea
+                              <VoiceNoteTextarea
+                                sectionId={`form_${form.id}_${fieldId}`}
+                                name={fieldId}
+                                value={value}
+                                onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
                                 rows={3}
-                                {...commonProps}
+                                onVoiceSaved={addVoiceClip}
                               />
                             ) : field.type === 'number' ? (
                               <input
                                 type="number"
-                                {...commonProps}
+                                id={controlId}
+                                value={value}
+                                onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
                             ) : field.type === 'checkbox' ? (
-                              <select {...commonProps}>
-                                <option value="">Select…</option>
-                                <option value="yes">Yes</option>
-                                <option value="no">No</option>
-                              </select>
+                              <SearchableSelect
+                                id={controlId}
+                                value={value}
+                                onChange={v => handleFormAnswerChange(form.id, fieldId, v)}
+                                options={[
+                                  { value: '', label: 'Select…' },
+                                  { value: 'yes', label: 'Yes' },
+                                  { value: 'no', label: 'No' }
+                                ]}
+                                placeholder="Search…"
+                              />
                             ) : field.type === 'select' ? (
-                              <select {...commonProps}>
-                                <option value="">Select…</option>
-                                {Array.isArray(field.options)
-                                  ? field.options.filter(Boolean).map((opt) => (
-                                      <option key={opt} value={opt}>
-                                        {opt}
-                                      </option>
-                                    ))
-                                  : null}
-                              </select>
+                              <SearchableSelect
+                                id={controlId}
+                                value={value}
+                                onChange={v => handleFormAnswerChange(form.id, fieldId, v)}
+                                options={selectOptionsFromField}
+                                placeholder="Search…"
+                              />
                             ) : (
-                              <input
-                                type="text"
-                                {...commonProps}
+                              <VoiceNoteInput
+                                sectionId={`form_${form.id}_${fieldId}`}
+                                name={fieldId}
+                                value={value}
+                                onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
+                                onVoiceSaved={addVoiceClip}
                               />
                             )}
                             {field.helpText && (
@@ -2608,13 +2622,13 @@ const JobCardFormPublic = () => {
         </header>
             <div className="space-y-3 mb-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  type="text"
+                <VoiceNoteInput
+                  sectionId="material_itemName"
+                  name="materialItemName"
                   value={newMaterialItem.itemName}
-                  onChange={(e) => setNewMaterialItem({ ...newMaterialItem, itemName: e.target.value })}
+                  onChange={e => setNewMaterialItem({ ...newMaterialItem, itemName: e.target.value })}
                   placeholder="Item Name *"
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
-              style={{ fontSize: '16px' }}
+                  onVoiceSaved={addVoiceClip}
                 />
                 <input
                   type="number"
@@ -2628,21 +2642,21 @@ const JobCardFormPublic = () => {
               style={{ fontSize: '16px' }}
                 />
               </div>
-              <input
-                type="text"
+              <VoiceNoteInput
+                sectionId="material_description"
+                name="materialDescription"
                 value={newMaterialItem.description}
-                onChange={(e) => setNewMaterialItem({ ...newMaterialItem, description: e.target.value })}
+                onChange={e => setNewMaterialItem({ ...newMaterialItem, description: e.target.value })}
                 placeholder="Description"
-            className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
-            style={{ fontSize: '16px' }}
+                onVoiceSaved={addVoiceClip}
               />
-              <input
-                type="text"
+              <VoiceNoteInput
+                sectionId="material_reason"
+                name="materialReason"
                 value={newMaterialItem.reason}
-                onChange={(e) => setNewMaterialItem({ ...newMaterialItem, reason: e.target.value })}
+                onChange={e => setNewMaterialItem({ ...newMaterialItem, reason: e.target.value })}
                 placeholder="Reason for purchase"
-            className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
-            style={{ fontSize: '16px' }}
+                onVoiceSaved={addVoiceClip}
               />
               <button
                 type="button"
@@ -2763,28 +2777,26 @@ const JobCardFormPublic = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Customer Name
               </label>
-              <input
-                type="text"
+              <VoiceNoteInput
+                sectionId="customerName"
                 name="customerName"
                 value={formData.customerName}
                 onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Full name"
-                style={{ fontSize: '16px' }}
+                onVoiceSaved={addVoiceClip}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Position / Title
               </label>
-              <input
-                type="text"
+              <VoiceNoteInput
+                sectionId="customerTitle"
                 name="customerTitle"
                 value={formData.customerTitle}
                 onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Role at site"
-                style={{ fontSize: '16px' }}
+                onVoiceSaved={addVoiceClip}
               />
             </div>
           </div>
@@ -2793,14 +2805,14 @@ const JobCardFormPublic = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Customer Feedback
             </label>
-            <textarea
+            <VoiceNoteTextarea
+              sectionId="customerFeedback"
               name="customerFeedback"
               value={formData.customerFeedback}
               onChange={handleChange}
               rows={3}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
               placeholder="Optional comments from customer"
-              style={{ fontSize: '16px' }}
+              onVoiceSaved={addVoiceClip}
             />
           </div>
 
@@ -2822,17 +2834,15 @@ const JobCardFormPublic = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Job Status
             </label>
-            <select
+            <SearchableSelect
+              id="jobcard-status"
               name="status"
+              aria-label="Job status"
               value={formData.status}
-              onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                style={{ fontSize: '16px' }}
-            >
-              <option value="draft">Draft</option>
-              <option value="submitted">Submitted</option>
-              <option value="completed">Completed</option>
-            </select>
+              onChange={v => handleChange({ target: { name: 'status', value: v } })}
+              options={jobStatusOptions}
+              placeholder="Search status…"
+            />
             </div>
           </div>
 
