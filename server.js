@@ -9,6 +9,13 @@ import { dirname, join } from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
+// `dotenv/config` loads from process.cwd(); PM2 often uses a different cwd than the app folder,
+// so secrets in /var/www/.../abcotronics-erp/.env would be skipped. Always merge .env next to server.js.
+const rootEnvPath = join(__dirname, '.env')
+if (existsSync(rootEnvPath)) {
+  dotenv.config({ path: rootEnvPath, override: true })
+}
+
 // Load .env.local ONLY in development (NEVER in production)
 // SECURITY: .env.local should never exist on production server as it overrides .env
 const isProduction = process.env.NODE_ENV === 'production' || 
