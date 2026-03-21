@@ -188,25 +188,28 @@ const KanbanView = ({
     };
 
     return (
-        <div className="flex gap-3 overflow-x-auto pb-4 min-w-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div
+            className="flex w-full min-w-0 gap-2 overflow-x-auto pb-3"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+        >
             {tasksByStatus.map(({ column, tasks: statusTasks }) => {
                 const statusColorClass = statusColorFn(column.label);
                 
                 return (
                     <div 
                         key={column.value} 
-                        className="flex-shrink-0 w-72 min-w-[260px]"
+                        className="flex min-w-[200px] flex-1 basis-0 flex-col"
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, column.label)}
                     >
                         {/* Column Header */}
-                        <div className={`${statusColorClass} rounded-t-lg px-3 py-2.5 border-b-2`}>
+                        <div className={`${statusColorClass} rounded-t-lg px-2 py-1.5 border-b-2`}>
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-current opacity-75"></div>
-                                    <h3 className="text-sm font-semibold">{column.label}</h3>
-                                    <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-white/50 font-medium">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                    <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-current opacity-75"></div>
+                                    <h3 className="truncate text-xs font-semibold">{column.label}</h3>
+                                    <span className="flex-shrink-0 rounded-full bg-white/50 px-1 py-0 text-[9px] font-medium">
                                         {statusTasks.length}
                                     </span>
                                 </div>
@@ -214,11 +217,11 @@ const KanbanView = ({
                         </div>
 
                         {/* Task Cards */}
-                        <div className="bg-gray-50 rounded-b-lg p-2 min-h-[400px] space-y-2 border-2 border-gray-200">
+                        <div className="min-h-[220px] flex-1 space-y-1 rounded-b-lg border-2 border-t-0 border-gray-200 bg-gray-50 p-1.5">
                             {statusTasks.length === 0 ? (
-                                <div className="text-center py-6 text-gray-400">
-                                    <i className="fas fa-inbox text-2xl mb-1"></i>
-                                    <p className="text-xs">No tasks</p>
+                                <div className="py-4 text-center text-gray-400">
+                                    <i className="fas fa-inbox mb-0.5 text-lg"></i>
+                                    <p className="text-[10px]">No tasks</p>
                                 </div>
                             ) : (
                                 statusTasks.map(task => {
@@ -228,69 +231,69 @@ const KanbanView = ({
                                             key={task.id}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, task)}
-                                            className="bg-white rounded-lg p-3 hover:shadow-md transition-shadow cursor-move border border-gray-200 hover:border-primary-300"
+                                            className="cursor-move rounded-md border border-gray-200 bg-white px-2 py-1.5 transition-shadow hover:border-primary-300 hover:shadow-sm"
                                             onClick={() => onViewTaskDetail && onViewTaskDetail(task)}
                                         >
                                             {/* Task Title */}
-                                            <div className="text-sm font-medium text-gray-900 mb-1.5">{task.title || 'Untitled'}</div>
+                                            <div className="text-xs font-medium leading-snug text-gray-900 line-clamp-2">{task.title || 'Untitled'}</div>
 
                                             {/* Task Description (truncated; strip HTML so pasted images don't show raw markup) */}
                                             {task.description && (
-                                                <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                                                <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-gray-600">
                                                     {typeof task.description === 'string' && task.description.includes('<')
                                                         ? task.description.replace(/<[^>]*>/g, '').trim() || null
                                                         : task.description}
                                                 </p>
                                             )}
 
-                                            {/* Task Metadata */}
-                                            <div className="space-y-1.5">
-                                                {/* Priority, Start & Due Date */}
-                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                            {/* Task Metadata — single compact row where possible */}
+                                            <div className="mt-1 space-y-0.5">
+                                                <div className="flex flex-wrap items-center gap-1">
                                                     {task.priority && (
-                                                        <span className={`px-1.5 py-0.5 text-[10px] rounded ${priorityColorFn(task.priority)} font-medium`}>
+                                                        <span className={`rounded px-1 py-0 text-[9px] font-medium ${priorityColorFn(task.priority)}`}>
                                                             {task.priority}
                                                         </span>
                                                     )}
                                                     {task.startDate && (() => {
                                                         const d = new Date(task.startDate);
                                                         return !Number.isNaN(d.getTime()) ? (
-                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-700 font-medium">
-                                                                <i className="fas fa-play-circle text-[9px]"></i>
+                                                            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-100 px-1 py-0 text-[9px] font-medium text-emerald-700">
+                                                                <i className="fas fa-play-circle text-[8px]"></i>
                                                                 {d.toLocaleDateString()}
                                                             </span>
                                                         ) : null;
                                                     })()}
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${dueMeta.pillClass}`}>
-                                                        <i className="fas fa-calendar text-[9px]"></i>
+                                                    <span className={`inline-flex items-center gap-0.5 rounded px-1 py-0 text-[9px] ${dueMeta.pillClass}`}>
+                                                        <i className="fas fa-calendar text-[8px]"></i>
                                                         {dueMeta.label}
                                                     </span>
                                                 </div>
 
-                                                {/* Assignee */}
-                                                {task.assignee && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center text-white text-[10px] font-semibold">
-                                                            {String(task.assignee).charAt(0).toUpperCase()}
-                                                        </div>
-                                                        <span className="text-[10px] text-gray-600">{task.assignee}</span>
-                                                    </div>
-                                                )}
-
-                                                {/* Subtasks count */}
-                                                {task.subtasks && task.subtasks.length > 0 && (
-                                                    <div className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                        <i className="fas fa-tasks"></i>
-                                                        {task.subtasks.length} subtask{task.subtasks.length > 1 ? 's' : ''}
+                                                {(task.assignee || (task.subtasks && task.subtasks.length > 0)) && (
+                                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-gray-500">
+                                                        {task.assignee && (
+                                                            <span className="inline-flex min-w-0 items-center gap-1">
+                                                                <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-[8px] font-semibold text-white">
+                                                                    {String(task.assignee).charAt(0).toUpperCase()}
+                                                                </span>
+                                                                <span className="truncate text-gray-600">{task.assignee}</span>
+                                                            </span>
+                                                        )}
+                                                        {task.subtasks && task.subtasks.length > 0 && (
+                                                            <span className="inline-flex items-center gap-0.5">
+                                                                <i className="fas fa-tasks text-[8px]"></i>
+                                                                {task.subtasks.length}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
 
                                             {/* Actions */}
-                                            <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
-                                                <div className="text-[10px] text-gray-400">
+                                            <div className="mt-1 flex items-center justify-between border-t border-gray-100 pt-1">
+                                                <div className="text-[9px] text-gray-400">
                                                     <i className="fas fa-clock mr-0.5"></i>
-                                                    {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : 'No date'}
+                                                    {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}
                                                 </div>
                                                 {onDeleteTask && (
                                                     <button
@@ -298,10 +301,10 @@ const KanbanView = ({
                                                             e.stopPropagation();
                                                             onDeleteTask(task.id);
                                                         }}
-                                                        className="text-gray-400 hover:text-red-600 transition p-0.5"
+                                                        className="p-0.5 text-gray-400 transition hover:text-red-600"
                                                         title="Delete Task"
                                                     >
-                                                        <i className="fas fa-trash text-xs"></i>
+                                                        <i className="fas fa-trash text-[10px]"></i>
                                                     </button>
                                                 )}
                                             </div>
@@ -314,9 +317,9 @@ const KanbanView = ({
                             {onAddTask && (
                                 <button
                                     onClick={() => onAddTask(null, column.label)}
-                                    className="w-full py-2 border border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-white transition text-gray-500 hover:text-primary-600 text-xs font-medium"
+                                    className="w-full rounded-md border border-dashed border-gray-300 py-1 text-[10px] font-medium text-gray-500 transition hover:border-primary-400 hover:bg-white hover:text-primary-600"
                                 >
-                                    <i className="fas fa-plus mr-1.5"></i>
+                                    <i className="fas fa-plus mr-1"></i>
                                     Add Task
                                 </button>
                             )}

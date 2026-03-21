@@ -9599,7 +9599,7 @@ function initializeProjectDetail() {
                 ListView()
             ) : (
                 KanbanViewComponent ? (
-                    <div className="min-w-0 overflow-x-auto">
+                    <div className="-mx-6 min-w-0 w-full max-w-none">
                     <KanbanViewComponent
                         tasks={kanbanTasks}
                         statusColumns={kanbanColumns}
