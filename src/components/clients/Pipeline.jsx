@@ -2647,8 +2647,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     {/* Card Header */}
                                                     <div className="flex items-start justify-between mb-2">
                                                         <div className="flex-1 min-w-0">
-                                                            <h4 className="text-sm font-semibold text-gray-900 truncate">
-                                                                {itemType === 'site' ? (item.site?.name || item.name?.split?.(' · ')?.[1] || itemName) : itemName}
+                                                            <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2 min-w-0">
+                                                                {itemType === 'site' && (
+                                                                    <i
+                                                                        className="fas fa-map-marker-alt text-xs opacity-70 flex-shrink-0 text-gray-500"
+                                                                        aria-hidden
+                                                                    />
+                                                                )}
+                                                                <span className="truncate">
+                                                                    {itemType === 'site'
+                                                                        ? item.site?.name || item.name?.split?.(' · ')?.[1] || itemName
+                                                                        : itemName}
+                                                                </span>
                                                             </h4>
                                                             {itemType === 'site' && (item.lead?.name || item.client?.name || item.name?.split?.(' · ')?.[0]) && (
                                                                 <p className="text-xs text-gray-600 mt-0.5 truncate">
@@ -2978,9 +2988,28 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                             )
                                                         )}
                                                         <div className="min-w-0">
-                                                            <span className={`font-medium text-gray-900 dark:text-gray-100 block ${isNested ? 'text-xs' : 'text-sm'}`}>
-                                                                {isSite && isNested ? (item.site?.name || item.name?.replace?.(`${parentName} · `, '') || item.name) : item.name}
-                                                            </span>
+                                                            {isSite && isNested ? (
+                                                                <span
+                                                                    className={`inline-flex items-center gap-2 font-medium text-gray-900 dark:text-gray-100 ${isNested ? 'text-xs' : 'text-sm'}`}
+                                                                >
+                                                                    <i
+                                                                        className="fas fa-map-marker-alt text-xs opacity-70 flex-shrink-0 text-gray-500 dark:text-gray-400"
+                                                                        aria-hidden
+                                                                    />
+                                                                    <span>
+                                                                        {item.site?.name || item.name?.replace?.(`${parentName} · `, '') || item.name}
+                                                                        {item.site?.address ? (
+                                                                            <span className="text-xs opacity-80"> — {item.site.address}</span>
+                                                                        ) : null}
+                                                                    </span>
+                                                                </span>
+                                                            ) : (
+                                                                <span
+                                                                    className={`font-medium text-gray-900 dark:text-gray-100 block ${isNested ? 'text-xs' : 'text-sm'}`}
+                                                                >
+                                                                    {item.name}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </td>
