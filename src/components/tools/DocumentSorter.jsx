@@ -232,7 +232,7 @@ const DocumentSorter = () => {
               type="button"
               onClick={runProcess}
               disabled={processing}
-              className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {processing ? 'Sorting…' : 'Sort into File 1–7'}
             </button>

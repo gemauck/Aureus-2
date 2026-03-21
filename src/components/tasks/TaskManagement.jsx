@@ -659,7 +659,7 @@ const TaskManagement = () => {
             <p className={`font-semibold leading-snug text-left w-full ${isDark ? 'text-white' : 'text-gray-900'} ${normalizeStatus(task.status) === 'completed' ? 'line-through opacity-70' : ''}`}>
               {task.title}
             </p>
-            {task.category ? <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>{task.category}</p> : null}
+            {task.category ? <p className={`text-[11px] mt-0.5 uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>{task.category}</p> : null}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
               <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize ${priorityPillClass(task.priority)}`}>{task.priority || 'medium'}</span>
               {due ? (
@@ -710,13 +710,13 @@ const TaskManagement = () => {
 
   return (
     <div className={`${shell} ${isDark ? 'bg-[#0c0f14]' : 'bg-gradient-to-b from-slate-50 via-white to-slate-100'}`}>
-      <div className={`relative overflow-hidden border-b ${isDark ? 'border-gray-800 bg-gradient-to-br from-slate-900 via-[#111827] to-slate-900' : 'border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-indigo-50/40'}`}>
+      <div className={`relative overflow-hidden border-b ${isDark ? 'border-gray-800 bg-gradient-to-br from-slate-900 via-[#111827] to-slate-900' : 'border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/40'}`}>
         <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }} />
         <div className="relative max-w-[1600px] mx-auto px-4 md:px-8 py-8 md:py-10">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mb-3 border bg-white/5 border-white/10 text-indigo-200">
-                <i className="fas fa-layer-group text-indigo-300" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mb-3 border bg-white/5 border-white/10 text-blue-200">
+                <i className="fas fa-layer-group text-blue-300" />
                 Workspace
               </div>
               <h1 className={`text-3xl md:text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Task workspace</h1>
@@ -741,7 +741,7 @@ const TaskManagement = () => {
                 <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
-              <button type="button" onClick={openCreateList} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/25 hover:from-violet-500 hover:to-indigo-500">
+              <button type="button" onClick={openCreateList} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-sky-500">
                 <i className="fas fa-columns" />
                 New list
               </button>
@@ -779,7 +779,7 @@ const TaskManagement = () => {
                   onClick={() => setViewMode(v.mode)}
                   className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition ${
                     viewMode === v.mode
-                      ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md'
+                      ? 'bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-md'
                       : isDark
                         ? 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700'
                         : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80'
@@ -828,7 +828,7 @@ const TaskManagement = () => {
           </div>
           {viewMode === 'list' ? (
             <div className="mt-3 flex justify-end">
-              <button type="button" onClick={clearFilters} className={`text-xs font-medium ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+              <button type="button" onClick={clearFilters} className={`text-xs font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
                 Reset all filters
               </button>
             </div>
@@ -856,11 +856,11 @@ const TaskManagement = () => {
           lists.length === 0 ? (
             <div className={`text-center py-20 rounded-2xl border border-dashed ${isDark ? 'border-gray-600 bg-gray-900/30' : 'border-slate-300 bg-slate-50'}`}>
               <div className={`inline-flex h-16 w-16 items-center justify-center rounded-2xl mb-4 ${isDark ? 'bg-gray-800' : 'bg-white shadow'}`}>
-                <i className="fas fa-columns text-2xl text-indigo-400" />
+                <i className="fas fa-columns text-2xl text-blue-400" />
               </div>
               <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>Create your first list</p>
               <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Lists are columns on your board — add one to start organizing tasks.</p>
-              <button type="button" onClick={openCreateList} className="mt-6 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-500">Create list</button>
+              <button type="button" onClick={openCreateList} className="mt-6 px-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-500">Create list</button>
             </div>
           ) : (
             <div className="flex gap-4 overflow-x-auto pb-4 -mx-1 px-1 scrollbar-thin">
@@ -881,7 +881,7 @@ const TaskManagement = () => {
                     style={{ borderBottomColor: list.color ? `${list.color}40` : undefined, background: list.color ? (isDark ? `linear-gradient(135deg, ${list.color}22, transparent)` : `linear-gradient(135deg, ${list.color}18, transparent)`) : undefined }}
                   >
                     <div className="min-w-0 flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-white/30" style={{ backgroundColor: list.color || '#6366f1' }} />
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-white/30" style={{ backgroundColor: list.color || '#2563eb' }} />
                       <div>
                         <h3 className={`font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{list.name || 'Unnamed'}</h3>
                         <p className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>{statusLabel(normalizeStatus(list.status))}</p>
@@ -891,7 +891,7 @@ const TaskManagement = () => {
                       <span className={`text-xs font-bold tabular-nums px-2 py-0.5 rounded-lg ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-slate-100 text-slate-700'}`}>{items.length}</span>
                       <button type="button" onClick={() => reorderList(list.id, -1)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-slate-100 text-slate-500'}`} title="Move left"><i className="fas fa-chevron-left text-xs" /></button>
                       <button type="button" onClick={() => reorderList(list.id, 1)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-slate-100 text-slate-500'}`} title="Move right"><i className="fas fa-chevron-right text-xs" /></button>
-                      <button type="button" onClick={() => openEditList(list)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-gray-800 text-indigo-400' : 'hover:bg-slate-100 text-indigo-600'}`} title="Edit"><i className="fas fa-sliders-h text-xs" /></button>
+                      <button type="button" onClick={() => openEditList(list)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-gray-800 text-blue-400' : 'hover:bg-slate-100 text-blue-600'}`} title="Edit"><i className="fas fa-sliders-h text-xs" /></button>
                       <button type="button" onClick={() => deleteList(list.id)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-gray-800 text-rose-400' : 'hover:bg-slate-100 text-rose-600'}`} title="Delete"><i className="fas fa-trash-alt text-xs" /></button>
                     </div>
                   </div>
@@ -934,7 +934,7 @@ const TaskManagement = () => {
                       >
                         <td className="px-4 py-3">
                           <span className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{task.title}</span>
-                          {task.category ? <span className={`ml-2 text-[10px] uppercase tracking-wide ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{task.category}</span> : null}
+                          {task.category ? <span className={`ml-2 text-[10px] uppercase tracking-wide ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{task.category}</span> : null}
                         </td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center gap-1.5">
@@ -967,7 +967,7 @@ const TaskManagement = () => {
                       <td colSpan={7} className={`px-4 py-16 text-center ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
                         <i className="fas fa-search text-3xl mb-3 opacity-40" />
                         <p className="font-medium">No tasks match your filters</p>
-                        <button type="button" onClick={clearFilters} className="mt-3 text-indigo-500 hover:underline text-sm">Clear filters</button>
+                        <button type="button" onClick={clearFilters} className="mt-3 text-blue-500 hover:underline text-sm">Clear filters</button>
                       </td>
                     </tr>
                   ) : null}
@@ -1034,7 +1034,7 @@ const TaskManagement = () => {
       {showTaskModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl max-h-[92vh] overflow-hidden flex flex-col ${isDark ? 'border-gray-600 bg-gray-900' : 'border-slate-200 bg-white'}`}>
-            <div className={`px-6 py-4 border-b flex items-center justify-between ${isDark ? 'border-gray-700 bg-gradient-to-r from-indigo-900/40 to-slate-900' : 'border-slate-100 bg-gradient-to-r from-indigo-50 to-white'}`}>
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${isDark ? 'border-gray-700 bg-gradient-to-r from-blue-900/40 to-slate-900' : 'border-slate-100 bg-gradient-to-r from-blue-50 to-white'}`}>
               <div>
                 <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{editingTaskId ? 'Edit task' : 'New task'}</h3>
                 <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Details sync to your account</p>
@@ -1073,7 +1073,7 @@ const TaskManagement = () => {
                 <div className="flex gap-2 flex-wrap">
                   <input type="text" value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="New tag" className={`flex-1 min-w-[120px] px-3 py-2 rounded-xl border text-sm ${isDark ? 'bg-gray-700 border-gray-500 text-white' : 'bg-white border-slate-200'}`} />
                   <input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="h-10 w-14 rounded-xl border cursor-pointer" />
-                  <button type="button" onClick={createTag} className="px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500">Create tag</button>
+                  <button type="button" onClick={createTag} className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-500">Create tag</button>
                 </div>
               </div>
 
@@ -1114,7 +1114,7 @@ const TaskManagement = () => {
       {showListModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className={`w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden ${isDark ? 'border-gray-600 bg-gray-900' : 'border-slate-200 bg-white'}`}>
-            <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700 bg-violet-950/30' : 'border-slate-100 bg-violet-50/50'}`}>
+            <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700 bg-blue-950/30' : 'border-slate-100 bg-blue-50/50'}`}>
               <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{editingListId ? 'Edit list' : 'New list'}</h3>
             </div>
             <div className="p-6 space-y-4">
@@ -1134,7 +1134,7 @@ const TaskManagement = () => {
             </div>
             <div className={`px-6 py-4 border-t flex justify-end gap-3 ${isDark ? 'border-gray-700' : 'border-slate-100'}`}>
               <button type="button" onClick={() => setShowListModal(false)} className={`px-4 py-2 rounded-xl text-sm ${isDark ? 'bg-gray-800 text-gray-200' : 'bg-slate-100 text-slate-700'}`}>Cancel</button>
-              <button type="button" disabled={saving} onClick={saveList} className="px-5 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50">
+              <button type="button" disabled={saving} onClick={saveList} className="px-5 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">
                 {saving ? 'Saving...' : 'Save list'}
               </button>
             </div>

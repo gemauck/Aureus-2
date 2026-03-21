@@ -5184,7 +5184,7 @@ const LeadDetailModal = ({
                                                         const teamMetaMap = {
                                                             'business development': { icon: 'fa-rocket', colorClass: 'text-pink-700 bg-pink-100 border-pink-200' },
                                                             'technical': { icon: 'fa-cogs', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
-                                                            'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
+                                                            'data': { icon: 'fa-chart-line', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
                                                             'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
                                                             'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
                                                             'operations': { icon: 'fa-project-diagram', colorClass: 'text-primary-700 bg-primary-100 border-primary-200' },

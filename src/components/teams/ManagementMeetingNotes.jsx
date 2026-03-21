@@ -44,7 +44,7 @@ const DEPARTMENTS = [
     { id: 'compliance', name: 'Compliance', icon: 'fa-shield-alt', color: 'red' },
     { id: 'finance', name: 'Finance', icon: 'fa-coins', color: 'yellow' },
     { id: 'technical', name: 'Technical', icon: 'fa-tools', color: 'primary' },
-    { id: 'data', name: 'Data & Analytics', icon: 'fa-chart-line', color: 'indigo' },
+    { id: 'data', name: 'Data & Analytics', icon: 'fa-chart-line', color: 'sky' },
     { id: 'support', name: 'Support', icon: 'fa-headset', color: 'green' },
     { id: 'commercial', name: 'Commercial', icon: 'fa-handshake', color: 'orange' },
     { id: 'business-development', name: 'Business Development', icon: 'fa-rocket', color: 'pink' }

@@ -14,6 +14,10 @@
 #   3) Builds the app
 #   4) Applies DB migrations (if any)
 #   5) Restarts the PM2 process
+#
+# Release summary (in-app “update available” banner):
+#   Set RELEASE_SUMMARY before running this script to override. Otherwise the server
+#   exports RELEASE_SUMMARY from the latest git commit subject (same default as build-jsx).
 ###############################################################################
 
 set -euo pipefail
@@ -64,6 +68,13 @@ npm install --include=dev
 
 echo
 echo "-> Building application..."
+# Embed deploy summary for /version + dist/build-version.json (override with RELEASE_SUMMARY=... deploy.sh)
+if [ -z "${RELEASE_SUMMARY:-}" ] && [ -z "${DEPLOY_SUMMARY:-}" ]; then
+  export RELEASE_SUMMARY="$(git log -1 --pretty=%s 2>/dev/null || true)"
+  if [ -n "${RELEASE_SUMMARY}" ]; then
+    echo "  (RELEASE_SUMMARY from git: ${RELEASE_SUMMARY})"
+  fi
+fi
 npm run build
 
 # Ensure Vite projects bundle exists (avoids 502 on /vite-projects/projects-module.js)

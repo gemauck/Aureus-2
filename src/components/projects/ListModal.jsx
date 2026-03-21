@@ -8,7 +8,7 @@ const ListModal = ({ list, onSave, onClose }) => {
         description: ''
     });
 
-    const colors = ['blue', 'green', 'cyan', 'red', 'yellow', 'pink', 'indigo', 'gray'];
+    const colors = ['blue', 'green', 'cyan', 'red', 'yellow', 'pink', 'sky', 'gray'];
 
     const handleSubmit = (e) => {
         e.preventDefault();

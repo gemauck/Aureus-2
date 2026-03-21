@@ -9,7 +9,7 @@ const BCEA_LEAVE_TYPES = [
     { value: 'paternity', label: 'Paternity Leave', defaultDays: 10, color: 'teal', icon: 'fa-baby-carriage' },
     { value: 'study', label: 'Study Leave', defaultDays: 0, color: 'orange', icon: 'fa-book' },
     { value: 'unpaid', label: 'Unpaid Leave', defaultDays: 0, color: 'gray', icon: 'fa-money-bill-wave' },
-    { value: 'compassionate', label: 'Compassionate Leave', defaultDays: 3, color: 'indigo', icon: 'fa-hands-helping' },
+    { value: 'compassionate', label: 'Compassionate Leave', defaultDays: 3, color: 'primary', icon: 'fa-hands-helping' },
     { value: 'religious', label: 'Religious Holiday', defaultDays: 0, color: 'amber', icon: 'fa-star-and-crescent' }
 ];
 

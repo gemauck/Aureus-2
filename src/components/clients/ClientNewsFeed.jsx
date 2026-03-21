@@ -288,7 +288,7 @@ const ClientNewsFeed = () => {
             'meeting': 'bg-primary-100 text-primary-800',
             'email': 'bg-green-100 text-green-800',
             'note': 'bg-yellow-100 text-yellow-800',
-            'project': 'bg-indigo-100 text-indigo-800',
+            'project': 'bg-blue-100 text-blue-800',
             'invoice': 'bg-orange-100 text-orange-800',
             'opportunity': 'bg-pink-100 text-pink-800',
             'Lead Converted': 'bg-green-100 text-green-800',

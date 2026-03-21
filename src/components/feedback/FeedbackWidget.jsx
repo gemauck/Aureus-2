@@ -226,14 +226,14 @@ const FeedbackWidget = () => {
             {!open ? (
                 <button
                     onClick={() => setOpen(true)}
-                    className={`px-3 py-2 rounded-full shadow-lg text-xs font-medium transition-colors ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-white text-primary-600 border border-gray-200 hover:bg-gray-50 hover:border-primary-300'}`}
+                    className={`px-3 py-2 rounded-full shadow-lg shadow-blue-900/10 text-xs font-medium transition-all ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-white/95 backdrop-blur-sm text-primary-600 border border-gray-200/90 hover:bg-gray-50 hover:border-primary-300 hover:shadow-md'}`}
                     title="Send feedback"
                 >
                     <i className="fas fa-comment-dots mr-1"></i>
                     Feedback
                 </button>
             ) : (
-                <div className={`${isMobile ? 'w-full max-w-[calc(100vw-2rem)]' : 'w-80'} ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col`}>
+                <div className={`${isMobile ? 'w-full max-w-[calc(100vw-2rem)]' : 'w-80'} ${isDark ? 'bg-gray-800/98 border-gray-700' : 'bg-white/98 border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/12 ring-1 ring-black/5 backdrop-blur-md overflow-hidden max-h-[90vh] flex flex-col`}>
                     <div className={`px-3 py-2 border-b ${isDark ? 'border-gray-700 bg-gray-750' : 'border-gray-200 bg-gray-50'} flex items-center justify-between`}>
                         <div className={`text-xs font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>Send Feedback</div>
                         <button className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setOpen(false)}>

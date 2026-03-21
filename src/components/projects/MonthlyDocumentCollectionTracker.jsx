@@ -1873,7 +1873,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-amber-200 text-amber-800 font-semibold dark:bg-amber-900/60 dark:text-amber-200', cellColor: 'bg-amber-200 border-l-4 border-amber-400 shadow-sm dark:bg-amber-900/60 dark:border-amber-500', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
         { value: 'collected', label: 'Collected', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
         { value: 'unavailable', label: 'Unavailable', color: 'bg-slate-200 text-slate-700 font-semibold dark:bg-slate-700 dark:text-slate-200', cellColor: 'bg-slate-200 border-l-4 border-slate-400 shadow-sm dark:bg-slate-700 dark:border-slate-500', optionStyle: { backgroundColor: '#e2e8f0', color: '#334155' } },
-        { value: 'available-on-request', label: 'Available on Request', color: 'bg-violet-200 text-violet-800 font-semibold dark:bg-violet-900/60 dark:text-violet-200', cellColor: 'bg-violet-200 border-l-4 border-violet-400 shadow-sm dark:bg-violet-900/60 dark:border-violet-500', optionStyle: { backgroundColor: '#ddd6fe', color: '#5b21b6' } },
+        { value: 'available-on-request', label: 'Available on Request', color: 'bg-blue-200 text-blue-800 font-semibold dark:bg-blue-900/60 dark:text-blue-200', cellColor: 'bg-blue-200 border-l-4 border-blue-400 shadow-sm dark:bg-blue-900/60 dark:border-blue-500', optionStyle: { backgroundColor: '#dbeafe', color: '#1e40af' } },
         { value: 'not-required', label: 'Not Required', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-700 dark:text-gray-200', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-700 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } }
     ];
     // Monthly Data Review: Not Started, Started, Complete (Complete = stored as 'done' for backward compatibility)
@@ -6373,7 +6373,7 @@ Abcotronics`;
                                         type="button"
                                         onClick={handleApply}
                                         disabled={!selectedTemplateId}
-                                        className="px-3 py-1.5 text-xs bg-violet-200 text-violet-800 rounded-lg hover:bg-violet-300 disabled:opacity-50"
+                                        className="px-3 py-1.5 text-xs bg-blue-200 text-blue-800 rounded-lg hover:bg-blue-300 disabled:opacity-50"
                                     >
                                         Apply Template
                                     </button>
@@ -6879,7 +6879,7 @@ Abcotronics`;
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
                                     onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
-                                    className="px-3 py-1.5 bg-violet-200 dark:bg-violet-700 text-violet-800 dark:text-violet-100 rounded-lg hover:bg-violet-300 dark:hover:bg-violet-600 text-xs font-semibold flex items-center gap-1.5"
+                                    className="px-3 py-1.5 bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-100 rounded-lg hover:bg-blue-300 dark:hover:bg-blue-600 text-xs font-semibold flex items-center gap-1.5"
                                 >
                                     <i className="fas fa-layer-group"></i><span>Templates</span>
                                     <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
@@ -6902,9 +6902,9 @@ Abcotronics`;
                                                 setShowTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/40 hover:text-violet-700 dark:hover:text-violet-300 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-layer-group text-violet-600 dark:text-violet-400"></i>
+                                            <i className="fas fa-layer-group text-blue-600 dark:text-blue-400"></i>
                                             <span>Manage Templates</span>
                                         </button>
                                         <button

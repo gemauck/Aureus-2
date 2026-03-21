@@ -630,13 +630,13 @@ const MyNotes = () => {
     return (
         <div className={isDark ? 'min-h-[calc(100vh-4rem)] bg-[#0c0f14]' : 'min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-slate-100'} role="main" aria-label="My Notes">
             {/* Hero — matches Task workspace */}
-            <div className={`relative overflow-hidden border-b ${isDark ? 'border-gray-800 bg-gradient-to-br from-slate-900 via-[#111827] to-slate-900' : 'border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-violet-50/30'}`}>
+            <div className={`relative overflow-hidden border-b ${isDark ? 'border-gray-800 bg-gradient-to-br from-slate-900 via-[#111827] to-slate-900' : 'border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/30'}`}>
                 <div className="absolute inset-0 opacity-[0.07] pointer-events-none text-current" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }} />
                 <div className="relative max-w-[1600px] mx-auto px-4 md:px-8 py-8 md:py-10">
                     <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
                         <div>
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mb-3 border bg-white/5 border-white/10 text-violet-200">
-                                <i className="fas fa-book-open text-violet-300" />
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mb-3 border bg-white/5 border-white/10 text-blue-200">
+                                <i className="fas fa-book-open text-blue-300" />
                                 Workspace
                             </div>
                             <h1 className={`text-3xl md:text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Notes workspace</h1>
@@ -644,7 +644,7 @@ const MyNotes = () => {
                                 Capture ideas, organize with tags, share with your team, and link notes to clients & projects.
                             </p>
                             <div className="mt-4 flex flex-wrap gap-2">
-                                <div className={`text-xs px-3 py-1.5 rounded-lg border ${isDark ? 'border-violet-800/50 bg-violet-950/30 text-violet-300' : 'border-violet-200 bg-violet-50 text-violet-800'}`}>
+                                <div className={`text-xs px-3 py-1.5 rounded-lg border ${isDark ? 'border-blue-800/50 bg-blue-950/30 text-blue-300' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
                                     <i className="fas fa-keyboard mr-1.5" />
                                     ⌘/Ctrl+N new · ⌘/Ctrl+S save
                                 </div>
@@ -672,7 +672,7 @@ const MyNotes = () => {
                             <button
                                 type="button"
                                 onClick={handleCreateNote}
-                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/25 hover:from-violet-500 hover:to-indigo-500"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-sky-500"
                             >
                                 <i className="fas fa-plus" />
                                 New note
@@ -701,7 +701,7 @@ const MyNotes = () => {
                             <button
                                 type="button"
                                 onClick={() => setViewMode('list')}
-                                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'list' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md' : isDark ? 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700' : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80'}`}
+                                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'list' ? 'bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-md' : isDark ? 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700' : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80'}`}
                                 title="Split view with editor"
                             >
                                 <i className="fas fa-columns" />
@@ -710,7 +710,7 @@ const MyNotes = () => {
                             <button
                                 type="button"
                                 onClick={() => setViewMode('grid')}
-                                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'grid' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md' : isDark ? 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700' : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80'}`}
+                                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'grid' ? 'bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-md' : isDark ? 'bg-gray-800 text-gray-300 border border-gray-600 hover:bg-gray-700' : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200/80'}`}
                                 title="Grid only — switch to Split to edit"
                             >
                                 <i className="fas fa-th-large" />
@@ -724,7 +724,7 @@ const MyNotes = () => {
                             <button
                                 type="button"
                                 onClick={() => setSelectedTagFilter('')}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-medium ${!selectedTagFilter ? (isDark ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-900') : (isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium ${!selectedTagFilter ? (isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-900') : (isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}
                             >
                                 All
                             </button>
@@ -733,7 +733,7 @@ const MyNotes = () => {
                                     key={tag}
                                     type="button"
                                     onClick={() => setSelectedTagFilter(selectedTagFilter === tag ? '' : tag)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium ${selectedTagFilter === tag ? (isDark ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-900') : (isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium ${selectedTagFilter === tag ? (isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-900') : (isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}
                                 >
                                     {tag}
                                 </button>

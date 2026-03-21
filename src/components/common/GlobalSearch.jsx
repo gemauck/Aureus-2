@@ -120,16 +120,16 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
             document: 'text-gray-600',
             invoice: 'text-orange-600',
             task: 'text-yellow-600',
-            lead: 'text-indigo-600',
+            lead: 'text-blue-600',
             opportunity: 'text-teal-600'
         };
         return colors[type] || 'text-gray-600';
     };
     
     return (
-        <div className="relative">
+        <div className={`relative ${isMobile ? 'w-full' : 'flex-1 min-w-0 max-w-xl'}`}>
             {/* Search Input */}
-            <div className={`relative ${isMobile ? 'block' : 'hidden lg:block'}`}>
+            <div className={`relative ${isMobile ? 'block w-full' : 'hidden lg:block w-full'}`}>
                 <input
                     ref={searchRef}
                     type="text"
@@ -138,14 +138,14 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
                     onFocus={() => {
                         if (searchTerm) setIsOpen(true);
                     }}
-                    placeholder="Q Search..."
-                    className={`w-48 pl-8 pr-10 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all ${
+                    placeholder="Search..."
+                    className={`w-full pl-10 pr-10 py-2 text-sm border rounded-full shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all ${
                         isDark 
-                            ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400' 
-                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                            ? 'bg-gray-800/90 border-gray-600 text-gray-200 placeholder-gray-400' 
+                            : 'bg-gray-50/95 border-gray-200/95 text-gray-900 placeholder-gray-500'
                     }`}
                 />
-                <i className={`fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                <i className={`fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                 {isOpen && results.length === 0 && !loading && searchTerm && (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2">
                         <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>ESC</span>
@@ -157,7 +157,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
             {isOpen && (results.length > 0 || loading || (searchTerm.length > 0 && !loading)) && (
                 <div 
                     ref={resultsRef}
-                    className={`absolute left-0 top-full mt-2 w-96 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50 max-h-96 overflow-hidden`}
+                    className={`absolute left-0 top-full mt-2 w-96 ${isDark ? 'bg-gray-800/98 backdrop-blur-md border-gray-700' : 'bg-white/98 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50 max-h-96 overflow-hidden`}
                 >
                     {/* Loading State */}
                     {loading && (

@@ -2876,7 +2876,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 <div className="flex items-center space-x-1">
                                     <label className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">Color:</label>
                                     <div className="flex items-center space-x-1">
-                                        {['#000000', '#ffffff', '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'].map((color) => (
+                                        {['#000000', '#ffffff', '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#1d4ed8'].map((color) => (
                                             <button
                                                 key={color}
                                                 onClick={() => {

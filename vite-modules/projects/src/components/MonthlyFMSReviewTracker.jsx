@@ -3272,7 +3272,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
                         </button>
                         <button
                             onClick={() => setShowTemplateModal(true)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-[10px] font-medium"
+                            className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-[10px] font-medium"
                         >
                             <i className="fas fa-layer-group mr-1"></i>Templates
                         </button>

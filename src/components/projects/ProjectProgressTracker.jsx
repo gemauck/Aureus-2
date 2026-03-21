@@ -1482,7 +1482,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 icon: 'fa-comment-dots',
                 color: '#0284c7', // primary (brand)
                 bgColor: hasValue ? '#f5f3ff' : '#faf5ff',
-                borderColor: hasValue ? '#8b5cf6' : '#e9d5ff',
+                borderColor: hasValue ? '#2563eb' : '#bfdbfe',
                 label: 'Comments',
                 placeholder: 'Add comments'
             }
@@ -1760,7 +1760,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         ) : null,
         // Working Months Info - Modern Badge Design
         React.createElement('div', { 
-            className: 'flex flex-col md:flex-row md:items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200',
+            className: 'flex flex-col md:flex-row md:items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-sky-50 rounded-xl border border-blue-200',
         },
             React.createElement('div', {
                 className: 'px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm',
@@ -1788,7 +1788,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     React.createElement('span', { className: 'text-xs text-gray-600' }, 'Data')
                 ),
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
-                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#8b5cf6' } }),
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#2563eb' } }),
                     React.createElement('span', { className: 'text-xs text-gray-600' }, 'Comments')
                 )
             )
@@ -1998,7 +1998,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         fontWeight: '600',
                                         textAlign: 'left',
                                         backgroundColor: isWorking ? 'rgba(139, 92, 246, 0.1)' : '#ffffff',
-                                        color: isWorking ? '#7c3aed' : '#8b5cf6',
+                                        color: isWorking ? '#1d4ed8' : '#2563eb',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
                                         borderRight: '1px solid #e5e7eb',
@@ -2010,7 +2010,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
-                                        React.createElement('i', { className: 'fas fa-comment-dots text-xs', style: { color: '#8b5cf6' } }),
+                                        React.createElement('i', { className: 'fas fa-comment-dots text-xs', style: { color: '#2563eb' } }),
                                         React.createElement('span', null, 'Comments')
                                     )
                                 )

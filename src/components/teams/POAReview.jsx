@@ -956,8 +956,8 @@ self.onmessage = async (e) => {
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                             newSource.trim()
                                 ? isDark 
-                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
-                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
                                 : isDark
                                     ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -1028,7 +1028,7 @@ self.onmessage = async (e) => {
             {isProcessing && (
                 <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <div className="flex items-center gap-3 mb-3">
-                        <i className={`fas ${processingProgressPercent >= 100 ? 'fa-check-circle text-green-600' : 'fa-spinner fa-spin text-indigo-600'}`}></i>
+                        <i className={`fas ${processingProgressPercent >= 100 ? 'fa-check-circle text-green-600' : 'fa-spinner fa-spin text-blue-600'}`}></i>
                         <div className="flex-1">
                             <p className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
                                 {processingProgressPercent >= 100 ? 'Complete!' : 'Processing...'}
@@ -1047,7 +1047,7 @@ self.onmessage = async (e) => {
                     {/* Progress Bar */}
                     <div className={`w-full h-2 rounded-full ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
                         <div 
-                            className="h-2 rounded-full bg-indigo-600 transition-all duration-300"
+                            className="h-2 rounded-full bg-blue-600 transition-all duration-300"
                             style={{ width: `${processingProgressPercent}%` }}
                         ></div>
                     </div>
@@ -1063,8 +1063,8 @@ self.onmessage = async (e) => {
                     className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition ${
                         uploadedFile && !isProcessing && sources && sources.length > 0
                             ? isDark
-                                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
                             : isDark
                                 ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'

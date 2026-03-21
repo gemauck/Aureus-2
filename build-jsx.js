@@ -2,6 +2,7 @@ import { build, context } from 'esbuild';
 import { glob } from 'glob';
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -201,14 +202,43 @@ async function buildJSX() {
         console.warn('⚠️ core-entry.js not found, skipping core bundle build');
     }
 
-    // Write build version file for cache busting
+    // Write build version file for cache busting (optional human-readable deploy summary for update banner)
+    function readDeploySummaryForBuild() {
+        const fromEnv = process.env.RELEASE_SUMMARY || process.env.DEPLOY_SUMMARY || '';
+        const trimmed = String(fromEnv).trim();
+        if (trimmed) return trimmed.slice(0, 500);
+        const summaryPath = path.join(__dirname, 'release-summary.txt');
+        if (fs.existsSync(summaryPath)) {
+            const raw = fs.readFileSync(summaryPath, 'utf8').trim();
+            if (!raw) return '';
+            const firstLine = raw.split(/\r?\n/).find((l) => l.trim().length > 0) || '';
+            return firstLine.trim().slice(0, 500);
+        }
+        // Default for CI/deploy: last commit subject (recommended when RELEASE_SUMMARY is not set)
+        try {
+            const subject = execSync('git log -1 --pretty=%s', {
+                cwd: __dirname,
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+                maxBuffer: 1024 * 1024
+            }).trim();
+            if (subject) return subject.slice(0, 500);
+        } catch (_) {
+            /* no .git or git unavailable (e.g. some Docker builds) */
+        }
+        return '';
+    }
     const versionInfo = {
         version: Date.now().toString(),
         generatedAt: new Date().toISOString()
     };
+    const deploySummary = readDeploySummaryForBuild();
+    if (deploySummary) {
+        versionInfo.summary = deploySummary;
+    }
     const versionFilePath = path.join(__dirname, 'dist', 'build-version.json');
     fs.writeFileSync(versionFilePath, JSON.stringify(versionInfo, null, 2));
-    console.log(`🧾 Build version file created at dist/build-version.json (version: ${versionInfo.version})`);
+    console.log(`🧾 Build version file created at dist/build-version.json (version: ${versionInfo.version}${deploySummary ? ', summary: ' + deploySummary.slice(0, 60) + (deploySummary.length > 60 ? '…' : '') : ''})`);
     
     // Update index.html with new build version for cache busting
     const indexHtmlPath = path.join(__dirname, 'index.html');

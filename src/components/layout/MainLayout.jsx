@@ -6,6 +6,19 @@ const { useState } = React;
 const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 
+/** Display label for the signed-in user role (sidebar, etc.) */
+function formatUserRoleLabel(role) {
+    if (role == null || role === '') return '';
+    const raw = String(role).trim();
+    const compact = raw.toLowerCase().replace(/[\s_-]/g, '');
+    if (compact === 'superadmin') return 'SuperAdmin';
+    return raw
+        .split(/[\s_-]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+}
+
 const MainLayout = () => {
     // Load company name from settings
     const [companyName, setCompanyName] = React.useState('Abcotronics');
@@ -365,6 +378,11 @@ const MainLayout = () => {
             setSidebarOpen(!manuallyCollapsed);
         }
     }, []); // Only run once on mount
+
+    React.useEffect(() => {
+        document.body.classList.add('erp-app');
+        return () => document.body.classList.remove('erp-app');
+    }, []);
     
     // Handle resize events separately to avoid conflicts
     React.useEffect(() => {
@@ -1463,18 +1481,18 @@ const MainLayout = () => {
                     setSidebarOpen(false);
                 }
             }}
-            className={`w-full flex items-center ${sidebarOpen ? 'px-5 py-2.5 mx-2 my-1 space-x-3 rounded-lg' : 'px-3 py-2.5 mx-2 my-1 justify-center rounded-lg'} transition-all duration-200 ${
+            className={`w-full flex items-center ${sidebarOpen ? 'px-5 py-2.5 mx-2 my-1 space-x-3 rounded-xl' : 'px-3 py-2.5 mx-2 my-1 justify-center rounded-xl'} transition-all duration-200 ${
                 currentPage === item.id 
                     ? isDark
-                        ? 'bg-gray-800 text-white shadow-sm'
-                        : 'bg-gray-200 text-gray-900 shadow-sm'
+                        ? 'bg-gray-800 text-white shadow-sm ring-1 ring-slate-500/50'
+                        : 'bg-blue-50 text-blue-900 shadow-sm ring-1 ring-slate-200/90'
                     : isDark 
-                        ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' 
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+                        ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/80' 
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/80'
             } ${extraClasses}`}
             title={!sidebarOpen ? item.label : ''}
         >
-            <i className={`fas ${item.icon} ${sidebarOpen ? 'text-base' : 'text-lg'} ${currentPage === item.id ? '' : 'opacity-70'}`}></i>
+            <i className={`fas ${item.icon} ${sidebarOpen ? 'text-base' : 'text-lg'} ${currentPage === item.id ? (isDark ? 'text-blue-300' : 'text-blue-700') : 'opacity-70'}`}></i>
             {sidebarOpen && <span className={`text-base font-medium ${currentPage === item.id ? '' : 'font-normal'}`}>{item.label}</span>}
         </button>
     );
@@ -1482,7 +1500,7 @@ const MainLayout = () => {
     /* Layout: isMobile (sidebar overlay) uses 1024px; CSS mobile visuals use 768px — see main.css breakpoint comment */
     return (
         <div 
-            className={`flex h-screen overflow-hidden overflow-x-hidden ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`} 
+            className={`flex h-screen overflow-hidden overflow-x-hidden ${isDark ? 'bg-gray-950' : 'bg-[#f8fafc]'}`} 
             style={{ 
                 width: '100vw', 
                 maxWidth: '100vw', 
@@ -1507,8 +1525,8 @@ const MainLayout = () => {
             <div 
                 data-theme={isDark ? 'dark' : 'light'}
                 className={`
-                    ${isDark ? 'bg-gray-900' : 'bg-white'} 
-                    transition-all duration-300 flex flex-col shadow-sm
+                    ${isDark ? 'bg-gray-900 border-r border-gray-800 shadow-xl shadow-black/20' : 'bg-white border-r border-gray-200/80 shadow-[4px_0_24px_-12px_rgba(15,23,42,0.06)]'} 
+                    transition-all duration-300 flex flex-col
                     ${isMobile ? 'fixed z-50' : 'relative z-10'}
                     ${isMobile ? 'main-layout-sidebar' : ''}
                     ${isMobile ? (sidebarOpen ? 'sidebar-open' : 'sidebar-closed') : ''}
@@ -1535,12 +1553,12 @@ const MainLayout = () => {
                 <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-200'}`}>
                     {sidebarOpen && (
                         <h1 className={`abcotronics-logo font-semibold text-lg tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            Praxis ERP
+                            {companyName}
                         </h1>
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200`}
+                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-xl transition-all duration-200`}
                         aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                     >
                         <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-lg`}></i>
@@ -1548,12 +1566,12 @@ const MainLayout = () => {
                 </div>
 
                 {/* Menu Items */}
-                <nav className="flex-1 overflow-y-auto py-3 flex flex-col">
+                <nav className="flex-1 min-h-0 overflow-y-auto py-3 flex flex-col sidebar-scrollbar">
                     <div className="flex-1">
                         {primaryMenuItems.map((item) => renderMenuButton(item))}
                     </div>
                     {(myTasksMenuItem || myNotesMenuItem) && (
-                        <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-200'} pt-2 mt-2`}>
+                        <div className={`${isDark ? 'border-t border-slate-700' : 'border-t border-slate-200'} pt-2 mt-2`}>
                             {myTasksMenuItem && renderMenuButton(myTasksMenuItem)}
                             {myNotesMenuItem && renderMenuButton(myNotesMenuItem)}
                         </div>
@@ -1561,20 +1579,20 @@ const MainLayout = () => {
                 </nav>
 
                 {/* User Profile */}
-                <div className={`${isDark ? 'border-t border-gray-800' : 'border-t border-gray-200'} p-4`}>
-                    <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'}`}>
-                        <div className={`w-9 h-9 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-200'} flex items-center justify-center ${isDark ? 'text-gray-200' : 'text-gray-700'} font-medium text-base`}>
+                <div className={`${isDark ? 'border-t border-slate-700' : 'border-t border-slate-200'} p-3`}>
+                    <div className={`flex items-center ${sidebarOpen ? 'space-x-3 rounded-xl border p-2.5 ' + (isDark ? 'border-gray-700/80 bg-gray-800/40' : 'border-gray-200/90 bg-white/70 shadow-sm') : 'justify-center'}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-white text-base shadow-sm bg-gradient-to-br from-blue-500 to-blue-600`}>
                             {user?.name?.charAt(0) || 'U'}
                         </div>
                         {sidebarOpen && (
                             <>
                                 <div className="flex-1 min-w-0">
                                     <p className={`text-base font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'} truncate`}>{user?.name}</p>
-                                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'} truncate capitalize`}>{user?.role}</p>
+                                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'} truncate`}>{formatUserRoleLabel(user?.role)}</p>
                                 </div>
                                 <button 
                                     onClick={logout}
-                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200`}
+                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-xl transition-all duration-200`}
                                     title="Logout"
                                 >
                                     <i className="fas fa-sign-out-alt text-base"></i>
@@ -1590,18 +1608,17 @@ const MainLayout = () => {
                 {/* Header - STICKY on mobile */}
                 <header 
                     className={`
-                        ${isDark ? 'bg-gray-900' : 'bg-white'} 
-                        ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-100'} 
+                        ${isDark ? 'bg-gray-900/95 backdrop-blur-md border-b border-gray-800 shadow-lg shadow-black/10' : 'bg-white/90 backdrop-blur-md border-b border-gray-200/90 shadow-sm shadow-gray-900/5'} 
                         h-16 flex items-center justify-between px-4 sm:px-6 flex-shrink-0
                         ${isMobile ? 'sticky top-0 z-30' : ''}
                     `}
                 >
-                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                    <div className="flex items-center space-x-4 flex-1 min-w-0 gap-3">
                         {/* Hamburger - MOBILE ONLY */}
                         {isMobile && (
                             <button 
                                 onClick={() => setSidebarOpen(true)}
-                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-lg transition-all duration-200`}
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-xl transition-all duration-200`}
                                 aria-label="Open menu"
                             >
                                 <i className="fas fa-bars text-lg"></i>
@@ -1630,7 +1647,7 @@ const MainLayout = () => {
                         {/* Settings Button */}
                         <button
                             onClick={() => navigateToPage('settings')}
-                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2.5 rounded-lg transition-all duration-200`}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} p-2.5 rounded-xl transition-all duration-200`}
                             title="Settings"
                         >
                             <i className="fas fa-cog text-sm"></i>
@@ -1639,14 +1656,14 @@ const MainLayout = () => {
                         {/* Theme Selector */}
                         <div className="relative theme-selector">
                             <button 
-                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2.5 rounded-lg transition-all duration-200`}
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} p-2.5 rounded-xl transition-all duration-200`}
                                 onClick={() => setShowThemeMenu(!showThemeMenu)}
                             >
                                 <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
                             </button>
                             
                             {showThemeMenu && (
-                                <div className={`absolute right-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50`}>
+                                <div className={`absolute right-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
                                     <div className="p-2">
                                         <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
                                             Theme
@@ -1679,7 +1696,7 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content - scrollable, no horizontal overflow */}
-                <main className={`flex-1 overflow-y-auto overflow-x-hidden min-w-0 ${currentPage === 'clients' ? 'p-0' : 'p-6'}`} style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
+                <main className={`flex-1 overflow-y-auto overflow-x-hidden min-w-0 ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : 'p-6'}`} style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
                     <div className={`w-full max-w-full min-w-0 ${currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`} style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
                         {renderPage}
                     </div>

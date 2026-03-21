@@ -289,10 +289,32 @@ const getAppVersion = () => {
 const APP_VERSION = getAppVersion()
 const APP_BUILD_TIME = process.env.APP_BUILD_TIME || new Date().toISOString()
 
+/** Short sentence for the post-deploy update banner (env overrides dist/build-version.json) */
+function getReleaseSummary () {
+  const envSummary = process.env.RELEASE_SUMMARY || process.env.DEPLOY_SUMMARY
+  if (envSummary && String(envSummary).trim()) {
+    return String(envSummary).trim().slice(0, 500)
+  }
+  try {
+    const p = join(__dirname, 'dist', 'build-version.json')
+    if (existsSync(p)) {
+      const j = JSON.parse(readFileSync(p, 'utf8'))
+      if (j.summary && typeof j.summary === 'string' && j.summary.trim()) {
+        return j.summary.trim().slice(0, 500)
+      }
+    }
+  } catch (_) {}
+  return ''
+}
+const APP_RELEASE_SUMMARY = getReleaseSummary()
+
 // Log version info for debugging
 console.log('📦 App Version:', APP_VERSION)
 console.log('📦 Build Time:', APP_BUILD_TIME)
-console.log('📦 Version endpoint will return:', { version: APP_VERSION, buildTime: APP_BUILD_TIME })
+if (APP_RELEASE_SUMMARY) {
+  console.log('📦 Release summary:', APP_RELEASE_SUMMARY)
+}
+console.log('📦 Version endpoint will return:', { version: APP_VERSION, buildTime: APP_BUILD_TIME, summary: APP_RELEASE_SUMMARY || undefined })
 
 // Trust proxy to work behind Nginx
 app.set('trust proxy', 1)
@@ -439,10 +461,14 @@ app.get('/version', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
   res.setHeader('Pragma', 'no-cache')
   res.setHeader('Expires', '0')
-  res.json({
+  const payload = {
     version: APP_VERSION,
-    buildTime: APP_BUILD_TIME,
-  })
+    buildTime: APP_BUILD_TIME
+  }
+  if (APP_RELEASE_SUMMARY) {
+    payload.summary = APP_RELEASE_SUMMARY
+  }
+  res.json(payload)
 })
 
 // Database health check (no auth) – use for diagnostics when /api/clients returns 500

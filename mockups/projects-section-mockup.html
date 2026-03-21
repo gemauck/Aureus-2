@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Projects — Abcotronics ERP (mockup)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-page: #f3f4f6;
+      --bg-sidebar: #f9fafb;
+      --bg-card: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --text-faint: #9ca3af;
+      --accent-brand: #2563eb;
+      --accent-blue: #3b82f6;
+      --accent-green: #22c55e;
+      --accent-amber: #f59e0b;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+      --font-display: "Outfit", system-ui, sans-serif;
+      --font-ui: "DM Sans", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-ui);
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg-page);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 0 0 16px;
+    }
+
+    .brand {
+      padding: 20px 20px 16px;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.125rem;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav {
+      flex: 1;
+      padding: 12px 10px;
+      overflow-y: auto;
+    }
+
+    .nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-bottom: 2px;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav a:hover {
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--text);
+    }
+
+    .nav a svg {
+      width: 18px;
+      height: 18px;
+      opacity: 0.85;
+    }
+
+    .nav a.active {
+      background: #eff6ff;
+      color: #1d4ed8;
+      box-shadow: inset 3px 0 0 var(--accent-brand);
+    }
+
+    .nav a.active svg {
+      color: var(--accent-brand);
+    }
+
+    .user {
+      margin: 8px 12px 0;
+      padding: 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .user-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .user-name {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .user-role {
+      font-size: 12px;
+      color: var(--text-faint);
+      margin-top: 2px;
+    }
+
+    .logout {
+      color: var(--text-faint);
+      padding: 4px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    .logout:hover {
+      background: var(--bg-page);
+      color: var(--text-muted);
+    }
+
+    /* Main column */
+    .main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      height: 56px;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+    }
+
+    .search-global {
+      flex: 1;
+      max-width: 480px;
+      position: relative;
+    }
+
+    .search-global input {
+      width: 100%;
+      padding: 10px 14px 10px 40px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 13px;
+      background: var(--bg-sidebar);
+    }
+
+    .search-global input::placeholder {
+      color: var(--text-faint);
+    }
+
+    .search-global svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--text-faint);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-btn:hover {
+      background: var(--bg-sidebar);
+      color: var(--text);
+    }
+
+    /* Content */
+    .content {
+      flex: 1;
+      padding: 24px 28px 40px;
+      overflow: auto;
+    }
+
+    .crumb {
+      font-size: 12px;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .page-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .page-head h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .page-head p {
+      margin: 8px 0 0;
+      max-width: 520px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .head-right {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .pill-green {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      text-decoration: none;
+    }
+
+    .btn-ghost {
+      background: var(--bg-card);
+      border-color: var(--border);
+      color: var(--text-muted);
+    }
+
+    .btn-ghost:hover {
+      background: var(--bg-sidebar);
+      color: var(--text);
+    }
+
+    .btn-primary-brand {
+      background: var(--accent-brand);
+      color: #fff;
+    }
+
+    .btn-primary-brand:hover {
+      filter: brightness(1.05);
+    }
+
+    .btn-blue {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+
+    .btn-blue:hover {
+      filter: brightness(1.05);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .search-local {
+      flex: 1;
+      min-width: 200px;
+      max-width: 360px;
+      position: relative;
+    }
+
+    .search-local input {
+      width: 100%;
+      padding: 10px 12px 10px 38px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 13px;
+      background: var(--bg-card);
+    }
+
+    .search-local svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--text-faint);
+    }
+
+    .segment {
+      display: inline-flex;
+      padding: 4px;
+      background: var(--bg-sidebar);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+
+    .segment button {
+      padding: 8px 14px;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .segment button.active {
+      background: var(--bg-card);
+      color: var(--accent-brand);
+      box-shadow: var(--shadow);
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    select.fake-select {
+      padding: 9px 32px 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: var(--bg-card);
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+
+    .link-quiet {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-blue);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      transition: box-shadow 0.2s, border-color 0.2s;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-md);
+      border-color: #d1d5db;
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--text);
+      margin: 0;
+      line-height: 1.35;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 4px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .badge-active {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .badge-planning {
+      background: #fef3c7;
+      color: #b45309;
+    }
+
+    .badge-hold {
+      background: #f3f4f6;
+      color: #4b5563;
+    }
+
+    .badge-done {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .card-meta strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .progress {
+      margin-bottom: 14px;
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: var(--bg-sidebar);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-brand), var(--accent-blue));
+    }
+
+    .card-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .avatars-row {
+      display: flex;
+    }
+
+    .avatars-row .mini {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 2px solid var(--bg-card);
+      margin-left: -8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .avatars-row .mini:first-child {
+      margin-left: 0;
+    }
+
+    .due {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .due svg {
+      vertical-align: -3px;
+      margin-right: 4px;
+    }
+
+    .fab-hint {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 10px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      box-shadow: var(--shadow-md);
+    }
+
+    @media (max-width: 900px) {
+      .sidebar {
+        display: none;
+      }
+      .content {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="brand">Abcotronics ERP</div>
+      <nav class="nav">
+        <a href="#">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+          Dashboard
+        </a>
+        <a href="#">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          CRM
+        </a>
+        <a class="active" href="#" aria-current="page">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          Projects
+        </a>
+        <a href="#">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          My tasks
+        </a>
+        <a href="#">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          Teams
+        </a>
+        <a href="#">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          Manufacturing
+        </a>
+        <a href="#">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Documents
+        </a>
+        <a href="#">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Reports
+        </a>
+      </nav>
+      <div class="user">
+        <div class="avatar">G</div>
+        <div class="user-meta">
+          <div class="user-name">Gareth Mauck</div>
+          <div class="user-role">SuperAdmin</div>
+        </div>
+        <button class="logout" type="button" title="Sign out" aria-label="Sign out">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="search-global">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="search" placeholder="Search clients, projects, documents…" />
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn" type="button" aria-label="Notifications">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          </button>
+          <button class="icon-btn" type="button" aria-label="Settings">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </button>
+          <button class="icon-btn" type="button" aria-label="Toggle theme">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="crumb">Workspace</div>
+        <div class="page-head">
+          <div>
+            <h1>Projects</h1>
+            <p>Track delivery, ownership, and health across every client engagement. Filter by status or client, then open a project for tasks, documents, and timeline.</p>
+          </div>
+          <div class="head-right">
+            <span class="pill pill-green">24 active</span>
+            <button class="btn btn-ghost" type="button">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Refresh
+            </button>
+            <button class="btn btn-primary-brand" type="button">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              New project
+            </button>
+            <button class="btn btn-blue" type="button">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              Export
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-local">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="search" placeholder="Search project name or code…" />
+          </div>
+          <div class="segment" role="group" aria-label="View mode">
+            <button class="active" type="button">Cards</button>
+            <button type="button">Table</button>
+            <button type="button">Timeline</button>
+          </div>
+        </div>
+
+        <div class="filters" style="margin-bottom: 20px;">
+          <select class="fake-select" aria-label="Status">
+            <option>All statuses</option>
+            <option>Active</option>
+            <option>Planning</option>
+            <option>On hold</option>
+            <option>Completed</option>
+          </select>
+          <select class="fake-select" aria-label="Client">
+            <option>All clients</option>
+            <option>ACME Manufacturing</option>
+            <option>Bluewater Logistics</option>
+          </select>
+          <select class="fake-select" aria-label="Owner">
+            <option>Any owner</option>
+            <option>Me</option>
+            <option>My team</option>
+          </select>
+          <select class="fake-select" aria-label="Due">
+            <option>Any due date</option>
+            <option>This week</option>
+            <option>This quarter</option>
+          </select>
+          <button class="link-quiet" type="button">Clear filters</button>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <div class="card-top">
+              <h2 class="card-title">HV Panel — Site B retrofit</h2>
+              <span class="badge badge-active">Active</span>
+            </div>
+            <div class="card-meta">Client <strong>ACME Manufacturing</strong> · PRJ-2025-0142</div>
+            <div class="progress">
+              <div class="progress-label"><span>Overall progress</span><span>68%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width: 68%;"></div></div>
+            </div>
+            <div class="card-foot">
+              <div class="avatars-row" aria-hidden="true">
+                <span class="mini" style="background:#2563eb;margin-left:0;">GM</span>
+                <span class="mini" style="background:#3b82f6;">SK</span>
+                <span class="mini" style="background:#a855f7;">+2</span>
+              </div>
+              <div class="due">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Due Apr 12
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-top">
+              <h2 class="card-title">Control system upgrade — Phase 2</h2>
+              <span class="badge badge-planning">Planning</span>
+            </div>
+            <div class="card-meta">Client <strong>Bluewater Logistics</strong> · PRJ-2025-0098</div>
+            <div class="progress">
+              <div class="progress-label"><span>Overall progress</span><span>22%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width: 22%;"></div></div>
+            </div>
+            <div class="card-foot">
+              <div class="avatars-row">
+                <span class="mini" style="background:#ec4899;margin-left:0;">AL</span>
+              </div>
+              <div class="due">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Kickoff May 01
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-top">
+              <h2 class="card-title">Annual maintenance contract 2025</h2>
+              <span class="badge badge-done">Completed</span>
+            </div>
+            <div class="card-meta">Client <strong>GridLink Utilities</strong> · PRJ-2024-0551</div>
+            <div class="progress">
+              <div class="progress-label"><span>Overall progress</span><span>100%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width: 100%; background: var(--accent-green);"></div></div>
+            </div>
+            <div class="card-foot">
+              <div class="avatars-row">
+                <span class="mini" style="background:#14b8a6;margin-left:0;">JP</span>
+                <span class="mini" style="background:#2563eb;">GM</span>
+              </div>
+              <div class="due">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Closed Feb 28
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-top">
+              <h2 class="card-title">Safety audit remediation</h2>
+              <span class="badge badge-hold">On hold</span>
+            </div>
+            <div class="card-meta">Client <strong>ACME Manufacturing</strong> · PRJ-2025-0203</div>
+            <div class="progress">
+              <div class="progress-label"><span>Overall progress</span><span>41%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width: 41%;"></div></div>
+            </div>
+            <div class="card-foot">
+              <div class="avatars-row">
+                <span class="mini" style="background:#f59e0b;margin-left:0;">RT</span>
+              </div>
+              <div class="due">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Awaiting PO
+              </div>
+            </div>
+          </article>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="fab-hint">Feedback</div>
+</body>
+</html>

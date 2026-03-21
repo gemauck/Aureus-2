@@ -53,7 +53,7 @@ async function main() {
       id: 'data-analytics', 
       name: 'Data Analytics', 
       icon: 'fa-chart-line', 
-      color: 'indigo',
+      color: 'sky',
       description: 'Data analysis and business intelligence',
       permissions: [
         'Query governed datasets and schedule BI dashboard refreshes',

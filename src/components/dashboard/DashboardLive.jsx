@@ -549,7 +549,7 @@ const DashboardLive = () => {
     React.useEffect(() => {
         console.log('%c✨✨✨ DashboardLive v2.0 LOADED ✨✨✨', 'color: #10b981; font-size: 20px; font-weight: bold; padding: 10px; background: #10b981; color: white;');
         console.log('%c📍 Look for the "Edit Layout" button at the bottom of the dashboard', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
-        console.log('%c🎨 Click "Edit Layout" to enable drag, drop, and resize features!', 'color: #8b5cf6; font-size: 14px; font-weight: bold;');
+        console.log('%c🎨 Click "Edit Layout" to enable drag, drop, and resize features!', 'color: #2563eb; font-size: 14px; font-weight: bold;');
         // Set a flag so we can verify it loaded
         window.__DASHBOARD_LIVE_V2_LOADED__ = true;
     }, []);
@@ -826,7 +826,7 @@ const DashboardLive = () => {
                         <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className={`text-sm font-semibold ${headerText}`}>Recent Activity</h3>
-                                <i className="fas fa-stream text-indigo-500 opacity-70"></i>
+                                <i className="fas fa-stream text-blue-500 opacity-70"></i>
                             </div>
                             {sorted.length === 0 ? (
                                 <div className={`text-sm ${subText}`}>No recent activity.</div>

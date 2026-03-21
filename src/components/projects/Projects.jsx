@@ -5,28 +5,56 @@ const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
 const SectionCommentWidget = window.SectionCommentWidget;
 
-// Utility function for project status colors
+// Utility function for project status colors (workspace mockup: blue = active work, green = done, gray = hold)
 const getStatusColorClasses = (status) => {
     const statusMap = {
-        'In Progress': 'bg-blue-100 text-blue-700',
-        'Active': 'bg-green-100 text-green-700',
-        'Completed': 'bg-primary-100 text-primary-700',
-        'On Hold': 'bg-yellow-100 text-yellow-700',
-        'Cancelled': 'bg-red-100 text-red-700',
+        'In Progress': 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200',
+        'Active': 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200',
+        'Completed': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200',
+        'On Hold': 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+        'Cancelled': 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
     };
-    return statusMap[status] || 'bg-gray-100 text-gray-700';
+    return statusMap[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
 };
 
 // Left border accent for grid cards (status at a glance)
 const getStatusBorderClasses = (status) => {
     const borderMap = {
-        'In Progress': 'border-l-blue-500',
-        'Active': 'border-l-green-500',
-        'Completed': 'border-l-primary-500',
-        'On Hold': 'border-l-amber-500',
+        'In Progress': 'border-l-sky-500',
+        'Active': 'border-l-blue-500',
+        'Completed': 'border-l-emerald-500',
+        'On Hold': 'border-l-slate-400',
         'Cancelled': 'border-l-red-500',
     };
     return borderMap[status] || 'border-l-gray-400';
+};
+
+const getProjectProgressPercent = (project) => {
+    const raw = project?.progressPercent ?? project?.completionPercent;
+    if (raw != null && !Number.isNaN(Number(raw))) {
+        return Math.min(100, Math.max(0, Math.round(Number(raw))));
+    }
+    const s = project?.status || '';
+    if (s === 'Completed') return 100;
+    if (s === 'Active') return 68;
+    if (s === 'In Progress') return 45;
+    if (s === 'On Hold') return 18;
+    return 35;
+};
+
+const getAssigneeInitials = (assignedTo) => {
+    if (!assignedTo || typeof assignedTo !== 'string') return '?';
+    const t = assignedTo.trim();
+    if (!t) return '?';
+    const parts = t.split(/[,/&]+/).map((s) => s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+        const a = parts[0].split(/\s+/)[0];
+        const b = parts[1].split(/\s+/)[0];
+        return ((a[0] || '') + (b[0] || '')).toUpperCase() || t.slice(0, 2).toUpperCase();
+    }
+    const words = t.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return t.slice(0, 2).toUpperCase();
 };
 
 const formatProjectDate = (dateValue) => {
@@ -200,6 +228,7 @@ const Projects = () => {
     const routeCheckInProgressRef = useRef(false);
     const navigatingBackRef = useRef(false); // Track when user explicitly navigates back
     const lastHandleViewProjectCallRef = useRef({ projectId: null, timestamp: 0 });
+    const reloadProjectsListRef = useRef(null);
     // Track when projects were last loaded to avoid unnecessary refreshes
     const projectLoadTimestampsRef = useRef(new Map()); // Map<projectId, timestamp>
     const [selectedClient, setSelectedClient] = useState('all');
@@ -210,9 +239,9 @@ const Projects = () => {
     const [viewMode, setViewMode] = useState(() => {
         try {
             const saved = localStorage.getItem('projectsViewMode');
-            return saved === 'grid' || saved === 'list' || saved === 'client' ? saved : 'list';
+            return saved === 'grid' || saved === 'list' || saved === 'client' ? saved : 'grid';
         } catch (e) {
-            return 'list';
+            return 'grid';
         }
     });
     const [isLoading, setIsLoading] = useState(true);
@@ -1459,11 +1488,13 @@ const Projects = () => {
             }
         };
 
+        reloadProjectsListRef.current = loadProjects;
         loadProjects();
-        
+
         // Cleanup function to prevent state updates after unmount
         return () => {
             isMounted = false;
+            reloadProjectsListRef.current = null;
         };
     }, []); // Only run once on initial mount
 
@@ -3441,6 +3472,27 @@ const Projects = () => {
         });
     }, [projects, selectedClient, debouncedSearchTerm, filterStatus]);
 
+    const activeProjectCount = useMemo(
+        () => projects.filter((p) => ['Active', 'In Progress'].includes(p.status)).length,
+        [projects]
+    );
+
+    const handleExportProjectsJson = useCallback(() => {
+        try {
+            const blob = new Blob([JSON.stringify(filteredProjects, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `projects-export-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Export failed:', e);
+        }
+    }, [filteredProjects]);
+
     const groupedProjectsByClient = useMemo(() => {
         const groups = new Map();
         filteredProjects.forEach(project => {
@@ -4573,139 +4625,161 @@ const Projects = () => {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
-                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
-                        <i className={`fas fa-project-diagram ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                                <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Projects</h1>
-                                <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Manage and track all your projects</p>
+        <div className="space-y-6 max-w-[1600px] mx-auto">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 xl:gap-6">
+                    <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200 text-primary-600'}`}>
+                            <i className="fas fa-project-diagram text-lg" aria-hidden="true"></i>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="erp-workspace-kicker">Workspace</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                                <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Projects</h1>
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-800'}`}>
+                                    {activeProjectCount} active
+                                </span>
                             </div>
+                            <p className={`text-sm mt-1.5 max-w-xl ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Track delivery, ownership, and health across every client engagement.
+                            </p>
                             {SectionCommentWidget && (
-                                <div className="hidden sm:block flex-shrink-0">
-                                    <SectionCommentWidget 
-                                        sectionId="projects-main"
-                                        sectionName="Projects"
-                                    />
+                                <div className="mt-3 hidden sm:block">
+                                    <SectionCommentWidget sectionId="projects-main" sectionName="Projects" />
                                 </div>
                             )}
                         </div>
                     </div>
-                </div>
-                <div className="flex flex-wrap items-stretch sm:items-center gap-3 sm:gap-3">
-                    {/* View Toggle */}
-                    <div className={`flex items-center ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 shrink-0`} role="group" aria-label="View mode selector">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 xl:justify-end">
                         <button
-                            onClick={() => {
-                                setViewMode('grid');
-                                try {
-                                    localStorage.setItem('projectsViewMode', 'grid');
-                                } catch (e) {
-                                    console.warn('Failed to save view mode preference:', e);
-                                }
-                            }}
-                            className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                viewMode === 'grid'
-                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            type="button"
+                            onClick={() => reloadProjectsListRef.current?.()}
+                            className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-medium min-h-[44px] sm:min-h-0 transition-colors ${
+                                isDark
+                                    ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750'
+                                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm'
                             }`}
-                            title="Grid View"
-                            aria-label="Switch to grid view"
-                            aria-pressed={viewMode === 'grid'}
+                            aria-label="Refresh projects"
                         >
-                            <i className="fas fa-th" aria-hidden="true"></i>
+                            <i className="fas fa-sync-alt text-xs" aria-hidden="true"></i>
+                            Refresh
                         </button>
                         <button
-                            onClick={() => {
-                                setViewMode('list');
-                                try {
-                                    localStorage.setItem('projectsViewMode', 'list');
-                                } catch (e) {
-                                    console.warn('Failed to save view mode preference:', e);
-                                }
-                            }}
-                            className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                viewMode === 'list'
-                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            type="button"
+                            onClick={handleExportProjectsJson}
+                            className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-medium min-h-[44px] sm:min-h-0 transition-colors ${
+                                isDark
+                                    ? 'border border-primary-500 text-primary-400 hover:bg-gray-800'
+                                    : 'bg-white border border-primary-600 text-primary-600 hover:bg-primary-50 shadow-sm'
                             }`}
-                            title="List View"
-                            aria-label="Switch to list view"
-                            aria-pressed={viewMode === 'list'}
+                            aria-label="Export projects as JSON"
                         >
-                            <i className="fas fa-list" aria-hidden="true"></i>
+                            <i className="fas fa-file-export text-xs" aria-hidden="true"></i>
+                            Export
+                        </button>
+                        <div className={`inline-flex items-center rounded-full border p-1 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200 shadow-sm'}`} role="group" aria-label="View mode selector">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setViewMode('grid');
+                                    try {
+                                        localStorage.setItem('projectsViewMode', 'grid');
+                                    } catch (e) {
+                                        console.warn('Failed to save view mode preference:', e);
+                                    }
+                                }}
+                                className={`px-3 py-1.5 text-sm font-semibold transition-all rounded-full ${
+                                    viewMode === 'grid'
+                                        ? isDark ? 'bg-primary-600 text-white shadow-sm' : 'bg-primary-600 text-white shadow-sm'
+                                        : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                                title="Cards view"
+                                aria-pressed={viewMode === 'grid'}
+                            >
+                                Cards
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setViewMode('list');
+                                    try {
+                                        localStorage.setItem('projectsViewMode', 'list');
+                                    } catch (e) {
+                                        console.warn('Failed to save view mode preference:', e);
+                                    }
+                                }}
+                                className={`px-3 py-1.5 text-sm font-semibold transition-all rounded-full ${
+                                    viewMode === 'list'
+                                        ? isDark ? 'bg-primary-600 text-white shadow-sm' : 'bg-primary-600 text-white shadow-sm'
+                                        : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                                title="Table view"
+                                aria-pressed={viewMode === 'list'}
+                            >
+                                Table
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setViewMode('client');
+                                    try {
+                                        localStorage.setItem('projectsViewMode', 'client');
+                                    } catch (e) {
+                                        console.warn('Failed to save view mode preference:', e);
+                                    }
+                                }}
+                                className={`px-3 py-1.5 text-sm font-semibold transition-all rounded-full ${
+                                    viewMode === 'client'
+                                        ? isDark ? 'bg-primary-600 text-white shadow-sm' : 'bg-primary-600 text-white shadow-sm'
+                                        : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                                title="Group by client"
+                                aria-pressed={viewMode === 'client'}
+                            >
+                                By client
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAllTasksError(null);
+                                setShowAllTasksView(true);
+                                if (allTasksList.length === 0) setAllTasksLoading(true);
+                            }}
+                            className={`px-3.5 py-2.5 rounded-xl transition-all text-sm font-medium min-h-[44px] sm:min-h-0 flex items-center ${
+                                isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm'
+                            }`}
+                            aria-label="View all tasks"
+                        >
+                            <i className="fas fa-tasks mr-2 text-xs" aria-hidden="true"></i>
+                            All Tasks
                         </button>
                         <button
-                            onClick={() => {
-                                setViewMode('client');
-                                try {
-                                    localStorage.setItem('projectsViewMode', 'client');
-                                } catch (e) {
-                                    console.warn('Failed to save view mode preference:', e);
-                                }
-                            }}
-                            className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                viewMode === 'client'
-                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            type="button"
+                            onClick={() => openProgressTrackerHash()}
+                            className={`px-3.5 py-2.5 rounded-xl transition-all text-sm font-medium min-h-[44px] sm:min-h-0 flex items-center ${
+                                isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm'
                             }`}
-                            title="Group by Client"
-                            aria-label="Switch to client grouped view"
-                            aria-pressed={viewMode === 'client'}
+                            aria-label="Open progress tracker"
                         >
-                            <i className="fas fa-user-tag" aria-hidden="true"></i>
+                            <i className="fas fa-chart-line mr-2 text-xs" aria-hidden="true"></i>
+                            Progress
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleAddProject}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold min-h-[44px] sm:min-h-0 bg-primary-600 text-white hover:bg-primary-700 shadow-md shadow-primary-600/20 transition-colors"
+                            aria-label="Create new project"
+                        >
+                            <i className="fas fa-plus text-xs" aria-hidden="true"></i>
+                            New project
                         </button>
                     </div>
-                    <button 
-                        onClick={() => {
-                            setAllTasksError(null);
-                            setShowAllTasksView(true);
-                            if (allTasksList.length === 0) setAllTasksLoading(true);
-                        }}
-                        className={`px-4 py-2.5 rounded-lg transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 ${
-                            isDark 
-                                ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' 
-                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-                        }`}
-                        aria-label="View all tasks"
-                    >
-                        <i className="fas fa-tasks mr-2 text-xs" aria-hidden="true"></i>
-                        All Tasks
-                    </button>
-                    <button 
-                        onClick={() => {
-                            openProgressTrackerHash();
-                            // Also log after state update
-                            setTimeout(() => {
-                            }, 100);
-                        }}
-                        className={`px-4 py-2.5 rounded-lg transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 ${
-                            isDark 
-                                ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' 
-                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-                        }`}
-                        aria-label="Open progress tracker"
-                    >
-                        <i className="fas fa-chart-line mr-2 text-xs" aria-hidden="true"></i>
-                        Progress Tracker
-                    </button>
-                    <button 
-                        onClick={handleAddProject}
-                        className="bg-blue-500 text-white px-4 py-2.5 rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center text-sm font-medium min-h-[44px] sm:min-h-0"
-                        aria-label="Create new project"
-                    >
-                        <i className="fas fa-plus mr-2 text-xs" aria-hidden="true"></i>
-                        New Project
-                    </button>
                 </div>
             </div>
 
             {/* Search and Filters */}
-            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 sm:p-5 shadow-sm`}>
+            <div className="erp-module-card p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1 min-w-0">
                         <div className="relative">
@@ -4855,7 +4929,7 @@ const Projects = () => {
                             ))}
                         </div>
                     ) : (
-                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
+                        <div className="erp-module-card overflow-hidden">
                             <div className="table-responsive overflow-x-auto min-w-0">
                                 <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                     <colgroup>
@@ -4929,7 +5003,7 @@ const Projects = () => {
             {!isLoading && !loadError && (
                 <>
                     {filteredProjects.length === 0 ? (
-                        <div className={`col-span-full text-center py-12 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8`}>
+                        <div className="erp-module-card col-span-full text-center py-12 p-8">
                             {projects.length === 0 ? (
                                 <>
                                     <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
@@ -4939,7 +5013,7 @@ const Projects = () => {
                                     <p className={`text-sm mb-5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Create your first project to get started.</p>
                                     <button
                                         onClick={handleAddProject}
-                                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium transition-all duration-200 shadow-sm hover:shadow"
+                                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-all duration-200 shadow-sm hover:shadow"
                                         aria-label="Create your first project"
                                     >
                                         <i className="fas fa-plus" aria-hidden="true"></i>
@@ -4956,7 +5030,7 @@ const Projects = () => {
                                             setSelectedClient('all');
                                             setFilterStatus('all');
                                         }}
-                                        className="mt-3 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium transition-all duration-200"
+                                        className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-all duration-200"
                                     >
                                         <i className="fas fa-redo mr-2" aria-hidden="true"></i>
                                         Clear all filters
@@ -5036,46 +5110,73 @@ const Projects = () => {
                                         }
                                         mouseDownRef.current = null;
                                     }}
-                                    className={`group relative rounded-xl border-l-4 p-4 sm:p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.01] focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-transparent ${getStatusBorderClasses(project.status)} ${isDark ? 'bg-gray-900 border border-gray-800 border-l-4' : 'bg-white border border-gray-100 border-l-4'}`}
+                                    className={`erp-module-card group relative border-l-4 p-4 sm:p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.01] focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-2 focus-within:ring-offset-transparent ${getStatusBorderClasses(project.status)}`}
                                 >
-                                    <div className="flex justify-between items-start mb-4">
+                                    <div className="flex justify-between items-start gap-2 mb-3">
                                         <div className="flex-1 min-w-0">
-                                            <h3 className={`font-semibold text-sm mb-1 truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{project.name}</h3>
-                                            <p className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{project.client || '—'}</p>
+                                            <h3 className={`font-semibold text-base leading-snug mb-1.5 line-clamp-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{project.name}</h3>
+                                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                Client <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>{project.client || '—'}</span>
+                                                {project.id != null && (
+                                                    <span className={`font-mono ${isDark ? 'text-gray-500' : 'text-gray-400'}`}> · #{project.id}</span>
+                                                )}
+                                            </p>
+                                            {project.type && (
+                                                <p className={`text-[11px] mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{project.type}</p>
+                                            )}
                                         </div>
-                                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                                            <span className={`px-2 py-1 text-xs rounded-lg font-medium ${getStatusColorClasses(project.status)}`}>
+                                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                            <span className={`px-2 py-0.5 text-[10px] uppercase tracking-wide rounded-md font-bold ${getStatusColorClasses(project.status)}`}>
                                                 {project.status}
                                             </span>
-                                            <span className={`opacity-0 group-hover:opacity-100 transition-opacity text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`} aria-hidden="true">
+                                            <span className={`opacity-0 group-hover:opacity-100 transition-opacity text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`} aria-hidden="true">
                                                 <i className="fas fa-chevron-right"></i>
                                             </span>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2.5">
-                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            <i className={`fas fa-tag mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
-                                            {project.type}
+                                    {(() => {
+                                        const pct = getProjectProgressPercent(project);
+                                        return (
+                                            <div className="mb-3">
+                                                <div className={`flex justify-between text-[11px] mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                    <span>Overall progress</span>
+                                                    <span className="font-semibold tabular-nums">{pct}%</span>
+                                                </div>
+                                                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                                    <div
+                                                        className={`h-full rounded-full transition-all ${project.status === 'Completed' ? 'bg-emerald-500' : 'bg-gradient-to-r from-primary-500 to-sky-500'}`}
+                                                        style={{ width: `${pct}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    <div className={`flex items-center justify-between pt-3 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                                        <div className="flex items-center -space-x-2">
+                                            <span
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-white text-[10px] font-bold ring-2 ring-white dark:ring-gray-900 shadow-sm"
+                                                title={project.assignedTo || 'Unassigned'}
+                                            >
+                                                {getAssigneeInitials(project.assignedTo)}
+                                            </span>
+                                            {(project.tasksCount || 0) > 0 && (
+                                                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ring-white dark:ring-gray-900 ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-slate-200 text-slate-700'}`}>
+                                                    {project.tasksCount > 9 ? '9+' : project.tasksCount}
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            <i className={`fas fa-calendar mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
-                                            {formatProjectDateRange(project.startDate, project.dueDate)}
-                                        </div>
-                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            <i className={`fas fa-user mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
-                                            {project.assignedTo}
-                                        </div>
-                                        <div className={`flex items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            <i className={`fas fa-tasks mr-2 w-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
-                                            {project.tasksCount || 0} tasks
+                                        <div className={`flex items-center gap-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            <i className="far fa-calendar-alt" aria-hidden="true"></i>
+                                            <span className="truncate max-w-[9rem]">{formatProjectDateRange(project.startDate, project.dueDate)}</span>
                                         </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : viewMode === 'list' ? (
-                        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border overflow-hidden shadow-sm`}>
+                        <div className="erp-module-card overflow-hidden">
                             <div className="table-responsive overflow-x-auto min-w-0">
                                 <table className="w-full table-fixed" style={{ tableLayout: 'fixed' }}>
                                     <colgroup>

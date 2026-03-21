@@ -148,8 +148,13 @@ const LoginPage = () => {
                     overflow-x: hidden;
                     overflow-y: auto;
                     -webkit-overflow-scrolling: touch;
-                    background: linear-gradient(160deg, #eef4ff 0%, #f8fbff 45%, #ffffff 100%);
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    background-color: #f4f7fb;
+                    background-image:
+                        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(37, 99, 235, 0.14), transparent 55%),
+                        radial-gradient(ellipse 80% 60% at 100% 50%, rgba(59, 130, 246, 0.1), transparent 50%),
+                        radial-gradient(ellipse 60% 50% at 0% 80%, rgba(14, 165, 233, 0.07), transparent 45%),
+                        linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
+                    font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                     -webkit-font-smoothing: antialiased;
                     -moz-osx-font-smoothing: grayscale;
                 }
@@ -192,12 +197,16 @@ const LoginPage = () => {
                 .login-card {
                     width: 100%;
                     max-width: 460px;
-                    background: #ffffff;
-                    border-radius: 1.25rem;
-                    border: 1px solid #e5e7eb;
-                    box-shadow: 0 18px 40px rgba(37, 99, 235, 0.12);
+                    background: rgba(255, 255, 255, 0.92);
+                    border-radius: 1.35rem;
+                    border: 1px solid rgba(226, 232, 240, 0.95);
+                    box-shadow:
+                        0 0 0 1px rgba(255, 255, 255, 0.7) inset,
+                        0 24px 50px -12px rgba(15, 23, 42, 0.14),
+                        0 12px 24px -8px rgba(79, 70, 229, 0.12);
                     padding: clamp(1.25rem, 3.5vw, 2.25rem);
-                    animation: fadeInUp 0.28s ease-out;
+                    animation: fadeInUp 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+                    backdrop-filter: blur(12px);
                 }
 
                 @keyframes fadeInUp {
@@ -216,8 +225,9 @@ const LoginPage = () => {
                     font-size: clamp(1.5rem, 4.6vw, 2rem);
                     font-weight: 750;
                     color: #111827;
-                    letter-spacing: -0.015em;
+                    letter-spacing: -0.02em;
                     text-align: center;
+                    font-family: 'Outfit', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
                 }
 
                 .login-brand-subtitle {
@@ -279,8 +289,8 @@ const LoginPage = () => {
 
                 .form-input:focus {
                     outline: none;
-                    border-color: #2563eb;
-                    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+                    border-color: #3b82f6;
+                    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.22);
                 }
 
                 .form-input::placeholder {
@@ -354,15 +364,15 @@ const LoginPage = () => {
                     width: 100%;
                     min-height: 48px;
                     border: none;
-                    border-radius: 0.72rem;
-                    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                    border-radius: 0.85rem;
+                    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #1d4ed8 100%);
                     color: #ffffff !important;
                     -webkit-text-fill-color: #ffffff !important;
                     font-size: 0.98rem;
                     font-weight: 650;
                     cursor: pointer;
                     transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-                    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+                    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
                 }
 
                 .login-card .submit-button,
@@ -373,7 +383,7 @@ const LoginPage = () => {
 
                 .submit-button:hover:not(:disabled) {
                     transform: translateY(-1px);
-                    box-shadow: 0 11px 22px rgba(37, 99, 235, 0.34);
+                    box-shadow: 0 14px 28px rgba(37, 99, 235, 0.4);
                     color: #ffffff !important;
                 }
 
@@ -400,6 +410,7 @@ const LoginPage = () => {
                     color: #2563eb;
                     font-size: 0.88rem;
                     text-decoration: underline;
+                    text-underline-offset: 2px;
                     cursor: pointer;
                     padding: 0.35rem;
                 }
@@ -441,7 +452,7 @@ const LoginPage = () => {
             <div className="login-wrapper">
                 <div className="login-card login-modal">
                     <h1 className="login-title">Praxis ERP</h1>
-                    <p className="login-slogan">Knowlege drives action</p>
+                    <p className="login-slogan">Knowledge drives action</p>
                     <p className="login-brand-subtitle">by Abco</p>
                     <p className="login-subtitle">Sign in to continue to your account</p>
 

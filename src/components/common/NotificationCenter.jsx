@@ -413,7 +413,7 @@ const NotificationCenter = () => {
                         loadNotifications();
                     }
                 }}
-                className={`relative ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] max-w-[44px] max-h-[44px] flex items-center justify-center notification-button`}
+                className={`relative ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-xl transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200/90 hover:border-gray-300 hover:shadow-sm'} min-w-[44px] min-h-[44px] max-w-[44px] max-h-[44px] flex items-center justify-center notification-button`}
                 title="Notifications"
                 style={{ overflow: 'hidden', position: 'relative' }}
             >
@@ -429,7 +429,7 @@ const NotificationCenter = () => {
             
             {/* Dropdown Panel */}
             {isOpen && (
-                <div className={`absolute right-0 mt-2 w-80 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50 backdrop-blur-sm`}>
+                <div className={`absolute right-0 mt-2 w-80 ${isDark ? 'bg-gray-800/98 border-gray-700' : 'bg-white/98 border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50 backdrop-blur-md`}>
                     {/* Header */}
                     <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h3 className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
@@ -480,7 +480,7 @@ const NotificationCenter = () => {
                                             }
                                         }}
                                         className={`border-b ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'} cursor-pointer transition-colors ${
-                                            !notification.read && (isDark ? 'bg-gray-750' : 'bg-blue-50')
+                                            !notification.read && (isDark ? 'bg-gray-750' : 'bg-blue-50/90')
                                         }`}
                                         style={{ userSelect: 'none' }}
                                         role="button"

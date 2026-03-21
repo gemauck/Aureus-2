@@ -213,7 +213,7 @@ const SarsMonitoring = () => {
     const getCategoryColor = (category) => {
         switch (category) {
             case 'VAT': return isDark ? 'bg-primary-900/50 text-primary-300' : 'bg-primary-100 text-primary-700';
-            case 'Tax': return isDark ? 'bg-indigo-900/50 text-indigo-300' : 'bg-indigo-100 text-indigo-700';
+            case 'Tax': return isDark ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700';
             case 'Compliance': return isDark ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-700';
             default: return isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700';
         }

@@ -3992,7 +3992,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
                                     onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
-                                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
+                                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-semibold transition-all shadow-sm hover:shadow-md flex items-center gap-1.5"
                                 >
                                     <i className="fas fa-layer-group"></i><span>Templates</span>
                                     <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
@@ -4015,9 +4015,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                 setShowTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-layer-group text-indigo-600"></i>
+                                            <i className="fas fa-layer-group text-blue-600"></i>
                                             <span>Manage Templates</span>
                                         </button>
                                         <button

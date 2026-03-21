@@ -262,7 +262,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         { value: 'paternity', label: 'Paternity Leave', days: 10, color: 'teal' },
         { value: 'study', label: 'Study Leave', days: 0, color: 'orange' },
         { value: 'unpaid', label: 'Unpaid Leave', days: 0, color: 'gray' },
-        { value: 'compassionate', label: 'Compassionate Leave', days: 3, color: 'indigo' },
+        { value: 'compassionate', label: 'Compassionate Leave', days: 3, color: 'primary' },
         { value: 'religious', label: 'Religious Holiday', days: 0, color: 'amber' }
     ];
 
@@ -274,7 +274,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             teal: 'bg-teal-100 text-teal-800',
             orange: 'bg-orange-100 text-orange-800',
             gray: 'bg-gray-100 text-gray-800',
-            indigo: 'bg-indigo-100 text-indigo-800',
+            indigo: 'bg-blue-100 text-blue-800',
             amber: 'bg-amber-100 text-amber-800',
             default: 'bg-gray-100 text-gray-800'
         };

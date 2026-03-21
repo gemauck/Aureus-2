@@ -121,7 +121,7 @@ const Tools = () => {
                 name: 'Document Parser',
                 description: 'Extract all information from documents including handwriting, tables, and structured data',
                 icon: 'fa-file-search',
-                color: 'indigo',
+                color: 'sky',
                 component: toolComponents.DocumentParser
             },
             {

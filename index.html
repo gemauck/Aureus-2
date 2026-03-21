@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <meta name="theme-color" content="#0284c7">
+    <meta name="theme-color" content="#2563eb">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -18,14 +18,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    
     <!-- Leaflet CSS - Defer (only needed for maps) -->
     <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""></noscript>
     
     <!-- Tailwind CSS - Production Build (Critical - load immediately) -->
-    <!-- CACHE BUST: 20260109-remove-triangle -->
-    <link rel="preload" href="/dist/styles.css?v=20260115-ee2557f" as="style">
-    <link rel="stylesheet" href="/dist/styles.css?v=20260115-ee2557f">
+    <!-- CACHE BUST: 20260321-erp-ui -->
+    <link rel="preload" href="/dist/styles.css?v=20260321-erp-ui" as="style">
+    <link rel="stylesheet" href="/dist/styles.css?v=20260321-erp-ui">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -80,7 +84,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1774070700360'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1774088932197'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload so Chrome gets fresh JS (fixes cached bundle) -->
     <script>
@@ -106,7 +110,7 @@
     <!-- VERSION: 20260129-doc-collection-cache-bust - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1774070700360';
+            var APP_VERSION = '1774088932197';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -235,25 +239,33 @@
             var checkInterval = null;
             var notificationShown = false;
             
-            function showUpdateNotification() {
+            function showUpdateNotification(summaryText) {
                 if (notificationShown) return;
                 notificationShown = true;
                 
                 // Create notification banner
                 var banner = document.createElement('div');
                 banner.id = 'build-version-notification';
-                banner.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; padding: 16px 20px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
+                banner.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 16px 20px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
                 
                 var message = document.createElement('div');
-                message.style.cssText = 'flex: 1; font-size: 14px; font-weight: 500;';
-                message.textContent = 'A new version is available. Please refresh to get the latest updates.';
+                message.style.cssText = 'flex: 1; font-size: 14px; font-weight: 500; display: flex; flex-direction: column; gap: 6px; min-width: 0;';
+                var mainLine = document.createElement('div');
+                mainLine.textContent = 'A new version is available. Please refresh to get the latest updates.';
+                message.appendChild(mainLine);
+                if (summaryText && String(summaryText).trim()) {
+                    var sub = document.createElement('div');
+                    sub.style.cssText = 'font-size: 12px; font-weight: 400; opacity: 0.92; line-height: 1.35;';
+                    sub.textContent = String(summaryText).trim();
+                    message.appendChild(sub);
+                }
                 
                 var buttonContainer = document.createElement('div');
                 buttonContainer.style.cssText = 'display: flex; gap: 12px; align-items: center;';
                 
                 var refreshBtn = document.createElement('button');
                 refreshBtn.textContent = 'Refresh Now';
-                refreshBtn.style.cssText = 'background: white; color: #0284c7; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: all 0.2s;';
+                refreshBtn.style.cssText = 'background: white; color: #2563eb; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; transition: all 0.2s;';
                 refreshBtn.onmouseover = function() { this.style.transform = 'scale(1.05)'; this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)'; };
                 refreshBtn.onmouseout = function() { this.style.transform = 'scale(1)'; this.style.boxShadow = 'none'; };
                 refreshBtn.onclick = function() {
@@ -300,7 +312,7 @@
                             
                             // If versions don't match and we haven't shown notification yet
                             if (storedVersion && storedVersion !== currentVersion && !notificationShown) {
-                                showUpdateNotification();
+                                showUpdateNotification(data.summary && String(data.summary).trim() ? data.summary : '');
                             } else if (!storedVersion) {
                                 // First time - store the version
                                 localStorage.setItem(BUILD_VERSION_KEY, currentVersion);
@@ -344,19 +356,19 @@
     </script>
     
     <!-- Mobile Responsive CSS - Defer non-critical CSS -->
-    <link rel="preload" href="/mobile-responsive.css?v=20260115-ee2557f" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20260115-ee2557f"></noscript>
+    <link rel="preload" href="/mobile-responsive.css?v=20260321-erp-ui" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20260321-erp-ui"></noscript>
     
     <!-- Mobile Helper JavaScript - Dynamic mobile enhancements -->
-    <script defer src="/mobile-helper.js?v=20260115-ee2557f"></script>
+    <script defer src="/mobile-helper.js?v=20260321-erp-ui"></script>
     
     <!-- Dark Mode Fixes CSS - Defer -->
-    <link rel="preload" href="/dark-mode-fixes.css?v=20260115-ee2557f" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20260115-ee2557f"></noscript>
+    <link rel="preload" href="/dark-mode-fixes.css?v=20260321-erp-ui" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20260321-erp-ui"></noscript>
     
     <!-- Public Job Card Mobile Overrides - Defer -->
-    <link rel="preload" href="/job-card-public-mobile.css?v=20260115-ee2557f" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260115-ee2557f"></noscript>
+    <link rel="preload" href="/job-card-public-mobile.css?v=20260321-erp-ui" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260321-erp-ui"></noscript>
     
     <!-- Font Awesome - Defer non-critical CSS -->
     <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -366,16 +378,16 @@
     <!-- Custom Primary Colors -->
     <style>
         :root {
-            --primary-50: #e0f2fe;
-            --primary-100: #bae6fd;
-            --primary-200: #7dd3fc;
-            --primary-300: #38bdf8;
-            --primary-400: #0ea5e9;
-            --primary-500: #0284c7;
-            --primary-600: #0369a1;
-            --primary-700: #075985;
-            --primary-800: #0c4a6e;
-            --primary-900: #082f49;
+            --primary-50: #eff6ff;
+            --primary-100: #dbeafe;
+            --primary-200: #bfdbfe;
+            --primary-300: #93c5fd;
+            --primary-400: #60a5fa;
+            --primary-500: #3b82f6;
+            --primary-600: #2563eb;
+            --primary-700: #1d4ed8;
+            --primary-800: #1e40af;
+            --primary-900: #1e3a8a;
         }
         .bg-primary-500 { background-color: var(--primary-500); }
         .text-primary-500 { color: var(--primary-500); }
@@ -405,6 +417,19 @@
             align-items: center;
             justify-content: space-between;
             gap: 0.75rem;
+        }
+        .app-version-banner__text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+        .app-version-banner__summary {
+            font-size: 0.8125rem;
+            color: #9ca3af;
+            font-weight: 400;
+            line-height: 1.35;
+            max-width: 42rem;
         }
         .app-version-banner__button {
             border-radius: 9999px;
@@ -445,7 +470,7 @@
     
     <style>
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             touch-action: manipulation;
@@ -557,6 +582,13 @@
             }
         }
         
+        .sidebar-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+        html.dark .sidebar-scrollbar {
+            scrollbar-color: #475569 transparent;
+        }
         .sidebar-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
@@ -564,8 +596,20 @@
             background: transparent;
         }
         .sidebar-scrollbar::-webkit-scrollbar-thumb {
-            background: #0284c7;
+            background: #cbd5e1;
             border-radius: 3px;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        html.dark .sidebar-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        html.dark .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar-corner {
+            background: transparent;
         }
         .scrollbar-hide {
             -ms-overflow-style: none;
@@ -606,9 +650,12 @@
     <!-- Version checker: detects new deployments and prompts user to reload -->
     <div id="app-version-banner" class="app-version-banner" aria-live="polite" aria-atomic="true">
         <div class="app-version-banner__content">
+            <div class="app-version-banner__text">
             <span id="app-version-banner-text">
                 A new version of Abcotronics ERP is available.
             </span>
+            <span id="app-version-banner-summary" class="app-version-banner__summary" hidden></span>
+            </div>
             <div style="display: flex; gap: 0.5rem;">
                 <button
                     type="button"
@@ -974,8 +1021,11 @@
                         // Try to parse as JSON anyway
                     }
                     const data = await res.json().catch(function() { return null; });
-                    if (!data || typeof data.version !== 'string') return null;
-                    return data.version;
+                    if (!data || data.version == null || data.version === '') return null;
+                    return {
+                        version: String(data.version),
+                        summary: typeof data.summary === 'string' ? data.summary.trim() : ''
+                    };
                 } catch (err) {
                     clearTimeout(timeoutId);
                     // Network errors (ERR_ADDRESS_UNREACHABLE, timeout) - fail silently
@@ -983,10 +1033,21 @@
                 }
             }
 
-            function showBanner() {
+            function showBanner(releaseSummary) {
                 const banner = document.getElementById('app-version-banner');
                 if (!banner) return;
                 banner.style.display = 'block';
+
+                const summaryEl = document.getElementById('app-version-banner-summary');
+                if (summaryEl) {
+                    if (releaseSummary && String(releaseSummary).trim()) {
+                        summaryEl.textContent = String(releaseSummary).trim();
+                        summaryEl.removeAttribute('hidden');
+                    } else {
+                        summaryEl.textContent = '';
+                        summaryEl.setAttribute('hidden', 'hidden');
+                    }
+                }
 
                 const reloadBtn = document.getElementById('app-version-reload');
                 const dismissBtn = document.getElementById('app-version-dismiss');
@@ -1026,26 +1087,28 @@
 
                 const stored = getStoredVersion();
                 const dismissed = getDismissedVersion();
+                const latestVersion = latest.version;
+                const summary = latest.summary || '';
 
                 // Only log when something actionable happens (reduces console noise)
                 var versionDebug = typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_VERSION_CHECK') === 'true';
 
-                if (stored && stored !== latest) {
-                    console.log('✅ New version detected!', { old: stored, new: latest });
-                    if (dismissed !== latest || forceShow) {
+                if (stored && stored !== latestVersion) {
+                    console.log('✅ New version detected!', { old: stored, new: latestVersion, summary: summary || undefined });
+                    if (dismissed !== latestVersion || forceShow) {
                         console.log('📢 Showing update notification banner');
-                        showBanner();
+                        showBanner(summary);
                     } else if (versionDebug) {
                         console.log('ℹ️ New version available but user dismissed it');
                     }
                 } else if (!stored) {
-                    if (versionDebug) console.log('📦 First version check - storing version:', latest);
+                    if (versionDebug) console.log('📦 First version check - storing version:', latestVersion);
                 } else if (versionDebug) {
-                    console.log('🔍 Version unchanged:', latest);
+                    console.log('🔍 Version unchanged:', latestVersion);
                 }
 
                 // Always update stored version
-                setStoredVersion(latest);
+                setStoredVersion(latestVersion);
             }
 
             function startPeriodicChecks() {
@@ -1128,8 +1191,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1774070700360" as="script">
-    <script defer src="/dist/core-bundle.js?v=1774070700360"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1774088932197" as="script">
+    <script defer src="/dist/core-bundle.js?v=1774088932197"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1500,8 +1563,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1774070700360" as="script">
-    <script defer src="/lazy-load-components.js?v=1774070700360"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1774088932197" as="script">
+    <script defer src="/lazy-load-components.js?v=1774088932197"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
@@ -1739,8 +1802,8 @@
     
     
     <!-- Mount App - Fast loader for immediate mounting -->
-    <link rel="preload" href="/fast-loader.js?v=20260115-ee2557f" as="script">
-    <script defer src="/fast-loader.js?v=20260115-ee2557f"></script>
+    <link rel="preload" href="/fast-loader.js?v=20260321-erp-ui" as="script">
+    <script defer src="/fast-loader.js?v=20260321-erp-ui"></script>
     
     <!-- Simple fallback mount - only if fast-loader didn't mount -->
     <script>
