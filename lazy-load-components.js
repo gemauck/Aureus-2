@@ -162,6 +162,9 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/tools/DocumentSorter.jsx',
         './src/components/tools/Tools.jsx',
         
+        // ERP Calendar (greenfield)
+        './src/components/erp-calendar/ErpCalendar.jsx',
+
         // Tasks and Notes
         './src/components/tasks/TaskManagement.jsx',
         './src/components/notes/MyNotes.jsx',

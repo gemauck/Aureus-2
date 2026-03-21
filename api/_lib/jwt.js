@@ -54,3 +54,24 @@ export function verifyCalendarFeedToken(token) {
   }
 }
 
+const ERP_CAL_OAUTH_PURPOSE = 'erp-cal-oauth'
+
+/** Short-lived state token for Google OAuth (greenfield Erp Calendar). */
+export function signErpCalendarOAuthState(userId) {
+  if (!process.env.JWT_SECRET || !userId) return null
+  return jwt.sign({ purpose: ERP_CAL_OAUTH_PURPOSE, sub: userId }, process.env.JWT_SECRET, {
+    expiresIn: '15m'
+  })
+}
+
+export function verifyErpCalendarOAuthState(token) {
+  try {
+    if (!process.env.JWT_SECRET || !token) return null
+    const payload = jwt.verify(token, process.env.JWT_SECRET)
+    if (payload.purpose !== ERP_CAL_OAUTH_PURPOSE || !payload.sub) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+

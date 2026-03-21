@@ -108,11 +108,12 @@ body.erp-app :where(a, button, input, textarea, select, [tabindex]):focus-visibl
         max-width: 100%;
     }
 
-    /* Desktop-site mode (wide meta viewport): allow horizontal pan; do not clip the wide layout */
+    /* Desktop-site mode (wide meta viewport): allow horizontal pan; layout at least 1330px (sync MainLayout DESKTOP_SITE_LAYOUT_MIN_PX) */
     html.erp-desktop-site,
     html.erp-desktop-site body {
         overflow-x: auto;
         max-width: none;
+        min-width: 1330px;
     }
     
     /* Touch-friendly buttons */

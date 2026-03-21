@@ -216,6 +216,9 @@
         'components/account/Account.jsx',
         'components/settings/Settings.jsx',
         
+        // ERP Calendar (greenfield — Google OAuth + ERP events)
+        'components/erp-calendar/ErpCalendar.jsx',
+
         // Layout
         'components/layout/MainLayout.jsx',
         

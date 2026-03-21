@@ -3,8 +3,18 @@ if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
 
-const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications'];
+const VALID_PAGES = ['dashboard', 'erp-calendar', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
+
+/** Greenfield ERP Calendar: sidebar + route only for this account (must match api/_lib/erpCalendarAccess.js). */
+const ERP_CALENDAR_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
+function canAccessErpCalendar(user) {
+    const email = (user?.email || '').toLowerCase().trim();
+    return email === ERP_CALENDAR_ALLOWED_EMAIL.toLowerCase();
+}
+
+/** Wide layout viewport for "Desktop site" on phones; ≥1024 so Tailwind lg: applies. Keep in sync with main.css .erp-desktop-site min-width. */
+const DESKTOP_SITE_LAYOUT_MIN_PX = 1330;
 
 /** Display label for the signed-in user role (sidebar, etc.) */
 function formatUserRoleLabel(role) {
@@ -404,18 +414,15 @@ const MainLayout = () => {
     }, [preferDesktopSite]);
 
     /**
-     * Desktop-site mode: use a wide layout viewport (typical laptop width) with initial-scale=1 and
-     * minimum-scale=1 so the browser does not shrink the page to fit the screen (which made text tiny).
-     * User pans horizontally; CSS min-width breakpoints (e.g. lg:) match the wide layout viewport.
+     * Desktop-site mode: fixed layout viewport at least 1330px with initial-scale=1 and minimum-scale=1
+     * so the browser does not shrink the page to fit the screen. User pans horizontally; lg: breakpoints apply.
      */
-    /* Typical full-HD layout width so the app matches desktop breakpoints and feels like a real desktop canvas */
-    const DESKTOP_SITE_LAYOUT_CSS_PX = 1920;
     React.useEffect(() => {
         const meta = document.querySelector('meta[name="viewport"]');
         if (!meta) return undefined;
         const defaultContent =
             'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
-        const desktopSiteContent = `width=${DESKTOP_SITE_LAYOUT_CSS_PX}, initial-scale=1, minimum-scale=1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover`;
+        const desktopSiteContent = `width=${DESKTOP_SITE_LAYOUT_MIN_PX}, initial-scale=1, minimum-scale=1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover`;
         meta.setAttribute('content', preferDesktopSite ? desktopSiteContent : defaultContent);
         return () => {
             meta.setAttribute('content', defaultContent);
@@ -1234,7 +1241,19 @@ const MainLayout = () => {
             window.removeEventListener('leavePlatformComponentReady', handleLeavePlatformReady);
         };
     }, [leavePlatformReady]);
-    
+
+    const [erpCalendarReady, setErpCalendarReady] = React.useState(
+        () => !!(window.ErpCalendar && typeof window.ErpCalendar === 'function')
+    );
+    React.useEffect(() => {
+        const onReady = () => setErpCalendarReady(true);
+        window.addEventListener('erpCalendarComponentReady', onReady);
+        if (window.ErpCalendar && typeof window.ErpCalendar === 'function') {
+            setErpCalendarReady(true);
+        }
+        return () => window.removeEventListener('erpCalendarComponentReady', onReady);
+    }, []);
+
     const LeavePlatform = React.useMemo(() => {
         const component = window.LeavePlatform;
         if (component && typeof component === 'function') {
@@ -1253,6 +1272,7 @@ const MainLayout = () => {
     // Filter menu items based on permissions
     const allMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large', permission: null }, // Always accessible
+        { id: 'erp-calendar', label: 'Calendar', icon: 'fa-calendar-week', permission: null },
         { id: 'clients', label: 'CRM', icon: 'fa-users', permission: 'ACCESS_CRM' },
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
@@ -1298,11 +1318,16 @@ const MainLayout = () => {
         
         // Guest users can only see Projects
         if (userRole === 'guest') {
-            return allMenuItems.filter(item => ['projects', 'my-tasks', 'my-notes'].includes(item.id));
+            return allMenuItems.filter(item =>
+                ['projects', 'my-tasks', 'my-notes'].includes(item.id)
+            );
         }
         
         // Filter menu items based on permissions
         const filtered = allMenuItems.filter(item => {
+            if (item.id === 'erp-calendar') {
+                return canAccessErpCalendar(user);
+            }
             // If no permission specified, always show (dashboard, documents)
             if (!item.permission) {
                 return true;
@@ -1403,6 +1428,18 @@ const MainLayout = () => {
             switch(currentPage) {
                 case 'dashboard': 
                     return <ErrorBoundary key="dashboard"><Dashboard /></ErrorBoundary>;
+                case 'erp-calendar': {
+                    const ErpCal = window.ErpCalendar;
+                    if (!erpCalendarReady || !ErpCal || typeof ErpCal !== 'function') {
+                        return (
+                            <div key="erp-calendar-loading" className="flex flex-col items-center justify-center min-h-[320px] text-gray-500">
+                                <i className="fas fa-spinner fa-spin text-3xl mb-3" />
+                                <p>Loading calendar…</p>
+                            </div>
+                        );
+                    }
+                    return <ErrorBoundary key="erp-calendar"><ErpCal /></ErrorBoundary>;
+                }
                 case 'clients': 
                     // Always get fresh component at render time
                     const ClientsComponent = getClientsComponent();
@@ -1504,7 +1541,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Helpdesk, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker]);
+    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Helpdesk, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker, erpCalendarReady]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
@@ -1553,16 +1590,25 @@ const MainLayout = () => {
     /* Layout: effectiveIsMobile = width < 1024 && !preferDesktopSite; aligns with main.css max-width 1023px */
     return (
         <div 
-            className={`flex h-screen overflow-hidden overflow-x-hidden ${isDark ? 'bg-gray-950' : 'bg-[#f8fafc]'}`} 
+            className={`flex h-screen overflow-hidden ${preferDesktopSite ? 'overflow-x-auto' : 'overflow-x-hidden'} ${isDark ? 'bg-gray-950' : 'bg-[#f8fafc]'}`} 
             style={{ 
-                width: '100vw', 
-                maxWidth: '100vw', 
-                overflowX: 'hidden',
+                ...(preferDesktopSite
+                    ? {
+                        width: '100%',
+                        minWidth: `${DESKTOP_SITE_LAYOUT_MIN_PX}px`,
+                        maxWidth: 'none',
+                        overflowX: 'auto',
+                    }
+                    : {
+                        width: '100vw',
+                        maxWidth: '100vw',
+                        overflowX: 'hidden',
+                    }),
                 paddingTop: 'env(safe-area-inset-top)',
                 paddingLeft: 'env(safe-area-inset-left)',
                 paddingRight: 'env(safe-area-inset-right)',
                 paddingBottom: 'env(safe-area-inset-bottom)',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
             }}
         >
             {/* Mobile Sidebar Overlay - FIXED positioning */}
