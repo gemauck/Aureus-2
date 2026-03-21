@@ -8811,6 +8811,34 @@ function initializeProjectDetail() {
     const KanbanViewComponent = (typeof window.KanbanView === 'function' ? window.KanbanView : null);
     const DocumentCollectionModalComponent = (typeof window.DocumentCollectionModal === 'function' ? window.DocumentCollectionModal : null);
 
+    const projectSectionNavItems = useMemo(() => {
+        const items = [
+            { id: 'overview', label: 'Overview' },
+            { id: 'tasks', label: 'Tasks' }
+        ];
+        if (hasTimeProcess) items.push({ id: 'time', label: 'Time' });
+        if (hasDocumentCollectionProcess) items.push({ id: 'documentCollection', label: 'Document Collection' });
+        if (hasWeeklyFMSReviewProcess) items.push({ id: 'weeklyFMSReview', label: 'Weekly FMS Review' });
+        if (hasMonthlyFMSReviewProcess) items.push({ id: 'monthlyFMSReview', label: 'Monthly FMS Review' });
+        if (hasMonthlyDataReviewProcess) items.push({ id: 'monthlyDataReview', label: 'Monthly Data Review' });
+        if (hasComplianceReviewProcess) items.push({ id: 'complianceReview', label: 'Compliance Review' });
+        items.push({ id: 'notes', label: 'Notes' });
+        items.push({ id: 'activity', label: 'Activity' });
+        return items;
+    }, [
+        hasTimeProcess,
+        hasDocumentCollectionProcess,
+        hasWeeklyFMSReviewProcess,
+        hasMonthlyFMSReviewProcess,
+        hasMonthlyDataReviewProcess,
+        hasComplianceReviewProcess
+    ]);
+
+    const activeSectionLabel = useMemo(() => {
+        const found = projectSectionNavItems.find((i) => i.id === activeSection);
+        return found ? found.label : 'Section';
+    }, [projectSectionNavItems, activeSection]);
+
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -8856,6 +8884,10 @@ function initializeProjectDetail() {
                     <div className="min-w-0">
                         <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">{project.name}</h1>
                         <p className="text-sm text-gray-500 truncate">{project.client} • {project.type}</p>
+                        <p className="lg:hidden mt-1.5 text-xs font-medium text-gray-700" aria-live="polite">
+                            <span className="text-gray-500 font-normal">Section: </span>
+                            {activeSectionLabel}
+                        </p>
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
@@ -8900,12 +8932,30 @@ function initializeProjectDetail() {
                 </div>
             </div>
 
-            {/* Tab Navigation — horizontal scroll on narrow viewports */}
+            {/* Tab Navigation — native select on small screens; horizontal tabs from lg and up */}
             <div className="bg-white rounded-lg border border-gray-200 p-1 min-w-0">
-                <p className="px-2 pt-1 text-[10px] text-gray-500 lg:hidden" aria-hidden>
-                    <i className="fas fa-arrows-alt-h mr-1 opacity-70" /> Swipe tabs for more sections
-                </p>
-                <div className="overflow-x-auto overflow-y-visible -mx-0.5 px-0.5 pb-0.5" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="lg:hidden px-2 pt-2 pb-1 space-y-1">
+                    <label htmlFor="project-detail-section-nav" className="block text-xs font-medium text-gray-600">
+                        Jump to section
+                    </label>
+                    <select
+                        id="project-detail-section-nav"
+                        value={projectSectionNavItems.some((i) => i.id === activeSection) ? activeSection : 'overview'}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            requestAnimationFrame(() => switchSection(v));
+                        }}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 min-h-[44px]"
+                    >
+                        {projectSectionNavItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                                {item.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-1 min-w-0">
+                <div className="min-w-0 flex-1 overflow-x-auto overflow-y-visible -mx-0.5 px-0.5 pb-0.5 hidden lg:block" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <div className="flex gap-1 flex-nowrap min-w-0">
                     <button
                         onClick={() => requestAnimationFrame(() => switchSection('overview'))}
@@ -9028,10 +9078,12 @@ function initializeProjectDetail() {
                             Compliance Review
                         </button>
                     )}
-                    <div className="relative">
+                </div>
+                </div>
+                    <div className="relative flex justify-end shrink-0 px-2 pb-2 lg:px-0 lg:pb-0 lg:self-center">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
-                            className="px-2 py-0.5 bg-primary-600 text-white text-xs font-medium rounded hover:bg-primary-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+                            className="px-3 py-2 lg:px-2 lg:py-0.5 bg-primary-600 text-white text-xs font-medium rounded-lg lg:rounded hover:bg-primary-700 transition-colors flex items-center gap-1 whitespace-nowrap min-h-[44px] lg:min-h-0"
                         >
                             <i className="fas fa-plus text-[10px]"></i>
                             <span>Module</span>
@@ -9130,7 +9182,6 @@ function initializeProjectDetail() {
                             </>
                         )}
                     </div>
-                </div>
                 </div>
             </div>
 

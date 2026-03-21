@@ -625,6 +625,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Status legend collapsed by default to reduce visual weight
     const [legendCollapsed, setLegendCollapsed] = useState(true);
 
+    // Table vs vertical list layout (persisted per project + tracker type; default list on narrow viewports)
+    const layoutStorageKey = project?.id ? `mdct_layout_${dataSource}_${project.id}` : null;
+    const [trackerLayoutMode, setTrackerLayoutMode] = useState(() => {
+        if (typeof window === 'undefined') return 'table';
+        const key = project?.id ? `mdct_layout_${dataSource}_${project.id}` : null;
+        if (key) {
+            try {
+                const stored = localStorage.getItem(key);
+                if (stored === 'list' || stored === 'table') return stored;
+            } catch (_) {}
+        }
+        return window.innerWidth < 1024 ? 'list' : 'table';
+    });
+    useEffect(() => {
+        if (!layoutStorageKey || typeof window === 'undefined') return;
+        try {
+            const stored = localStorage.getItem(layoutStorageKey);
+            if (stored === 'list' || stored === 'table') {
+                setTrackerLayoutMode(stored);
+                return;
+            }
+        } catch (_) {}
+        setTrackerLayoutMode(window.innerWidth < 1024 ? 'list' : 'table');
+    }, [layoutStorageKey, project?.id, dataSource]);
+    useEffect(() => {
+        if (!layoutStorageKey) return;
+        try {
+            localStorage.setItem(layoutStorageKey, trackerLayoutMode);
+        } catch (_) {}
+    }, [trackerLayoutMode, layoutStorageKey]);
+
     // Clear pending attachments when switching to another comment cell
     useEffect(() => {
         setPendingCommentAttachments([]);
@@ -3903,7 +3934,8 @@ const getAssigneeColor = (identifier, users) => {
     // RENDER STATUS CELL
     // ============================================================
     
-    const renderStatusCell = (section, doc, month) => {
+    const renderStatusCell = (section, doc, month, options = {}) => {
+        const { variant = 'table' } = options;
         const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(doc, month);
@@ -3963,23 +3995,42 @@ const baseTextColorClass = statusConfig && statusConfig.color
         };
         
         const monthSeparatorClass = isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200';
-        return (
-            <td
-                data-cell-key={cellKey}
-                tabIndex={0}
-                className={`px-3 py-1.5 text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`}
-                onClick={handleCellClick}
-                onMouseEnter={() => setHoveredStatusCell(cellKey)}
-                onMouseLeave={() => setHoveredStatusCell(null)}
-                onFocus={() => setHoveredStatusCell(cellKey)}
-                onBlur={(e) => {
+        const isList = variant === 'list';
+        const outerClassName = isList
+            ? `px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-600 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-gray-900' : ''}`
+            : `px-3 py-1.5 text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`;
+        const innerWidthClass = isList
+            ? 'w-full min-w-0'
+            : (isJsonOnlyTracker ? 'min-w-[180px] w-[180px]' : 'min-w-[180px]');
+        const OuterTag = isList ? 'div' : 'td';
+        const outerProps = isList
+            ? {
+                'data-cell-key': cellKey,
+                className: outerClassName,
+                onClick: handleCellClick,
+                onMouseEnter: () => setHoveredStatusCell(cellKey),
+                onMouseLeave: () => setHoveredStatusCell(null),
+                title: isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple',
+                role: 'group'
+            }
+            : {
+                'data-cell-key': cellKey,
+                tabIndex: 0,
+                className: outerClassName,
+                onClick: handleCellClick,
+                onMouseEnter: () => setHoveredStatusCell(cellKey),
+                onMouseLeave: () => setHoveredStatusCell(null),
+                onFocus: () => setHoveredStatusCell(cellKey),
+                onBlur: (e) => {
                     if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return;
                     setHoveredStatusCell(null);
-                }}
-                title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
-                role="gridcell"
-            >
-                <div className={`relative ${isJsonOnlyTracker ? 'min-w-[180px] w-[180px]' : 'min-w-[180px]'}`}>
+                },
+                title: isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple',
+                role: 'gridcell'
+            };
+        return (
+            <OuterTag {...outerProps}>
+                <div className={`relative ${innerWidthClass}`}>
                     <select
                         value={status || ''}
                         onChange={(e) => {
@@ -4209,11 +4260,12 @@ const baseTextColorClass = statusConfig && statusConfig.color
                         })()}
                     </div>
                 </div>
-            </td>
+            </OuterTag>
         );
     };
 
-    const renderNotesCell = (section, doc, month) => {
+    const renderNotesCell = (section, doc, month, options = {}) => {
+        const { variant = 'table' } = options;
         const notes = getDocumentNotes(doc, month);
         const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
@@ -4221,31 +4273,113 @@ const baseTextColorClass = statusConfig && statusConfig.color
         const cellBg = statusConfig?.cellColor || (isWorkingMonth ? 'bg-sky-50' : '');
         // Uncontrolled textarea: browser handles all key input (space, enter, etc.) natively.
         // We sync to state on change and save on blur. key resets the field when section/doc/month/year changes.
+        const textarea = (
+            <textarea
+                key={`notes-${section.id}-${doc.id}-${month}-${selectedYear}`}
+                defaultValue={notes}
+                onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
+                onBlur={() => {
+                    lastSavedDataRef.current = null;
+                    if (saveTimeoutRef.current) {
+                        clearTimeout(saveTimeoutRef.current);
+                        saveTimeoutRef.current = null;
+                    }
+                    saveToDatabase();
+                }}
+                placeholder="Notes..."
+                rows={variant === 'list' ? 2 : 3}
+                className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent dark:bg-gray-800/50"
+                aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
+            />
+        );
+        if (variant === 'list') {
+            return (
+                <div
+                    className={`px-2 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-600 ${cellBg} align-top`}
+                    role="group"
+                >
+                    {textarea}
+                </div>
+            );
+        }
         return (
             <td
                 className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
                 style={{ minWidth: '180px', width: '180px' }}
             >
-                <textarea
-                    key={`notes-${section.id}-${doc.id}-${month}-${selectedYear}`}
-                    defaultValue={notes}
-                    onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
-                    onBlur={() => {
-                        lastSavedDataRef.current = null;
-                        if (saveTimeoutRef.current) {
-                            clearTimeout(saveTimeoutRef.current);
-                            saveTimeoutRef.current = null;
-                        }
-                        saveToDatabase();
-                    }}
-                    placeholder="Notes..."
-                    rows={3}
-                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
-                    aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
-                />
+                {textarea}
             </td>
         );
+    };
+
+    /** Vertical list layout: one card per month with full-width status (+ notes for JSON trackers). */
+    const renderListRowsForSection = (section) => {
+        if (!section.documents || section.documents.length === 0) {
+            return (
+                <div className="px-4 py-10 text-center">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">No documents in this section</p>
+                    <button
+                        type="button"
+                        onClick={() => handleAddDocument(section.id)}
+                        className="mt-3 px-4 py-2 bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600 text-sm font-semibold inline-flex items-center gap-2"
+                    >
+                        <i className="fas fa-plus"></i>
+                        <span>Add Document</span>
+                    </button>
+                </div>
+            );
+        }
+        return getOrderedDocumentRows(section).map(({ doc, isSubRow }) => {
+            const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
+            return (
+                <div
+                    key={doc.id}
+                    className={`space-y-3 ${isSubRow ? 'ml-1 pl-3 border-l-2 border-sky-300/80 dark:border-sky-600' : ''}`}
+                >
+                    <div className="min-w-0">
+                        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug">{doc.name}</div>
+                        {doc.description ? (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-4">{doc.description}</div>
+                        ) : null}
+                    </div>
+                    <div className="space-y-3">
+                        {months.map((month, monthIdx) => {
+                            const focusMonth = isOneMonthArrears(selectedYear, monthIdx);
+                            return (
+                                <div
+                                    key={`${doc.id}-${month}`}
+                                    className={`rounded-xl p-3 border bg-white dark:bg-gray-800/90 ${
+                                        focusMonth
+                                            ? 'border-sky-300 dark:border-sky-600 ring-1 ring-sky-200/80 dark:ring-sky-700/80'
+                                            : 'border-gray-200 dark:border-gray-600'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                        <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                                            {month.slice(0, 3)} {selectedYear}
+                                        </span>
+                                        {focusMonth ? (
+                                            <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wide">Focus</span>
+                                        ) : null}
+                                    </div>
+                                    {isMasterGreyedOut ? (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 italic py-1">
+                                            Status for this row is tracked on sub-documents below.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {renderStatusCell(section, doc, month, { variant: 'list' })}
+                                            {isJsonOnlyTracker ? renderNotesCell(section, doc, month, { variant: 'list' }) : null}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        });
     };
     
     // ============================================================
@@ -6867,6 +7001,43 @@ Abcotronics`;
                                     ))}
                                 </select>
                             </div>
+                            <div
+                                className="flex items-center gap-1 bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600"
+                                role="group"
+                                aria-label="Tracker layout"
+                            >
+                                <span className="text-xs font-medium text-gray-600 dark:text-gray-400 hidden sm:inline">View</span>
+                                <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+                                    <button
+                                        type="button"
+                                        onClick={() => setTrackerLayoutMode('list')}
+                                        className={`px-2.5 py-1 text-xs font-semibold transition-colors ${
+                                            trackerLayoutMode === 'list'
+                                                ? 'bg-primary-600 text-white'
+                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
+                                        aria-pressed={trackerLayoutMode === 'list'}
+                                        title="List — one month per row, full width"
+                                    >
+                                        <i className="fas fa-list-ul mr-1" aria-hidden="true" />
+                                        List
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTrackerLayoutMode('table')}
+                                        className={`px-2.5 py-1 text-xs font-semibold transition-colors border-l border-gray-300 dark:border-gray-600 ${
+                                            trackerLayoutMode === 'table'
+                                                ? 'bg-primary-600 text-white'
+                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
+                                        aria-pressed={trackerLayoutMode === 'table'}
+                                        title="Grid — full year table (scroll horizontally on small screens)"
+                                    >
+                                        <i className="fas fa-table mr-1" aria-hidden="true" />
+                                        Grid
+                                    </button>
+                                </div>
+                            </div>
                             <button
                                 type="button"
                                 onClick={handleAddSection}
@@ -7159,6 +7330,16 @@ Abcotronics`;
                                 </div>
                             </div>
 
+                            {trackerLayoutMode === 'list' ? (
+                                <div className="px-3 pb-4 pt-2 space-y-8 border-t border-gray-100 dark:border-gray-700">
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                        <i className="fas fa-list-ul mr-1 opacity-70" aria-hidden="true" />
+                                        List view — one card per month; use Grid for the full year table.
+                                    </p>
+                                    {renderListRowsForSection(section)}
+                                </div>
+                            ) : (
+                                <>
                             {/* Scrollable month/document grid for this section only */}
                                 <div data-scroll-sync className="overflow-x-auto">
                                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
@@ -7550,6 +7731,8 @@ Abcotronics`;
                                     </tbody>
                                 </table>
                             </div>
+                                </>
+                            )}
                         </div>
                     ))
                 )}
