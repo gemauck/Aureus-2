@@ -28,7 +28,7 @@ async function handler(req, res) {
     if (!oauth2) {
       return serviceUnavailable(
         res,
-        'Google Calendar OAuth is not configured on this server. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. For production, also set ERP_GOOGLE_REDIRECT_URI to https://<your-host>/api/erp-calendar/oauth-callback and add that exact URL in Google Cloud Console → OAuth client → Authorized redirect URIs.',
+        'Google Calendar OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or reuse GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET (Helpdesk). Add this redirect URI to that OAuth client: https://<your-host>/api/erp-calendar/oauth-callback (or set ERP_GOOGLE_REDIRECT_URI).',
         'ERP_CALENDAR_GOOGLE_NOT_CONFIGURED'
       )
     }
