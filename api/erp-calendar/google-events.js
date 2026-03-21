@@ -18,7 +18,7 @@ async function handler(req, res) {
     return badRequest(res, 'User required')
   }
 
-  if (!requireErpCalendarAccess(req, res)) {
+  if (!(await requireErpCalendarAccess(req, res))) {
     return
   }
 

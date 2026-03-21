@@ -6,7 +6,7 @@ import { signErpCalendarOAuthState } from '../_lib/jwt.js'
 import { ok, serverError, badRequest, serviceUnavailable } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { createOAuth2Client } from '../_lib/erpGoogleCalendar.js'
+import { createOAuth2Client } from '../_lib/googleOAuthErpClient.js'
 import { requireErpCalendarAccess } from '../_lib/erpCalendarAccess.js'
 
 async function handler(req, res) {
@@ -20,7 +20,7 @@ async function handler(req, res) {
       return badRequest(res, 'User required')
     }
 
-    if (!requireErpCalendarAccess(req, res)) {
+    if (!(await requireErpCalendarAccess(req, res))) {
       return
     }
 
@@ -50,7 +50,7 @@ async function handler(req, res) {
     const authUrl = oauth2.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
-      scope: scopes,
+      scope: scopes.join(' '),
       state
     })
 

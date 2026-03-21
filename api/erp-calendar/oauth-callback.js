@@ -5,7 +5,7 @@
 import { google } from 'googleapis'
 import { prisma } from '../_lib/prisma.js'
 import { verifyErpCalendarOAuthState } from '../_lib/jwt.js'
-import { createOAuth2Client } from '../_lib/erpGoogleCalendar.js'
+import { createOAuth2Client } from '../_lib/googleOAuthErpClient.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { erpCalendarEmailAllowed } from '../_lib/erpCalendarAccess.js'

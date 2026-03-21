@@ -1,25 +1,8 @@
 import { google } from 'googleapis'
 import { prisma } from './prisma.js'
+import { createOAuth2ClientStaticRedirect } from './googleOAuthErpClient.js'
 
 const TZ = 'Africa/Johannesburg'
-
-export function getRedirectUri(req) {
-  const fromEnv = process.env.ERP_GOOGLE_REDIRECT_URI
-  if (fromEnv) return fromEnv.replace(/\/$/, '')
-  const host = req.headers?.host
-  if (!host) return 'http://localhost:3000/api/erp-calendar/oauth-callback'
-  const proto = host.includes('localhost') ? 'http' : 'https'
-  return `${proto}://${host}/api/erp-calendar/oauth-callback`
-}
-
-export function createOAuth2Client(req) {
-  const id = process.env.GOOGLE_CLIENT_ID
-  const secret = process.env.GOOGLE_CLIENT_SECRET
-  if (!id || !secret) {
-    return null
-  }
-  return new google.auth.OAuth2(id, secret, getRedirectUri(req))
-}
 
 /**
  * Load connection, refresh access token if needed, return oauth2 client + calendar API + connection row.
@@ -30,13 +13,8 @@ export async function getAuthorizedCalendarClient(userId) {
   })
   if (!conn) return null
 
-  const redirectUri =
-    process.env.ERP_GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/erp-calendar/oauth-callback'
-  const oauth2 = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri
-  )
+  const oauth2 = createOAuth2ClientStaticRedirect()
+  if (!oauth2) return null
 
   oauth2.setCredentials({
     access_token: conn.accessToken,
