@@ -361,7 +361,7 @@ const MainLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [isMobile, setIsMobile] = useState(false);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-    /** User opt-in: mini desktop layout + zoomed viewport on phones (localStorage erpPreferDesktopLayout) */
+    /** User opt-in: desktop shell on narrow viewports (sidebar in-flow, etc.); viewport stays device-width for readable text */
     const [preferDesktopSite, setPreferDesktopSite] = useState(() => {
         try {
             return localStorage.getItem('erpPreferDesktopLayout') === 'true';
@@ -403,19 +403,8 @@ const MainLayout = () => {
         document.documentElement.classList.toggle('erp-desktop-site', preferDesktopSite);
     }, [preferDesktopSite]);
 
-    /** Zoomed-out “desktop site” viewport on narrow devices */
-    React.useEffect(() => {
-        const meta = document.querySelector('meta[name="viewport"]');
-        if (!meta) return undefined;
-        const defaultContent =
-            'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
-        const desktopSiteContent =
-            'width=1280, initial-scale=1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
-        meta.setAttribute('content', preferDesktopSite ? desktopSiteContent : defaultContent);
-        return () => {
-            meta.setAttribute('content', defaultContent);
-        };
-    }, [preferDesktopSite]);
+    // Do not change <meta name="viewport"> for desktop-site mode: width=1280 + initial-scale=1 shrinks the
+    // whole layout to fit the phone and makes body text unreadable. Layout is controlled by effectiveIsMobile.
 
     // Toggling “desktop site” on a narrow viewport switches shell between overlay and in-flow sidebar
     React.useEffect(() => {
