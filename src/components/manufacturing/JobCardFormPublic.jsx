@@ -84,6 +84,409 @@ const SummaryRow = ({ label, value }) => (
   </div>
 );
 
+/** Combobox-style select: type to filter, click to choose (technicians, clients, stock, etc.) */
+const SearchableSelect = ({
+  id,
+  value,
+  onChange,
+  options,
+  placeholder = 'Search or select…',
+  disabled = false,
+  required = false,
+  className = '',
+  name,
+  'aria-label': ariaLabel
+}) => {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const wrapRef = useRef(null);
+  const listId = id ? `${id}-listbox` : undefined;
+
+  const selected = useMemo(
+    () => options.find(o => String(o.value) === String(value)),
+    [options, value]
+  );
+
+  useEffect(() => {
+    if (!open) {
+      setFilter(selected ? selected.label : '');
+    }
+  }, [value, selected, open]);
+
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(
+      o =>
+        String(o.label).toLowerCase().includes(q) ||
+        String(o.value).toLowerCase().includes(q)
+    );
+  }, [options, filter]);
+
+  useEffect(() => {
+    const onDoc = e => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  return (
+    <div ref={wrapRef} className={`relative ${className}`}>
+      <input
+        id={id}
+        type="text"
+        name={name}
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        aria-controls={listId}
+        disabled={disabled}
+        required={required}
+        aria-label={ariaLabel}
+        autoComplete="off"
+        value={open ? filter : (selected ? selected.label : filter)}
+        onChange={e => {
+          setFilter(e.target.value);
+          setOpen(true);
+          if (!e.target.value) onChange('');
+        }}
+        onFocus={() => {
+          setOpen(true);
+          setFilter(selected ? selected.label : '');
+        }}
+        placeholder={placeholder}
+        className={`w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed`}
+        style={{ fontSize: '16px' }}
+      />
+      {open && !disabled && filtered.length > 0 && (
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute z-[60] mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+        >
+          {filtered.map(opt => (
+            <li
+              key={String(opt.value) + String(opt.label)}
+              role="option"
+              aria-selected={String(opt.value) === String(value)}
+              className="cursor-pointer px-3 py-2.5 text-sm text-gray-900 hover:bg-blue-50"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => {
+                onChange(opt.value);
+                setFilter(opt.label);
+                setOpen(false);
+              }}
+            >
+              {opt.label}
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && !disabled && filtered.length === 0 && (
+        <div className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg">
+          No matches
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Textarea with mic: records audio per section, appends live transcription when the browser supports it */
+const VoiceNoteTextarea = ({
+  sectionId,
+  name,
+  value,
+  onChange,
+  rows = 3,
+  className = '',
+  placeholder = '',
+  onVoiceSaved
+}) => {
+  const [recording, setRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const recognitionRef = useRef(null);
+  const streamRef = useRef(null);
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  const appendText = useCallback(
+    text => {
+      if (!text || !String(text).trim()) return;
+      const v = valueRef.current;
+      const next = v ? `${String(v).trim()}\n${String(text).trim()}` : String(text).trim();
+      onChange({ target: { name, value: next } });
+    },
+    [name, onChange]
+  );
+
+  const stopRecording = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (_) {}
+      recognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setRecording(false);
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    streamRef.current = stream;
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : '';
+    const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    const appliedMime = mr.mimeType || 'audio/webm';
+    chunksRef.current = [];
+    mr.ondataavailable = e => {
+      if (e.data && e.data.size) chunksRef.current.push(e.data);
+    };
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: appliedMime });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result && onVoiceSaved) {
+          onVoiceSaved({
+            section: sectionId,
+            dataUrl: reader.result,
+            mimeType: blob.type || appliedMime
+          });
+        }
+      };
+      reader.readAsDataURL(blob);
+    };
+    mr.start(200);
+    mediaRecorderRef.current = mr;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = navigator.language || 'en-ZA';
+      rec.onresult = ev => {
+        let chunk = '';
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript;
+        }
+        if (chunk.trim()) appendText(chunk.trim());
+      };
+      rec.onerror = () => {};
+      try {
+        rec.start();
+        recognitionRef.current = rec;
+      } catch (_) {
+        recognitionRef.current = null;
+      }
+    }
+
+    setRecording(true);
+  }, [appendText, onVoiceSaved, sectionId]);
+
+  const toggle = () => {
+    if (recording) {
+      stopRecording();
+      return;
+    }
+    startRecording().catch(err => {
+      console.warn('Voice note:', err);
+      alert(`Could not use the microphone: ${err.message || err}`);
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      stopRecording();
+    };
+  }, [stopRecording]);
+
+  return (
+    <div className="relative">
+      <textarea
+        name={name}
+        value={value}
+        onChange={onChange}
+        rows={rows}
+        placeholder={placeholder}
+        className={`w-full pl-4 pr-14 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${className}`}
+        style={{ fontSize: '16px' }}
+      />
+      <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+        <button
+          type="button"
+          onClick={toggle}
+          title={recording ? 'Stop recording' : 'Record voice note'}
+          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
+            recording
+              ? 'border-red-300 bg-red-50 text-red-600'
+              : 'border-gray-200 bg-white text-blue-600 hover:bg-blue-50'
+          }`}
+        >
+          <i className={`fas ${recording ? 'fa-stop' : 'fa-microphone'}`} />
+        </button>
+        {recording && (
+          <span className="text-[10px] font-medium text-red-600">Recording…</span>
+        )}
+      </div>
+      {!(window.SpeechRecognition || window.webkitSpeechRecognition) && (
+        <p className="mt-1 text-[10px] text-gray-400">
+          Live transcription: use Chrome/Edge for best results. Audio is still saved.
+        </p>
+      )}
+    </div>
+  );
+};
+
+const VoiceNoteInput = ({
+  sectionId,
+  name,
+  value,
+  onChange,
+  placeholder = '',
+  className = '',
+  onVoiceSaved
+}) => {
+  const [recording, setRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const recognitionRef = useRef(null);
+  const streamRef = useRef(null);
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  const appendText = useCallback(
+    text => {
+      if (!text || !String(text).trim()) return;
+      const v = valueRef.current;
+      const next = v ? `${String(v).trim()} ${String(text).trim()}` : String(text).trim();
+      onChange({ target: { name, value: next } });
+    },
+    [name, onChange]
+  );
+
+  const stopRecording = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (_) {}
+      recognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setRecording(false);
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    streamRef.current = stream;
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : '';
+    const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    const appliedMime = mr.mimeType || 'audio/webm';
+    chunksRef.current = [];
+    mr.ondataavailable = e => {
+      if (e.data && e.data.size) chunksRef.current.push(e.data);
+    };
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: appliedMime });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result && onVoiceSaved) {
+          onVoiceSaved({
+            section: sectionId,
+            dataUrl: reader.result,
+            mimeType: blob.type || appliedMime
+          });
+        }
+      };
+      reader.readAsDataURL(blob);
+    };
+    mr.start(200);
+    mediaRecorderRef.current = mr;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = navigator.language || 'en-ZA';
+      rec.onresult = ev => {
+        let chunk = '';
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript;
+        }
+        if (chunk.trim()) appendText(chunk.trim());
+      };
+      rec.onerror = () => {};
+      try {
+        rec.start();
+        recognitionRef.current = rec;
+      } catch (_) {
+        recognitionRef.current = null;
+      }
+    }
+    setRecording(true);
+  }, [appendText, onVoiceSaved, sectionId]);
+
+  const toggle = () => {
+    if (recording) {
+      stopRecording();
+      return;
+    }
+    startRecording().catch(err => {
+      console.warn('Voice note:', err);
+      alert(`Could not use the microphone: ${err.message || err}`);
+    });
+  };
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full pl-4 pr-12 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${className}`}
+        style={{ fontSize: '16px' }}
+      />
+      <button
+        type="button"
+        onClick={toggle}
+        title={recording ? 'Stop recording' : 'Record voice note'}
+        className={`absolute top-1/2 right-2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-lg border text-sm touch-manipulation ${
+          recording ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-200 bg-white text-blue-600 hover:bg-blue-50'
+        }`}
+      >
+        <i className={`fas ${recording ? 'fa-stop' : 'fa-microphone'}`} />
+      </button>
+    </div>
+  );
+};
+
 const NO_CLIENT_ID = 'NO_CLIENT';
 
 const JobCardFormPublic = () => {
@@ -136,6 +539,8 @@ const JobCardFormPublic = () => {
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [shareStatus, setShareStatus] = useState('Copy share link');
+  /** Voice clips recorded from text fields: saved with the job card and keyed by section */
+  const [voiceAttachments, setVoiceAttachments] = useState([]);
   // Service form templates and selection state
   const [formTemplates, setFormTemplates] = useState([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -173,6 +578,101 @@ const JobCardFormPublic = () => {
   const availableTechnicians = useMemo(
     () => users.filter(u => u.status !== 'inactive' && u.status !== 'suspended'),
     [users]
+  );
+
+  const addVoiceClip = useCallback(clip => {
+    setVoiceAttachments(prev => [
+      ...prev,
+      {
+        ...clip,
+        id: `vn_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      }
+    ]);
+  }, []);
+
+  const leadTechnicianOptions = useMemo(
+    () => [
+      { value: '', label: 'Select technician' },
+      ...availableTechnicians.map(tech => ({
+        value: tech.name || tech.email,
+        label: `${tech.name || tech.email}${tech.department ? ` (${tech.department})` : ''}`
+      }))
+    ],
+    [availableTechnicians]
+  );
+
+  const teamTechnicianOptions = useMemo(
+    () => [
+      { value: '', label: 'Select technician to add' },
+      ...availableTechnicians
+        .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
+        .map(tech => ({
+          value: tech.name || tech.email,
+          label: tech.name || tech.email
+        }))
+    ],
+    [availableTechnicians, formData.otherTechnicians]
+  );
+
+  const clientSelectOptions = useMemo(
+    () => [
+      { value: '', label: 'Select client' },
+      ...clients.map(c => ({ value: c.id, label: c.name || c.companyName || c.id })),
+      { value: NO_CLIENT_ID, label: 'No Client (enter details manually)' }
+    ],
+    [clients]
+  );
+
+  const siteSelectOptions = useMemo(() => {
+    if (!formData.clientId || availableSites.length === 0) {
+      return [
+        {
+          value: '',
+          label:
+            availableSites.length === 0 && formData.clientId && formData.clientId !== NO_CLIENT_ID
+              ? 'No sites available for this client'
+              : 'Select site'
+        }
+      ];
+    }
+    return [
+      { value: '', label: 'Select site' },
+      ...availableSites.map(site => ({
+        value: site.id || site.name || site,
+        label: String(site.name || site)
+      }))
+    ];
+  }, [formData.clientId, availableSites]);
+
+  const stockSkuOptions = useMemo(
+    () => [
+      { value: '', label: 'Select component' },
+      ...inventory.map(item => ({
+        value: item.sku || item.id,
+        label: `${item.name} (${item.sku || item.id})`
+      }))
+    ],
+    [inventory]
+  );
+
+  const stockLocationOptions = useMemo(
+    () => [
+      { value: '', label: 'Select location' },
+      ...stockLocations.map(loc => ({
+        value: loc.id,
+        label: `${loc.name} (${loc.code})`
+      }))
+    ],
+    [stockLocations]
+  );
+
+  const jobStatusOptions = useMemo(
+    () => [
+      { value: 'draft', label: 'Draft' },
+      { value: 'submitted', label: 'Submitted' },
+      { value: 'completed', label: 'Completed' }
+    ],
+    []
   );
 
   const travelKm = formData.kmReadingBefore && formData.kmReadingAfter
@@ -1227,6 +1727,7 @@ const JobCardFormPublic = () => {
       setTechnicianInput('');
       setNewStockItem({ sku: '', quantity: 0, locationId: '' });
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
+    setVoiceAttachments([]);
     setCurrentStep(0);
     clearSignature();
   };
@@ -1258,6 +1759,14 @@ const JobCardFormPublic = () => {
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
       jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
       jobCardData.totalMaterialsCost = totalMaterialCost;
+
+      const voicePhotoEntries = voiceAttachments.map(v => ({
+        kind: 'voice',
+        section: v.section,
+        url: v.dataUrl,
+        mimeType: v.mimeType || 'audio/webm'
+      }));
+      jobCardData.photos = [...(formData.photos || []), ...voicePhotoEntries];
 
       if (formData.stockUsed && formData.stockUsed.length > 0) {
         const jobCardReference = `Job Card ${jobCardData.id}`;
@@ -1402,21 +1911,16 @@ const JobCardFormPublic = () => {
           <h2 className="text-lg font-semibold text-gray-900">Lead Technician</h2>
           <p className="text-sm text-gray-500 mt-1">Assign the primary technician responsible for this job card.</p>
         </header>
-            <select
+            <SearchableSelect
+              id="lead-technician"
               name="agentName"
+              aria-label="Lead technician"
               value={formData.agentName}
-              onChange={handleChange}
+              onChange={v => handleChange({ target: { name: 'agentName', value: v } })}
+              options={leadTechnicianOptions}
+              placeholder="Search or select technician"
               required
-          className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-          style={{ fontSize: '16px' }}
-            >
-              <option value="">Select technician</option>
-              {availableTechnicians.map(tech => (
-                <option key={tech.id} value={tech.name || tech.email}>
-                  {tech.name || tech.email} {tech.department ? `(${tech.department})` : ''}
-                </option>
-              ))}
-            </select>
+            />
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -1425,21 +1929,16 @@ const JobCardFormPublic = () => {
           <p className="text-sm text-gray-500 mt-1">Add additional technicians assisting on-site.</p>
         </header>
             <div className="flex flex-col sm:flex-row gap-2 mb-2">
-              <select
-                value={technicianInput}
-                onChange={(e) => setTechnicianInput(e.target.value)}
-            className="flex-1 px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-            style={{ fontSize: '16px' }}
-              >
-                <option value="">Select technician to add</option>
-                {availableTechnicians
-                  .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
-                  .map(tech => (
-                    <option key={tech.id} value={tech.name || tech.email}>
-                      {tech.name || tech.email}
-                    </option>
-                  ))}
-              </select>
+              <div className="flex-1 min-w-0">
+                <SearchableSelect
+                  id="team-technician"
+                  aria-label="Technician to add"
+                  value={technicianInput}
+                  onChange={v => setTechnicianInput(v)}
+                  options={teamTechnicianOptions}
+                  placeholder="Search technician to add"
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleAddTechnician}
@@ -1478,20 +1977,16 @@ const JobCardFormPublic = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Client *
             </label>
-            <select
+            <SearchableSelect
+              id="jobcard-client"
               name="clientId"
+              aria-label="Client"
               value={formData.clientId}
-              onChange={handleChange}
+              onChange={v => handleChange({ target: { name: 'clientId', value: v } })}
+              options={clientSelectOptions}
+              placeholder="Search clients…"
               required
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-              style={{ fontSize: '16px' }}
-            >
-              <option value="">Select client</option>
-              {clients.map(client => (
-                <option key={client.id} value={client.id}>{client.name}</option>
-              ))}
-              <option value={NO_CLIENT_ID}>No Client (enter details manually)</option>
-            </select>
+            />
           </div>
           {formData.clientId === NO_CLIENT_ID ? (
             <>
@@ -1529,23 +2024,16 @@ const JobCardFormPublic = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Site
               </label>
-              <select
+              <SearchableSelect
+                id="jobcard-site"
                 name="siteId"
+                aria-label="Site"
                 value={formData.siteId}
-                onChange={handleChange}
-                disabled={!formData.clientId || availableSites.length === 0}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 bg-white"
-                style={{ fontSize: '16px' }}
-              >
-                <option value="">
-                  {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
-                </option>
-                {availableSites.map(site => (
-                  <option key={site.id || site.name || site} value={site.id || site.name || site}>
-                    {site.name || site}
-                  </option>
-                ))}
-              </select>
+                onChange={v => handleChange({ target: { name: 'siteId', value: v } })}
+                options={siteSelectOptions}
+                placeholder="Search sites…"
+                disabled={!formData.clientId || formData.clientId === NO_CLIENT_ID || availableSites.length === 0}
+              />
             </div>
           )}
         </div>
@@ -1567,15 +2055,16 @@ const JobCardFormPublic = () => {
               Location
             </label>
             <div className="flex gap-2">
-              <input
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                className="flex-1 px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Facility, area or coordinates"
-                style={{ fontSize: '16px' }}
-              />
+              <div className="flex-1 min-w-0">
+                <VoiceNoteInput
+                  sectionId="location"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  placeholder="Facility, area or coordinates"
+                  onVoiceSaved={addVoiceClip}
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleOpenMap}
@@ -1595,14 +2084,14 @@ const JobCardFormPublic = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Reason for Call Out / Visit
             </label>
-            <textarea
+            <VoiceNoteTextarea
+              sectionId="reasonForVisit"
               name="reasonForVisit"
               value={formData.reasonForVisit}
               onChange={handleChange}
               rows={3}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
               placeholder="Why was the technician requested to attend?"
-              style={{ fontSize: '16px' }}
+              onVoiceSaved={addVoiceClip}
             />
           </div>
         </div>
@@ -1713,15 +2202,15 @@ const JobCardFormPublic = () => {
           <h2 className="text-lg font-semibold text-gray-900">Diagnosis</h2>
           <p className="text-sm text-gray-500 mt-1">Summarise the fault, findings or observations.</p>
         </header>
-            <textarea
+            <VoiceNoteTextarea
+              sectionId="diagnosis"
               name="diagnosis"
               value={formData.diagnosis}
               onChange={handleChange}
               rows={4}
-          className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
-          placeholder="e.g., Pump not priming due to airlock in suction line..."
-          style={{ fontSize: '16px' }}
-        />
+              placeholder="e.g., Pump not priming due to airlock in suction line..."
+              onVoiceSaved={addVoiceClip}
+            />
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -1746,15 +2235,15 @@ const JobCardFormPublic = () => {
             </p>
           </div>
         </header>
-            <textarea
+            <VoiceNoteTextarea
+              sectionId="actionsTaken"
               name="actionsTaken"
               value={formData.actionsTaken}
               onChange={handleChange}
               rows={4}
-          className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
-          placeholder="Steps taken, parts replaced, calibrations performed..."
-          style={{ fontSize: '16px' }}
-        />
+              placeholder="Steps taken, parts replaced, calibrations performed..."
+              onVoiceSaved={addVoiceClip}
+            />
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -1762,14 +2251,14 @@ const JobCardFormPublic = () => {
           <h2 className="text-lg font-semibold text-gray-900">Additional Notes</h2>
           <p className="text-sm text-gray-500 mt-1">Capture handover notes, risks or recommended next actions.</p>
         </header>
-        <textarea
+        <VoiceNoteTextarea
+          sectionId="otherComments"
           name="otherComments"
           value={formData.otherComments}
           onChange={handleChange}
           rows={3}
-          className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
           placeholder="Outstanding concerns, customer requests, safety notes..."
-          style={{ fontSize: '16px' }}
+          onVoiceSaved={addVoiceClip}
         />
       </section>
 
@@ -2036,34 +2525,24 @@ const JobCardFormPublic = () => {
         </header>
             <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-2 mb-3">
               <div className="sm:col-span-4">
-                <select
+                <SearchableSelect
+                  id="stock-sku"
+                  aria-label="Stock component"
                   value={newStockItem.sku}
-                  onChange={(e) => setNewStockItem({ ...newStockItem, sku: e.target.value })}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg bg-white"
-              style={{ fontSize: '16px' }}
-                >
-                  <option value="">Select component</option>
-                  {inventory.map(item => (
-                    <option key={item.id || item.sku} value={item.sku || item.id}>
-                      {item.name} ({item.sku || item.id})
-                    </option>
-                  ))}
-                </select>
+                  onChange={v => setNewStockItem({ ...newStockItem, sku: v })}
+                  options={stockSkuOptions}
+                  placeholder="Search component…"
+                />
               </div>
               <div className="sm:col-span-4">
-                <select
+                <SearchableSelect
+                  id="stock-location"
+                  aria-label="Stock location"
                   value={newStockItem.locationId}
-                  onChange={(e) => setNewStockItem({ ...newStockItem, locationId: e.target.value })}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg bg-white"
-              style={{ fontSize: '16px' }}
-                >
-                  <option value="">Select location</option>
-                  {stockLocations.map(loc => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name} ({loc.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={v => setNewStockItem({ ...newStockItem, locationId: v })}
+                  options={stockLocationOptions}
+                  placeholder="Search location…"
+                />
               </div>
               <div className="sm:col-span-2">
                 <input

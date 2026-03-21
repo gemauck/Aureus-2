@@ -16,6 +16,18 @@ function canAccessErpCalendar(user) {
 /** Wide layout viewport for "Desktop site" on phones; ≥1024 so Tailwind lg: applies. Keep in sync with main.css .erp-desktop-site min-width. */
 const DESKTOP_SITE_LAYOUT_MIN_PX = 1330;
 
+/** Default layout: desktop-style shell; users on phones can opt into mobile layout via theme menu (stored as erpPreferDesktopLayout). */
+function readPreferDesktopLayout() {
+    try {
+        const v = localStorage.getItem('erpPreferDesktopLayout');
+        if (v === 'false') return false;
+        if (v === 'true') return true;
+        return true;
+    } catch {
+        return true;
+    }
+}
+
 /** Display label for the signed-in user role (sidebar, etc.) */
 function formatUserRoleLabel(role) {
     if (role == null || role === '') return '';
@@ -371,14 +383,8 @@ const MainLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [isMobile, setIsMobile] = useState(false);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-    /** User opt-in: wide fixed layout viewport so Tailwind/desktop CSS applies; pan horizontally (no shrink-to-fit) */
-    const [preferDesktopSite, setPreferDesktopSite] = useState(() => {
-        try {
-            return localStorage.getItem('erpPreferDesktopLayout') === 'true';
-        } catch {
-            return false;
-        }
-    });
+    /** Desktop-style layout by default; on narrow viewports user can switch to mobile-friendly shell in theme → Layout */
+    const [preferDesktopSite, setPreferDesktopSite] = useState(() => readPreferDesktopLayout());
     const effectiveIsMobile = isMobile && !preferDesktopSite;
     
     // Initialize mobile state on mount only and set initial sidebar state
@@ -388,12 +394,7 @@ const MainLayout = () => {
         setIsMobile(mobile);
         setWindowWidth(width);
         
-        let preferDesktop = false;
-        try {
-            preferDesktop = localStorage.getItem('erpPreferDesktopLayout') === 'true';
-        } catch {
-            preferDesktop = false;
-        }
+        const preferDesktop = readPreferDesktopLayout();
         const effectiveMobileShell = mobile && !preferDesktop;
 
         if (effectiveMobileShell) {
@@ -414,20 +415,21 @@ const MainLayout = () => {
     }, [preferDesktopSite]);
 
     /**
-     * Desktop-site mode: fixed layout viewport at least 1330px with initial-scale=1 and minimum-scale=1
-     * so the browser does not shrink the page to fit the screen. User pans horizontally; lg: breakpoints apply.
+     * Wide meta viewport only on narrow devices when desktop layout is on — avoids forcing width=1330 on real desktops.
+     * Pinch zoom allowed; lg breakpoints apply to the wide layout viewport on phones/tablets in desktop mode.
      */
     React.useEffect(() => {
         const meta = document.querySelector('meta[name="viewport"]');
         if (!meta) return undefined;
         const defaultContent =
-            'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
-        const desktopSiteContent = `width=${DESKTOP_SITE_LAYOUT_MIN_PX}, initial-scale=1, minimum-scale=1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover`;
-        meta.setAttribute('content', preferDesktopSite ? desktopSiteContent : defaultContent);
+            'width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
+        const desktopSiteContent = `width=${DESKTOP_SITE_LAYOUT_MIN_PX}, initial-scale=1, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover`;
+        const useWideViewport = isMobile && preferDesktopSite;
+        meta.setAttribute('content', useWideViewport ? desktopSiteContent : defaultContent);
         return () => {
             meta.setAttribute('content', defaultContent);
         };
-    }, [preferDesktopSite]);
+    }, [preferDesktopSite, isMobile]);
 
     // Toggling “desktop site” on a narrow viewport switches shell between overlay and in-flow sidebar
     React.useEffect(() => {
@@ -1616,9 +1618,9 @@ const MainLayout = () => {
     /* Layout: effectiveIsMobile = width < 1024 && !preferDesktopSite; aligns with main.css max-width 1023px */
     return (
         <div 
-            className={`flex h-screen overflow-hidden ${preferDesktopSite ? 'overflow-x-auto' : 'overflow-x-hidden'} ${isDark ? 'bg-gray-950' : 'bg-[#f8fafc]'}`} 
+            className={`flex h-screen overflow-hidden ${isMobile && preferDesktopSite ? 'overflow-x-auto' : 'overflow-x-hidden'} ${isDark ? 'bg-gray-950' : 'bg-[#f8fafc]'}`} 
             style={{ 
-                ...(preferDesktopSite
+                ...(isMobile && preferDesktopSite
                     ? {
                         width: '100%',
                         minWidth: `${DESKTOP_SITE_LAYOUT_MIN_PX}px`,
@@ -1812,8 +1814,8 @@ const MainLayout = () => {
                                                     <i className={`fas fa-${preferDesktopSite ? 'mobile-alt' : 'desktop'} mt-0.5`}></i>
                                                     <span className="leading-snug">
                                                         {preferDesktopSite
-                                                            ? 'Use mobile-friendly layout'
-                                                            : 'Desktop site (zoomed out, full features)'}
+                                                            ? 'Switch to mobile layout (sidebar overlay, compact UI)'
+                                                            : 'Switch to desktop layout (wide canvas, pan on small screens)'}
                                                     </span>
                                                 </button>
                                                 <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
