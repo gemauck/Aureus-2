@@ -361,7 +361,7 @@ const MainLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [isMobile, setIsMobile] = useState(false);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-    /** User opt-in: desktop shell on narrow viewports (sidebar in-flow, etc.); viewport stays device-width for readable text */
+    /** User opt-in: wide fixed layout viewport so Tailwind/desktop CSS applies; pan horizontally (no shrink-to-fit) */
     const [preferDesktopSite, setPreferDesktopSite] = useState(() => {
         try {
             return localStorage.getItem('erpPreferDesktopLayout') === 'true';
@@ -403,8 +403,24 @@ const MainLayout = () => {
         document.documentElement.classList.toggle('erp-desktop-site', preferDesktopSite);
     }, [preferDesktopSite]);
 
-    // Do not change <meta name="viewport"> for desktop-site mode: width=1280 + initial-scale=1 shrinks the
-    // whole layout to fit the phone and makes body text unreadable. Layout is controlled by effectiveIsMobile.
+    /**
+     * Desktop-site mode: use a wide layout viewport (typical laptop width) with initial-scale=1 and
+     * minimum-scale=1 so the browser does not shrink the page to fit the screen (which made text tiny).
+     * User pans horizontally; CSS min-width breakpoints (e.g. lg:) match the wide layout viewport.
+     */
+    /* Typical full-HD layout width so the app matches desktop breakpoints and feels like a real desktop canvas */
+    const DESKTOP_SITE_LAYOUT_CSS_PX = 1920;
+    React.useEffect(() => {
+        const meta = document.querySelector('meta[name="viewport"]');
+        if (!meta) return undefined;
+        const defaultContent =
+            'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
+        const desktopSiteContent = `width=${DESKTOP_SITE_LAYOUT_CSS_PX}, initial-scale=1, minimum-scale=1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover`;
+        meta.setAttribute('content', preferDesktopSite ? desktopSiteContent : defaultContent);
+        return () => {
+            meta.setAttribute('content', defaultContent);
+        };
+    }, [preferDesktopSite]);
 
     // Toggling “desktop site” on a narrow viewport switches shell between overlay and in-flow sidebar
     React.useEffect(() => {

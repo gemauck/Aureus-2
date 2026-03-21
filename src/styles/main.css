@@ -107,6 +107,13 @@ body.erp-app :where(a, button, input, textarea, select, [tabindex]):focus-visibl
         width: 100%;
         max-width: 100%;
     }
+
+    /* Desktop-site mode (wide meta viewport): allow horizontal pan; do not clip the wide layout */
+    html.erp-desktop-site,
+    html.erp-desktop-site body {
+        overflow-x: auto;
+        max-width: none;
+    }
     
     /* Touch-friendly buttons */
     button, .btn, [role="button"] {
