@@ -117,7 +117,7 @@ const MyFeedbackViewer = () => {
                                     <div className="flex flex-wrap items-center gap-2 mb-2">
                                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                             (item.type || 'feedback') === 'bug' ? (isDark ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-800') :
-                                            (item.type || 'feedback') === 'development_request' ? (isDark ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-100 text-purple-800') :
+                                            (item.type || 'feedback') === 'development_request' ? (isDark ? 'bg-primary-900/40 text-primary-300' : 'bg-primary-100 text-primary-800') :
                                             isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-800'
                                         }`}>
                                             {item.type === 'development_request' ? 'Development Request' : (item.type || 'feedback')}

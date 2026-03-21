@@ -343,9 +343,9 @@ export const InvoiceReports = ({ invoices, onClose }) => {
                                     <div className="text-sm text-gray-600 mb-1">Late Payments</div>
                                     <div className="text-3xl font-bold text-red-600">{paymentStats.latePayments}</div>
                                 </div>
-                                <div className="bg-purple-50 p-4 rounded-lg">
+                                <div className="bg-primary-50 p-4 rounded-lg">
                                     <div className="text-sm text-gray-600 mb-1">Total Collected</div>
-                                    <div className="text-2xl font-bold text-purple-600">
+                                    <div className="text-2xl font-bold text-primary-600">
                                         R{paymentStats.totalPaid.toLocaleString('en-ZA')}
                                     </div>
                                 </div>

@@ -103,7 +103,7 @@ const DashboardEnhanced = () => {
                 description: `${project.status} - ${project.progress || 0}% complete`,
                 timestamp: project.updatedAt || new Date().toISOString(),
                 icon: 'fas fa-project-diagram',
-                color: 'text-purple-600'
+                color: 'text-primary-600'
             });
         });
 

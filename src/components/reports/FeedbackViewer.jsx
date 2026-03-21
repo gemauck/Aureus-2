@@ -366,7 +366,7 @@ const FeedbackViewer = () => {
                                                 (item.type || 'feedback') === 'bug'
                                                     ? isDark ? 'bg-red-900/40 text-red-300 border-red-700' : 'bg-red-100 text-red-800 border-red-200'
                                                     : (item.type || 'feedback') === 'development_request'
-                                                    ? isDark ? 'bg-purple-900/40 text-purple-300 border-purple-700' : 'bg-purple-100 text-purple-800 border-purple-200'
+                                                    ? isDark ? 'bg-primary-900/40 text-primary-300 border-primary-700' : 'bg-primary-100 text-primary-800 border-primary-200'
                                                     : isDark ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-300'
                                             }`}
                                         >

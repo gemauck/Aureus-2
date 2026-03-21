@@ -153,7 +153,7 @@ const Tools = () => {
                 name: 'Handwriting to Text',
                 description: 'Convert handwritten text images to editable RTF documents using OCR',
                 icon: 'fa-pen-fancy',
-                color: 'purple',
+                color: 'primary',
                 component: toolComponents.HandwritingToWord
             },
             {

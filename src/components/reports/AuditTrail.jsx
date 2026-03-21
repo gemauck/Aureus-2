@@ -361,7 +361,7 @@ const AuditTrail = () => {
             case 'update': return 'text-blue-600 bg-blue-50';
             case 'delete': return 'text-red-600 bg-red-50';
             case 'view': return 'text-gray-600 bg-gray-50';
-            case 'export': return 'text-purple-600 bg-purple-50';
+            case 'export': return 'text-primary-600 bg-primary-50';
             case 'login': return 'text-teal-600 bg-teal-50';
             case 'logout': return 'text-orange-600 bg-orange-50';
             default: return 'text-gray-600 bg-gray-50';
@@ -447,10 +447,10 @@ const AuditTrail = () => {
                     <p className="text-xl font-bold text-green-900">{resultsCount}</p>
                     <p className="text-[9px] text-green-600 mt-0.5">matching filters</p>
                 </div>
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                    <p className="text-[10px] text-purple-600 font-medium mb-0.5">Unique users</p>
-                    <p className="text-xl font-bold text-purple-900">{uniqueUsersInResults}</p>
-                    <p className="text-[9px] text-purple-600 mt-0.5">in results</p>
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                    <p className="text-[10px] text-primary-600 font-medium mb-0.5">Unique users</p>
+                    <p className="text-xl font-bold text-primary-900">{uniqueUsersInResults}</p>
+                    <p className="text-[9px] text-primary-600 mt-0.5">in results</p>
                 </div>
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                     <p className="text-[10px] text-orange-600 font-medium mb-0.5">Modules</p>

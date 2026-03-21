@@ -2301,7 +2301,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 </div>
                 
                 {/* Handwriting Tool - Always Visible - PROMINENT */}
-                <div className="flex items-center space-x-1 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/30 dark:to-purple-900/30 rounded-lg p-1 border-2 border-blue-300 dark:border-blue-600 shadow-md">
+                <div className="flex items-center space-x-1 bg-gradient-to-r from-blue-50 to-primary-50 dark:from-blue-900/30 dark:to-primary-900/30 rounded-lg p-1 border-2 border-blue-300 dark:border-blue-600 shadow-md">
                     <button
                         onClick={() => {
                             const newHandwritingState = !showHandwriting;

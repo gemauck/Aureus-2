@@ -11,7 +11,7 @@ const NOTIFICATION_ICONS = {
 const NOTIFICATION_COLORS = {
     mention: 'text-blue-600',
     comment: 'text-green-600',
-    task: 'text-purple-600',
+    task: 'text-primary-600',
     invoice: 'text-orange-600',
     system: 'text-gray-600'
 };

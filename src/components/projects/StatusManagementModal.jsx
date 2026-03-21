@@ -8,7 +8,7 @@ const StatusManagementModal = ({ statuses, onSave, onClose }) => {
         { id: 3, name: 'Done', color: 'green' }
     ]);
     const [newStatusName, setNewStatusName] = useState('');
-    const [newStatusColor, setNewStatusColor] = useState('purple');
+    const [newStatusColor, setNewStatusColor] = useState('cyan');
 
     const colorOptions = [
         { value: 'gray', label: 'Gray', class: 'bg-gray-500' },
@@ -17,9 +17,13 @@ const StatusManagementModal = ({ statuses, onSave, onClose }) => {
         { value: 'yellow', label: 'Yellow', class: 'bg-yellow-500' },
         { value: 'green', label: 'Green', class: 'bg-green-500' },
         { value: 'blue', label: 'Blue', class: 'bg-blue-500' },
-        { value: 'purple', label: 'Purple', class: 'bg-purple-500' },
+        { value: 'cyan', label: 'Cyan', class: 'bg-cyan-500' },
         { value: 'pink', label: 'Pink', class: 'bg-pink-500' }
     ];
+
+    const legacyStatusSwatch = { purple: 'bg-primary-500' };
+    const swatchClassFor = (color) =>
+        colorOptions.find((c) => c.value === color)?.class || legacyStatusSwatch[color] || 'bg-gray-400';
 
     const handleAddStatus = () => {
         if (newStatusName.trim()) {
@@ -30,7 +34,7 @@ const StatusManagementModal = ({ statuses, onSave, onClose }) => {
             };
             setStatusList([...statusList, newStatus]);
             setNewStatusName('');
-            setNewStatusColor('purple');
+            setNewStatusColor('cyan');
         }
     };
 
@@ -68,7 +72,7 @@ const StatusManagementModal = ({ statuses, onSave, onClose }) => {
                             {statusList.map(status => (
                                 <div key={status.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg border border-gray-200">
                                     <div className="flex items-center gap-2">
-                                        <div className={`w-3 h-3 rounded ${colorOptions.find(c => c.value === status.color)?.class}`}></div>
+                                        <div className={`w-3 h-3 rounded ${swatchClassFor(status.color)}`}></div>
                                         <span className="font-medium text-gray-800 text-sm">{status.name}</span>
                                     </div>
                                     {statusList.length > 1 && (

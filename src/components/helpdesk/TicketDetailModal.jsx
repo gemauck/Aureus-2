@@ -359,7 +359,7 @@ const TicketDetailModal = ({
             'medium': 'bg-blue-100 text-blue-600',
             'high': 'bg-orange-100 text-orange-600',
             'urgent': 'bg-red-100 text-red-600',
-            'critical': 'bg-purple-100 text-purple-600'
+            'critical': 'bg-primary-100 text-primary-600'
         };
         return priorityMap[priority] || 'bg-gray-100 text-gray-600';
     };

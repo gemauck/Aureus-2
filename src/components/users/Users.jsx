@@ -797,8 +797,8 @@ const Users = () => {
                             <p className={`text-xs mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Departments</p>
                             <p className={`text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{departments.length}</p>
                         </div>
-                        <div className={`w-10 h-10 ${isDark ? 'bg-gray-800' : 'bg-purple-100'} rounded-lg flex items-center justify-center`}>
-                            <i className={`fas fa-building ${isDark ? 'text-gray-300' : 'text-purple-600'}`}></i>
+                        <div className={`w-10 h-10 ${isDark ? 'bg-gray-800' : 'bg-primary-100'} rounded-lg flex items-center justify-center`}>
+                            <i className={`fas fa-building ${isDark ? 'text-gray-300' : 'text-primary-600'}`}></i>
                         </div>
                     </div>
                 </div>

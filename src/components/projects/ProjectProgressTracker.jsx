@@ -1480,7 +1480,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             },
             comments: {
                 icon: 'fa-comment-dots',
-                color: '#8b5cf6', // purple
+                color: '#0284c7', // primary (brand)
                 bgColor: hasValue ? '#f5f3ff' : '#faf5ff',
                 borderColor: hasValue ? '#8b5cf6' : '#e9d5ff',
                 label: 'Comments',
@@ -2201,7 +2201,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 }
                             }, 
                                 project.type && project.type !== '-' ? React.createElement('span', {
-                                    className: 'px-2.5 py-1 bg-purple-100 text-purple-700 rounded-md text-xs font-semibold',
+                                    className: 'px-2.5 py-1 bg-primary-100 text-primary-700 rounded-md text-xs font-semibold',
                                     style: { display: 'inline-block' }
                                 }, String(project.type)) : React.createElement('span', { className: 'text-gray-400' }, '-')
                             ),

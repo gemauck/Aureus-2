@@ -4181,7 +4181,7 @@ const LeadDetailModal = ({
                                                             
                                                             {site.email && (
                                                                 <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                    <i className="fas fa-envelope text-purple-600 mt-0.5 w-4"></i>
+                                                                    <i className="fas fa-envelope text-primary-600 mt-0.5 w-4"></i>
                                                                     <div>
                                                                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</div>
                                                                         <a href={`mailto:${site.email}`} className="text-sm text-primary-600 hover:underline">
@@ -4381,7 +4381,7 @@ const LeadDetailModal = ({
                                                                 <div className="flex items-center gap-2 mb-1">
                                                                     <span className={`px-2 py-0.5 text-xs rounded font-medium ${
                                                                         followUp.type === 'Call' ? 'bg-blue-100 text-blue-700' :
-                                                                        followUp.type === 'Meeting' ? 'bg-purple-100 text-purple-700' :
+                                                                        followUp.type === 'Meeting' ? 'bg-primary-100 text-primary-700' :
                                                                         followUp.type === 'Email' ? 'bg-green-100 text-green-700' :
                                                                         'bg-gray-100 text-gray-700'
                                                                     }`}>
@@ -5187,8 +5187,8 @@ const LeadDetailModal = ({
                                                             'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
                                                             'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
                                                             'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
-                                                            'operations': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
-                                                            'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                            'operations': { icon: 'fa-project-diagram', colorClass: 'text-primary-700 bg-primary-100 border-primary-200' },
+                                                            'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-primary-700 bg-primary-100 border-primary-200' },
                                                             'commercial': { icon: 'fa-handshake', colorClass: 'text-orange-700 bg-orange-100 border-orange-200' },
                                                             'ceo': { icon: 'fa-user-tie', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' }
                                                         };

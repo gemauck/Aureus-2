@@ -991,7 +991,7 @@ const TankSizeCalculator = () => {
                                 
                                 {/* Torispherical */}
                                 <div 
-                                    className="relative cursor-help border-2 rounded-lg p-2 transition-all hover:border-purple-500 hover:bg-purple-50"
+                                    className="relative cursor-help border-2 rounded-lg p-2 transition-all hover:border-primary-500 hover:bg-primary-50"
                                     onMouseEnter={() => setHoveredEndType('torispherical')}
                                     onMouseLeave={() => setHoveredEndType(null)}
                                     onClick={() => setDimensions({...dimensions, endType: 'torispherical'})}
@@ -1009,7 +1009,7 @@ const TankSizeCalculator = () => {
                                         <text x="21.5" y="28" fontSize="5" fill="#ef4444" textAnchor="middle">~0.19D</text>
                                     </svg>
                                     <p className="text-[9px] text-center text-gray-600 mt-1 leading-tight">Torispherical</p>
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-purple-600 text-white text-[9px] px-2 py-1 rounded shadow-lg hidden group-hover:block">
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-primary-600 text-white text-[9px] px-2 py-1 rounded shadow-lg hidden group-hover:block">
                                         F&D Head. Economical. ~0.19D depth
                                     </div>
                                 </div>
@@ -2269,7 +2269,7 @@ const TankSizeCalculator = () => {
                                 <div className="flex gap-2">
                                     <button
                                         onClick={printCalibrationChart}
-                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
                                     >
                                         <i className="fas fa-print mr-1.5"></i>
                                         Print

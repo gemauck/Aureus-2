@@ -251,11 +251,11 @@ const TimeTrackingDatabaseFirst = () => {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Value</p>
-                            <p className={`text-2xl font-bold text-purple-600`}>
+                            <p className={`text-2xl font-bold text-primary-600`}>
                                 R{totalAmount.toLocaleString()}
                             </p>
                         </div>
-                        <i className="fas fa-chart-line text-2xl text-purple-600"></i>
+                        <i className="fas fa-chart-line text-2xl text-primary-600"></i>
                     </div>
                 </div>
             </div>

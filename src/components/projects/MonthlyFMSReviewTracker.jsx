@@ -1154,7 +1154,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 dark:text-gray-300 font-semibold', cellColor: 'bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-600' },
         { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500' },
         { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500' },
-        { value: 'sent', label: 'Sent', color: 'bg-purple-200 text-slate-700 font-semibold dark:bg-purple-900/60 dark:text-purple-200', cellColor: 'bg-purple-200 border-l-4 border-purple-300 shadow-sm dark:bg-purple-900/60 dark:border-purple-500' }
+        { value: 'sent', label: 'Sent', color: 'bg-primary-200 text-slate-700 font-semibold dark:bg-primary-900/60 dark:text-primary-200', cellColor: 'bg-primary-200 border-l-4 border-primary-300 shadow-sm dark:bg-primary-900/60 dark:border-primary-500' }
     ];
     
     const getStatusConfig = (status) => {
@@ -3561,7 +3561,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                         type="button"
                                         onClick={handleApply}
                                         disabled={!selectedTemplateId}
-                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                                     >
                                         Apply Template
                                     </button>
@@ -4005,9 +4005,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                 setShowApplyTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-700 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-magic text-purple-600"></i>
+                                            <i className="fas fa-magic text-primary-600"></i>
                                             <span>Apply Template</span>
                                         </button>
                                         <button

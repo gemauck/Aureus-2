@@ -8893,7 +8893,7 @@ const Clients = React.memo(() => {
 
         const typeBadgeClasses = (type) => {
             if (type === 'lead') {
-                return isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-700';
+                return isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700';
             }
             return isDark ? 'bg-teal-900 text-teal-200' : 'bg-teal-100 text-teal-700';
         };
@@ -9062,7 +9062,7 @@ const Clients = React.memo(() => {
                     </div>
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm p-4`}>
                         <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Leads</div>
-                        <div className={`text-2xl font-bold ${isDark ? 'text-purple-200' : 'text-purple-600'}`}>{totals.leads}</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-primary-200' : 'text-primary-600'}`}>{totals.leads}</div>
                     </div>
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm p-4`}>
                         <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Opportunities</div>
@@ -9285,7 +9285,7 @@ const Clients = React.memo(() => {
                                                     (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
                                                     (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
                                                     (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'proposal' || (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                    (lead.engagementStage ?? (lead.status || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-primary-900/80 text-primary-200' : 'bg-primary-100 text-primary-800') :
                                                     (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
                                                 }`}
                                             >
@@ -9376,7 +9376,7 @@ const Clients = React.memo(() => {
                                                         (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
                                                         (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'potential' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
                                                         (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'proposal' || (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'tender' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
-                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                        (site.engagementStage ?? (site.stage || '')).toLowerCase() === 'disinterested' ? (isDark ? 'bg-primary-900/80 text-primary-200' : 'bg-primary-100 text-primary-800') :
                                                         (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
                                                     }`}
                                                 >

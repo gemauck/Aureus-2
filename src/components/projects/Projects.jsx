@@ -10,7 +10,7 @@ const getStatusColorClasses = (status) => {
     const statusMap = {
         'In Progress': 'bg-blue-100 text-blue-700',
         'Active': 'bg-green-100 text-green-700',
-        'Completed': 'bg-purple-100 text-purple-700',
+        'Completed': 'bg-primary-100 text-primary-700',
         'On Hold': 'bg-yellow-100 text-yellow-700',
         'Cancelled': 'bg-red-100 text-red-700',
     };
@@ -22,7 +22,7 @@ const getStatusBorderClasses = (status) => {
     const borderMap = {
         'In Progress': 'border-l-blue-500',
         'Active': 'border-l-green-500',
-        'Completed': 'border-l-purple-500',
+        'Completed': 'border-l-primary-500',
         'On Hold': 'border-l-amber-500',
         'Cancelled': 'border-l-red-500',
     };

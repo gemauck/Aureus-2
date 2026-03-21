@@ -756,7 +756,7 @@ const UserManagement = () => {
 
     const getRoleBadge = (role) => {
         const roleClasses = {
-            admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+            admin: 'bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-300',
             user: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
             manager: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
             member: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
@@ -882,7 +882,7 @@ const UserManagement = () => {
                             });
                             setShowAddUserModal(true);
                         }}
-                        className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center"
+                        className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
                     >
                         <i className="fas fa-user-friends mr-2"></i>
                         Add Guest

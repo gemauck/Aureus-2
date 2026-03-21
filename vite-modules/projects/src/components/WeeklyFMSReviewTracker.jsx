@@ -3576,7 +3576,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                         type="button"
                                         onClick={handleApply}
                                         disabled={!selectedTemplateId}
-                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                                     >
                                         Apply Template
                                     </button>
@@ -3829,7 +3829,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     <div className="flex items-center gap-1 border-l border-gray-300 pl-2 ml-2">
                         <button
                             onClick={() => setShowApplyTemplateModal(true)}
-                            className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-[10px] font-medium"
+                            className="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-[10px] font-medium"
                         >
                             <i className="fas fa-magic mr-1"></i>Apply Template
                         </button>

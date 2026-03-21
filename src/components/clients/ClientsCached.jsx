@@ -647,7 +647,7 @@ opp.status !== 'Closed Lost' &&
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4 flex items-center justify-between`}>
                         <div>
                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Conversion Rate</div>
-                            <div className="text-2xl font-bold text-purple-600">
+                            <div className="text-2xl font-bold text-primary-600">
                                 {activeLeads.length > 0 ? Math.round((activeLeads.filter(l => l.stage === 'Action').length / activeLeads.length) * 100) : 0}%
                             </div>
                             <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>To action stage</div>
@@ -942,7 +942,7 @@ opp.status !== 'Closed Lost' &&
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                             lead.status === 'Active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
                                             lead.status === 'Potential' || !lead.status ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
-                                            lead.status === 'Disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-700') :
+                                            lead.status === 'Disinterested' ? (isDark ? 'bg-primary-900/80 text-primary-200' : 'bg-primary-100 text-primary-700') :
                                             (lead.status === 'Proposal' || lead.status === 'Tender') ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
                                             (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
                                         }`}>

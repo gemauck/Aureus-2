@@ -275,13 +275,13 @@ const AdvancedSearch = ({
                     {sortField && (
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
                             isDark 
-                                ? 'bg-purple-900 text-purple-300' 
-                                : 'bg-purple-100 text-purple-800'
+                                ? 'bg-primary-900 text-primary-300' 
+                                : 'bg-primary-100 text-primary-800'
                         }`}>
                             Sort: {sortField} ({sortDirection})
                             <button
                                 onClick={() => setSortField('')}
-                                className="ml-2 text-purple-600 hover:text-purple-800"
+                                className="ml-2 text-primary-600 hover:text-primary-800"
                             >
                                 <i className="fas fa-times text-xs"></i>
                             </button>

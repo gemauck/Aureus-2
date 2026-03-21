@@ -93,7 +93,7 @@ const Dashboard = () => {
             label: 'Hours This Month', 
             value: hoursThisMonth.toFixed(1), 
             icon: 'fa-clock', 
-            color: 'bg-purple-500', 
+            color: 'bg-primary-500', 
             change: hoursChange !== 0 ? `${hoursChange > 0 ? '+' : ''}${hoursChange}%` : 'No change',
             changeColor: hoursChange > 0 ? 'text-green-600' : hoursChange < 0 ? 'text-red-600' : 'text-gray-600'
         }
@@ -167,7 +167,7 @@ const Dashboard = () => {
             time: timeAgo.text,
             sortValue: timeAgo.value,
             icon: 'project-diagram',
-            color: 'purple'
+            color: 'primary'
         });
     });
 

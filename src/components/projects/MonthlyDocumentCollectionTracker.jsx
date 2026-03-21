@@ -6892,9 +6892,9 @@ Abcotronics`;
                                                 setShowApplyTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-300 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/40 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-magic text-purple-600 dark:text-purple-400"></i>
+                                            <i className="fas fa-magic text-primary-600 dark:text-primary-400"></i>
                                             <span>Apply Template</span>
                                         </button>
                                         <button

@@ -326,7 +326,7 @@ const ProgressPersistenceTest = function ProgressPersistenceTestComponent() {
                 React.createElement('button', {
                     onClick: testPersistence,
                     disabled: loading || !testData.projectId || !testData.value.trim(),
-                    className: 'px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium'
+                    className: 'px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium'
                 },
                     React.createElement('i', { className: 'fas fa-sync mr-2' }),
                     'Test Persistence (Save & Reload)'

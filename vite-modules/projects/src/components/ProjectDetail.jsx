@@ -1003,7 +1003,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                             <span className={`inline-block px-2 py-0.5 text-xs rounded font-medium ${
                                 project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
                                 project.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
+                                project.status === 'Completed' ? 'bg-primary-100 text-primary-700' :
                                 project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
                                 project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
                                 'bg-gray-100 text-gray-700'
@@ -1080,8 +1080,8 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                     {daysUntilDue === null ? 'N/A' : daysUntilDue < 0 ? `${Math.abs(daysUntilDue)} overdue` : daysUntilDue}
                                 </p>
                             </div>
-                            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-calendar-alt text-purple-600"></i>
+                            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                                <i className="fas fa-calendar-alt text-primary-600"></i>
                             </div>
                         </div>
                     </div>
@@ -1162,7 +1162,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                 const fileIcon = doc.type?.includes('pdf') ? 'fa-file-pdf text-red-600' :
                                                doc.type?.includes('word') || doc.type?.includes('document') ? 'fa-file-word text-blue-600' :
                                                doc.type?.includes('excel') || doc.type?.includes('spreadsheet') ? 'fa-file-excel text-green-600' :
-                                               doc.type?.includes('image') ? 'fa-file-image text-purple-600' :
+                                               doc.type?.includes('image') ? 'fa-file-image text-primary-600' :
                                                'fa-file text-gray-600';
                                 const fileSize = doc.size ? (doc.size / 1024).toFixed(1) + ' KB' : 'Unknown size';
                                 
@@ -2587,7 +2587,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
         switch(status) {
             case 'Done': return 'bg-green-100 text-green-800 border-green-500';
             case 'In Progress': return 'bg-blue-100 text-blue-800 border-blue-500';
-            case 'Review': return 'bg-purple-100 text-purple-800 border-purple-500';
+            case 'Review': return 'bg-primary-100 text-primary-800 border-primary-500';
             case 'Blocked': return 'bg-red-100 text-red-800 border-red-500';
             case 'To Do': return 'bg-gray-100 text-gray-800 border-gray-500';
             default: return 'bg-gray-100 text-gray-800 border-gray-500';
@@ -3036,7 +3036,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                                                             {task.tags && task.tags.length > 0 && (
                                                                 <div className="flex flex-wrap gap-1.5">
                                                                     {task.tags.map(tag => (
-                                                                        <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-purple-100 text-purple-700">
+                                                                        <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary-100 text-primary-700">
                                                                             <i className="fas fa-tag text-[9px]"></i>
                                                                             {tag}
                                                                         </span>

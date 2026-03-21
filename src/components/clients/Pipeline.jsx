@@ -2346,7 +2346,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             case 'tender':
                 return 'bg-green-100 text-green-700';
             case 'disinterested':
-                return 'bg-purple-100 text-purple-700';
+                return 'bg-primary-100 text-primary-700';
             case 'potential':
             default:
                 return 'bg-white text-gray-700 border border-gray-200';
@@ -2698,7 +2698,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                                     ? 'bg-blue-100 text-blue-700' 
                                                                     : itemType === 'site'
                                                                     ? 'bg-amber-100 text-amber-700'
-                                                                    : 'bg-purple-100 text-purple-700'
+                                                                    : 'bg-primary-100 text-primary-700'
                                                             }`}>
                                                                 {itemType === 'lead' ? 'Lead' : itemType === 'site' ? 'Site' : 'Opportunity'}
                                                             </span>

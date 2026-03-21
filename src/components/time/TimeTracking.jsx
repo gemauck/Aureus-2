@@ -202,11 +202,11 @@ const TimeTracking = () => {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs text-gray-600 mb-0.5">Utilization</p>
-                            <p className="text-lg font-bold text-purple-600">{utilization.toFixed(0)}%</p>
+                            <p className="text-lg font-bold text-primary-600">{utilization.toFixed(0)}%</p>
                             <p className="text-[10px] text-gray-500 mt-0.5">Billable ratio</p>
                         </div>
-                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-chart-line text-purple-600"></i>
+                        <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                            <i className="fas fa-chart-line text-primary-600"></i>
                         </div>
                     </div>
                 </div>

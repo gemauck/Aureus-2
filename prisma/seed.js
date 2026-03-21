@@ -29,7 +29,7 @@ async function main() {
       id: 'technical', 
       name: 'Technical', 
       icon: 'fa-tools', 
-      color: 'purple',
+      color: 'cyan',
       description: 'Technical operations and system maintenance',
       permissions: [
         'Deploy production releases and manage infrastructure integrations',

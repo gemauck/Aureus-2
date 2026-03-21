@@ -776,7 +776,7 @@ const DashboardLive = () => {
                         <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className={`text-sm font-semibold ${headerText}`}>Leads by Stage</h3>
-                                <i className="fas fa-filter text-purple-500 opacity-70"></i>
+                                <i className="fas fa-filter text-primary-500 opacity-70"></i>
                             </div>
                             {entries.length === 0 ? (
                                 <div className={`text-sm ${subText}`}>No leads data.</div>

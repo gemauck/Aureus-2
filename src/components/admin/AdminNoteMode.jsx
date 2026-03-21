@@ -369,7 +369,7 @@ const AdminNoteMode = () => {
                                                         feedback.type === 'improvement' ? 'bg-blue-100 text-blue-800' :
                                                         feedback.type === 'feature' ? 'bg-green-100 text-green-800' :
                                                         feedback.type === 'question' ? 'bg-yellow-100 text-yellow-800' :
-                                                        'bg-purple-100 text-purple-800'
+                                                        'bg-primary-100 text-primary-800'
                                                     }`}>
                                                         {feedback.type}
                                                     </span>

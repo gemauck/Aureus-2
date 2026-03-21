@@ -59,13 +59,13 @@ export const InvoiceTemplateSelector = ({ currentTemplate, onSelect, onClose }) 
                                 template.id === 'modern' ? 'bg-gradient-to-br from-blue-50 to-blue-100' :
                                 template.id === 'classic' ? 'bg-gradient-to-br from-gray-50 to-gray-100' :
                                 template.id === 'minimal' ? 'bg-white border-2 border-gray-300' :
-                                'bg-gradient-to-br from-purple-50 to-pink-50'
+                                'bg-gradient-to-br from-primary-50 to-pink-50'
                             }`}>
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <div className={`text-2xl font-bold ${
-                                                template.id === 'creative' ? 'text-purple-600' : 'text-gray-800'
+                                                template.id === 'creative' ? 'text-primary-600' : 'text-gray-800'
                                             }`}>
                                                 INVOICE
                                             </div>
@@ -75,7 +75,7 @@ export const InvoiceTemplateSelector = ({ currentTemplate, onSelect, onClose }) 
                                             template.id === 'modern' ? 'bg-blue-600' :
                                             template.id === 'classic' ? 'bg-gray-700' :
                                             template.id === 'minimal' ? 'bg-black' :
-                                            'bg-gradient-to-br from-purple-600 to-pink-600'
+                                            'bg-gradient-to-br from-primary-600 to-pink-600'
                                         }`}></div>
                                     </div>
                                     <div className="h-16 bg-white bg-opacity-70 rounded p-2">

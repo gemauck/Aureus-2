@@ -1821,12 +1821,12 @@ const TaskDetailModal = ({
                             {Array.isArray(tags) && tags.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-2">
                                     {tags.map((tag, idx) => (
-                                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-medium">
+                                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full text-[10px] font-medium">
                                             <i className="fas fa-tag"></i>
                                             {tag}
                                             <button
                                                 onClick={() => handleRemoveTag(tag)}
-                                                className="hover:text-purple-900"
+                                                className="hover:text-primary-900"
                                             >
                                                 <i className="fas fa-times"></i>
                                             </button>
@@ -3021,7 +3021,7 @@ const TaskDetailModal = ({
                                                     />
                                                     <button
                                                         onClick={handleAddTag}
-                                                        className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm shadow-sm"
+                                                        className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm shadow-sm"
                                                     >
                                                         <i className="fas fa-plus"></i>
                                                     </button>

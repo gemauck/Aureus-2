@@ -1845,7 +1845,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       consumption: 'text-red-600 bg-red-50',
       receipt: 'text-green-600 bg-green-50',
       production: 'text-blue-600 bg-blue-50',
-      transfer: 'text-purple-600 bg-purple-50',
+      transfer: 'text-primary-600 bg-primary-50',
       adjustment: 'text-orange-600 bg-orange-50'
     };
     return colors[status] || 'text-gray-600 bg-gray-50';
@@ -1939,8 +1939,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{prodStats.totalProduction}</p>
                 <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{prodStats.completedOrders} orders completed</p>
               </div>
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-purple-50'}`}>
-                <i className={`fas fa-chart-line ${isDark ? 'text-gray-300' : 'text-purple-600'}`}></i>
+              <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-primary-50'}`}>
+                <i className={`fas fa-chart-line ${isDark ? 'text-gray-300' : 'text-primary-600'}`}></i>
               </div>
             </div>
           </div>
@@ -2014,7 +2014,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border`}>
           <div className={`p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
             <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-              <i className={`fas fa-exchange-alt ${isDark ? 'text-gray-300' : 'text-purple-600'}`}></i>
+              <i className={`fas fa-exchange-alt ${isDark ? 'text-gray-300' : 'text-primary-600'}`}></i>
               Recent Stock Movements
             </h3>
           </div>

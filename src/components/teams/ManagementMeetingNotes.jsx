@@ -43,7 +43,7 @@ const DEPARTMENTS = [
     { id: 'management', name: 'Management', icon: 'fa-user-tie', color: 'blue' },
     { id: 'compliance', name: 'Compliance', icon: 'fa-shield-alt', color: 'red' },
     { id: 'finance', name: 'Finance', icon: 'fa-coins', color: 'yellow' },
-    { id: 'technical', name: 'Technical', icon: 'fa-tools', color: 'purple' },
+    { id: 'technical', name: 'Technical', icon: 'fa-tools', color: 'primary' },
     { id: 'data', name: 'Data & Analytics', icon: 'fa-chart-line', color: 'indigo' },
     { id: 'support', name: 'Support', icon: 'fa-headset', color: 'green' },
     { id: 'commercial', name: 'Commercial', icon: 'fa-handshake', color: 'orange' },
@@ -5746,7 +5746,7 @@ const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActio
                                 window.scrollTo(0, currentScrollPosition);
                             });
                         }}
-                        className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-purple-700 text-purple-200 hover:bg-purple-600' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}
+                        className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-primary-700 text-primary-200 hover:bg-primary-600' : 'bg-primary-100 text-primary-700 hover:bg-primary-200'}`}
                     >
                         <i className="fas fa-tasks mr-1"></i>
                         Create Action Item

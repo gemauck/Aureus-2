@@ -115,7 +115,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
         const colors = {
             client: 'text-blue-600',
             project: 'text-green-600',
-            user: 'text-purple-600',
+            user: 'text-primary-600',
             team: 'text-pink-600',
             document: 'text-gray-600',
             invoice: 'text-orange-600',

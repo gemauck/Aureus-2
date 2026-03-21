@@ -4050,7 +4050,7 @@ placeholder="Notes..."
                                         type="button"
                                         onClick={handleApply}
                                         disabled={!selectedTemplateId}
-                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                                     >
                                         Apply Template
                                     </button>
@@ -4504,9 +4504,9 @@ placeholder="Notes..."
                                                 setShowApplyTemplateModal(true);
                                                 setIsTemplateDropdownOpen(false);
                                             }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 flex items-center gap-2 transition-colors"
+                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-700 flex items-center gap-2 transition-colors"
                                         >
-                                            <i className="fas fa-magic text-purple-600"></i>
+                                            <i className="fas fa-magic text-primary-600"></i>
                                             <span>Apply Template</span>
                                         </button>
                                         <button

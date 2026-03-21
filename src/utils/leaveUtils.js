@@ -4,7 +4,7 @@
 const BCEA_LEAVE_TYPES = [
     { value: 'annual', label: 'Annual Leave', defaultDays: 21, color: 'blue', icon: 'fa-umbrella-beach' },
     { value: 'sick', label: 'Sick Leave', defaultDays: 30, color: 'red', icon: 'fa-heartbeat' },
-    { value: 'family', label: 'Family Responsibility', defaultDays: 3, color: 'purple', icon: 'fa-home' },
+    { value: 'family', label: 'Family Responsibility', defaultDays: 3, color: 'primary', icon: 'fa-home' },
     { value: 'maternity', label: 'Maternity Leave', defaultDays: 120, color: 'pink', icon: 'fa-baby' },
     { value: 'paternity', label: 'Paternity Leave', defaultDays: 10, color: 'teal', icon: 'fa-baby-carriage' },
     { value: 'study', label: 'Study Leave', defaultDays: 0, color: 'orange', icon: 'fa-book' },

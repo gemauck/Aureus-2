@@ -257,7 +257,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         const leaveTypes = leaveUtils.BCEA_LEAVE_TYPES || [
         { value: 'annual', label: 'Annual Leave', days: 21, color: 'blue' },
         { value: 'sick', label: 'Sick Leave', days: 30, color: 'red' },
-        { value: 'family', label: 'Family Responsibility', days: 3, color: 'purple' },
+        { value: 'family', label: 'Family Responsibility', days: 3, color: 'primary' },
         { value: 'maternity', label: 'Maternity Leave', days: 120, color: 'pink' },
         { value: 'paternity', label: 'Paternity Leave', days: 10, color: 'teal' },
         { value: 'study', label: 'Study Leave', days: 0, color: 'orange' },
@@ -269,7 +269,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         const leaveTypeBadgeClasses = {
             blue: 'bg-blue-100 text-blue-800',
             red: 'bg-red-100 text-red-800',
-            purple: 'bg-purple-100 text-purple-800',
+            primary: 'bg-primary-100 text-primary-800',
             pink: 'bg-pink-100 text-pink-800',
             teal: 'bg-teal-100 text-teal-800',
             orange: 'bg-orange-100 text-orange-800',

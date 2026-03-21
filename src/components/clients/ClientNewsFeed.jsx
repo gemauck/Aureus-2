@@ -285,7 +285,7 @@ const ClientNewsFeed = () => {
     const getActivityColor = (type) => {
         const colorMap = {
             'contact': 'bg-blue-100 text-blue-800',
-            'meeting': 'bg-purple-100 text-purple-800',
+            'meeting': 'bg-primary-100 text-primary-800',
             'email': 'bg-green-100 text-green-800',
             'note': 'bg-yellow-100 text-yellow-800',
             'project': 'bg-indigo-100 text-indigo-800',

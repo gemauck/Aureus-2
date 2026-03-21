@@ -6117,7 +6117,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     const stageLower = String(engagementStage).toLowerCase();
                                                                     return (
                                                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                                            stageLower === 'disinterested' ? (isDark ? 'bg-purple-900/80 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                                                            stageLower === 'disinterested' ? (isDark ? 'bg-primary-900/80 text-primary-200' : 'bg-primary-100 text-primary-800') :
                                                                             stageLower === 'potential' ? (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200') :
                                                                             stageLower === 'active' || stageLower === 'proposal' || stageLower === 'tender' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
                                                                             (isDark ? 'bg-gray-700 text-gray-200 border border-gray-600' : 'bg-white text-gray-800 border border-gray-200')
@@ -6571,7 +6571,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 <div className="flex items-center gap-2 mb-1">
                                                                     <span className={`px-2 py-0.5 text-xs rounded font-medium ${
                                                                         followUp.type === 'Call' ? 'bg-blue-100 text-blue-700' :
-                                                                        followUp.type === 'Meeting' ? 'bg-purple-100 text-purple-700' :
+                                                                        followUp.type === 'Meeting' ? 'bg-primary-100 text-primary-700' :
                                                                         followUp.type === 'Email' ? 'bg-green-100 text-green-700' :
                                                                         'bg-gray-100 text-gray-700'
                                                                     }`}>
