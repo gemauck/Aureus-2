@@ -93,22 +93,62 @@ function partitionJobCardAttachments(photosInput) {
   return { visualItems, voicesBySection };
 }
 
-function JobCardVoiceClips({ items }) {
+/**
+ * Compact voice attachments: collapsed to a single control; expand to play.
+ * @param {'auto'|'dark'|'light'} [tone='auto'] — `dark` for the manufacturing immersive viewer; `auto` follows app theme (e.g. Service & Maintenance).
+ */
+function JobCardVoiceClips({ items, tone = 'auto' }) {
+  const [expanded, setExpanded] = useState(false);
   if (!items || items.length === 0) return null;
+
+  const themeDark =
+    typeof window !== 'undefined' && window.useTheme ? window.useTheme().isDark : false;
+  const isDark = tone === 'dark' ? true : tone === 'light' ? false : themeDark;
+
+  const count = items.length;
+  const label = count === 1 ? 'Voice note' : `${count} voice notes`;
+
+  const btn = isDark
+    ? 'border-slate-600/80 bg-slate-900/50 text-slate-200 hover:bg-slate-800/70'
+    : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50';
+  const iconBg = isDark ? 'bg-pink-500/15 text-pink-300' : 'bg-pink-50 text-pink-600';
+  const panel = isDark
+    ? 'border-slate-600/50 bg-slate-950/50'
+    : 'border-gray-200 bg-gray-50';
+
   return (
-    <div className="mt-3 space-y-2">
-      {items.map((item) => (
-        <div
-          key={item.idx}
-          className="rounded-lg border border-pink-500/25 bg-slate-950/60 p-2"
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs font-medium transition-colors ${btn}`}
+        aria-expanded={expanded}
+        aria-label={expanded ? 'Hide voice note player' : `Show ${label}`}
+      >
+        <span
+          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${iconBg}`}
         >
-          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-pink-300/90">
-            <i className="fa-solid fa-microphone text-pink-400" aria-hidden />
-            Voice recording
-          </div>
-          <audio controls className="h-8 w-full max-w-md" src={item.url} />
+          <i className="fa-solid fa-microphone text-[13px]" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">{label}</span>
+        <i
+          className={`fa-solid fa-chevron-down text-[10px] text-current opacity-50 transition-transform duration-200 ${
+            expanded ? 'rotate-180' : ''
+          }`}
+          aria-hidden
+        />
+      </button>
+      {expanded ? (
+        <div
+          className={`mt-2 space-y-2 rounded-lg border p-2 ${panel}`}
+          role="region"
+          aria-label="Voice recordings"
+        >
+          {items.map((item) => (
+            <audio key={item.idx} controls className="h-8 w-full max-w-md" src={item.url} />
+          ))}
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }
@@ -919,6 +959,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
                       </div>
                       <JobCardVoiceClips
+                        tone="dark"
                         items={attachmentParts.voicesBySection.reasonForVisit}
                       />
                     </div>
@@ -933,6 +974,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {selectedJobCard.diagnosis || 'No diagnosis captured.'}
                       </p>
                       <JobCardVoiceClips
+                        tone="dark"
                         items={attachmentParts.voicesBySection.diagnosis}
                       />
                     </div>
@@ -944,6 +986,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {selectedJobCard.actionsTaken || 'No actions recorded.'}
                       </p>
                       <JobCardVoiceClips
+                        tone="dark"
                         items={attachmentParts.voicesBySection.actionsTaken}
                       />
                     </div>
@@ -962,6 +1005,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         </div>
                       ) : null}
                       <JobCardVoiceClips
+                        tone="dark"
                         items={attachmentParts.voicesBySection.otherComments}
                       />
                     </div>
@@ -974,6 +1018,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         Customer feedback
                       </div>
                       <JobCardVoiceClips
+                        tone="dark"
                         items={attachmentParts.voicesBySection.customerFeedback}
                       />
                     </div>
@@ -1033,6 +1078,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                                         <dd className="text-slate-100 sm:col-span-2 whitespace-pre-wrap">
                                           <span className="block">{value || '—'}</span>
                                           <JobCardVoiceClips
+                                            tone="dark"
                                             items={attachmentParts.voicesBySection[formVoiceKey]}
                                           />
                                         </dd>
@@ -1062,6 +1108,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                                 {labelOrphanFormVoiceKey(detailServiceForms, key)}
                               </div>
                               <JobCardVoiceClips
+                                tone="dark"
                                 items={attachmentParts.voicesBySection[key]}
                               />
                             </div>

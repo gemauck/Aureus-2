@@ -27,7 +27,41 @@ function normalizeAudioMime(raw) {
     return 'audio/webm'
   }
   if (base === 'video/webm') return 'audio/webm'
+  // Whisper accepts standard types; Safari/iOS often sends MP4-family labels that confuse the API
+  if (base === 'video/mp4' || base === 'video/quicktime') return 'audio/mp4'
+  if (base.includes('mp4a') || base === 'audio/x-m4a') return 'audio/mp4'
   return base || 'audio/webm'
+}
+
+/**
+ * Detect container from magic bytes. Browsers (especially Safari / iOS) often leave
+ * MediaRecorder.mimeType / Blob.type empty and the client falls back to audio/webm
+ * while the bytes are actually MP4/AAC — Whisper then rejects the file.
+ */
+function sniffAudioContainer(buf) {
+  if (!buf || buf.length < 16) return null
+  // WebM (EBML header)
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
+    return { mimeType: 'audio/webm', ext: 'webm' }
+  }
+  // ISO BMFF (MP4 / M4A) — "ftyp" at offset 4
+  if (buf.length >= 8 && buf.toString('ascii', 4, 8) === 'ftyp') {
+    return { mimeType: 'audio/mp4', ext: 'mp4' }
+  }
+  if (buf.toString('ascii', 0, 4) === 'OggS') {
+    return { mimeType: 'audio/ogg', ext: 'ogg' }
+  }
+  if (
+    buf.toString('ascii', 0, 4) === 'RIFF' &&
+    buf.length >= 12 &&
+    buf.toString('ascii', 8, 12) === 'WAVE'
+  ) {
+    return { mimeType: 'audio/wav', ext: 'wav' }
+  }
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) {
+    return { mimeType: 'audio/mpeg', ext: 'mp3' }
+  }
+  return null
 }
 
 async function handler(req, res) {
@@ -43,9 +77,6 @@ async function handler(req, res) {
   try {
     const body = req.body || {}
     const audioBase64 = body.audioBase64
-    const mimeType = normalizeAudioMime(
-      typeof body.mimeType === 'string' ? body.mimeType : 'audio/webm'
-    )
     if (!audioBase64 || typeof audioBase64 !== 'string') {
       return badRequest(res, 'audioBase64 is required')
     }
@@ -56,7 +87,11 @@ async function handler(req, res) {
     if (buf.length > MAX_BYTES) {
       return badRequest(res, 'Audio file is too large')
     }
-    const ext = extFromMime(mimeType)
+    const sniffed = sniffAudioContainer(buf)
+    const mimeType = sniffed
+      ? sniffed.mimeType
+      : normalizeAudioMime(typeof body.mimeType === 'string' ? body.mimeType : 'audio/webm')
+    const ext = sniffed ? sniffed.ext : extFromMime(mimeType)
     const file = await toFile(buf, `voice-note.${ext}`, { type: mimeType })
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     const tr = await openai.audio.transcriptions.create({
