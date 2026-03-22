@@ -2337,6 +2337,17 @@ app.all('/api/public/clients', async (req, res, next) => {
   }
 })
 
+app.all('/api/public/sites/client/:clientId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'sites-client.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public sites/client API error:', e)
+    return next(e)
+  }
+})
+
 app.all('/api/public/users', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'public', 'users.js'))
