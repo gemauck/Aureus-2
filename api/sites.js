@@ -7,6 +7,19 @@ import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 import { getSitesForClientRead } from './_lib/getSitesForClientRead.js'
 
+/** GET /api/sites/client/:clientId (list only) — same read as public job card; no auth (mutations still require auth). */
+function isUnauthenticatedGetSitesList(req) {
+  if (req.method !== 'GET') return false
+  const urlPath = (req.url || '').split('?')[0].split('#')[0]
+  const pathSegments = urlPath.split('/').filter(Boolean)
+  const clientIdx = pathSegments.indexOf('client')
+  const clientIdFromUrl = clientIdx >= 0 && pathSegments[clientIdx + 1] ? pathSegments[clientIdx + 1] : null
+  const siteIdFromUrl = clientIdx >= 0 && pathSegments[clientIdx + 2] ? pathSegments[clientIdx + 2] : null
+  const clientId = (req.params && req.params.clientId) || clientIdFromUrl
+  const siteId = (req.params && req.params.siteId) || siteIdFromUrl
+  return !!(clientId && !siteId)
+}
+
 async function handler(req, res) {
   try {
     
@@ -326,4 +339,13 @@ async function handler(req, res) {
   }
 }
 
-export default withHttp(withLogging(authRequired(handler)))
+const authenticatedHandler = authRequired(handler)
+
+async function sitesHandlerWithPublicGet(req, res) {
+  if (isUnauthenticatedGetSitesList(req)) {
+    return handler(req, res)
+  }
+  return authenticatedHandler(req, res)
+}
+
+export default withHttp(withLogging(sitesHandlerWithPublicGet))
