@@ -425,7 +425,8 @@ const createMediaRecorder = stream => {
   }
 };
 
-const MIN_AUDIO_BLOB_BYTES = 512;
+/** Below this, recording is treated as failed (headers-only / silence). Keep low but not zero. */
+const MIN_AUDIO_BLOB_BYTES = 80;
 
 /** Wrapped transcript for each voice note so multiple clips stay visually distinct in the field */
 const formatVoiceNoteTranscriptBlock = (noteNumber, text) => {
@@ -457,18 +458,34 @@ const VoiceNoteTextarea = ({
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
   const valueRef = useRef(value);
+  const mountedRef = useRef(true);
+  const onVoiceSavedRef = useRef(onVoiceSaved);
+  const sectionIdRef = useRef(sectionId);
+  const pendingNoteNumberRef = useRef(1);
+  const voiceClipsCountRef = useRef(0);
+
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
+  useEffect(() => {
+    onVoiceSavedRef.current = onVoiceSaved;
+    sectionIdRef.current = sectionId;
+  }, [onVoiceSaved, sectionId]);
+  useEffect(() => {
+    voiceClipsCountRef.current = voiceClips.length;
+  }, [voiceClips.length]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const stopAudioRecording = useCallback(() => {
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') {
-      try {
-        if (mr.state === 'recording') {
-          mr.requestData();
-        }
-      } catch (_) {}
+      // With start() and no timeslice, the full blob is delivered on stop(). requestData() first
+      // can yield an empty chunk on WebKit and break the merged Blob / playback.
       try {
         mr.stop();
       } catch (_) {}
@@ -508,13 +525,15 @@ const VoiceNoteTextarea = ({
     const appliedMime =
       mr.mimeType || pickAudioRecorderMimeType() || 'audio/webm';
     chunksRef.current = [];
-    const noteNumber = voiceClips.length + 1;
+    pendingNoteNumberRef.current = voiceClipsCountRef.current + 1;
     mr.ondataavailable = e => {
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
     mr.onerror = ev => {
       console.warn('MediaRecorder error:', ev.error);
-      setRecordHint('Recording error — try again.');
+      if (mountedRef.current) {
+        setRecordHint('Recording error — try again.');
+      }
     };
     mr.onstop = () => {
       mediaRecorderRef.current = null;
@@ -526,49 +545,52 @@ const VoiceNoteTextarea = ({
       const blobType = (mr.mimeType && mr.mimeType.length > 0 ? mr.mimeType : appliedMime) || 'audio/webm';
       const blob = new Blob(chunksRef.current, { type: blobType });
       if (!blob.size || blob.size < MIN_AUDIO_BLOB_BYTES) {
-        setRecordHint(
-          'No usable audio captured — speak for a few seconds, then tap stop. On iPhone use Safari and allow the microphone.'
-        );
+        console.warn('JobCard voice: empty or tiny blob', blob.size, 'type', blobType);
+        if (mountedRef.current) {
+          setRecordHint(
+            'No audio captured — hold mic, speak 2–3 seconds, tap stop. Try Safari on iPhone, or update Chrome. If it keeps failing, check site microphone permission.'
+          );
+        }
         return;
       }
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result;
-        if (dataUrl && typeof dataUrl === 'string' && onVoiceSaved) {
-          onVoiceSaved({
-            section: sectionId,
+        const save = onVoiceSavedRef.current;
+        if (dataUrl && typeof dataUrl === 'string' && save) {
+          save({
+            section: sectionIdRef.current,
             dataUrl,
             mimeType: blob.type || blobType,
-            noteNumber
+            noteNumber: pendingNoteNumberRef.current
           });
-          setRecordHint('');
+          if (mountedRef.current) {
+            setRecordHint('');
+          }
         }
       };
-      reader.onerror = () => setRecordHint('Could not read recording — try again.');
+      reader.onerror = () => {
+        if (mountedRef.current) {
+          setRecordHint('Could not read recording — try again.');
+        }
+      };
       reader.readAsDataURL(blob);
     };
 
     try {
-      if (isIOSOrSafari) {
-        mr.start();
-      } else {
-        mr.start(250);
-      }
+      // No timeslice: browsers emit one blob at stop (timesliced recording often yields empty/unplayable clips).
+      mr.start();
     } catch (startErr) {
       console.warn('MediaRecorder.start failed:', startErr);
-      try {
-        mr.start();
-      } catch (e2) {
-        stream.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-        alert('Could not start audio recording. Try another browser or update this one.');
-        return;
-      }
+      stream.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+      alert('Could not start audio recording. Try another browser or update this one.');
+      return;
     }
 
     mediaRecorderRef.current = mr;
     setAudioRecording(true);
-  }, [onVoiceSaved, sectionId, voiceClips.length]);
+  }, []);
 
   const transcribeClip = async clip => {
     if (!clip?.dataUrl || transcribingClipId) return;
@@ -696,7 +718,12 @@ const VoiceNoteTextarea = ({
                 <span className="text-[10px] font-semibold text-gray-500 whitespace-nowrap">
                   #{clip.noteNumber != null ? clip.noteNumber : '—'}
                 </span>
-                <audio controls className="h-8 w-full min-w-0" preload="metadata">
+                <audio
+                  controls
+                  className="h-8 w-full min-w-0"
+                  preload="metadata"
+                  src={clip.dataUrl}
+                >
                   <source src={clip.dataUrl} type={clip.mimeType || 'audio/webm'} />
                 </audio>
               </div>
