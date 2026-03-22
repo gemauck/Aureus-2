@@ -148,8 +148,26 @@ const SearchableSelect = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
+  const [menuFixedStyle, setMenuFixedStyle] = useState(null);
   const wrapRef = useRef(null);
+  const inputRef = useRef(null);
+  const menuRef = useRef(null);
   const listId = id ? `${id}-listbox` : undefined;
+
+  const positionMenu = useCallback(() => {
+    if (!open || !inputRef.current || typeof window === 'undefined') return;
+    const r = inputRef.current.getBoundingClientRect();
+    const gap = 4;
+    const maxH = 224;
+    const spaceBelow = window.innerHeight - r.bottom - gap - 16;
+    const mh = Math.min(maxH, Math.max(96, spaceBelow));
+    setMenuFixedStyle({
+      top: r.bottom + gap,
+      left: r.left,
+      width: r.width,
+      maxHeight: mh
+    });
+  }, [open]);
 
   /** Real choices only — never show "Select…" style rows in the dropdown */
   const listOptions = useMemo(
@@ -183,53 +201,80 @@ const SearchableSelect = ({
 
   useEffect(() => {
     const onDoc = e => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      const t = e.target;
+      if (wrapRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('touchstart', onDoc, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('touchstart', onDoc);
+    };
   }, []);
 
-  return (
-    <div ref={wrapRef} className={`relative ${className}`}>
-      <input
-        id={id}
-        type="text"
-        name={name}
-        role="combobox"
-        aria-expanded={open}
-        aria-autocomplete="list"
-        aria-controls={listId}
-        disabled={disabled}
-        required={required}
-        aria-label={ariaLabel}
-        autoComplete="off"
-        value={open ? filter : (selected ? selected.label : '')}
-        onChange={e => {
-          setFilter(e.target.value);
-          setOpen(true);
-          if (!e.target.value) onChange('');
-        }}
-        onFocus={() => {
-          setOpen(true);
-          // Empty filter so the full list appears immediately (no fake "Select…" row)
-          setFilter(selected ? selected.label : '');
-        }}
-        placeholder={placeholder}
-        className={`w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed`}
-        style={{ fontSize: '16px' }}
-      />
-      {open && !disabled && listOptions.length > 0 && filtered.length > 0 && (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-[60] mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuFixedStyle(null);
+      return;
+    }
+    positionMenu();
+    const onWin = () => positionMenu();
+    window.addEventListener('resize', onWin);
+    window.addEventListener('scroll', onWin, true);
+    return () => {
+      window.removeEventListener('resize', onWin);
+      window.removeEventListener('scroll', onWin, true);
+    };
+  }, [open, positionMenu, filtered.length, listOptions.length]);
+
+  const canPortal =
+    typeof document !== 'undefined' &&
+    window.ReactDOM &&
+    typeof window.ReactDOM.createPortal === 'function';
+
+  const renderDropdown = () => {
+    if (!open || disabled) return null;
+
+    const menuShellClass = 'rounded-lg border border-gray-200 bg-white shadow-lg';
+
+    if (listOptions.length === 0) {
+      return (
+        <div
+          ref={menuRef}
+          className={`${menuShellClass} fixed z-[10050] px-3 py-2 text-sm text-gray-500`}
+          style={menuFixedStyle || undefined}
         >
+          No options available
+        </div>
+      );
+    }
+
+    if (filtered.length === 0) {
+      return (
+        <div
+          ref={menuRef}
+          className={`${menuShellClass} fixed z-[10050] px-3 py-2 text-sm text-gray-500`}
+          style={menuFixedStyle || undefined}
+        >
+          No matches
+        </div>
+      );
+    }
+
+    return (
+      <div
+        ref={menuRef}
+        className={`${menuShellClass} fixed z-[10050] overflow-y-auto py-1`}
+        style={menuFixedStyle || undefined}
+      >
+        <ul id={listId} role="listbox" className="py-0">
           {filtered.map(opt => (
             <li
               key={String(opt.value) + String(opt.label)}
               role="option"
               aria-selected={String(opt.value) === String(value)}
-              className="cursor-pointer px-3 py-2.5 text-sm text-gray-900 hover:bg-blue-50"
+              className="cursor-pointer px-3 py-2.5 text-sm text-gray-900 hover:bg-blue-50 active:bg-blue-100 touch-manipulation"
               onMouseDown={e => e.preventDefault()}
               onClick={() => {
                 onChange(opt.value);
@@ -241,16 +286,97 @@ const SearchableSelect = ({
             </li>
           ))}
         </ul>
-      )}
-      {open && !disabled && listOptions.length === 0 && (
-        <div className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg">
-          No options available
-        </div>
-      )}
-      {open && !disabled && listOptions.length > 0 && filtered.length === 0 && (
-        <div className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg">
-          No matches
-        </div>
+      </div>
+    );
+  };
+
+  const dropdownNode = renderDropdown();
+  const portaledDropdown =
+    canPortal && dropdownNode ? window.ReactDOM.createPortal(dropdownNode, document.body) : null;
+
+  return (
+    <div ref={wrapRef} className={`relative ${className}`}>
+      <div className="relative">
+        <input
+          ref={inputRef}
+          id={id}
+          type="text"
+          name={name}
+          role="combobox"
+          aria-expanded={open}
+          aria-autocomplete="list"
+          aria-controls={listId}
+          disabled={disabled}
+          required={required}
+          aria-label={ariaLabel}
+          autoComplete="off"
+          value={open ? filter : (selected ? selected.label : '')}
+          onChange={e => {
+            setFilter(e.target.value);
+            setOpen(true);
+            if (!e.target.value) onChange('');
+          }}
+          onFocus={() => {
+            setOpen(true);
+            setFilter(selected ? selected.label : '');
+          }}
+          placeholder={placeholder}
+          className="w-full pl-4 pr-11 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed touch-manipulation"
+          style={{ fontSize: '16px' }}
+        />
+        <span
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+          aria-hidden
+        >
+          <i className="fas fa-chevron-down text-sm" />
+        </span>
+      </div>
+      {canPortal ? (
+        portaledDropdown
+      ) : (
+        <>
+          {open && !disabled && listOptions.length > 0 && filtered.length > 0 && (
+            <ul
+              id={listId}
+              role="listbox"
+              ref={menuRef}
+              className="absolute z-[60] mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+            >
+              {filtered.map(opt => (
+                <li
+                  key={String(opt.value) + String(opt.label)}
+                  role="option"
+                  aria-selected={String(opt.value) === String(value)}
+                  className="cursor-pointer px-3 py-2.5 text-sm text-gray-900 hover:bg-blue-50 active:bg-blue-100 touch-manipulation"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setFilter(opt.label);
+                    setOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </li>
+              ))}
+            </ul>
+          )}
+          {open && !disabled && listOptions.length === 0 && (
+            <div
+              ref={menuRef}
+              className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg"
+            >
+              No options available
+            </div>
+          )}
+          {open && !disabled && listOptions.length > 0 && filtered.length === 0 && (
+            <div
+              ref={menuRef}
+              className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg"
+            >
+              No matches
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -2238,16 +2364,21 @@ const JobCardFormPublic = () => {
           <h2 className="text-lg font-semibold text-gray-900">Lead Technician</h2>
           <p className="text-sm text-gray-500 mt-1">Assign the primary technician responsible for this job card.</p>
         </header>
-            <SearchableSelect
-              id="lead-technician"
-              name="agentName"
-              aria-label="Lead technician"
-              value={formData.agentName}
-              onChange={v => handleChange({ target: { name: 'agentName', value: v } })}
-              options={leadTechnicianOptions}
-              placeholder="Search or select technician"
-              required
-            />
+        <div>
+          <label htmlFor="lead-technician" className="block text-sm font-medium text-gray-700 mb-2">
+            Technician <span className="text-red-500">*</span>
+          </label>
+          <SearchableSelect
+            id="lead-technician"
+            name="agentName"
+            aria-label="Lead technician"
+            value={formData.agentName}
+            onChange={v => handleChange({ target: { name: 'agentName', value: v } })}
+            options={leadTechnicianOptions}
+            placeholder="Tap to choose or search…"
+            required
+          />
+        </div>
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">

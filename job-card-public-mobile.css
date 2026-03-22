@@ -199,10 +199,9 @@
     padding: 8px 12px !important;
   }
 
-  /* Ensure parent containers don't clip dropdown options */
+  /* Let cards show dropdown popovers; keep scroll on .job-card-scrollable-content (portal menus render on body) */
   body.job-card-public .job-card-public-wrapper section,
-  body.job-card-public .job-card-public-wrapper .max-w-4xl,
-  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+  body.job-card-public .job-card-public-wrapper .max-w-4xl {
     overflow: visible !important;
     z-index: auto !important;
   }
@@ -261,6 +260,36 @@
     min-height: 44px !important;
     border-radius: 8px !important;
     touch-action: manipulation !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    -webkit-tap-highlight-color: rgba(37, 99, 235, 0.15) !important;
+  }
+
+  /* Keep primary actions readable on tap (WebKit / sticky-hover quirks on phones) */
+  body.job-card-public .job-card-public-wrapper button.bg-blue-600,
+  body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600'] {
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper button.bg-blue-600:active,
+  body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600']:active {
+    background-color: #1e40af !important;
+    color: #ffffff !important;
+  }
+
+  @media (hover: hover) {
+    body.job-card-public .job-card-public-wrapper button.bg-blue-600:hover,
+    body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600']:hover {
+      background-color: #1d4ed8 !important;
+      color: #ffffff !important;
+    }
+  }
+
+  body.job-card-public .job-card-public-wrapper button.border-gray-300:active,
+  body.job-card-public .job-card-public-wrapper button[class*='border-gray-300']:active {
+    background-color: #f3f4f6 !important;
+    color: #374151 !important;
   }
 
   /* Typography improvements */

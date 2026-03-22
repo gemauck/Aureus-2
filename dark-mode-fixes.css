@@ -495,6 +495,28 @@
     color: #ffffff !important;
 }
 
+/* Tailwind blue-600 primary (e.g. Job Card wizard, maps): keep contrast on hover/active */
+[data-theme="light"] button.bg-blue-600,
+[data-theme="light"] button[class*="bg-blue-600"] {
+    background-color: #2563eb !important;
+}
+
+[data-theme="light"] button.bg-blue-600:hover,
+[data-theme="light"] button[class*="bg-blue-600"]:hover,
+[data-theme="light"] button.bg-blue-600.text-white:hover,
+[data-theme="light"] button[class*="bg-blue-600"][class*="text-white"]:hover {
+    background-color: #1d4ed8 !important;
+    color: #ffffff !important;
+}
+
+[data-theme="light"] button.bg-blue-600:active,
+[data-theme="light"] button[class*="bg-blue-600"]:active,
+[data-theme="light"] button.bg-blue-600.text-white:active,
+[data-theme="light"] button[class*="bg-blue-600"][class*="text-white"]:active {
+    background-color: #1e40af !important;
+    color: #ffffff !important;
+}
+
 [data-theme="light"] button.text-white .fas,
 [data-theme="light"] button.text-white .far,
 [data-theme="light"] button.text-white .fab,
