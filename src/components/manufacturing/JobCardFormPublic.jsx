@@ -487,6 +487,77 @@ const isLikelyServerJobCardId = id => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 };
 
+/** Pending / failed-sync job cards for the public wizard (offline or server unreachable) */
+const JOB_CARD_LOCAL_PENDING_KEY = 'manufacturing_jobcards';
+const MAX_LOCAL_PENDING_JOB_CARDS = 100;
+
+function readLocalPendingJobCards() {
+  try {
+    const raw = localStorage.getItem(JOB_CARD_LOCAL_PENDING_KEY);
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalPendingJobCards(cards) {
+  try {
+    localStorage.setItem(
+      JOB_CARD_LOCAL_PENDING_KEY,
+      JSON.stringify(cards.slice(0, MAX_LOCAL_PENDING_JOB_CARDS))
+    );
+  } catch (e) {
+    console.warn('JobCardFormPublic: could not persist local job cards', e);
+  }
+}
+
+function upsertLocalPendingJobCard(card) {
+  if (!card || card.id == null) return;
+  const list = readLocalPendingJobCards();
+  const id = String(card.id);
+  const next = [{ ...card, synced: false }, ...list.filter(c => c && String(c.id) !== id)].slice(
+    0,
+    MAX_LOCAL_PENDING_JOB_CARDS
+  );
+  writeLocalPendingJobCards(next);
+}
+
+function removeLocalPendingJobCard(id) {
+  if (id == null) return;
+  const sid = String(id);
+  writeLocalPendingJobCards(readLocalPendingJobCards().filter(c => c && String(c.id) !== sid));
+}
+
+/** Merge server/public API rows with unsynced local copies (local wins on id collision). */
+function buildMergedWizardJobCardRows(serverList) {
+  const token = typeof window !== 'undefined' ? window.storage?.getToken?.() : null;
+  const localPending = readLocalPendingJobCards().filter(j => j && j.synced === false);
+  const pendingIdSet = new Set(localPending.map(j => String(j.id)));
+  const serverRows = (serverList || [])
+    .filter(jc => jc && !pendingIdSet.has(String(jc.id)))
+    .map(jc => ({
+      ...jc,
+      source: token ? 'server' : 'public',
+      serverJobCardId: jc.id,
+      synced: true
+    }));
+  const localRows = localPending.map(jc => ({
+    ...jc,
+    source: 'local',
+    serverJobCardId:
+      jc.serverJobCardId || (isLikelyServerJobCardId(jc.id) ? String(jc.id) : null),
+    synced: false
+  }));
+  const rows = [...localRows, ...serverRows];
+  rows.sort((a, b) => {
+    const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    return tb - ta;
+  });
+  return rows;
+}
+
 const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
     agentName: '',
@@ -545,8 +616,11 @@ const JobCardFormPublic = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   /** landing → pick create vs edit; prior_list → choose a saved card; form → wizard */
   const [wizardFlow, setWizardFlow] = useState('landing');
-  /** Prior list: loaded from API only (no browser cache for job cards) */
+  /** Prior list: server + public API; merged with readLocalPendingJobCards() for display */
   const [serverPriorList, setServerPriorList] = useState([]);
+  const [serverPriorLoading, setServerPriorLoading] = useState(false);
+  /** Bump after local pending queue changes so landing / prior list re-read storage */
+  const [localDraftsTick, setLocalDraftsTick] = useState(0);
   /** When editing, keep stable id / createdAt / sync flags for save */
   const [editingMeta, setEditingMeta] = useState(null);
   /** Mobile (< xl): collapse wizard header to maximize form area */
@@ -987,19 +1061,12 @@ const JobCardFormPublic = () => {
   const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
 
   useEffect(() => {
-    try {
-      localStorage.removeItem('manufacturing_jobcards');
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    if (wizardFlow !== 'prior_list') return;
+    if (wizardFlow !== 'prior_list' && wizardFlow !== 'landing') return;
     let cancelled = false;
     const token = window.storage?.getToken?.();
 
     (async () => {
+      if (!cancelled) setServerPriorLoading(true);
       if (token) {
         try {
           const r = await fetch(
@@ -1020,13 +1087,18 @@ const JobCardFormPublic = () => {
           if (!cancelled) setServerPriorList(Array.isArray(list) ? list : []);
         } catch {
           if (!cancelled) setServerPriorList([]);
+        } finally {
+          if (!cancelled) setServerPriorLoading(false);
         }
         return;
       }
 
       const ids = readPublicPriorJobCardIds();
       if (ids.length === 0) {
-        if (!cancelled) setServerPriorList([]);
+        if (!cancelled) {
+          setServerPriorList([]);
+          setServerPriorLoading(false);
+        }
         return;
       }
       try {
@@ -1035,7 +1107,10 @@ const JobCardFormPublic = () => {
           headers: { 'Content-Type': 'application/json' }
         });
         if (!r.ok) {
-          if (!cancelled) setServerPriorList([]);
+          if (!cancelled) {
+            setServerPriorList([]);
+            setServerPriorLoading(false);
+          }
           return;
         }
         const raw = await r.json();
@@ -1043,6 +1118,8 @@ const JobCardFormPublic = () => {
         if (!cancelled) setServerPriorList(Array.isArray(list) ? list : []);
       } catch {
         if (!cancelled) setServerPriorList([]);
+      } finally {
+        if (!cancelled) setServerPriorLoading(false);
       }
     })();
 
@@ -1053,20 +1130,14 @@ const JobCardFormPublic = () => {
 
   const mergedPriorJobCards = useMemo(() => {
     if (wizardFlow !== 'prior_list') return [];
-    const token = typeof window !== 'undefined' ? window.storage?.getToken?.() : null;
-    const rows = serverPriorList.map(jc => ({
-      ...jc,
-      source: token ? 'server' : 'public',
-      serverJobCardId: jc.id,
-      synced: true
-    }));
-    rows.sort((a, b) => {
-      const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      return tb - ta;
-    });
-    return rows;
-  }, [wizardFlow, serverPriorList]);
+    return buildMergedWizardJobCardRows(serverPriorList);
+  }, [wizardFlow, serverPriorList, localDraftsTick]);
+
+  /** Landing preview: same merge rules, capped for compact display */
+  const landingPreviewRows = useMemo(() => {
+    if (wizardFlow !== 'landing') return [];
+    return buildMergedWizardJobCardRows(serverPriorList).slice(0, 8);
+  }, [wizardFlow, serverPriorList, localDraftsTick]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -1942,7 +2013,10 @@ const JobCardFormPublic = () => {
       (isLikelyServerJobCardId(full.id) ? String(full.id) : null) ||
       null;
     const createdAt = full.createdAt || new Date().toISOString();
-    const synced = Boolean(full.synced) || Boolean(serverJobCardId);
+    const synced =
+      full.source === 'local' || full.synced === false
+        ? false
+        : Boolean(full.synced) || Boolean(serverJobCardId);
     const jobCardNumber = full.jobCardNumber || '';
 
     setEditingMeta({
@@ -2048,7 +2122,8 @@ const JobCardFormPublic = () => {
         createdAt: editingMeta?.createdAt ?? nowIso,
         updatedAt: nowIso,
         synced: editingMeta?.synced ?? false,
-        jobCardNumber: editingMeta?.jobCardNumber || ''
+        jobCardNumber: editingMeta?.jobCardNumber || '',
+        serverJobCardId: editingMeta?.serverJobCardId || null
       };
 
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
@@ -2166,12 +2241,15 @@ const JobCardFormPublic = () => {
       }
 
       if (serverReachOk) {
+        removeLocalPendingJobCard(jobCardData.id);
         alert(
           '✅ Job card saved to the server. It appears in Service & Maintenance → Job Cards for everyone.'
         );
       } else {
+        upsertLocalPendingJobCard(jobCardData);
+        setLocalDraftsTick(t => t + 1);
         alert(
-          '⚠️ Could not save to the server. Check your connection, sign in to the ERP if required, and try again.'
+          '⚠️ Saved on this device only (not synced). Your card is listed under “Not synced” until the server accepts it. Check connection or sign in, then open the card and submit again.'
         );
       }
       setEditingMeta(null);
@@ -3321,6 +3399,11 @@ const JobCardFormPublic = () => {
   }
 
   if (wizardFlow === 'landing') {
+    const previewSubtitle =
+      window.storage?.getToken?.() != null
+        ? 'Signed in: includes job cards from the server. Not synced = saved on this device only until upload succeeds.'
+        : 'Submitted from this browser appear from the server. Not synced = saved on this device only (offline or upload failed).';
+
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-blue-50/80 to-slate-100 text-slate-900 px-4 py-10">
         <div className="w-full max-w-md space-y-8">
@@ -3332,10 +3415,85 @@ const JobCardFormPublic = () => {
               Job Card App
             </h1>
             <p className="text-sm text-slate-600">
-              Open job cards you submitted from this browser, or sign in for the full server list. You can also start
-              a new card.
+              Open job cards from the server or drafts stored on this device, or start a new card.
             </p>
           </div>
+
+          {(landingPreviewRows.length > 0 || serverPriorLoading) && (
+            <div className="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent job cards</p>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-snug">{previewSubtitle}</p>
+                </div>
+                {serverPriorLoading && (
+                  <span className="text-[10px] font-medium text-slate-500 shrink-0" aria-live="polite">
+                    <i className="fa-solid fa-circle-notch fa-spin mr-1" aria-hidden />
+                    Updating
+                  </span>
+                )}
+              </div>
+              {landingPreviewRows.length === 0 && serverPriorLoading ? (
+                <p className="text-sm text-slate-500 py-2">Loading recent cards…</p>
+              ) : (
+                <ul className="space-y-2">
+                  {landingPreviewRows.map(jc => {
+                    const when = jc.updatedAt || jc.createdAt;
+                    const whenLabel = when
+                      ? new Date(when).toLocaleString(undefined, {
+                          dateStyle: 'short',
+                          timeStyle: 'short'
+                        })
+                      : '';
+                    const title =
+                      jc.jobCardNumber ||
+                      (jc.clientName ? `${jc.clientName}` : 'Job card draft');
+                    const isLocal = jc.source === 'local' || jc.synced === false;
+                    return (
+                      <li key={`landing-${jc.source || 'x'}-${String(jc.id)}`}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectPriorCard(jc)}
+                          className="w-full text-left rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 hover:border-blue-300 hover:bg-white transition touch-manipulation"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm text-slate-900 truncate">{title}</p>
+                              <p className="text-xs text-slate-600 truncate mt-0.5">
+                                {[jc.agentName, jc.siteName].filter(Boolean).join(' · ') || 'No site'}
+                              </p>
+                              {whenLabel && (
+                                <p className="text-[10px] text-slate-500 mt-1">{whenLabel}</p>
+                              )}
+                            </div>
+                            <span
+                              className={
+                                isLocal
+                                  ? 'text-[9px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full shrink-0'
+                                  : 'text-[9px] font-semibold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0'
+                              }
+                            >
+                              {isLocal ? 'Not synced' : 'Server'}
+                            </span>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {landingPreviewRows.length > 0 && (
+                <button
+                  type="button"
+                  onClick={openPriorList}
+                  className="w-full text-center text-sm font-semibold text-blue-700 hover:text-blue-900 py-1 touch-manipulation"
+                >
+                  View all job cards
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3">
             <button
               type="button"
@@ -3367,8 +3525,7 @@ const JobCardFormPublic = () => {
                 <span className="flex-1 min-w-0">
                   <span className="block font-semibold text-base sm:text-lg">Edit prior job card</span>
                   <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
-                    Signed in: all job cards from the server. Not signed in: cards submitted from this browser — newest
-                    first.
+                    Full list: server job cards plus not synced drafts on this device, newest first.
                   </span>
                 </span>
                 <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
@@ -3394,17 +3551,18 @@ const JobCardFormPublic = () => {
           </button>
           <h1 className="text-xl font-bold">Prior job cards</h1>
           <p className="text-sm text-white/80 mt-1">
-            Newest first — tap a card to continue. Without signing in, only cards submitted from this browser appear.
+            Newest first — tap a card to continue. Includes server cards (when signed in or submitted from this
+            browser) and any not synced drafts stored on this device.
           </p>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-8">
-          {mergedPriorJobCards.length === 0 ? (
+          {mergedPriorJobCards.length === 0 && !serverPriorLoading ? (
             <div className="max-w-lg mx-auto mt-8 rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-600 shadow-sm">
               <i className="fa-regular fa-folder-open text-3xl text-gray-400 mb-3" aria-hidden />
               <p className="font-medium text-gray-800">No job cards to show</p>
               <p className="text-sm mt-2">
-                Sign in to load the full list from the server, or submit a job card from this browser — then it will
-                appear here for editing.
+                Sign in to load job cards from the server, submit one from this browser, or save a card while offline
+                — not synced drafts appear here from this device.
               </p>
               <button
                 type="button"
@@ -3413,6 +3571,11 @@ const JobCardFormPublic = () => {
               >
                 Create new job card
               </button>
+            </div>
+          ) : mergedPriorJobCards.length === 0 && serverPriorLoading ? (
+            <div className="max-w-lg mx-auto mt-12 flex flex-col items-center text-gray-500">
+              <i className="fa-solid fa-circle-notch fa-spin text-2xl mb-3 text-blue-500" aria-hidden />
+              <p className="text-sm font-medium">Loading job cards…</p>
             </div>
           ) : (
             <ul className="max-w-2xl mx-auto space-y-3">
@@ -3427,6 +3590,7 @@ const JobCardFormPublic = () => {
                 const title =
                   jc.jobCardNumber ||
                   (jc.clientName ? `${jc.clientName}` : 'Job card draft');
+                const isLocalPending = jc.source === 'local' || jc.synced === false;
                 return (
                   <li key={`${jc.source || 'local'}-${String(jc.id)}`}>
                     <button
@@ -3445,9 +3609,13 @@ const JobCardFormPublic = () => {
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                          {jc.synced ? (
+                          {isLocalPending ? (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
+                              Not synced
+                            </span>
+                          ) : jc.synced ? (
                             <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                              Submitted
+                              Server
                             </span>
                           ) : (
                             <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
