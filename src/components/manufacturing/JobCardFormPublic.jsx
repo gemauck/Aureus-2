@@ -473,169 +473,127 @@ const dataUrlToArrayBuffer = dataUrl => {
   return bytes.buffer
 }
 
-async function decodeAudioDataCompat(audioContext, arrayBuffer) {
-  const copy = arrayBuffer.slice(0)
-  try {
-    const ret = audioContext.decodeAudioData(copy)
-    if (ret && typeof ret.then === 'function') {
-      return await ret
-    }
-  } catch (_) {
-    /* older WebKit: promise API may throw; use callback form */
+/** Build a Blob from a data URL (used for <audio> playback; CSP allows blob: in media-src). */
+const dataUrlToBlob = dataUrl => {
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    throw new Error('Invalid audio data')
   }
-  return new Promise((resolve, reject) => {
-    try {
-      audioContext.decodeAudioData(arrayBuffer.slice(0), resolve, reject)
-    } catch (e) {
-      reject(e)
-    }
-  })
+  const comma = dataUrl.indexOf(',')
+  const meta = comma >= 0 ? dataUrl.slice(0, comma) : ''
+  const mimeMatch = /^data:([^;,]+)/i.exec(meta)
+  const mime = mimeMatch ? mimeMatch[1].trim() : 'application/octet-stream'
+  const ab = dataUrlToArrayBuffer(dataUrl)
+  return new Blob([ab], { type: mime })
 }
 
 /**
- * One shared context for all job-card voice clips: a single user-gesture resume() unlocks playback everywhere.
- * Pre-decode in an effect so Play does not await decode (Safari/iOS drop the gesture chain between await and start()).
- */
-let jobCardVoicePlaybackCtx = null
-
-const getJobCardVoicePlaybackContext = () => {
-  if (typeof window === 'undefined') return null
-  const AC = window.AudioContext || window.webkitAudioContext
-  if (!AC) return null
-  if (!jobCardVoicePlaybackCtx || jobCardVoicePlaybackCtx.state === 'closed') {
-    jobCardVoicePlaybackCtx = new AC()
-  }
-  return jobCardVoicePlaybackCtx
-}
-
-/**
- * Play recorded clips via Web Audio API (in-memory decode). Avoids <audio src="data:..."> which strict CSP blocks
- * when `media-src` is omitted (falls back to `default-src` only).
+ * Play voice clips with HTMLMediaElement + blob URL — not Web Audio.
+ * On iOS Safari, AudioContext output is often silent until the mic is active (play-and-record session);
+ * using <audio> matches native playback and works without recording first.
  */
 const VoiceClipWebPlayer = ({ dataUrl }) => {
-  const sourceRef = useRef(null)
-  const decodedBufferRef = useRef(null)
+  const audioRef = useRef(null)
+  const objectUrlRef = useRef(null)
   const [playing, setPlaying] = useState(false)
   const [hint, setHint] = useState('')
-  const [decodePhase, setDecodePhase] = useState('loading')
-
-  const stop = useCallback(() => {
-    try {
-      sourceRef.current?.stop()
-    } catch (_) {
-      /* already stopped */
-    }
-    sourceRef.current = null
-    setPlaying(false)
-  }, [])
+  const [loadPhase, setLoadPhase] = useState('loading')
 
   useEffect(() => {
-    stop()
-    decodedBufferRef.current = null
     setHint('')
+    setPlaying(false)
+    const prevUrl = objectUrlRef.current
+    if (prevUrl) {
+      URL.revokeObjectURL(prevUrl)
+      objectUrlRef.current = null
+    }
     if (!dataUrl || typeof dataUrl !== 'string') {
-      setDecodePhase('error')
+      setLoadPhase('error')
       return undefined
     }
-    setDecodePhase('loading')
-    const ctx = getJobCardVoicePlaybackContext()
-    if (!ctx) {
-      setDecodePhase('error')
-      return undefined
-    }
+    setLoadPhase('loading')
     let cancelled = false
-    ;(async () => {
-      try {
-        const ab = dataUrlToArrayBuffer(dataUrl)
-        const buffer = await decodeAudioDataCompat(ctx, ab)
-        if (cancelled) return
-        decodedBufferRef.current = buffer
-        setDecodePhase('ready')
-      } catch (e) {
-        if (cancelled) return
-        decodedBufferRef.current = null
-        setDecodePhase('error')
-        console.warn('Voice clip decode failed:', e)
+    try {
+      const blob = dataUrlToBlob(dataUrl)
+      const url = URL.createObjectURL(blob)
+      const el = audioRef.current
+      if (!el) {
+        URL.revokeObjectURL(url)
+        if (!cancelled) setLoadPhase('error')
+        return undefined
       }
-    })()
+      objectUrlRef.current = url
+      el.src = url
+      el.load()
+      if (!cancelled) setLoadPhase('ready')
+    } catch (e) {
+      if (!cancelled) {
+        setLoadPhase('error')
+        console.warn('Voice clip blob failed:', e)
+      }
+    }
     return () => {
       cancelled = true
-      stop()
-    }
-  }, [dataUrl, stop])
-
-  const startPlaybackAfterResume = useCallback(() => {
-    const ctx = getJobCardVoicePlaybackContext()
-    const buffer = decodedBufferRef.current
-    if (!ctx || !buffer) {
-      setPlaying(false)
-      return
-    }
-    try {
-      stop()
-      const src = ctx.createBufferSource()
-      src.buffer = buffer
-      src.connect(ctx.destination)
-      src.onended = () => {
-        sourceRef.current = null
-        setPlaying(false)
+      const u = objectUrlRef.current
+      if (u) {
+        URL.revokeObjectURL(u)
+        objectUrlRef.current = null
       }
-      sourceRef.current = src
-      src.start(0)
-      setPlaying(true)
-    } catch (e) {
-      console.warn('Voice clip Web Audio playback failed:', e)
-      setHint('Could not play this clip here (try Chrome, or use Transcribe).')
-      setPlaying(false)
+      const el = audioRef.current
+      if (el) {
+        el.pause()
+        el.removeAttribute('src')
+        el.load()
+      }
     }
-  }, [stop])
+  }, [dataUrl])
 
   const onPlayClick = useCallback(() => {
     setHint('')
+    const el = audioRef.current
+    if (!el || loadPhase !== 'ready') {
+      setHint(loadPhase === 'loading' ? 'Loading audio…' : 'Could not load this recording.')
+      return
+    }
     if (playing) {
-      stop()
-      return
-    }
-    const ctx = getJobCardVoicePlaybackContext()
-    if (!ctx) {
-      setHint('Playback not supported in this browser.')
-      return
-    }
-    if (decodePhase === 'loading' || !decodedBufferRef.current) {
-      setHint(decodePhase === 'loading' ? 'Loading audio…' : 'Could not load this recording.')
-      return
-    }
-    const run = () => {
       try {
-        startPlaybackAfterResume()
-      } catch (e) {
-        console.warn('Voice clip play:', e)
-        setHint('Could not play this clip here (try Chrome, or use Transcribe).')
+        el.pause()
+        el.currentTime = 0
+      } catch (_) {
+        /* */
       }
+      setPlaying(false)
+      return
     }
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(run).catch(err => {
-        console.warn('AudioContext.resume failed:', err)
-        setHint('Tap Play again — audio was blocked.')
+    el.play()
+      .then(() => setPlaying(true))
+      .catch(err => {
+        console.warn('Voice clip <audio>.play failed:', err)
+        setHint('Could not play — check volume and silent mode, or tap Play again.')
+        setPlaying(false)
       })
-    } else {
-      run()
-    }
-  }, [playing, stop, decodePhase, startPlaybackAfterResume])
+  }, [playing, loadPhase])
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center">
+      <audio
+        ref={audioRef}
+        playsInline
+        preload="auto"
+        className="sr-only"
+        aria-hidden
+        onEnded={() => setPlaying(false)}
+      />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
           onClick={onPlayClick}
           className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-600 shadow-sm hover:bg-blue-50 touch-manipulation disabled:opacity-50"
-          title={playing ? 'Stop' : decodePhase === 'loading' ? 'Loading…' : 'Play'}
+          title={playing ? 'Stop' : loadPhase === 'loading' ? 'Loading…' : 'Play'}
           aria-label={playing ? 'Stop playback' : 'Play recording'}
-          disabled={decodePhase === 'loading' && !playing}
+          disabled={loadPhase === 'loading' && !playing}
         >
           <i
-            className={`fas ${playing ? 'fa-stop' : decodePhase === 'loading' ? 'fa-spinner fa-spin' : 'fa-play'}`}
+            className={`fas ${playing ? 'fa-stop' : loadPhase === 'loading' ? 'fa-spinner fa-spin' : 'fa-play'}`}
           />
         </button>
         <span className="text-[10px] text-gray-500">Listen</span>
@@ -1182,11 +1140,9 @@ const JobCardFormPublic = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   /** landing → pick create vs edit; prior_list → choose a saved card; form → wizard */
   const [wizardFlow, setWizardFlow] = useState('landing');
-  /** Logged-in users: all server job cards for “prior” list (any device) */
+  /** Prior list: loaded from API only (no browser cache for job cards) */
   const [serverPriorList, setServerPriorList] = useState([]);
-  /** Bumps when opening prior list so localStorage is re-read */
-  const [priorLocalTick, setPriorLocalTick] = useState(0);
-  /** When editing, keep stable id / createdAt / sync flags for save + localStorage replace */
+  /** When editing, keep stable id / createdAt / sync flags for save */
   const [editingMeta, setEditingMeta] = useState(null);
   /** Mobile (< xl): collapse wizard header to maximize form area */
   const [mobileHeaderCollapsed, setMobileHeaderCollapsed] = useState(() => {
@@ -1626,6 +1582,14 @@ const JobCardFormPublic = () => {
   const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
 
   useEffect(() => {
+    try {
+      localStorage.removeItem('manufacturing_jobcards');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
     if (wizardFlow !== 'prior_list') return;
     const token = window.storage?.getToken?.();
     if (!token) {
@@ -1662,39 +1626,19 @@ const JobCardFormPublic = () => {
 
   const mergedPriorJobCards = useMemo(() => {
     if (wizardFlow !== 'prior_list') return [];
-    let local = [];
-    try {
-      const raw = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      if (Array.isArray(raw)) {
-        local = raw.filter(jc => jc && typeof jc === 'object');
-      }
-    } catch {
-      local = [];
-    }
-
-    const serverIds = new Set(serverPriorList.map(s => s && s.id).filter(Boolean).map(String));
-    const localFiltered = local.filter(jc => {
-      const sid = jc.serverJobCardId || (isLikelyServerJobCardId(jc.id) ? jc.id : null);
-      if (sid && serverIds.has(String(sid))) return false;
-      if (isLikelyServerJobCardId(jc.id) && serverIds.has(String(jc.id))) return false;
-      return true;
-    });
-
-    const serverRows = serverPriorList.map(jc => ({
+    const rows = serverPriorList.map(jc => ({
       ...jc,
       source: 'server',
       serverJobCardId: jc.id,
       synced: true
     }));
-
-    const combined = [...serverRows, ...localFiltered];
-    combined.sort((a, b) => {
+    rows.sort((a, b) => {
       const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
       const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
       return tb - ta;
     });
-    return combined;
-  }, [wizardFlow, serverPriorList, priorLocalTick]);
+    return rows;
+  }, [wizardFlow, serverPriorList]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -2519,7 +2463,6 @@ const JobCardFormPublic = () => {
   };
 
   const openPriorList = () => {
-    setPriorLocalTick(t => t + 1);
     setWizardFlow('prior_list');
   };
 
@@ -2703,57 +2646,6 @@ const JobCardFormPublic = () => {
         }
       }
 
-      // Always keep a local offline copy for safety (strip base64 photos to avoid quota)
-      const forStorage = (card) => ({
-        ...card,
-        photos: [],
-        photoCount: Array.isArray(card.photos) ? card.photos.length : 0
-      });
-      const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      const storedSlice = forStorage(jobCardData);
-      let updatedJobCards;
-      if (editingMeta?.localId || editingMeta?.serverJobCardId) {
-        const idx = existingJobCards.findIndex(
-          jc =>
-            (editingMeta.localId != null &&
-              String(editingMeta.localId) !== '' &&
-              String(jc.id) === String(editingMeta.localId)) ||
-            (editingMeta.serverJobCardId &&
-              (String(jc.id) === String(editingMeta.serverJobCardId) ||
-                String(jc.serverJobCardId || '') === String(editingMeta.serverJobCardId)))
-        );
-        if (idx >= 0) {
-          updatedJobCards = [...existingJobCards];
-          updatedJobCards[idx] = {
-            ...storedSlice,
-            jobCardNumber: storedSlice.jobCardNumber || existingJobCards[idx].jobCardNumber
-          };
-        } else {
-          updatedJobCards = [...existingJobCards, storedSlice];
-        }
-      } else {
-        updatedJobCards = [...existingJobCards, storedSlice];
-      }
-      try {
-        localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
-      } catch (e) {
-        if (e.name === 'QuotaExceededError') {
-          const trimmed = existingJobCards.slice(-20).map(jc => ({
-            ...jc,
-            photos: [],
-            photoCount: Array.isArray(jc.photos) ? jc.photos.length : 0
-          }));
-          try {
-            localStorage.setItem(
-              'manufacturing_jobcards',
-              JSON.stringify([...trimmed, forStorage(jobCardData)])
-            );
-          } catch (_) {
-            console.warn('Job card local cache skipped (storage full)');
-          }
-        } else throw e;
-      }
-
       const serverJobCardId =
         editingMeta?.serverJobCardId ||
         (editingMeta?.localId && isLikelyServerJobCardId(editingMeta.localId)
@@ -2762,7 +2654,6 @@ const JobCardFormPublic = () => {
 
       const payloadJson = JSON.stringify(jobCardData);
       let serverReachOk = false;
-      let saved = null;
 
       if (serverJobCardId) {
         const token = window.storage?.getToken?.();
@@ -2778,8 +2669,7 @@ const JobCardFormPublic = () => {
             });
             if (authRes.ok) {
               serverReachOk = true;
-              const authData = await authRes.json().catch(() => ({}));
-              saved = authData.jobCard || authData.data?.jobCard || null;
+              await authRes.json().catch(() => ({}));
             }
           } catch (e) {
             console.warn('JobCardFormPublic: authenticated PATCH failed, trying public PATCH', e);
@@ -2794,8 +2684,7 @@ const JobCardFormPublic = () => {
             });
             if (pubRes.ok) {
               serverReachOk = true;
-              const pubData = await pubRes.json().catch(() => ({}));
-              saved = pubData.jobCard || pubData.data?.jobCard || null;
+              await pubRes.json().catch(() => ({}));
             } else {
               const text = await pubRes.text().catch(() => '');
               console.warn('⚠️ JobCardFormPublic: public PATCH failed', pubRes.status, text);
@@ -2817,43 +2706,10 @@ const JobCardFormPublic = () => {
             console.warn('⚠️ JobCardFormPublic: Public POST error', response.status, text);
           } else {
             serverReachOk = true;
-            const result = await response.json().catch(() => ({}));
-            saved = result?.jobCard || result?.data?.jobCard || null;
+            await response.json().catch(() => ({}));
           }
         } catch (error) {
-          console.warn('⚠️ JobCardFormPublic: Public POST failed, kept offline only:', error.message);
-        }
-      }
-
-      if (saved && saved.id) {
-        const syncedCards = updatedJobCards.map(jc =>
-          String(jc.id) === String(jobCardData.id) ||
-          (serverJobCardId &&
-            (String(jc.id) === String(serverJobCardId) ||
-              String(jc.serverJobCardId || '') === String(serverJobCardId)))
-            ? {
-                ...jc,
-                id: saved.id,
-                serverJobCardId: saved.id,
-                jobCardNumber: saved.jobCardNumber || jc.jobCardNumber,
-                synced: true
-              }
-            : jc
-        );
-        updatedJobCards = syncedCards;
-        try {
-          localStorage.setItem(
-            'manufacturing_jobcards',
-            JSON.stringify(
-              syncedCards.map(jc => ({
-                ...jc,
-                photos: [],
-                photoCount: Array.isArray(jc.photos) ? jc.photos.length : jc.photoCount || 0
-              }))
-            )
-          );
-        } catch (_) {
-          console.warn('Job card sync cache update skipped (storage full)');
+          console.warn('⚠️ JobCardFormPublic: Public POST failed:', error.message);
         }
       }
 
@@ -2863,7 +2719,7 @@ const JobCardFormPublic = () => {
         );
       } else {
         alert(
-          '⚠️ Saved on this device only — the server could not be updated. Check your connection and try again.'
+          '⚠️ Could not save to the server. Check your connection, sign in to the ERP if required, and try again.'
         );
       }
       setEditingMeta(null);
@@ -4024,7 +3880,7 @@ const JobCardFormPublic = () => {
               Job Card App
             </h1>
             <p className="text-sm text-slate-600">
-              Continue a draft, edit any saved card (including from the server if you are signed in), or start new.
+              Sign in to open or edit job cards stored on the server, or start a new card.
             </p>
           </div>
           <div className="space-y-3">
@@ -4058,7 +3914,7 @@ const JobCardFormPublic = () => {
                 <span className="flex-1 min-w-0">
                   <span className="block font-semibold text-base sm:text-lg">Edit prior job card</span>
                   <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
-                    All job cards from the server when signed in, plus this device&apos;s drafts — newest first.
+                    Job cards from the server when you are signed in — newest first.
                   </span>
                 </span>
                 <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
@@ -4084,16 +3940,17 @@ const JobCardFormPublic = () => {
           </button>
           <h1 className="text-xl font-bold">Prior job cards</h1>
           <p className="text-sm text-white/80 mt-1">
-            Newest first — tap a card to continue. Server cards require signing in to the ERP in this browser.
+            Newest first — tap a card to continue. You must be signed in to the ERP to load this list.
           </p>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-8">
           {mergedPriorJobCards.length === 0 ? (
             <div className="max-w-lg mx-auto mt-8 rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-600 shadow-sm">
               <i className="fa-regular fa-folder-open text-3xl text-gray-400 mb-3" aria-hidden />
-              <p className="font-medium text-gray-800">No saved job cards yet</p>
+              <p className="font-medium text-gray-800">No job cards to show</p>
               <p className="text-sm mt-2">
-                Submit a job card once, or save offline — drafts will appear here on this device.
+                Sign in to the ERP in this browser to load your job cards from the server. This list is not stored on
+                the device.
               </p>
               <button
                 type="button"
@@ -4126,9 +3983,6 @@ const JobCardFormPublic = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-gray-900 truncate">{title}</p>
-                          {jc.source === 'server' && (
-                            <p className="text-[10px] font-medium text-blue-700 mt-0.5">From server · all devices</p>
-                          )}
                           <p className="text-sm text-gray-600 mt-1 truncate">
                             {[jc.agentName, jc.siteName].filter(Boolean).join(' · ') || 'No site'}
                           </p>
