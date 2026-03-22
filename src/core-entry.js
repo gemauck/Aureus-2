@@ -71,6 +71,7 @@ import './components/notifications/NotificationsPage.jsx';
 import './components/layout/MainLayout.jsx';
 
 // Public access modules
+import './components/manufacturing/JobCardVoiceNoteTextarea.jsx';
 import './components/manufacturing/JobCardFormPublic.jsx';
 
 // Application entry point

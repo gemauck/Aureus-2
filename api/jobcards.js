@@ -314,6 +314,32 @@ async function handler(req, res) {
               ? String(body.longitude)
               : ''
 
+        /** Align with public job card API: optional customer lines appended for search/display */
+        const mergeJobCardOtherComments = (b) => {
+          const base = b.otherComments != null ? String(b.otherComments) : ''
+          if (
+            !b.customerName &&
+            !b.customerTitle &&
+            !b.customerPosition &&
+            !b.customerFeedback &&
+            !b.customerSignature
+          ) {
+            return base
+          }
+          const pos = b.customerTitle || b.customerPosition
+          return [
+            base,
+            b.customerName ? `Customer: ${b.customerName}` : '',
+            pos ? `Position: ${pos}` : '',
+            b.customerFeedback ? `Feedback: ${b.customerFeedback}` : '',
+            b.customerSignature ? `Signature: [Captured]` : ''
+          ]
+            .filter(Boolean)
+            .join('\n')
+        }
+
+        const otherCommentsForCreate = mergeJobCardOtherComments(body)
+
         const buildCreateArgs = jobCardNumber => ({
           data: {
             jobCardNumber,
@@ -338,7 +364,7 @@ async function handler(req, res) {
             stockUsed,
             materialsBought,
             totalMaterialsCost,
-            otherComments: body.otherComments || '',
+            otherComments: otherCommentsForCreate,
             photos,
             status: body.status || 'draft',
             submittedAt: body.submittedAt ? new Date(body.submittedAt) : null,
@@ -454,7 +480,47 @@ async function handler(req, res) {
         if (body.totalMaterialsCost !== undefined) {
           updateData.totalMaterialsCost = parseFloat(body.totalMaterialsCost) || 0
         }
-        if (body.otherComments !== undefined) updateData.otherComments = body.otherComments
+        if (
+          body.otherComments !== undefined ||
+          body.customerName !== undefined ||
+          body.customerTitle !== undefined ||
+          body.customerPosition !== undefined ||
+          body.customerFeedback !== undefined ||
+          body.customerSignature !== undefined
+        ) {
+          const mergedBody = {
+            otherComments:
+              body.otherComments !== undefined
+                ? body.otherComments
+                : existing.otherComments || '',
+            customerName: body.customerName,
+            customerTitle: body.customerTitle,
+            customerPosition: body.customerPosition,
+            customerFeedback: body.customerFeedback,
+            customerSignature: body.customerSignature
+          }
+          const base = mergedBody.otherComments != null ? String(mergedBody.otherComments) : ''
+          if (
+            mergedBody.customerName ||
+            mergedBody.customerTitle ||
+            mergedBody.customerPosition ||
+            mergedBody.customerFeedback ||
+            mergedBody.customerSignature
+          ) {
+            const pos = mergedBody.customerTitle || mergedBody.customerPosition
+            updateData.otherComments = [
+              base,
+              mergedBody.customerName ? `Customer: ${mergedBody.customerName}` : '',
+              pos ? `Position: ${pos}` : '',
+              mergedBody.customerFeedback ? `Feedback: ${mergedBody.customerFeedback}` : '',
+              mergedBody.customerSignature ? `Signature: [Captured]` : ''
+            ]
+              .filter(Boolean)
+              .join('\n')
+          } else {
+            updateData.otherComments = base
+          }
+        }
         if (body.photos !== undefined) {
           updateData.photos = Array.isArray(body.photos) 
             ? JSON.stringify(body.photos) 
