@@ -8,7 +8,7 @@ const ReactGlobal =
   (typeof React !== 'undefined' && React) ||
   {};
 
-const { useState, useEffect, useMemo } = ReactGlobal;
+const { useState, useEffect, useMemo, useCallback } = ReactGlobal;
 
 function jobCardAttachmentUrlIsVideo(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
@@ -16,7 +16,7 @@ function jobCardAttachmentUrlIsVideo(url) {
 
 const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const isDark = (typeof window !== 'undefined' && window.useTheme) ? (window.useTheme().isDark) : false;
-  if (!useState || !useEffect || !useMemo) {
+  if (!useState || !useEffect || !useMemo || !useCallback) {
     return (
       <div className="mt-6 flex items-center justify-center">
         <div className="text-center text-sm text-gray-500">
@@ -45,169 +45,122 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 
   const pageSize = 25;
 
-  const reloadJobCards = async (targetPage) => {
-    const pageToLoad = targetPage || page || 1;
+  /** Match Prisma cuid or UUID so we query by clientId; otherwise filter by clientName (contains). */
+  const clientFilterLooksLikeId = (value) => {
+    if (!value || typeof value !== 'string') return false;
+    const v = value.trim();
+    if (/^c[a-z0-9]{24}$/i.test(v)) return true;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+  };
 
-    try {
-      setLoading(true);
-      setError(null);
+  const buildJobCardsListUrl = useCallback(
+    (pageNum) => {
+      const params = new URLSearchParams();
+      params.set('page', String(pageNum));
+      params.set('pageSize', String(pageSize));
+      if (statusFilter && statusFilter !== 'all') {
+        params.set('status', statusFilter);
+      }
+      if (clientFilter) {
+        if (clientFilterLooksLikeId(clientFilter)) {
+          params.set('clientId', clientFilter.trim());
+        } else {
+          params.set('clientName', clientFilter.trim());
+        }
+      }
+      const apiSortField =
+        sortField === 'client'
+          ? 'clientName'
+          : sortField === 'technician'
+            ? 'agentName'
+            : sortField === 'jobCardNumber' ||
+                sortField === 'status' ||
+                sortField === 'createdAt'
+              ? sortField
+              : 'createdAt';
+      params.set('sortField', apiSortField);
+      params.set('sortDirection', sortDirection);
+      return `/api/jobcards?${params.toString()}`;
+    },
+    [pageSize, statusFilter, clientFilter, sortField, sortDirection]
+  );
 
+  const fetchJobCardsPage = useCallback(
+    async (pageToLoad) => {
       const token = window.storage?.getToken?.();
       if (!token) {
         setError('You must be logged in to view job cards.');
-        setLoading(false);
+        setJobCards([]);
+        setPagination(null);
         return;
       }
 
-      const response = await fetch(
-        `/api/jobcards?page=${pageToLoad}&pageSize=${pageSize}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('❌ JobCards: Failed to reload job cards', response.status, text);
-        
-        // Try to parse error message from response
-        let errorMessage = 'Failed to load job cards.';
-        try {
-          const errorData = JSON.parse(text);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
-          // If response is not JSON, use status-based messages
-          if (response.status === 401) {
-            errorMessage = 'Authentication required. Please log in again.';
-          } else if (response.status === 403) {
-            errorMessage = 'You do not have permission to view job cards.';
-          } else if (response.status === 500) {
-            errorMessage = 'Server error. Please try again later.';
-          } else if (response.status >= 400) {
-            errorMessage = `Failed to load job cards (${response.status}). Please try again.`;
-          }
-        }
-        
-        throw new Error(errorMessage);
-      }
-      
-      const raw = await response.json();
-      const data =
-        (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
-      
-      setJobCards(Array.isArray(data) ? data : []);
-      setPagination(raw.pagination || null);
-    } catch (e) {
-      console.error('❌ JobCards: Error reloading job cards', e);
-      
-      // Provide more helpful error messages
-      let errorMessage = e.message || 'Unable to load job cards.';
-      
-      // Handle network errors
-      if (e.name === 'TypeError' && e.message.includes('fetch')) {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else if (e.message.includes('JSON')) {
-        errorMessage = 'Invalid response from server. Please try again.';
-      }
-      
-      setError(errorMessage);
-      setJobCards([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadJobCards = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const token = window.storage?.getToken?.();
-        if (!token) {
-          setError('You must be logged in to view job cards.');
-          return;
-        }
+        const response = await fetch(buildJobCardsListUrl(pageToLoad), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
 
-        const response = await fetch(
-          `/api/jobcards?page=${page}&pageSize=${pageSize}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+        if (!response.ok) {
+          const text = await response.text();
+          console.error('❌ JobCards: Failed to load job cards', response.status, text);
+
+          let errorMessage = 'Failed to load job cards.';
+          try {
+            const errorData = JSON.parse(text);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch {
+            if (response.status === 401) {
+              errorMessage = 'Authentication required. Please log in again.';
+            } else if (response.status === 403) {
+              errorMessage = 'You do not have permission to view job cards.';
+            } else if (response.status === 500) {
+              errorMessage = 'Server error. Please try again later.';
+            } else if (response.status >= 400) {
+              errorMessage = `Failed to load job cards (${response.status}). Please try again.`;
+            }
           }
-        );
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('❌ JobCards: Failed to reload job cards', response.status, text);
-        
-        // Try to parse error message from response
-        let errorMessage = 'Failed to load job cards.';
-        try {
-          const errorData = JSON.parse(text);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
-          // If response is not JSON, use status-based messages
-          if (response.status === 401) {
-            errorMessage = 'Authentication required. Please log in again.';
-          } else if (response.status === 403) {
-            errorMessage = 'You do not have permission to view job cards.';
-          } else if (response.status === 500) {
-            errorMessage = 'Server error. Please try again later.';
-          } else if (response.status >= 400) {
-            errorMessage = `Failed to load job cards (${response.status}). Please try again.`;
-          }
+          throw new Error(errorMessage);
         }
-        
-        throw new Error(errorMessage);
-      }
 
         const raw = await response.json();
-
-        // Support both flat `{ jobCards: [] }` and wrapped `{ data: { jobCards: [] } }` API shapes
         const data =
           (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
 
-        if (!cancelled) {
-          setJobCards(Array.isArray(data) ? data : []);
-          setPagination(raw.pagination || null);
-        }
+        setJobCards(Array.isArray(data) ? data : []);
+        setPagination(raw.pagination || raw.data?.pagination || null);
       } catch (e) {
-        if (!cancelled) {
-          console.error('❌ JobCards: Error loading job cards', e);
-          
-          // Provide more helpful error messages
-          let errorMessage = e.message || 'Unable to load job cards.';
-          
-          // Handle network errors
-          if (e.name === 'TypeError' && e.message.includes('fetch')) {
-            errorMessage = 'Network error. Please check your connection and try again.';
-          } else if (e.message.includes('JSON')) {
-            errorMessage = 'Invalid response from server. Please try again.';
-          }
-          
-          setError(errorMessage);
-          setJobCards([]);
+        console.error('❌ JobCards: Error loading job cards', e);
+
+        let errorMessage = e.message || 'Unable to load job cards.';
+        if (e.name === 'TypeError' && e.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (e.message.includes('JSON')) {
+          errorMessage = 'Invalid response from server. Please try again.';
         }
+
+        setError(errorMessage);
+        setJobCards([]);
+        setPagination(null);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
-    };
+    },
+    [buildJobCardsListUrl]
+  );
 
-    loadJobCards();
+  useEffect(() => {
+    fetchJobCardsPage(page);
+  }, [page, fetchJobCardsPage]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [page]);
+  const reloadJobCards = useCallback(async () => {
+    await fetchJobCardsPage(page);
+  }, [fetchJobCardsPage, page]);
 
   const clientOptions = useMemo(() => {
     const base = clients.map((c) => ({
@@ -230,71 +183,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     ];
   }, [clients, jobCards]);
 
-  const filteredJobCards = useMemo(
-    () =>
-      jobCards.filter((jc) => {
-        if (statusFilter !== 'all' && (jc.status || 'draft') !== statusFilter) {
-          return false;
-        }
-        if (clientFilter) {
-          return jc.clientId === clientFilter || jc.clientName === clientFilter;
-        }
-        return true;
-      }),
-    [jobCards, statusFilter, clientFilter]
-  );
-
-  const sortedJobCards = useMemo(() => {
-    const data = [...filteredJobCards];
-
-    data.sort((a, b) => {
-      let aVal;
-      let bVal;
-
-      switch (sortField) {
-        case 'jobCardNumber':
-          aVal = a.jobCardNumber || '';
-          bVal = b.jobCardNumber || '';
-          break;
-        case 'client':
-          aVal = a.clientName || '';
-          bVal = b.clientName || '';
-          break;
-        case 'technician': {
-          const aTech = a.agentName || (users.find((u) => u.id === a.ownerId) || {}).name || '';
-          const bTech = b.agentName || (users.find((u) => u.id === b.ownerId) || {}).name || '';
-          aVal = aTech;
-          bVal = bTech;
-          break;
-        }
-        case 'status':
-          aVal = (a.status || 'draft').toString();
-          bVal = (b.status || 'draft').toString();
-          break;
-        case 'createdAt':
-        default:
-          aVal = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          bVal = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          break;
-      }
-
-      let cmp = 0;
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        cmp = aVal.localeCompare(bVal);
-      } else {
-        const aNum = Number(aVal) || 0;
-        const bNum = Number(bVal) || 0;
-        if (aNum < bNum) cmp = -1;
-        if (aNum > bNum) cmp = 1;
-      }
-
-      return sortDirection === 'asc' ? cmp : -cmp;
-    });
-
-    return data;
-  }, [filteredJobCards, sortField, sortDirection, users]);
+  /** Server applies filters + sort; list is ready to render. */
+  const displayJobCards = jobCards;
 
   const handleSort = (field) => {
+    setPage(1);
     setSortField((prevField) => {
       if (prevField === field) {
         setSortDirection((prevDir) => (prevDir === 'asc' ? 'desc' : 'asc'));
@@ -500,10 +393,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           <select
             className={`rounded-lg px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setPage(1);
+              setStatusFilter(e.target.value);
+            }}
           >
             <option value="all">All statuses</option>
             <option value="draft">Draft</option>
+            <option value="submitted">Submitted</option>
             <option value="open">Open</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
@@ -511,7 +408,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           <select
             className={`rounded-lg px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
             value={clientFilter}
-            onChange={(e) => setClientFilter(e.target.value)}
+            onChange={(e) => {
+              setPage(1);
+              setClientFilter(e.target.value);
+            }}
           >
             <option value="">All clients</option>
             {clientOptions.map((c) => (
@@ -553,7 +453,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             </div>
           </div>
         </div>
-      ) : filteredJobCards.length === 0 ? (
+      ) : displayJobCards.length === 0 ? (
         <div className={`px-4 py-6 sm:px-6 sm:py-8 text-center text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           No job cards found for the selected filters.
         </div>
@@ -615,7 +515,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               </tr>
             </thead>
             <tbody className={`divide-y ${isDark ? 'divide-slate-800 bg-slate-900' : 'divide-slate-100 bg-white'}`}>
-              {sortedJobCards.map((jc) => {
+              {displayJobCards.map((jc) => {
                 const technicianName =
                   jc.agentName ||
                   users.find((u) => u.id === jc.ownerId)?.name ||

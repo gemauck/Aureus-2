@@ -3,6 +3,21 @@ import { prisma } from '../_lib/prisma.js'
 import { created, serverError, badRequest } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 
+async function computeNextJobCardNumber() {
+  const lastJobCard = await prisma.jobCard.findFirst({
+    orderBy: { createdAt: 'desc' },
+    select: { jobCardNumber: true }
+  })
+  let nextNumber = 1
+  if (lastJobCard?.jobCardNumber?.startsWith('JC')) {
+    const match = lastJobCard.jobCardNumber.match(/JC(\d+)/)
+    if (match) {
+      nextNumber = parseInt(match[1], 10) + 1
+    }
+  }
+  return `JC${String(nextNumber).padStart(4, '0')}`
+}
+
 async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -22,21 +37,6 @@ async function handler(req, res) {
       }
     }
 
-    // Generate job card number
-    const lastJobCard = await prisma.jobCard.findFirst({
-      orderBy: { createdAt: 'desc' },
-      select: { jobCardNumber: true }
-    })
-    
-    let jobCardNumber = 'JC0001'
-    if (lastJobCard?.jobCardNumber) {
-      const match = lastJobCard.jobCardNumber.match(/JC(\d+)/)
-      if (match) {
-        const num = parseInt(match[1], 10) + 1
-        jobCardNumber = `JC${String(num).padStart(4, '0')}`
-      }
-    }
-
     // Parse and prepare data
     const otherTechnicians = parseJson(body.otherTechnicians, [])
     const stockUsed = parseJson(body.stockUsed, [])
@@ -52,8 +52,20 @@ async function handler(req, res) {
       ? materialsBought.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
       : parseFloat(body.totalMaterialsCost) || 0
 
-    // Create job card
-    const jobCard = await prisma.jobCard.create({
+    const lat =
+      body.locationLatitude != null && body.locationLatitude !== ''
+        ? String(body.locationLatitude)
+        : body.latitude != null && body.latitude !== ''
+          ? String(body.latitude)
+          : ''
+    const lng =
+      body.locationLongitude != null && body.locationLongitude !== ''
+        ? String(body.locationLongitude)
+        : body.longitude != null && body.longitude !== ''
+          ? String(body.longitude)
+          : ''
+
+    const buildCreateArgs = jobCardNumber => ({
       data: {
         jobCardNumber,
         agentName: body.agentName || '',
@@ -63,8 +75,8 @@ async function handler(req, res) {
         siteId: body.siteId || '',
         siteName: body.siteName || '',
         location: body.location || '',
-        locationLatitude: body.latitude || '',
-        locationLongitude: body.longitude || '',
+        locationLatitude: lat,
+        locationLongitude: lng,
         timeOfDeparture: body.timeOfDeparture ? new Date(body.timeOfDeparture) : null,
         timeOfArrival: body.timeOfArrival ? new Date(body.timeOfArrival) : null,
         vehicleUsed: body.vehicleUsed || '',
@@ -93,7 +105,30 @@ async function handler(req, res) {
         ownerId: null // Public form - no owner
       }
     })
-    
+
+    let jobCard = null
+    const maxAttempts = 12
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const jobCardNumber = await computeNextJobCardNumber()
+      try {
+        jobCard = await prisma.jobCard.create(buildCreateArgs(jobCardNumber))
+        break
+      } catch (err) {
+        const target = err?.meta?.target
+        const targetStr = Array.isArray(target) ? target.join(',') : String(target || '')
+        if (err.code === 'P2002' && targetStr.includes('jobCardNumber')) {
+          continue
+        }
+        throw err
+      }
+    }
+    if (!jobCard) {
+      return serverError(
+        res,
+        'Failed to create job card',
+        'Could not allocate a unique job card number'
+      )
+    }
 
     // Create service form instances if provided
     if (serviceForms.length > 0) {

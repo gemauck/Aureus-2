@@ -1,6 +1,6 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
-import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
+import { ok, created, badRequest, notFound, serverError, forbidden } from './_lib/response.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 // Some deployments may not yet have the optional service form tables used by
@@ -20,6 +20,45 @@ function isMissingServiceFormInstanceTables(error) {
   }
 
   return false
+}
+
+/** Roles that may create, update, or delete any job card (including public submissions with no owner). */
+function jobCardMutateRole(user) {
+  const role = String(user?.role || 'user').toLowerCase()
+  return role === 'admin' || role === 'service' || role === 'manager'
+}
+
+/** Owner may edit own card; elevated roles may edit any card. Unowned (public) cards: elevated roles only. */
+function canMutateJobCard(jobCard, user) {
+  if (!user?.sub) return false
+  if (jobCardMutateRole(user)) return true
+  if (jobCard.ownerId && jobCard.ownerId === user.sub) return true
+  return false
+}
+
+async function computeNextJobCardNumber() {
+  const lastJobCard = await prisma.jobCard.findFirst({
+    orderBy: { createdAt: 'desc' },
+    select: { jobCardNumber: true }
+  })
+  let nextNumber = 1
+  if (lastJobCard?.jobCardNumber?.startsWith('JC')) {
+    const match = lastJobCard.jobCardNumber.match(/JC(\d+)/)
+    if (match) {
+      nextNumber = parseInt(match[1], 10) + 1
+    }
+  }
+  return `JC${String(nextNumber).padStart(4, '0')}`
+}
+
+const LIST_SORT_WHITELIST = {
+  createdAt: true,
+  updatedAt: true,
+  jobCardNumber: true,
+  clientName: true,
+  status: true,
+  agentName: true,
+  reasonForVisit: true
 }
 
 async function handler(req, res) {
@@ -92,12 +131,16 @@ async function handler(req, res) {
         const url = new URL(req.url, 'http://localhost')
         const clientId = url.searchParams.get('clientId')
         const clientName = url.searchParams.get('clientName')
-        
+        const statusParam = url.searchParams.get('status')
+        const sortFieldRaw = url.searchParams.get('sortField') || 'createdAt'
+        const sortDirectionRaw =
+          url.searchParams.get('sortDirection') === 'asc' ? 'asc' : 'desc'
+
         // Allow larger page sizes when filtering by client (for client detail views)
         const allowLargePageSize = !!(clientId || clientName)
         const { page, pageSize } = getPagination(allowLargePageSize)
         const owner = req.user?.sub
-        
+
         // Build where clause for filtering
         // For clientName, use case-insensitive partial matching
         let whereClause = {}
@@ -111,7 +154,13 @@ async function handler(req, res) {
             mode: 'insensitive'
           }
         }
-        
+        if (statusParam && statusParam !== 'all') {
+          whereClause.status = statusParam
+        }
+
+        const sortField = LIST_SORT_WHITELIST[sortFieldRaw] ? sortFieldRaw : 'createdAt'
+        const orderBy = { [sortField]: sortDirectionRaw }
+
         // Limit the number of job cards returned and support simple pagination
         // to keep the dashboard fast even as history grows.
         // Only select fields needed for list view to improve performance
@@ -133,7 +182,7 @@ async function handler(req, res) {
               createdAt: true,
               updatedAt: true
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy,
             skip: (page - 1) * pageSize,
             take: pageSize
           })
@@ -228,21 +277,6 @@ async function handler(req, res) {
       const body = req.body || {}
       
       try {
-        // Generate sequential job card number (JC0001, JC0002, etc.)
-        const lastJobCard = await prisma.jobCard.findFirst({
-          orderBy: { createdAt: 'desc' },
-          select: { jobCardNumber: true }
-        })
-        
-        let nextNumber = 1
-        if (lastJobCard?.jobCardNumber?.startsWith('JC')) {
-          const match = lastJobCard.jobCardNumber.match(/JC(\d+)/)
-          if (match) {
-            nextNumber = parseInt(match[1]) + 1
-          }
-        }
-        const jobCardNumber = `JC${String(nextNumber).padStart(4, '0')}`
-        
         // Parse JSON fields
         const otherTechnicians = Array.isArray(body.otherTechnicians) 
           ? JSON.stringify(body.otherTechnicians) 
@@ -266,8 +300,21 @@ async function handler(req, res) {
         const totalMaterialsCost = Array.isArray(body.materialsBought) 
           ? body.materialsBought.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
           : parseFloat(body.totalMaterialsCost) || 0
-        
-        const jobCard = await prisma.jobCard.create({
+
+        const lat =
+          body.locationLatitude != null && body.locationLatitude !== ''
+            ? String(body.locationLatitude)
+            : body.latitude != null && body.latitude !== ''
+              ? String(body.latitude)
+              : ''
+        const lng =
+          body.locationLongitude != null && body.locationLongitude !== ''
+            ? String(body.locationLongitude)
+            : body.longitude != null && body.longitude !== ''
+              ? String(body.longitude)
+              : ''
+
+        const buildCreateArgs = jobCardNumber => ({
           data: {
             jobCardNumber,
             agentName: body.agentName || '',
@@ -277,6 +324,8 @@ async function handler(req, res) {
             siteId: body.siteId || '',
             siteName: body.siteName || '',
             location: body.location || '',
+            locationLatitude: lat,
+            locationLongitude: lng,
             timeOfDeparture: body.timeOfDeparture ? new Date(body.timeOfDeparture) : null,
             timeOfArrival: body.timeOfArrival ? new Date(body.timeOfArrival) : null,
             vehicleUsed: body.vehicleUsed || '',
@@ -297,6 +346,30 @@ async function handler(req, res) {
             ownerId: req.user?.sub || null
           }
         })
+
+        let jobCard = null
+        const maxAttempts = 12
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const jobCardNumber = await computeNextJobCardNumber()
+          try {
+            jobCard = await prisma.jobCard.create(buildCreateArgs(jobCardNumber))
+            break
+          } catch (err) {
+            const target = err?.meta?.target
+            const targetStr = Array.isArray(target) ? target.join(',') : String(target || '')
+            if (err.code === 'P2002' && targetStr.includes('jobCardNumber')) {
+              continue
+            }
+            throw err
+          }
+        }
+        if (!jobCard) {
+          return serverError(
+            res,
+            'Failed to create job card',
+            'Could not allocate a unique job card number'
+          )
+        }
         
         return created(res, { 
           jobCard: {
@@ -335,6 +408,9 @@ async function handler(req, res) {
         if (!existing) {
           return notFound(res, 'Job card not found')
         }
+        if (!canMutateJobCard(existing, req.user)) {
+          return forbidden(res, 'You do not have permission to update this job card')
+        }
         
         const updateData = {}
         
@@ -349,6 +425,14 @@ async function handler(req, res) {
         if (body.siteId !== undefined) updateData.siteId = body.siteId
         if (body.siteName !== undefined) updateData.siteName = body.siteName
         if (body.location !== undefined) updateData.location = body.location
+        if (body.latitude !== undefined) updateData.locationLatitude = String(body.latitude ?? '')
+        if (body.longitude !== undefined) updateData.locationLongitude = String(body.longitude ?? '')
+        if (body.locationLatitude !== undefined) {
+          updateData.locationLatitude = String(body.locationLatitude ?? '')
+        }
+        if (body.locationLongitude !== undefined) {
+          updateData.locationLongitude = String(body.locationLongitude ?? '')
+        }
         if (body.timeOfDeparture !== undefined) updateData.timeOfDeparture = body.timeOfDeparture ? new Date(body.timeOfDeparture) : null
         if (body.timeOfArrival !== undefined) updateData.timeOfArrival = body.timeOfArrival ? new Date(body.timeOfArrival) : null
         if (body.vehicleUsed !== undefined) updateData.vehicleUsed = body.vehicleUsed
@@ -438,6 +522,9 @@ async function handler(req, res) {
         if (!existing) {
           return notFound(res, 'Job card not found');
         }
+        if (!canMutateJobCard(existing, req.user)) {
+          return forbidden(res, 'You do not have permission to delete this job card');
+        }
         
         await prisma.jobCard.delete({ where: { id } });
         
@@ -502,6 +589,14 @@ async function handler(req, res) {
       }
 
       try {
+        const parentJob = await prisma.jobCard.findUnique({ where: { id } })
+        if (!parentJob) {
+          return notFound(res, 'Job card not found')
+        }
+        if (!canMutateJobCard(parentJob, req.user)) {
+          return forbidden(res, 'You do not have permission to attach forms to this job card')
+        }
+
         const template = await prisma.serviceFormTemplate.findUnique({
           where: { id: templateId }
         })
@@ -555,6 +650,14 @@ async function handler(req, res) {
 
         if (!existing || existing.jobCardId !== id) {
           return notFound(res, 'Job card form not found')
+        }
+
+        const parentJob = await prisma.jobCard.findUnique({ where: { id } })
+        if (!parentJob) {
+          return notFound(res, 'Job card not found')
+        }
+        if (!canMutateJobCard(parentJob, req.user)) {
+          return forbidden(res, 'You do not have permission to update forms on this job card')
         }
 
         const data = {}

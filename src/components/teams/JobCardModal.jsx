@@ -2,6 +2,19 @@
 const { useState, useEffect } = React;
 const storage = window.storage;
 
+const parseJsonArrayField = (value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+};
+
 const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const [formData, setFormData] = useState({
         agentName: '',
@@ -11,6 +24,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         siteId: '',
         siteName: '',
         location: '',
+        locationLatitude: '',
+        locationLongitude: '',
         timeOfDeparture: '',
         timeOfArrival: '',
         vehicleUsed: '',
@@ -18,6 +33,9 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         kmReadingAfter: '',
         reasonForVisit: '',
         diagnosis: '',
+        actionsTaken: '',
+        stockUsed: [],
+        materialsBought: [],
         otherComments: '',
         photos: [],
         status: 'draft'
@@ -37,26 +55,36 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
     useEffect(() => {
         if (jobCard) {
+            const photos = parseJsonArrayField(jobCard.photos);
             setFormData({
                 agentName: jobCard.agentName || '',
-                otherTechnicians: jobCard.otherTechnicians || [],
+                otherTechnicians: parseJsonArrayField(jobCard.otherTechnicians),
                 clientId: jobCard.clientId || '',
                 clientName: jobCard.clientName || '',
                 siteId: jobCard.siteId || '',
                 siteName: jobCard.siteName || '',
                 location: jobCard.location || '',
+                locationLatitude: jobCard.locationLatitude != null ? String(jobCard.locationLatitude) : '',
+                locationLongitude: jobCard.locationLongitude != null ? String(jobCard.locationLongitude) : '',
                 timeOfDeparture: jobCard.timeOfDeparture ? jobCard.timeOfDeparture.substring(0, 16) : '',
                 timeOfArrival: jobCard.timeOfArrival ? jobCard.timeOfArrival.substring(0, 16) : '',
                 vehicleUsed: jobCard.vehicleUsed || '',
-                kmReadingBefore: jobCard.kmReadingBefore || '',
-                kmReadingAfter: jobCard.kmReadingAfter || '',
+                kmReadingBefore: jobCard.kmReadingBefore ?? '',
+                kmReadingAfter: jobCard.kmReadingAfter ?? '',
                 reasonForVisit: jobCard.reasonForVisit || '',
                 diagnosis: jobCard.diagnosis || '',
+                actionsTaken: jobCard.actionsTaken || '',
+                stockUsed: parseJsonArrayField(jobCard.stockUsed),
+                materialsBought: parseJsonArrayField(jobCard.materialsBought),
                 otherComments: jobCard.otherComments || '',
-                photos: jobCard.photos || [],
+                photos: photos.length ? photos : (jobCard.photos || []),
                 status: jobCard.status || 'draft'
             });
-            setSelectedPhotos(jobCard.photos || []);
+            setSelectedPhotos(
+                photos.length
+                    ? photos.map((p, i) => (typeof p === 'string' ? { name: `Photo ${i + 1}`, url: p } : p))
+                    : (jobCard.photos || [])
+            );
         } else {
             setFormData({
                 agentName: '',
@@ -66,6 +94,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 siteId: '',
                 siteName: '',
                 location: '',
+                locationLatitude: '',
+                locationLongitude: '',
                 timeOfDeparture: '',
                 timeOfArrival: '',
                 vehicleUsed: '',
@@ -73,6 +103,9 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 kmReadingAfter: '',
                 reasonForVisit: '',
                 diagnosis: '',
+                actionsTaken: '',
+                stockUsed: [],
+                materialsBought: [],
                 otherComments: '',
                 photos: [],
                 status: 'draft'
@@ -152,6 +185,48 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         setFormData(prev => ({ ...prev, photos: newPhotos.map(p => typeof p === 'string' ? p : p.url) }));
     };
 
+    const addMaterialRow = () => {
+        setFormData(prev => ({
+            ...prev,
+            materialsBought: [...(prev.materialsBought || []), { itemName: '', description: '', reason: '', cost: '' }]
+        }));
+    };
+
+    const updateMaterialRow = (index, patch) => {
+        setFormData(prev => ({
+            ...prev,
+            materialsBought: (prev.materialsBought || []).map((m, i) => (i === index ? { ...m, ...patch } : m))
+        }));
+    };
+
+    const removeMaterialRow = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            materialsBought: (prev.materialsBought || []).filter((_, i) => i !== index)
+        }));
+    };
+
+    const addStockRow = () => {
+        setFormData(prev => ({
+            ...prev,
+            stockUsed: [...(prev.stockUsed || []), { sku: '', quantity: '', locationId: '', itemName: '', unitCost: '' }]
+        }));
+    };
+
+    const updateStockRow = (index, patch) => {
+        setFormData(prev => ({
+            ...prev,
+            stockUsed: (prev.stockUsed || []).map((s, i) => (i === index ? { ...s, ...patch } : s))
+        }));
+    };
+
+    const removeStockRow = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            stockUsed: (prev.stockUsed || []).filter((_, i) => i !== index)
+        }));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -188,8 +263,45 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
         try {
             setSaving(true);
+
+            const materialsBought = (formData.materialsBought || [])
+                .filter(
+                    m =>
+                        (m.itemName && String(m.itemName).trim()) ||
+                        (m.cost !== '' && m.cost != null && !Number.isNaN(parseFloat(m.cost)))
+                )
+                .map(m => ({
+                    itemName: String(m.itemName || '').trim(),
+                    description: String(m.description || '').trim(),
+                    reason: String(m.reason || '').trim(),
+                    cost: parseFloat(m.cost) || 0
+                }));
+
+            const stockUsed = (formData.stockUsed || [])
+                .filter(s => String(s.sku || '').trim() && parseFloat(s.quantity) > 0)
+                .map(s => {
+                    const row = {
+                        sku: String(s.sku || '').trim(),
+                        quantity: parseFloat(s.quantity) || 0,
+                        locationId: String(s.locationId || '').trim(),
+                        itemName: String(s.itemName || '').trim()
+                    };
+                    if (s.unitCost !== '' && s.unitCost != null && !Number.isNaN(parseFloat(s.unitCost))) {
+                        row.unitCost = parseFloat(s.unitCost);
+                    }
+                    return row;
+                });
+
+            const totalMaterialsCost = materialsBought.reduce((sum, m) => sum + (parseFloat(m.cost) || 0), 0);
+
             const jobCardData = {
                 ...formData,
+                materialsBought,
+                stockUsed,
+                totalMaterialsCost,
+                locationLatitude: formData.locationLatitude != null ? String(formData.locationLatitude) : '',
+                locationLongitude: formData.locationLongitude != null ? String(formData.locationLongitude) : '',
+                photos: selectedPhotos.map(p => (typeof p === 'string' ? p : p.url)),
                 id: jobCard?.id || Date.now().toString(),
                 createdAt: jobCard?.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -306,12 +418,11 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                                 name="siteId"
                                 value={formData.siteId}
                                 onChange={handleChange}
-                                required
                                 disabled={!formData.clientId || availableSites.length === 0}
                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 disabled:bg-gray-100 disabled:cursor-not-allowed"
                             >
                                 <option value="">
-                                    {availableSites.length === 0 ? 'No sites available' : 'Select site'}
+                                    {availableSites.length === 0 ? 'No sites available' : 'Select site (optional)'}
                                 </option>
                                 {availableSites.map(site => (
                                     <option key={site.id} value={site.id}>{site.name}</option>
@@ -333,6 +444,35 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             placeholder="Specific location details"
                         />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
+                                Latitude (GPS)
+                            </label>
+                            <input
+                                type="text"
+                                name="locationLatitude"
+                                value={formData.locationLatitude}
+                                onChange={handleChange}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                placeholder="-26.2041"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
+                                Longitude (GPS)
+                            </label>
+                            <input
+                                type="text"
+                                name="locationLongitude"
+                                value={formData.locationLongitude}
+                                onChange={handleChange}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                placeholder="28.0473"
+                            />
+                        </div>
                     </div>
 
                     {/* Time of Departure and Arrival */}
@@ -446,6 +586,154 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             placeholder="Notes and comments about diagnosis"
                         />
+                    </div>
+
+                    {/* Actions taken */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
+                            Actions taken
+                        </label>
+                        <textarea
+                            name="actionsTaken"
+                            value={formData.actionsTaken}
+                            onChange={handleChange}
+                            rows={3}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            placeholder="Work performed, repairs, replacements, tests…"
+                        />
+                    </div>
+
+                    {/* Stock used */}
+                    <div className="border border-gray-200 rounded-lg p-3 dark:border-slate-600">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-medium text-gray-700 dark:text-slate-300">Stock used</label>
+                            <button
+                                type="button"
+                                onClick={addStockRow}
+                                className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+                            >
+                                <i className="fas fa-plus mr-1" /> Add line
+                            </button>
+                        </div>
+                        {(formData.stockUsed || []).length === 0 ? (
+                            <p className="text-xs text-gray-500 dark:text-slate-400">No stock lines. Add consumables used on site.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {(formData.stockUsed || []).map((row, idx) => (
+                                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                                        <div className="col-span-3">
+                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">SKU</span>
+                                            <input
+                                                type="text"
+                                                value={row.sku || ''}
+                                                onChange={e => updateStockRow(idx, { sku: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                            />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Qty</span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={row.quantity ?? ''}
+                                                onChange={e => updateStockRow(idx, { quantity: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                            />
+                                        </div>
+                                        <div className="col-span-3">
+                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Location ID</span>
+                                            <input
+                                                type="text"
+                                                value={row.locationId || ''}
+                                                onChange={e => updateStockRow(idx, { locationId: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                            />
+                                        </div>
+                                        <div className="col-span-3">
+                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Item name</span>
+                                            <input
+                                                type="text"
+                                                value={row.itemName || ''}
+                                                onChange={e => updateStockRow(idx, { itemName: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                            />
+                                        </div>
+                                        <div className="col-span-1 flex justify-end pb-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => removeStockRow(idx)}
+                                                className="text-red-500 hover:text-red-700 text-xs"
+                                                title="Remove"
+                                            >
+                                                <i className="fas fa-times" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Materials bought */}
+                    <div className="border border-gray-200 rounded-lg p-3 dark:border-slate-600">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-medium text-gray-700 dark:text-slate-300">Materials / purchases</label>
+                            <button
+                                type="button"
+                                onClick={addMaterialRow}
+                                className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+                            >
+                                <i className="fas fa-plus mr-1" /> Add line
+                            </button>
+                        </div>
+                        {(formData.materialsBought || []).length === 0 ? (
+                            <p className="text-xs text-gray-500 dark:text-slate-400">No purchase lines.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {(formData.materialsBought || []).map((row, idx) => (
+                                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                                        <div className="col-span-4">
+                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Item</span>
+                                            <input
+                                                type="text"
+                                                value={row.itemName || ''}
+                                                onChange={e => updateMaterialRow(idx, { itemName: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                            />
+                                        </div>
+                                        <div className="col-span-2">
+                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Cost</span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={row.cost ?? ''}
+                                                onChange={e => updateMaterialRow(idx, { cost: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                            />
+                                        </div>
+                                        <div className="col-span-5">
+                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Reason / notes</span>
+                                            <input
+                                                type="text"
+                                                value={row.reason || ''}
+                                                onChange={e => updateMaterialRow(idx, { reason: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                            />
+                                        </div>
+                                        <div className="col-span-1 flex justify-end pb-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => removeMaterialRow(idx)}
+                                                className="text-red-500 hover:text-red-700 text-xs"
+                                                title="Remove"
+                                            >
+                                                <i className="fas fa-times" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Other Comments */}

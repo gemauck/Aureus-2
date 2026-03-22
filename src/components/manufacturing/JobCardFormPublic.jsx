@@ -1079,6 +1079,14 @@ const toDatetimeLocalInput = val => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+/** Prisma cuid or UUID — id stored on the server after submit */
+const isLikelyServerJobCardId = id => {
+  if (id == null || id === '') return false;
+  const s = String(id);
+  if (/^c[a-z0-9]{24}$/i.test(s)) return true;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+};
+
 const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
     agentName: '',
@@ -1137,6 +1145,10 @@ const JobCardFormPublic = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   /** landing → pick create vs edit; prior_list → choose a saved card; form → wizard */
   const [wizardFlow, setWizardFlow] = useState('landing');
+  /** Logged-in users: all server job cards for “prior” list (any device) */
+  const [serverPriorList, setServerPriorList] = useState([]);
+  /** Bumps when opening prior list so localStorage is re-read */
+  const [priorLocalTick, setPriorLocalTick] = useState(0);
   /** When editing, keep stable id / createdAt / sync flags for save + localStorage replace */
   const [editingMeta, setEditingMeta] = useState(null);
   /** Mobile (< xl): collapse wizard header to maximize form area */
@@ -1576,22 +1588,76 @@ const JobCardFormPublic = () => {
 
   const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
 
-  const priorJobCardsSorted = useMemo(() => {
+  useEffect(() => {
+    if (wizardFlow !== 'prior_list') return;
+    const token = window.storage?.getToken?.();
+    if (!token) {
+      setServerPriorList([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(
+          '/api/jobcards?page=1&pageSize=500&sortField=updatedAt&sortDirection=desc',
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        if (!r.ok) {
+          if (!cancelled) setServerPriorList([]);
+          return;
+        }
+        const raw = await r.json();
+        const list = raw.jobCards || raw.data?.jobCards || [];
+        if (!cancelled) setServerPriorList(Array.isArray(list) ? list : []);
+      } catch {
+        if (!cancelled) setServerPriorList([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardFlow]);
+
+  const mergedPriorJobCards = useMemo(() => {
     if (wizardFlow !== 'prior_list') return [];
+    let local = [];
     try {
       const raw = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      if (!Array.isArray(raw)) return [];
-      return [...raw]
-        .filter(jc => jc && typeof jc === 'object')
-        .sort((a, b) => {
-          const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
-          const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
-          return tb - ta;
-        });
+      if (Array.isArray(raw)) {
+        local = raw.filter(jc => jc && typeof jc === 'object');
+      }
     } catch {
-      return [];
+      local = [];
     }
-  }, [wizardFlow]);
+
+    const serverIds = new Set(serverPriorList.map(s => s && s.id).filter(Boolean).map(String));
+    const localFiltered = local.filter(jc => {
+      const sid = jc.serverJobCardId || (isLikelyServerJobCardId(jc.id) ? jc.id : null);
+      if (sid && serverIds.has(String(sid))) return false;
+      if (isLikelyServerJobCardId(jc.id) && serverIds.has(String(jc.id))) return false;
+      return true;
+    });
+
+    const serverRows = serverPriorList.map(jc => ({
+      ...jc,
+      source: 'server',
+      serverJobCardId: jc.id,
+      synced: true
+    }));
+
+    const combined = [...serverRows, ...localFiltered];
+    combined.sort((a, b) => {
+      const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      return tb - ta;
+    });
+    return combined;
+  }, [wizardFlow, serverPriorList, priorLocalTick]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -2416,61 +2482,118 @@ const JobCardFormPublic = () => {
   };
 
   const openPriorList = () => {
+    setPriorLocalTick(t => t + 1);
     setWizardFlow('prior_list');
   };
 
-  const handleSelectPriorCard = card => {
+  const handleSelectPriorCard = async card => {
     if (!card || card.id == null) return;
     lastSignatureRestoreRef.current = null;
     clearSignature();
-    const localId = String(card.id);
-    const createdAt = card.createdAt || new Date().toISOString();
-    const synced = Boolean(card.synced);
-    const jobCardNumber = card.jobCardNumber || '';
+
+    let full = card;
+    const token = window.storage?.getToken?.();
+    if (card.source === 'server' && token) {
+      try {
+        const r = await fetch(`/api/jobcards/${encodeURIComponent(card.id)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (r.ok) {
+          const data = await r.json();
+          const apiCard = data.jobCard || data.data?.jobCard;
+          if (apiCard && apiCard.id) {
+            full = apiCard;
+          }
+        }
+      } catch (e) {
+        console.warn('JobCardFormPublic: could not load full job card from server', e);
+      }
+    }
+
+    const localId = String(full.id);
+    const serverJobCardId =
+      full.serverJobCardId ||
+      (isLikelyServerJobCardId(full.id) ? String(full.id) : null) ||
+      null;
+    const createdAt = full.createdAt || new Date().toISOString();
+    const synced = Boolean(full.synced) || Boolean(serverJobCardId);
+    const jobCardNumber = full.jobCardNumber || '';
 
     setEditingMeta({
       localId,
+      serverJobCardId,
       createdAt,
       synced,
       jobCardNumber
     });
 
+    const photosRaw = parseStoredJsonArray(full.photos, []);
+    const voiceEntries = photosRaw.filter(
+      p => p && typeof p === 'object' && p.kind === 'voice'
+    );
+    const imageUrls = photosRaw
+      .filter(p => !p || typeof p !== 'object' || p.kind !== 'voice')
+      .map(p => (typeof p === 'string' ? p : p && p.url))
+      .filter(Boolean);
+
+    setVoiceAttachments(
+      voiceEntries.map((v, i) => ({
+        id: `vn_restore_${i}_${Date.now()}`,
+        section: v.section || 'otherComments',
+        dataUrl: v.url || v.dataUrl || '',
+        mimeType: v.mimeType || 'audio/webm',
+        noteNumber: i + 1
+      }))
+    );
+    setSelectedPhotos(imageUrls.map((url, i) => ({ name: `Photo ${i + 1}`, url })));
+
     setFormData(prev => ({
       ...prev,
-      agentName: card.agentName || '',
-      otherTechnicians: parseStoredJsonArray(card.otherTechnicians, []),
-      clientId: card.clientId || '',
-      clientName: card.clientName || '',
-      siteId: card.siteId || '',
-      siteName: card.siteName || '',
-      location: card.location || '',
-      latitude: card.latitude != null && card.latitude !== '' ? String(card.latitude) : '',
-      longitude: card.longitude != null && card.longitude !== '' ? String(card.longitude) : '',
-      timeOfDeparture: toDatetimeLocalInput(card.timeOfDeparture),
-      timeOfArrival: toDatetimeLocalInput(card.timeOfArrival),
-      vehicleUsed: card.vehicleUsed || '',
-      kmReadingBefore: card.kmReadingBefore != null ? String(card.kmReadingBefore) : '',
-      kmReadingAfter: card.kmReadingAfter != null ? String(card.kmReadingAfter) : '',
-      reasonForVisit: card.reasonForVisit || '',
-      diagnosis: card.diagnosis || '',
-      actionsTaken: card.actionsTaken || '',
-      otherComments: card.otherComments || '',
-      stockUsed: parseStoredJsonArray(card.stockUsed, []),
-      materialsBought: parseStoredJsonArray(card.materialsBought, []),
-      photos: [],
-      serviceForms: parseStoredJsonArray(card.serviceForms, []),
-      status: card.status || 'draft',
-      customerName: card.customerName || '',
-      customerTitle: card.customerTitle || card.customerPosition || '',
-      customerFeedback: card.customerFeedback || '',
-      customerSignDate: card.customerSignDate
-        ? String(card.customerSignDate).slice(0, 10)
+      agentName: full.agentName || '',
+      otherTechnicians: parseStoredJsonArray(full.otherTechnicians, []),
+      clientId: full.clientId || '',
+      clientName: full.clientName || '',
+      siteId: full.siteId || '',
+      siteName: full.siteName || '',
+      location: full.location || '',
+      latitude:
+        full.latitude != null && full.latitude !== ''
+          ? String(full.latitude)
+          : full.locationLatitude != null && full.locationLatitude !== ''
+            ? String(full.locationLatitude)
+            : '',
+      longitude:
+        full.longitude != null && full.longitude !== ''
+          ? String(full.longitude)
+          : full.locationLongitude != null && full.locationLongitude !== ''
+            ? String(full.locationLongitude)
+            : '',
+      timeOfDeparture: toDatetimeLocalInput(full.timeOfDeparture),
+      timeOfArrival: toDatetimeLocalInput(full.timeOfArrival),
+      vehicleUsed: full.vehicleUsed || '',
+      kmReadingBefore: full.kmReadingBefore != null ? String(full.kmReadingBefore) : '',
+      kmReadingAfter: full.kmReadingAfter != null ? String(full.kmReadingAfter) : '',
+      reasonForVisit: full.reasonForVisit || '',
+      diagnosis: full.diagnosis || '',
+      actionsTaken: full.actionsTaken || '',
+      otherComments: full.otherComments || '',
+      stockUsed: parseStoredJsonArray(full.stockUsed, []),
+      materialsBought: parseStoredJsonArray(full.materialsBought, []),
+      photos: imageUrls,
+      serviceForms: parseStoredJsonArray(full.serviceForms, []),
+      status: full.status || 'draft',
+      customerName: full.customerName || '',
+      customerTitle: full.customerTitle || full.customerPosition || '',
+      customerFeedback: full.customerFeedback || '',
+      customerSignDate: full.customerSignDate
+        ? String(full.customerSignDate).slice(0, 10)
         : '',
-      customerSignature: card.customerSignature || ''
+      customerSignature: full.customerSignature || ''
     }));
 
-    setSelectedPhotos([]);
-    setVoiceAttachments([]);
     setTechnicianInput('');
     setNewStockItem({ sku: '', quantity: 0, locationId: '' });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
@@ -2552,8 +2675,16 @@ const JobCardFormPublic = () => {
       const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
       const storedSlice = forStorage(jobCardData);
       let updatedJobCards;
-      if (editingMeta?.localId) {
-        const idx = existingJobCards.findIndex(jc => String(jc.id) === String(editingMeta.localId));
+      if (editingMeta?.localId || editingMeta?.serverJobCardId) {
+        const idx = existingJobCards.findIndex(
+          jc =>
+            (editingMeta.localId != null &&
+              String(editingMeta.localId) !== '' &&
+              String(jc.id) === String(editingMeta.localId)) ||
+            (editingMeta.serverJobCardId &&
+              (String(jc.id) === String(editingMeta.serverJobCardId) ||
+                String(jc.serverJobCardId || '') === String(editingMeta.serverJobCardId)))
+        );
         if (idx >= 0) {
           updatedJobCards = [...existingJobCards];
           updatedJobCards[idx] = {
@@ -2586,72 +2717,116 @@ const JobCardFormPublic = () => {
         } else throw e;
       }
 
-      const skipPublicPost = Boolean(editingMeta?.synced);
+      const serverJobCardId =
+        editingMeta?.serverJobCardId ||
+        (editingMeta?.localId && isLikelyServerJobCardId(editingMeta.localId)
+          ? String(editingMeta.localId)
+          : null);
 
-      // Primary persistence: public API (skip when this device copy is already linked to a server record)
-      if (!skipPublicPost) {
+      const payloadJson = JSON.stringify(jobCardData);
+      let serverReachOk = false;
+      let saved = null;
+
+      if (serverJobCardId) {
+        const token = window.storage?.getToken?.();
+        if (token) {
+          try {
+            const authRes = await fetch(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: payloadJson
+            });
+            if (authRes.ok) {
+              serverReachOk = true;
+              const authData = await authRes.json().catch(() => ({}));
+              saved = authData.jobCard || authData.data?.jobCard || null;
+            }
+          } catch (e) {
+            console.warn('JobCardFormPublic: authenticated PATCH failed, trying public PATCH', e);
+          }
+        }
+        if (!serverReachOk) {
+          try {
+            const pubRes = await fetch(`/api/public/jobcards/${encodeURIComponent(serverJobCardId)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: payloadJson
+            });
+            if (pubRes.ok) {
+              serverReachOk = true;
+              const pubData = await pubRes.json().catch(() => ({}));
+              saved = pubData.jobCard || pubData.data?.jobCard || null;
+            } else {
+              const text = await pubRes.text().catch(() => '');
+              console.warn('⚠️ JobCardFormPublic: public PATCH failed', pubRes.status, text);
+            }
+          } catch (e) {
+            console.warn('⚠️ JobCardFormPublic: public PATCH error', e);
+          }
+        }
+      } else {
         try {
           const response = await fetch('/api/public/jobcards', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(jobCardData)
+            headers: { 'Content-Type': 'application/json' },
+            body: payloadJson
           });
 
           if (!response.ok) {
             const text = await response.text();
-            console.warn('⚠️ JobCardFormPublic: Public API returned error status', response.status, text);
-            throw new Error('Job card saved locally but could not reach server.');
-          }
-
-          const result = await response.json().catch(() => ({}));
-          const saved = result?.jobCard || result?.data?.jobCard || null;
-
-          if (saved && saved.id) {
-            const syncedCards = updatedJobCards.map(jc =>
-              String(jc.id) === String(jobCardData.id)
-                ? {
-                    ...jc,
-                    id: saved.id,
-                    jobCardNumber: saved.jobCardNumber || jc.jobCardNumber,
-                    synced: true
-                  }
-                : jc
-            );
-            updatedJobCards = syncedCards;
-            try {
-              localStorage.setItem(
-                'manufacturing_jobcards',
-                JSON.stringify(
-                  syncedCards.map(jc => ({
-                    ...jc,
-                    photos: [],
-                    photoCount: Array.isArray(jc.photos) ? jc.photos.length : jc.photoCount || 0
-                  }))
-                )
-              );
-            } catch (_) {
-              console.warn('Job card sync cache update skipped (storage full)');
-            }
+            console.warn('⚠️ JobCardFormPublic: Public POST error', response.status, text);
           } else {
-            console.warn('⚠️ JobCardFormPublic: Public API response did not include jobCard payload', result);
+            serverReachOk = true;
+            const result = await response.json().catch(() => ({}));
+            saved = result?.jobCard || result?.data?.jobCard || null;
           }
         } catch (error) {
-          console.warn(
-            '⚠️ JobCardFormPublic: Failed to submit job card to public API, kept offline only:',
-            error.message
-          );
+          console.warn('⚠️ JobCardFormPublic: Public POST failed, kept offline only:', error.message);
         }
       }
 
-      if (skipPublicPost) {
+      if (saved && saved.id) {
+        const syncedCards = updatedJobCards.map(jc =>
+          String(jc.id) === String(jobCardData.id) ||
+          (serverJobCardId &&
+            (String(jc.id) === String(serverJobCardId) ||
+              String(jc.serverJobCardId || '') === String(serverJobCardId)))
+            ? {
+                ...jc,
+                id: saved.id,
+                serverJobCardId: saved.id,
+                jobCardNumber: saved.jobCardNumber || jc.jobCardNumber,
+                synced: true
+              }
+            : jc
+        );
+        updatedJobCards = syncedCards;
+        try {
+          localStorage.setItem(
+            'manufacturing_jobcards',
+            JSON.stringify(
+              syncedCards.map(jc => ({
+                ...jc,
+                photos: [],
+                photoCount: Array.isArray(jc.photos) ? jc.photos.length : jc.photoCount || 0
+              }))
+            )
+          );
+        } catch (_) {
+          console.warn('Job card sync cache update skipped (storage full)');
+        }
+      }
+
+      if (serverReachOk) {
         alert(
-          '✅ Job card updated on this device. This card was already submitted to the server; open Service & Maintenance while signed in to change the office record.'
+          '✅ Job card saved to the server. It appears in Service & Maintenance → Job Cards for everyone.'
         );
       } else {
         alert(
-          '✅ Job card saved successfully! It will appear under Service & Maintenance once the server has processed it.'
+          '⚠️ Saved on this device only — the server could not be updated. Check your connection and try again.'
         );
       }
       setEditingMeta(null);
@@ -3812,7 +3987,7 @@ const JobCardFormPublic = () => {
               Job Card App
             </h1>
             <p className="text-sm text-white/80">
-              Continue a draft on this device or start a new job card.
+              Continue a draft, edit any saved card (including from the server if you are signed in), or start new.
             </p>
           </div>
           <div className="space-y-3">
@@ -3846,7 +4021,7 @@ const JobCardFormPublic = () => {
                 <span className="flex-1 min-w-0">
                   <span className="block font-semibold text-sm">Edit prior job card</span>
                   <span className="block text-xs text-blue-800/80 mt-0.5 leading-snug">
-                    Open drafts saved on this phone or tablet, newest first.
+                    All job cards from the server when signed in, plus this device&apos;s drafts — newest first.
                   </span>
                 </span>
                 <i className="fa-solid fa-chevron-right text-blue-400 text-sm flex-shrink-0" aria-hidden />
@@ -3871,10 +4046,12 @@ const JobCardFormPublic = () => {
             Back
           </button>
           <h1 className="text-xl font-bold">Prior job cards</h1>
-          <p className="text-sm text-white/80 mt-1">Newest first — tap a card to continue editing.</p>
+          <p className="text-sm text-white/80 mt-1">
+            Newest first — tap a card to continue. Server cards require signing in to the ERP in this browser.
+          </p>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-8">
-          {priorJobCardsSorted.length === 0 ? (
+          {mergedPriorJobCards.length === 0 ? (
             <div className="max-w-lg mx-auto mt-8 rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-600 shadow-sm">
               <i className="fa-regular fa-folder-open text-3xl text-gray-400 mb-3" aria-hidden />
               <p className="font-medium text-gray-800">No saved job cards yet</p>
@@ -3891,7 +4068,7 @@ const JobCardFormPublic = () => {
             </div>
           ) : (
             <ul className="max-w-2xl mx-auto space-y-3">
-              {priorJobCardsSorted.map(jc => {
+              {mergedPriorJobCards.map(jc => {
                 const when = jc.updatedAt || jc.createdAt;
                 const whenLabel = when
                   ? new Date(when).toLocaleString(undefined, {
@@ -3903,7 +4080,7 @@ const JobCardFormPublic = () => {
                   jc.jobCardNumber ||
                   (jc.clientName ? `${jc.clientName}` : 'Job card draft');
                 return (
-                  <li key={String(jc.id)}>
+                  <li key={`${jc.source || 'local'}-${String(jc.id)}`}>
                     <button
                       type="button"
                       onClick={() => handleSelectPriorCard(jc)}
@@ -3912,6 +4089,9 @@ const JobCardFormPublic = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-gray-900 truncate">{title}</p>
+                          {jc.source === 'server' && (
+                            <p className="text-[10px] font-medium text-blue-700 mt-0.5">From server · all devices</p>
+                          )}
                           <p className="text-sm text-gray-600 mt-1 truncate">
                             {[jc.agentName, jc.siteName].filter(Boolean).join(' · ') || 'No site'}
                           </p>
