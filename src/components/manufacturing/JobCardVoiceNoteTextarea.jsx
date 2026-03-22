@@ -342,6 +342,7 @@ const VoiceNoteTextarea = ({
   const sectionIdRef = useRef(sectionId);
   const pendingNoteNumberRef = useRef(1);
   const voiceClipsCountRef = useRef(0);
+  const voiceClipsRef = useRef(voiceClips);
 
   useEffect(() => {
     valueRef.current = value;
@@ -353,6 +354,9 @@ const VoiceNoteTextarea = ({
   useEffect(() => {
     voiceClipsCountRef.current = voiceClips.length;
   }, [voiceClips.length]);
+  useEffect(() => {
+    voiceClipsRef.current = voiceClips;
+  }, [voiceClips]);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -554,71 +558,132 @@ const VoiceNoteTextarea = ({
     }
   }, []);
 
+  /** Sequential auto-transcribe: stable key avoids cancelling on unrelated parent re-renders. */
+  const pendingAutoKey = React.useMemo(
+    () =>
+      voiceClips
+        .filter(c => c && c.id && c.dataUrl && !c.transcribed)
+        .map(c => c.id)
+        .sort()
+        .join('|'),
+    [voiceClips]
+  );
+
+  const transcribeClipBody = useCallback(
+    async (clip, isCancelled) => {
+      if (!clip?.dataUrl) return false;
+      setRecordHint('');
+      setTranscribingClipId(clip.id);
+      try {
+        const comma = clip.dataUrl.indexOf(',');
+        const b64 = comma >= 0 ? clip.dataUrl.slice(comma + 1) : clip.dataUrl;
+        const res = await fetch('/api/public/transcribe-audio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audioBase64: b64,
+            mimeType: clip.mimeType || 'audio/webm'
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (isCancelled?.()) {
+          return false;
+        }
+        if (!res.ok) {
+          const err = data.error && typeof data.error === 'object' ? data.error : null;
+          const errCode =
+            (err && typeof err.code === 'string' && err.code) ||
+            (typeof data.code === 'string' ? data.code : null);
+          const errMsg =
+            err && typeof err.message === 'string'
+              ? err.message
+              : typeof data.error === 'string'
+                ? data.error
+                : null;
+          const errDetails = err && typeof err.details === 'string' ? err.details : null;
+
+          if (
+            res.status === 503 &&
+            (errCode === 'NO_OPENAI' || (errCode && errCode.startsWith('OPENAI_')))
+          ) {
+            setRecordHint(
+              errMsg ||
+                'Transcription is not configured on the server. Your admin can enable it with OPENAI_API_KEY, or type the text manually.'
+            );
+          } else if (res.status === 502 || res.status === 504) {
+            setRecordHint(
+              'Gateway timeout (502/504): the server proxy closed before Whisper finished. Try a shorter clip or retry. Admin: raise nginx proxy_read_timeout for /api/ to 300s (see scripts/nginx-bump-proxy-timeouts-300s.sh).'
+            );
+          } else {
+            setRecordHint(
+              errDetails ||
+                errMsg ||
+                'Transcription failed. Try again or type manually.'
+            );
+          }
+          return false;
+        }
+        if (isCancelled?.()) {
+          return false;
+        }
+        const fresh = voiceClipsRef.current.find(c => c.id === clip.id);
+        if (!fresh || fresh.transcribed) {
+          return true;
+        }
+        const text = typeof data.text === 'string' ? data.text : '';
+        const n = fresh.noteNumber != null ? fresh.noteNumber : 1;
+        const block = formatVoiceNoteTranscriptBlock(n, text);
+        const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
+        const join = prev.trim() ? '\n\n' : '';
+        const next = `${prev}${join}${block}`;
+        valueRef.current = next;
+        onChange({ target: { name, value: next } });
+        onVoiceClipUpdate?.(clip.id, { transcribed: true });
+        return true;
+      } catch (e) {
+        console.warn('transcribe:', e);
+        if (!isCancelled?.()) {
+          setRecordHint('Could not reach the transcription service. Check your connection.');
+        }
+        return false;
+      } finally {
+        if (!isCancelled?.()) {
+          setTranscribingClipId(null);
+        }
+      }
+    },
+    [name, onChange, onVoiceClipUpdate]
+  );
+
+  useEffect(() => {
+    if (!pendingAutoKey) {
+      return undefined;
+    }
+    let cancelled = false;
+    const isCancelled = () => cancelled || !mountedRef.current;
+
+    (async () => {
+      const ids = pendingAutoKey.split('|').filter(Boolean);
+      for (const id of ids) {
+        if (isCancelled()) {
+          return;
+        }
+        const clip = voiceClipsRef.current.find(c => c.id === id);
+        if (!clip || !clip.dataUrl || clip.transcribed) {
+          continue;
+        }
+        await transcribeClipBody(clip, isCancelled);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingAutoKey, transcribeClipBody]);
+
   const transcribeClip = async clip => {
     if (!clip?.dataUrl || transcribingClipId) return;
-    setRecordHint('');
-    setTranscribingClipId(clip.id);
-    try {
-      const comma = clip.dataUrl.indexOf(',');
-      const b64 = comma >= 0 ? clip.dataUrl.slice(comma + 1) : clip.dataUrl;
-      const res = await fetch('/api/public/transcribe-audio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audioBase64: b64,
-          mimeType: clip.mimeType || 'audio/webm'
-        })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const err = data.error && typeof data.error === 'object' ? data.error : null;
-        const errCode =
-          (err && typeof err.code === 'string' && err.code) ||
-          (typeof data.code === 'string' ? data.code : null);
-        const errMsg =
-          err && typeof err.message === 'string'
-            ? err.message
-            : typeof data.error === 'string'
-              ? data.error
-              : null;
-        const errDetails = err && typeof err.details === 'string' ? err.details : null;
-
-        if (
-          res.status === 503 &&
-          (errCode === 'NO_OPENAI' || (errCode && errCode.startsWith('OPENAI_')))
-        ) {
-          setRecordHint(
-            errMsg ||
-              'Transcription is not configured on the server. Your admin can enable it with OPENAI_API_KEY, or type the text manually.'
-          );
-        } else if (res.status === 502 || res.status === 504) {
-          setRecordHint(
-            'Gateway timeout (502/504): the server proxy closed before Whisper finished. Try a shorter clip or retry. Admin: raise nginx proxy_read_timeout for /api/ to 300s (see scripts/nginx-bump-proxy-timeouts-300s.sh).'
-          );
-        } else {
-          setRecordHint(
-            errDetails ||
-              errMsg ||
-              'Transcription failed. Try again or type manually.'
-          );
-        }
-        return;
-      }
-      const text = typeof data.text === 'string' ? data.text : '';
-      const n = clip.noteNumber != null ? clip.noteNumber : 1;
-      const block = formatVoiceNoteTranscriptBlock(n, text);
-      const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
-      const join = prev.trim() ? '\n\n' : '';
-      const next = `${prev}${join}${block}`;
-      valueRef.current = next;
-      onChange({ target: { name, value: next } });
-      onVoiceClipUpdate?.(clip.id, { transcribed: true });
-    } catch (e) {
-      console.warn('transcribe:', e);
-      setRecordHint('Could not reach the transcription service. Check your connection.');
-    } finally {
-      setTranscribingClipId(null);
-    }
+    await transcribeClipBody(clip, () => false);
   };
 
   const toggleMic = () => {

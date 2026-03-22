@@ -1347,7 +1347,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     </div>
                   </header>
 
-                  <div className={`grid gap-4 md:grid-cols-2 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                  <div className={`space-y-5 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Diagnosis

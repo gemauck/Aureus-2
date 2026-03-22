@@ -462,10 +462,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     try {
       setSaving(true);
 
+      let savedId = null;
       if (editingJobCard && editingJobCard.id) {
         await window.DatabaseAPI.updateJobCard(editingJobCard.id, formData);
+        savedId = editingJobCard.id;
       } else {
-        await window.DatabaseAPI.createJobCard(formData);
+        const created = await window.DatabaseAPI.createJobCard(formData);
+        const jc = created?.data?.jobCard || created?.jobCard;
+        savedId = jc?.id || null;
       }
 
       setIsModalOpen(false);
@@ -473,6 +477,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 
       // Refresh list after save
       await reloadJobCards();
+      return { id: savedId };
     } catch (e) {
       console.error('❌ Failed to save job card from classic manager:', e);
       
@@ -965,7 +970,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   </header>
 
-                  <div className="grid gap-4 md:grid-cols-2 text-sm text-slate-100">
+                  <div className="space-y-5 text-sm text-slate-100">
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500">
                         Diagnosis
