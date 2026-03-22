@@ -94,7 +94,7 @@ const StepBadge = ({
   const meta = STEP_META[stepId] || {};
   const baseClasses =
     variant === 'carousel'
-      ? 'group flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always]'
+      ? 'group flex flex-row items-center justify-start gap-2 rounded-lg px-2.5 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always]'
       : 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
   const stateClass = active
     ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
@@ -111,7 +111,9 @@ const StepBadge = ({
     >
       <div
         className={[
-          'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
+          variant === 'carousel'
+            ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition'
+            : 'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
           active
             ? 'bg-white text-blue-600 border-white shadow'
             : complete
@@ -119,7 +121,9 @@ const StepBadge = ({
               : 'bg-white/20 text-white border-white/30 group-hover:border-white/50'
         ].join(' ')}
       >
-        <i className={`fa-solid ${meta.icon || 'fa-circle-dot'} text-base`}></i>
+        <i
+          className={`fa-solid ${meta.icon || 'fa-circle-dot'} ${variant === 'carousel' ? 'text-sm' : 'text-base'}`}
+        ></i>
       </div>
       <div
         className={
@@ -3938,60 +3942,61 @@ const JobCardFormPublic = () => {
           <div className="absolute -top-24 -left-20 h-44 w-44 rounded-full bg-white/15 blur-3xl"></div>
           <div className="absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
         </div>
-        <div className="relative p-3 sm:p-5">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] sm:text-[11px] uppercase tracking-wide text-white/70 font-semibold">
+        <div className="relative px-2 pt-2 pb-2 sm:px-4 sm:py-4">
+          <div className="max-w-4xl mx-auto space-y-2">
+            {/* Title + compact toolbar on one row — avoids tall stacked full-width controls on phones */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1 pr-1">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-wide text-white/70 font-semibold leading-none">
                   Mobile Job Card
                 </p>
-                <h1 className="text-lg sm:text-2xl font-bold leading-tight mt-1 text-white">
+                <h1 className="text-base sm:text-2xl font-bold leading-tight mt-0.5 text-white">
                   Job Card App Wizard
                 </h1>
                 {editingMeta && (
-                  <p className="text-[11px] sm:text-xs text-amber-100 font-medium mt-1">
+                  <p className="text-[10px] sm:text-xs text-amber-100 font-medium mt-0.5 leading-snug line-clamp-2">
                     Editing {editingMeta.jobCardNumber || 'draft'}
                     {editingMeta.synced ? ' · submitted' : ''}
                   </p>
                 )}
-                <p className="text-xs sm:text-sm text-white/80 mt-2 hidden sm:block">
+                <p className="text-xs sm:text-sm text-white/80 mt-1.5 hidden sm:block">
                   Capture job cards in minutes with a guided, offline-friendly flow.
                 </p>
               </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2 sm:mt-0">
+              <div className="job-card-header-toolbar flex flex-shrink-0 items-center gap-1 self-start pt-0.5">
                 <span
-                  className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-[10px] sm:text-xs font-semibold justify-center ${
+                  className={`job-card-online-badge inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none whitespace-nowrap ${
                     isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
                   }`}
                 >
                   <span
-                    className={`h-2 w-2 rounded-full ${
+                    className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
                       isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
                     }`}
-                  ></span>
-                  {isOnline ? 'Online' : 'Offline'}
+                  />
+                  {isOnline ? 'Online' : 'Off'}
                 </span>
                 <button
                   type="button"
                   onClick={handleShareLink}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[10px] sm:text-xs font-semibold hover:bg-white/25 transition"
+                  className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
+                  aria-label="Share job card link"
                 >
-                  <i className="fa-regular fa-share-from-square text-xs"></i>
-                  <span className="hidden sm:inline">Share</span>
+                  <i className="fa-regular fa-share-from-square text-[12px]" aria-hidden />
                 </button>
                 <button
                   type="button"
                   onClick={exitToMenu}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[10px] sm:text-xs font-semibold hover:bg-white/25 transition touch-manipulation"
+                  className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
+                  aria-label="Back to menu"
                 >
-                  <i className="fa-solid fa-house text-xs" aria-hidden />
-                  <span className="hidden sm:inline">Menu</span>
+                  <i className="fa-solid fa-house text-[12px]" aria-hidden />
                 </button>
               </div>
             </div>
-            <div className="mt-3 sm:mt-4">
+            <div className="mt-1 sm:mt-2">
               <div
-                className="mobile-step-scroll flex flex-nowrap gap-3 overflow-x-auto overflow-y-hidden pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-hide touch-pan-x"
+                className="mobile-step-scroll flex flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pb-1.5 -mx-2 px-2 sm:-mx-3 sm:px-3 snap-x snap-mandatory scrollbar-hide touch-pan-x"
                 aria-label="Wizard steps — swipe sideways to choose a step"
               >
                 {STEP_IDS.map((stepId, idx) => (
@@ -4007,12 +4012,12 @@ const JobCardFormPublic = () => {
                 ))}
               </div>
             </div>
-            <div className="mt-3 space-y-1">
-              <div className="flex items-center justify-between text-[10px] sm:text-xs font-medium text-white/70">
+            <div className="mt-1.5 space-y-0.5">
+              <div className="flex items-center justify-between text-[9px] sm:text-xs font-medium text-white/70">
                 <span>Progress</span>
                 <span>{progressPercent}%</span>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-white/20 overflow-hidden">
+              <div className="h-1 w-full rounded-full bg-white/20 overflow-hidden sm:h-1.5">
                 <div
                   className="h-full rounded-full bg-white transition-all duration-500 ease-out"
                   style={{ width: `${progressPercent}%` }}

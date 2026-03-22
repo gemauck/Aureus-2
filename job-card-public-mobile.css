@@ -177,6 +177,7 @@
     width: min(90vw, 19rem) !important;
     min-width: min(90vw, 19rem) !important;
     max-width: 19rem !important;
+    min-height: auto !important;
     box-sizing: border-box !important;
     scroll-snap-align: start !important;
     scroll-snap-stop: always !important;
@@ -293,6 +294,23 @@
     -webkit-appearance: none !important;
     appearance: none !important;
     -webkit-tap-highlight-color: rgba(37, 99, 235, 0.15) !important;
+  }
+
+  /* Mobile wizard header: compact Online / Share / Home (override global 44px min-height on form buttons) */
+  body.job-card-public .job-card-public-wrapper > header .job-card-header-toolbar button {
+    min-height: 32px !important;
+    min-width: 32px !important;
+    max-height: 36px !important;
+    max-width: 40px !important;
+    padding: 0 !important;
+    border-radius: 9999px !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper > header .job-card-online-badge {
+    max-height: 28px !important;
+    padding: 3px 7px !important;
+    font-size: 9px !important;
+    line-height: 1.2 !important;
   }
 
   /* Keep primary actions readable on tap (WebKit / sticky-hover quirks on phones) */
