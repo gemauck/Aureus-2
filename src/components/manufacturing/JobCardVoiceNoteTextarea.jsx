@@ -1,5 +1,5 @@
 // Shared voice note textarea for job card wizard and classic modal (global React bundle)
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 const isIOSOrSafari =
   typeof navigator !== 'undefined' &&
   (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -314,8 +314,8 @@ const formatVoiceNoteTranscriptBlock = (noteNumber, text) => {
 };
 
 /**
- * One mic: record multiple clips per field. Each clip can be transcribed via server (Whisper) into the textarea
- * with clear start/end markers. No parallel Web Speech during recording (keeps audio playable).
+ * One mic: record multiple clips per field. Each new clip is transcribed automatically via server (Whisper)
+ * into the textarea with clear start/end markers. No parallel Web Speech during recording (keeps audio playable).
  */
 const VoiceNoteTextarea = ({
   sectionId,
@@ -343,6 +343,9 @@ const VoiceNoteTextarea = ({
   const pendingNoteNumberRef = useRef(1);
   const voiceClipsCountRef = useRef(0);
   const voiceClipsRef = useRef(voiceClips);
+  const onChangeRef = useRef(onChange);
+  const onVoiceClipUpdateRef = useRef(onVoiceClipUpdate);
+  const nameRef = useRef(name);
 
   useEffect(() => {
     valueRef.current = value;
@@ -351,6 +354,11 @@ const VoiceNoteTextarea = ({
     onVoiceSavedRef.current = onVoiceSaved;
     sectionIdRef.current = sectionId;
   }, [onVoiceSaved, sectionId]);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onVoiceClipUpdateRef.current = onVoiceClipUpdate;
+    nameRef.current = name;
+  }, [onChange, onVoiceClipUpdate, name]);
   useEffect(() => {
     voiceClipsCountRef.current = voiceClips.length;
   }, [voiceClips.length]);
@@ -559,7 +567,7 @@ const VoiceNoteTextarea = ({
   }, []);
 
   /** Sequential auto-transcribe: stable key avoids cancelling on unrelated parent re-renders. */
-  const pendingAutoKey = React.useMemo(
+  const pendingAutoKey = useMemo(
     () =>
       voiceClips
         .filter(c => c && c.id && c.dataUrl && !c.transcribed)
@@ -569,91 +577,87 @@ const VoiceNoteTextarea = ({
     [voiceClips]
   );
 
-  const transcribeClipBody = useCallback(
-    async (clip, isCancelled) => {
-      if (!clip?.dataUrl) return false;
-      setRecordHint('');
-      setTranscribingClipId(clip.id);
-      try {
-        const comma = clip.dataUrl.indexOf(',');
-        const b64 = comma >= 0 ? clip.dataUrl.slice(comma + 1) : clip.dataUrl;
-        const res = await fetch('/api/public/transcribe-audio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            audioBase64: b64,
-            mimeType: clip.mimeType || 'audio/webm'
-          })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (isCancelled?.()) {
-          return false;
-        }
-        if (!res.ok) {
-          const err = data.error && typeof data.error === 'object' ? data.error : null;
-          const errCode =
-            (err && typeof err.code === 'string' && err.code) ||
-            (typeof data.code === 'string' ? data.code : null);
-          const errMsg =
-            err && typeof err.message === 'string'
-              ? err.message
-              : typeof data.error === 'string'
-                ? data.error
-                : null;
-          const errDetails = err && typeof err.details === 'string' ? err.details : null;
+  const transcribeClipBody = useCallback(async (clip, isCancelled) => {
+    if (!clip?.dataUrl) return false;
+    setRecordHint('');
+    setTranscribingClipId(clip.id);
+    try {
+      const comma = clip.dataUrl.indexOf(',');
+      const b64 = comma >= 0 ? clip.dataUrl.slice(comma + 1) : clip.dataUrl;
+      const res = await fetch('/api/public/transcribe-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioBase64: b64,
+          mimeType: clip.mimeType || 'audio/webm'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (isCancelled?.()) {
+        return false;
+      }
+      if (!res.ok) {
+        const err = data.error && typeof data.error === 'object' ? data.error : null;
+        const errCode =
+          (err && typeof err.code === 'string' && err.code) ||
+          (typeof data.code === 'string' ? data.code : null);
+        const errMsg =
+          err && typeof err.message === 'string'
+            ? err.message
+            : typeof data.error === 'string'
+              ? data.error
+              : null;
+        const errDetails = err && typeof err.details === 'string' ? err.details : null;
 
-          if (
-            res.status === 503 &&
-            (errCode === 'NO_OPENAI' || (errCode && errCode.startsWith('OPENAI_')))
-          ) {
-            setRecordHint(
+        if (
+          res.status === 503 &&
+          (errCode === 'NO_OPENAI' || (errCode && errCode.startsWith('OPENAI_')))
+        ) {
+          setRecordHint(
+            errMsg ||
+              'Transcription is not configured on the server. Your admin can enable it with OPENAI_API_KEY, or type the text manually.'
+          );
+        } else if (res.status === 502 || res.status === 504) {
+          setRecordHint(
+            'Gateway timeout (502/504): the server proxy closed before Whisper finished. Try a shorter clip or retry. Admin: raise nginx proxy_read_timeout for /api/ to 300s (see scripts/nginx-bump-proxy-timeouts-300s.sh).'
+          );
+        } else {
+          setRecordHint(
+            errDetails ||
               errMsg ||
-                'Transcription is not configured on the server. Your admin can enable it with OPENAI_API_KEY, or type the text manually.'
-            );
-          } else if (res.status === 502 || res.status === 504) {
-            setRecordHint(
-              'Gateway timeout (502/504): the server proxy closed before Whisper finished. Try a shorter clip or retry. Admin: raise nginx proxy_read_timeout for /api/ to 300s (see scripts/nginx-bump-proxy-timeouts-300s.sh).'
-            );
-          } else {
-            setRecordHint(
-              errDetails ||
-                errMsg ||
-                'Transcription failed. Try again or type manually.'
-            );
-          }
-          return false;
-        }
-        if (isCancelled?.()) {
-          return false;
-        }
-        const fresh = voiceClipsRef.current.find(c => c.id === clip.id);
-        if (!fresh || fresh.transcribed) {
-          return true;
-        }
-        const text = typeof data.text === 'string' ? data.text : '';
-        const n = fresh.noteNumber != null ? fresh.noteNumber : 1;
-        const block = formatVoiceNoteTranscriptBlock(n, text);
-        const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
-        const join = prev.trim() ? '\n\n' : '';
-        const next = `${prev}${join}${block}`;
-        valueRef.current = next;
-        onChange({ target: { name, value: next } });
-        onVoiceClipUpdate?.(clip.id, { transcribed: true });
-        return true;
-      } catch (e) {
-        console.warn('transcribe:', e);
-        if (!isCancelled?.()) {
-          setRecordHint('Could not reach the transcription service. Check your connection.');
+              'Transcription failed. Try again or type manually.'
+          );
         }
         return false;
-      } finally {
-        if (!isCancelled?.()) {
-          setTranscribingClipId(null);
-        }
       }
-    },
-    [name, onChange, onVoiceClipUpdate]
-  );
+      if (isCancelled?.()) {
+        return false;
+      }
+      const fresh = voiceClipsRef.current.find(c => c.id === clip.id);
+      if (!fresh || fresh.transcribed) {
+        return true;
+      }
+      const text = typeof data.text === 'string' ? data.text : '';
+      const n = fresh.noteNumber != null ? fresh.noteNumber : 1;
+      const block = formatVoiceNoteTranscriptBlock(n, text);
+      const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
+      const join = prev.trim() ? '\n\n' : '';
+      const next = `${prev}${join}${block}`;
+      valueRef.current = next;
+      const fieldName = nameRef.current;
+      onChangeRef.current({ target: { name: fieldName, value: next } });
+      onVoiceClipUpdateRef.current?.(clip.id, { transcribed: true });
+      return true;
+    } catch (e) {
+      console.warn('transcribe:', e);
+      if (!isCancelled?.()) {
+        setRecordHint('Could not reach the transcription service. Check your connection.');
+      }
+      return false;
+    } finally {
+      setTranscribingClipId(cur => (cur === clip.id ? null : cur));
+    }
+  }, []);
 
   useEffect(() => {
     if (!pendingAutoKey) {
@@ -776,8 +780,8 @@ const VoiceNoteTextarea = ({
       )}
       {micState === 'idle' && (
         <p className="mt-1 text-[10px] text-gray-500">
-          Record multiple notes if needed. Use &quot;Transcribe&quot; on each clip to insert text between the marked
-          start/end lines.
+          Record multiple notes if needed. Each clip is transcribed automatically; if a clip fails, use
+          &quot;Transcribe&quot; to retry.
         </p>
       )}
       {voiceClips.length > 0 && (
