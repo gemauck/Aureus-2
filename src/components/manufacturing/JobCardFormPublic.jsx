@@ -428,6 +428,28 @@ const VoiceNoteTextarea = ({
 
 const NO_CLIENT_ID = 'NO_CLIENT';
 
+const parseStoredJsonArray = (val, fallback = []) => {
+  if (val == null) return fallback;
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+};
+
+const toDatetimeLocalInput = val => {
+  if (!val) return '';
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
     agentName: '',
@@ -484,6 +506,11 @@ const JobCardFormPublic = () => {
   const [formTemplates, setFormTemplates] = useState([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  /** landing → pick create vs edit; prior_list → choose a saved card; form → wizard */
+  const [wizardFlow, setWizardFlow] = useState('landing');
+  /** When editing, keep stable id / createdAt / sync flags for save + localStorage replace */
+  const [editingMeta, setEditingMeta] = useState(null);
+  const lastSignatureRestoreRef = useRef(null);
 
   const signatureCanvasRef = useRef(null);
   const signatureWrapperRef = useRef(null);
@@ -675,6 +702,8 @@ const JobCardFormPublic = () => {
   }, []);
 
   const clearSignature = useCallback(() => {
+    lastSignatureRestoreRef.current = null;
+    setFormData(prev => ({ ...prev, customerSignature: '' }));
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -894,6 +923,23 @@ const JobCardFormPublic = () => {
   }, []);
 
   const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
+
+  const priorJobCardsSorted = useMemo(() => {
+    if (wizardFlow !== 'prior_list') return [];
+    try {
+      const raw = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+      if (!Array.isArray(raw)) return [];
+      return [...raw]
+        .filter(jc => jc && typeof jc === 'object')
+        .sort((a, b) => {
+          const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
+          const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
+          return tb - ta;
+        });
+    } catch {
+      return [];
+    }
+  }, [wizardFlow]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -1280,6 +1326,41 @@ const JobCardFormPublic = () => {
     };
   }, [resizeSignatureCanvas]);
 
+  useEffect(() => {
+    if (wizardFlow !== 'form') return;
+    if (currentStep !== STEP_IDS.length - 1) return;
+    const sig = formData.customerSignature;
+    if (typeof sig !== 'string' || !sig.startsWith('data:image')) return;
+
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const canvas = signatureCanvasRef.current;
+      if (!canvas) return;
+      if (lastSignatureRestoreRef.current === sig) return;
+
+      const img = new Image();
+      img.onload = () => {
+        if (cancelled || lastSignatureRestoreRef.current === sig) return;
+        resizeSignatureCanvas();
+        const ctx = canvas.getContext('2d');
+        const ratio = window.devicePixelRatio || 1;
+        const w = canvas.width / ratio;
+        const h = canvas.height / ratio;
+        ctx.drawImage(img, 0, 0, w, h);
+        setHasSignature(true);
+        lastSignatureRestoreRef.current = sig;
+      };
+      img.onerror = () => {};
+      img.src = sig;
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [wizardFlow, currentStep, formData.customerSignature, resizeSignatureCanvas]);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
 
@@ -1621,6 +1702,8 @@ const JobCardFormPublic = () => {
         siteId: '',
         siteName: '',
         location: '',
+        latitude: '',
+        longitude: '',
         timeOfDeparture: '',
         timeOfArrival: '',
         vehicleUsed: '',
@@ -1648,7 +1731,84 @@ const JobCardFormPublic = () => {
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setVoiceAttachments([]);
     setCurrentStep(0);
+    lastSignatureRestoreRef.current = null;
     clearSignature();
+  };
+
+  const exitToMenu = () => {
+    setEditingMeta(null);
+    resetForm();
+    setWizardFlow('landing');
+  };
+
+  const startNewJobCard = () => {
+    setEditingMeta(null);
+    resetForm();
+    setWizardFlow('form');
+  };
+
+  const openPriorList = () => {
+    setWizardFlow('prior_list');
+  };
+
+  const handleSelectPriorCard = card => {
+    if (!card || card.id == null) return;
+    lastSignatureRestoreRef.current = null;
+    clearSignature();
+    const localId = String(card.id);
+    const createdAt = card.createdAt || new Date().toISOString();
+    const synced = Boolean(card.synced);
+    const jobCardNumber = card.jobCardNumber || '';
+
+    setEditingMeta({
+      localId,
+      createdAt,
+      synced,
+      jobCardNumber
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      agentName: card.agentName || '',
+      otherTechnicians: parseStoredJsonArray(card.otherTechnicians, []),
+      clientId: card.clientId || '',
+      clientName: card.clientName || '',
+      siteId: card.siteId || '',
+      siteName: card.siteName || '',
+      location: card.location || '',
+      latitude: card.latitude != null && card.latitude !== '' ? String(card.latitude) : '',
+      longitude: card.longitude != null && card.longitude !== '' ? String(card.longitude) : '',
+      timeOfDeparture: toDatetimeLocalInput(card.timeOfDeparture),
+      timeOfArrival: toDatetimeLocalInput(card.timeOfArrival),
+      vehicleUsed: card.vehicleUsed || '',
+      kmReadingBefore: card.kmReadingBefore != null ? String(card.kmReadingBefore) : '',
+      kmReadingAfter: card.kmReadingAfter != null ? String(card.kmReadingAfter) : '',
+      reasonForVisit: card.reasonForVisit || '',
+      diagnosis: card.diagnosis || '',
+      actionsTaken: card.actionsTaken || '',
+      otherComments: card.otherComments || '',
+      stockUsed: parseStoredJsonArray(card.stockUsed, []),
+      materialsBought: parseStoredJsonArray(card.materialsBought, []),
+      photos: [],
+      serviceForms: parseStoredJsonArray(card.serviceForms, []),
+      status: card.status || 'draft',
+      customerName: card.customerName || '',
+      customerTitle: card.customerTitle || card.customerPosition || '',
+      customerFeedback: card.customerFeedback || '',
+      customerSignDate: card.customerSignDate
+        ? String(card.customerSignDate).slice(0, 10)
+        : '',
+      customerSignature: card.customerSignature || ''
+    }));
+
+    setSelectedPhotos([]);
+    setVoiceAttachments([]);
+    setTechnicianInput('');
+    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+    setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
+    setCurrentStep(0);
+    setStepError('');
+    setWizardFlow('form');
   };
 
   const handleSave = async () => {
@@ -1666,12 +1826,15 @@ const JobCardFormPublic = () => {
     setIsSubmitting(true);
     setStepError('');
     try {
+      const nowIso = new Date().toISOString();
       const jobCardData = {
         ...formData,
         customerSignature: exportSignature(),
-        id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        id: editingMeta?.localId ?? Date.now().toString(),
+        createdAt: editingMeta?.createdAt ?? nowIso,
+        updatedAt: nowIso,
+        synced: editingMeta?.synced ?? false,
+        jobCardNumber: editingMeta?.jobCardNumber || ''
       };
 
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
@@ -1719,60 +1882,113 @@ const JobCardFormPublic = () => {
         photoCount: Array.isArray(card.photos) ? card.photos.length : 0
       });
       const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      const updatedJobCards = [...existingJobCards, forStorage(jobCardData)];
+      const storedSlice = forStorage(jobCardData);
+      let updatedJobCards;
+      if (editingMeta?.localId) {
+        const idx = existingJobCards.findIndex(jc => String(jc.id) === String(editingMeta.localId));
+        if (idx >= 0) {
+          updatedJobCards = [...existingJobCards];
+          updatedJobCards[idx] = {
+            ...storedSlice,
+            jobCardNumber: storedSlice.jobCardNumber || existingJobCards[idx].jobCardNumber
+          };
+        } else {
+          updatedJobCards = [...existingJobCards, storedSlice];
+        }
+      } else {
+        updatedJobCards = [...existingJobCards, storedSlice];
+      }
       try {
         localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
       } catch (e) {
         if (e.name === 'QuotaExceededError') {
-          const trimmed = existingJobCards.slice(-20).map(jc => ({ ...jc, photos: [], photoCount: Array.isArray(jc.photos) ? jc.photos.length : 0 }));
+          const trimmed = existingJobCards.slice(-20).map(jc => ({
+            ...jc,
+            photos: [],
+            photoCount: Array.isArray(jc.photos) ? jc.photos.length : 0
+          }));
           try {
-            localStorage.setItem('manufacturing_jobcards', JSON.stringify([...trimmed, forStorage(jobCardData)]));
+            localStorage.setItem(
+              'manufacturing_jobcards',
+              JSON.stringify([...trimmed, forStorage(jobCardData)])
+            );
           } catch (_) {
             console.warn('Job card local cache skipped (storage full)');
           }
         } else throw e;
       }
 
-      // Primary persistence: use public, unauthenticated job cards API
-      // This creates a real job card record that appears in Service & Maintenance
-      try {
-        const response = await fetch('/api/public/jobcards', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(jobCardData)
-        });
+      const skipPublicPost = Boolean(editingMeta?.synced);
 
-        if (!response.ok) {
-          const text = await response.text();
-          console.warn('⚠️ JobCardFormPublic: Public API returned error status', response.status, text);
-          throw new Error('Job card saved locally but could not reach server.');
-        }
+      // Primary persistence: public API (skip when this device copy is already linked to a server record)
+      if (!skipPublicPost) {
+        try {
+          const response = await fetch('/api/public/jobcards', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(jobCardData)
+          });
 
-        const result = await response.json().catch(() => ({}));
-        const saved = result?.jobCard || result?.data?.jobCard || null;
-
-        if (saved && saved.id) {
-          const syncedCards = updatedJobCards.map((jc) =>
-            jc.id === jobCardData.id
-              ? { ...jc, id: saved.id, jobCardNumber: saved.jobCardNumber || jc.jobCardNumber, synced: true }
-              : jc
-          );
-          try {
-            localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards.map(jc => ({ ...jc, photos: [], photoCount: Array.isArray(jc.photos) ? jc.photos.length : (jc.photoCount || 0) }))));
-          } catch (_) {
-            console.warn('Job card sync cache update skipped (storage full)');
+          if (!response.ok) {
+            const text = await response.text();
+            console.warn('⚠️ JobCardFormPublic: Public API returned error status', response.status, text);
+            throw new Error('Job card saved locally but could not reach server.');
           }
-        } else {
-          console.warn('⚠️ JobCardFormPublic: Public API response did not include jobCard payload', result);
+
+          const result = await response.json().catch(() => ({}));
+          const saved = result?.jobCard || result?.data?.jobCard || null;
+
+          if (saved && saved.id) {
+            const syncedCards = updatedJobCards.map(jc =>
+              String(jc.id) === String(jobCardData.id)
+                ? {
+                    ...jc,
+                    id: saved.id,
+                    jobCardNumber: saved.jobCardNumber || jc.jobCardNumber,
+                    synced: true
+                  }
+                : jc
+            );
+            updatedJobCards = syncedCards;
+            try {
+              localStorage.setItem(
+                'manufacturing_jobcards',
+                JSON.stringify(
+                  syncedCards.map(jc => ({
+                    ...jc,
+                    photos: [],
+                    photoCount: Array.isArray(jc.photos) ? jc.photos.length : jc.photoCount || 0
+                  }))
+                )
+              );
+            } catch (_) {
+              console.warn('Job card sync cache update skipped (storage full)');
+            }
+          } else {
+            console.warn('⚠️ JobCardFormPublic: Public API response did not include jobCard payload', result);
+          }
+        } catch (error) {
+          console.warn(
+            '⚠️ JobCardFormPublic: Failed to submit job card to public API, kept offline only:',
+            error.message
+          );
         }
-      } catch (error) {
-        console.warn('⚠️ JobCardFormPublic: Failed to submit job card to public API, kept offline only:', error.message);
       }
 
-      alert('✅ Job card saved successfully! It will appear under Service & Maintenance once the server has processed it.');
+      if (skipPublicPost) {
+        alert(
+          '✅ Job card updated on this device. This card was already submitted to the server; open Service & Maintenance while signed in to change the office record.'
+        );
+      } else {
+        alert(
+          '✅ Job card saved successfully! It will appear under Service & Maintenance once the server has processed it.'
+        );
+      }
+      setEditingMeta(null);
       resetForm();
+      setWizardFlow('landing');
     } catch (error) {
       console.error('Error saving job card:', error);
       alert(`Failed to save job card: ${error.message}`);
@@ -2914,6 +3130,147 @@ const JobCardFormPublic = () => {
     );
   }
 
+  if (wizardFlow === 'landing') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-700 via-blue-600 to-indigo-900 text-white px-4 py-10">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center space-y-2">
+            <p className="text-[11px] uppercase tracking-widest text-white/60 font-semibold">
+              Mobile Job Card
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold leading-tight">Field Job Card</h1>
+            <p className="text-sm text-white/80">
+              Continue a draft on this device or start a new job card.
+            </p>
+          </div>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={openPriorList}
+              className="w-full rounded-2xl bg-white/95 text-blue-900 px-5 py-4 text-left shadow-lg hover:bg-white transition touch-manipulation border border-white/40"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                  <i className="fa-solid fa-clock-rotate-left text-lg" aria-hidden />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-base">Edit prior job card</span>
+                  <span className="block text-sm text-blue-800/80 mt-0.5">
+                    Open drafts saved on this phone or tablet, newest first.
+                  </span>
+                </span>
+                <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={startNewJobCard}
+              className="w-full rounded-2xl bg-blue-500/30 backdrop-blur-sm text-white px-5 py-4 text-left shadow-lg hover:bg-blue-500/40 transition touch-manipulation border border-white/25"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white">
+                  <i className="fa-solid fa-plus text-lg" aria-hidden />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-base">Create new job card</span>
+                  <span className="block text-sm text-white/80 mt-0.5">
+                    Start the guided wizard for a new visit.
+                  </span>
+                </span>
+                <i className="fa-solid fa-chevron-right text-white/50 flex-shrink-0" aria-hidden />
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (wizardFlow === 'prior_list') {
+    return (
+      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-100 to-gray-50">
+        <header className="flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-blue-500 text-white shadow-md px-4 py-4 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setWizardFlow('landing')}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-white/90 hover:text-white mb-3 touch-manipulation"
+          >
+            <i className="fa-solid fa-arrow-left" aria-hidden />
+            Back
+          </button>
+          <h1 className="text-xl font-bold">Prior job cards</h1>
+          <p className="text-sm text-white/80 mt-1">Newest first — tap a card to continue editing.</p>
+        </header>
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-8">
+          {priorJobCardsSorted.length === 0 ? (
+            <div className="max-w-lg mx-auto mt-8 rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-600 shadow-sm">
+              <i className="fa-regular fa-folder-open text-3xl text-gray-400 mb-3" aria-hidden />
+              <p className="font-medium text-gray-800">No saved job cards yet</p>
+              <p className="text-sm mt-2">
+                Submit a job card once, or save offline — drafts will appear here on this device.
+              </p>
+              <button
+                type="button"
+                onClick={startNewJobCard}
+                className="mt-4 inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 touch-manipulation"
+              >
+                Create new job card
+              </button>
+            </div>
+          ) : (
+            <ul className="max-w-2xl mx-auto space-y-3">
+              {priorJobCardsSorted.map(jc => {
+                const when = jc.updatedAt || jc.createdAt;
+                const whenLabel = when
+                  ? new Date(when).toLocaleString(undefined, {
+                      dateStyle: 'medium',
+                      timeStyle: 'short'
+                    })
+                  : '';
+                const title =
+                  jc.jobCardNumber ||
+                  (jc.clientName ? `${jc.clientName}` : 'Job card draft');
+                return (
+                  <li key={String(jc.id)}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPriorCard(jc)}
+                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-gray-900 truncate">{title}</p>
+                          <p className="text-sm text-gray-600 mt-1 truncate">
+                            {[jc.agentName, jc.siteName].filter(Boolean).join(' · ') || 'No site'}
+                          </p>
+                          {whenLabel && (
+                            <p className="text-xs text-gray-500 mt-2">{whenLabel}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {jc.synced ? (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                              Submitted
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
+                              Draft
+                            </span>
+                          )}
+                          <i className="fa-solid fa-chevron-right text-gray-400 mt-1" aria-hidden />
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="job-card-public-wrapper fixed inset-0 flex flex-col xl:flex-row bg-gradient-to-b from-gray-100 to-gray-50 overflow-hidden">
       {/* Desktop Sidebar - Vertical Steps */}
@@ -2925,9 +3282,23 @@ const JobCardFormPublic = () => {
           <h1 className="text-lg font-bold leading-tight">
             Field Job Card Wizard
           </h1>
+          {editingMeta && (
+            <p className="text-xs text-amber-100 mt-1.5 font-medium">
+              Editing {editingMeta.jobCardNumber || 'saved draft'}
+              {editingMeta.synced ? ' (already submitted)' : ''}
+            </p>
+          )}
           <p className="text-xs text-white/80 mt-2">
             Capture job cards in minutes with a guided, offline-friendly flow.
           </p>
+          <button
+            type="button"
+            onClick={exitToMenu}
+            className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-xs font-semibold text-white hover:bg-white/25 transition touch-manipulation"
+          >
+            <i className="fa-solid fa-house text-[11px]" aria-hidden />
+            Back to menu
+          </button>
         </div>
         <div className="flex-1 p-4 space-y-2">
           {STEP_IDS.map((stepId, idx) => (
@@ -2993,6 +3364,12 @@ const JobCardFormPublic = () => {
                 <h1 className="text-lg sm:text-2xl font-bold leading-tight mt-1">
                   Field Job Card Wizard
                 </h1>
+                {editingMeta && (
+                  <p className="text-[11px] sm:text-xs text-amber-100 font-medium mt-1">
+                    Editing {editingMeta.jobCardNumber || 'draft'}
+                    {editingMeta.synced ? ' · submitted' : ''}
+                  </p>
+                )}
                 <p className="text-xs sm:text-sm text-white/80 mt-2 hidden sm:block">
                   Capture job cards in minutes with a guided, offline-friendly flow.
                 </p>
@@ -3017,6 +3394,14 @@ const JobCardFormPublic = () => {
                 >
                   <i className="fa-regular fa-share-from-square text-xs"></i>
                   <span className="hidden sm:inline">Share</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={exitToMenu}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[10px] sm:text-xs font-semibold hover:bg-white/25 transition touch-manipulation"
+                >
+                  <i className="fa-solid fa-house text-xs" aria-hidden />
+                  <span className="hidden sm:inline">Menu</span>
                 </button>
               </div>
             </div>

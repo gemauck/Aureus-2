@@ -4086,7 +4086,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                         data-year={selectedYear}
                         className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
                     >
-                        <option value="">Select Status</option>
+                        <option value="">—</option>
                         {statusOptions.map(option => (
                             <option key={option.value} value={option.value} style={option.optionStyle || {}}>
                                 {option.label}
@@ -6492,7 +6492,7 @@ Abcotronics`;
                                         data-testid="template-selector"
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
                                     >
-                                        <option value="">-- Select a template --</option>
+                                        <option value="">—</option>
                                         {templates.map(template => (
                                             <option key={template.id} value={template.id}>
                                                 {getTemplateDisplayName(template)} ({Array.isArray(template.sections) ? template.sections.length : 0} sections)

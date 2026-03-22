@@ -2086,7 +2086,7 @@ const TaskDetailModal = ({
                                                             })}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                                         >
-                                                            <option value="">Select...</option>
+                                                            <option value="">—</option>
                                                             {field.options.map((option, idx) => (
                                                                 <option key={idx} value={option}>{option}</option>
                                                             ))}
@@ -2104,7 +2104,7 @@ const TaskDetailModal = ({
                                                             })}
                                                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                                         >
-                                                            <option value="">Select Status...</option>
+                                                            <option value="">—</option>
                                                             {field.options.map((option, idx) => (
                                                                 <option key={idx} value={option}>{option}</option>
                                                             ))}

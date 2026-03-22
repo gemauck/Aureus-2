@@ -3231,7 +3231,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                         data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
-                        <option value="">Select Status</option>
+                        <option value="">—</option>
                         {statusOptions.map(option => (
                             <option key={option.value} value={option.value}>
                                 {option.label}
@@ -3466,7 +3466,7 @@ placeholder="Notes..."
                                 onChange={(e) => setFormData({...formData, reviewer: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                             >
-                                <option value="">-- Select Reviewer --</option>
+                                <option value="">—</option>
                                 {users.map(user => (
                                     <option key={user.id} value={user.id}>
                                         {user.name || user.email}
@@ -4016,7 +4016,7 @@ placeholder="Notes..."
                                         data-testid="template-selector"
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                                     >
-                                        <option value="">-- Select a template --</option>
+                                        <option value="">—</option>
                                         {templates.map(template => (
                                             <option key={template.id} value={template.id}>
                                                 {getTemplateDisplayName(template)} ({Array.isArray(template.sections) ? template.sections.length : 0} sections)
@@ -4634,7 +4634,7 @@ placeholder="Notes..."
                                             onClick={(e) => e.stopPropagation()}
                                             onMouseDown={(e) => e.stopPropagation()}
                                         >
-                                            <option value="">-- Select --</option>
+                                            <option value="">—</option>
                                             {users.map(user => (
                                                 <option key={user.id} value={user.id}>
                                                     {user.name || user.email}

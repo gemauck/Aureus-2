@@ -5341,7 +5341,7 @@ const ManagementMeetingNotes = () => {
                                                 }}
                                                 className={`w-full text-xs px-2 py-1 border rounded ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                             >
-                                                <option value="">Add user...</option>
+                                                <option value="">—</option>
                                                 {users.filter(u => !allocations.find(a => a.userId === u.id)).map(user => (
                                                     <option key={user.id} value={user.id}>{user.name || user.email}</option>
                                                 ))}
