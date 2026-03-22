@@ -192,7 +192,7 @@ const SearchableSelect = ({
   );
 };
 
-/** Textarea with mic: records audio per section, appends live transcription when the browser supports it */
+/** Long-form textarea with mic: transcribes speech into the field and saves the audio for replay */
 const VoiceNoteTextarea = ({
   sectionId,
   name,
@@ -201,7 +201,8 @@ const VoiceNoteTextarea = ({
   rows = 3,
   className = '',
   placeholder = '',
-  onVoiceSaved
+  onVoiceSaved,
+  voiceClips = []
 }) => {
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
@@ -231,6 +232,11 @@ const VoiceNoteTextarea = ({
       recognitionRef.current = null;
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        if (mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.requestData();
+        }
+      } catch (_) {}
       mediaRecorderRef.current.stop();
     }
     if (streamRef.current) {
@@ -328,7 +334,11 @@ const VoiceNoteTextarea = ({
         <button
           type="button"
           onClick={toggle}
-          title={recording ? 'Stop recording' : 'Record voice note'}
+          title={
+            recording
+              ? 'Stop: finishes recording, saves audio, and stops dictation'
+              : 'Record: speech is typed into the box and audio is saved for replay'
+          }
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
             recording
               ? 'border-red-300 bg-red-50 text-red-600'
@@ -341,154 +351,22 @@ const VoiceNoteTextarea = ({
           <span className="text-[10px] font-medium text-red-600">Recording…</span>
         )}
       </div>
-      {!(window.SpeechRecognition || window.webkitSpeechRecognition) && (
-        <p className="mt-1 text-[10px] text-gray-400">
-          Live transcription: use Chrome/Edge for best results. Audio is still saved.
-        </p>
+      {voiceClips.length > 0 && (
+        <div className="mt-2 space-y-1.5" aria-label="Saved voice recordings for this field">
+          <p className="text-[10px] font-medium text-gray-500">
+            <i className="fas fa-headphones mr-1 text-blue-500" aria-hidden />
+            Saved recording{voiceClips.length > 1 ? 's' : ''} (replay)
+          </p>
+          {voiceClips.map(clip => (
+            <div
+              key={clip.id}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5"
+            >
+              <audio controls className="h-8 w-full min-w-0" src={clip.dataUrl} preload="metadata" />
+            </div>
+          ))}
+        </div>
       )}
-    </div>
-  );
-};
-
-const VoiceNoteInput = ({
-  sectionId,
-  name,
-  value,
-  onChange,
-  placeholder = '',
-  className = '',
-  onVoiceSaved
-}) => {
-  const [recording, setRecording] = useState(false);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const recognitionRef = useRef(null);
-  const streamRef = useRef(null);
-  const valueRef = useRef(value);
-  useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
-
-  const appendText = useCallback(
-    text => {
-      if (!text || !String(text).trim()) return;
-      const v = valueRef.current;
-      const next = v ? `${String(v).trim()} ${String(text).trim()}` : String(text).trim();
-      onChange({ target: { name, value: next } });
-    },
-    [name, onChange]
-  );
-
-  const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (_) {}
-      recognitionRef.current = null;
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    setRecording(false);
-  }, []);
-
-  const startRecording = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : '';
-    const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-    const appliedMime = mr.mimeType || 'audio/webm';
-    chunksRef.current = [];
-    mr.ondataavailable = e => {
-      if (e.data && e.data.size) chunksRef.current.push(e.data);
-    };
-    mr.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: appliedMime });
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (reader.result && onVoiceSaved) {
-          onVoiceSaved({
-            section: sectionId,
-            dataUrl: reader.result,
-            mimeType: blob.type || appliedMime
-          });
-        }
-      };
-      reader.readAsDataURL(blob);
-    };
-    mr.start(200);
-    mediaRecorderRef.current = mr;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = false;
-      rec.lang = navigator.language || 'en-ZA';
-      rec.onresult = ev => {
-        let chunk = '';
-        for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript;
-        }
-        if (chunk.trim()) appendText(chunk.trim());
-      };
-      rec.onerror = () => {};
-      try {
-        rec.start();
-        recognitionRef.current = rec;
-      } catch (_) {
-        recognitionRef.current = null;
-      }
-    }
-    setRecording(true);
-  }, [appendText, onVoiceSaved, sectionId]);
-
-  const toggle = () => {
-    if (recording) {
-      stopRecording();
-      return;
-    }
-    startRecording().catch(err => {
-      console.warn('Voice note:', err);
-      alert(`Could not use the microphone: ${err.message || err}`);
-    });
-  };
-
-  useEffect(() => {
-    return () => {
-      stopRecording();
-    };
-  }, [stopRecording]);
-
-  return (
-    <div className="relative">
-      <input
-        type="text"
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full pl-4 pr-12 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${className}`}
-        style={{ fontSize: '16px' }}
-      />
-      <button
-        type="button"
-        onClick={toggle}
-        title={recording ? 'Stop recording' : 'Record voice note'}
-        className={`absolute top-1/2 right-2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-lg border text-sm touch-manipulation ${
-          recording ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-200 bg-white text-blue-600 hover:bg-blue-50'
-        }`}
-      >
-        <i className={`fas ${recording ? 'fa-stop' : 'fa-microphone'}`} />
-      </button>
     </div>
   );
 };
@@ -609,7 +487,7 @@ const JobCardFormPublic = () => {
 
   const teamTechnicianOptions = useMemo(
     () => [
-      { value: '', label: 'Select technician to add' },
+      { value: '', label: '—' },
       ...availableTechnicians
         .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
         .map(tech => ({
@@ -1938,11 +1816,11 @@ const JobCardFormPublic = () => {
               <div className="flex-1 min-w-0">
                 <SearchableSelect
                   id="team-technician"
-                  aria-label="Technician to add"
+                  aria-label="Technician"
                   value={technicianInput}
                   onChange={v => setTechnicianInput(v)}
                   options={teamTechnicianOptions}
-                  placeholder="Search technician to add"
+                  placeholder="Search…"
                 />
               </div>
               <button
@@ -2061,16 +1939,15 @@ const JobCardFormPublic = () => {
               Location
             </label>
             <div className="flex gap-2">
-              <div className="flex-1 min-w-0">
-                <VoiceNoteInput
-                  sectionId="location"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleChange}
-                  placeholder="Facility, area or coordinates"
-                  onVoiceSaved={addVoiceClip}
-                />
-              </div>
+              <input
+                type="text"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                className="flex-1 px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Facility, area or coordinates"
+                style={{ fontSize: '16px' }}
+              />
               <button
                 type="button"
                 onClick={handleOpenMap}
@@ -2098,6 +1975,7 @@ const JobCardFormPublic = () => {
               rows={3}
               placeholder="Why was the technician requested to attend?"
               onVoiceSaved={addVoiceClip}
+              voiceClips={voiceAttachments.filter(c => c.section === 'reasonForVisit')}
             />
           </div>
         </div>
@@ -2143,13 +2021,14 @@ const JobCardFormPublic = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Vehicle Used
                 </label>
-                <VoiceNoteInput
-                  sectionId="vehicleUsed"
+                <input
+                  type="text"
                   name="vehicleUsed"
                   value={formData.vehicleUsed}
                   onChange={handleChange}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g., AB12 CD GP"
-                  onVoiceSaved={addVoiceClip}
+                  style={{ fontSize: '16px' }}
                 />
               </div>
               <div>
@@ -2215,6 +2094,7 @@ const JobCardFormPublic = () => {
               rows={4}
               placeholder="e.g., Pump not priming due to airlock in suction line..."
               onVoiceSaved={addVoiceClip}
+              voiceClips={voiceAttachments.filter(c => c.section === 'diagnosis')}
             />
       </section>
 
@@ -2248,6 +2128,7 @@ const JobCardFormPublic = () => {
               rows={4}
               placeholder="Steps taken, parts replaced, calibrations performed..."
               onVoiceSaved={addVoiceClip}
+              voiceClips={voiceAttachments.filter(c => c.section === 'actionsTaken')}
             />
       </section>
 
@@ -2264,6 +2145,7 @@ const JobCardFormPublic = () => {
           rows={3}
           placeholder="Outstanding concerns, customer requests, safety notes..."
           onVoiceSaved={addVoiceClip}
+          voiceClips={voiceAttachments.filter(c => c.section === 'otherComments')}
         />
       </section>
 
@@ -2419,6 +2301,9 @@ const JobCardFormPublic = () => {
                                 onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
                                 rows={3}
                                 onVoiceSaved={addVoiceClip}
+                                voiceClips={voiceAttachments.filter(
+                                  c => c.section === `form_${form.id}_${fieldId}`
+                                )}
                               />
                             ) : field.type === 'number' ? (
                               <input
@@ -2449,12 +2334,12 @@ const JobCardFormPublic = () => {
                                 placeholder="Search…"
                               />
                             ) : (
-                              <VoiceNoteInput
-                                sectionId={`form_${form.id}_${fieldId}`}
-                                name={fieldId}
+                              <input
+                                type="text"
+                                id={controlId}
                                 value={value}
                                 onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
-                                onVoiceSaved={addVoiceClip}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
                             )}
                             {field.helpText && (
@@ -2627,13 +2512,13 @@ const JobCardFormPublic = () => {
         </header>
             <div className="space-y-3 mb-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <VoiceNoteInput
-                  sectionId="material_itemName"
-                  name="materialItemName"
+                <input
+                  type="text"
                   value={newMaterialItem.itemName}
                   onChange={e => setNewMaterialItem({ ...newMaterialItem, itemName: e.target.value })}
                   placeholder="Item Name *"
-                  onVoiceSaved={addVoiceClip}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
+                  style={{ fontSize: '16px' }}
                 />
                 <input
                   type="number"
@@ -2647,21 +2532,21 @@ const JobCardFormPublic = () => {
               style={{ fontSize: '16px' }}
                 />
               </div>
-              <VoiceNoteInput
-                sectionId="material_description"
-                name="materialDescription"
+              <input
+                type="text"
                 value={newMaterialItem.description}
                 onChange={e => setNewMaterialItem({ ...newMaterialItem, description: e.target.value })}
                 placeholder="Description"
-                onVoiceSaved={addVoiceClip}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
+                style={{ fontSize: '16px' }}
               />
-              <VoiceNoteInput
-                sectionId="material_reason"
-                name="materialReason"
+              <input
+                type="text"
                 value={newMaterialItem.reason}
                 onChange={e => setNewMaterialItem({ ...newMaterialItem, reason: e.target.value })}
                 placeholder="Reason for purchase"
-                onVoiceSaved={addVoiceClip}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
+                style={{ fontSize: '16px' }}
               />
               <button
                 type="button"
@@ -2782,26 +2667,28 @@ const JobCardFormPublic = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Customer Name
               </label>
-              <VoiceNoteInput
-                sectionId="customerName"
+              <input
+                type="text"
                 name="customerName"
                 value={formData.customerName}
                 onChange={handleChange}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Full name"
-                onVoiceSaved={addVoiceClip}
+                style={{ fontSize: '16px' }}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Position / Title
               </label>
-              <VoiceNoteInput
-                sectionId="customerTitle"
+              <input
+                type="text"
                 name="customerTitle"
                 value={formData.customerTitle}
                 onChange={handleChange}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Role at site"
-                onVoiceSaved={addVoiceClip}
+                style={{ fontSize: '16px' }}
               />
             </div>
           </div>
@@ -2818,6 +2705,7 @@ const JobCardFormPublic = () => {
               rows={3}
               placeholder="Optional comments from customer"
               onVoiceSaved={addVoiceClip}
+              voiceClips={voiceAttachments.filter(c => c.section === 'customerFeedback')}
             />
           </div>
 
