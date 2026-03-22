@@ -94,7 +94,7 @@ const StepBadge = ({
   const meta = STEP_META[stepId] || {};
   const baseClasses =
     variant === 'carousel'
-      ? 'group flex flex-row items-center justify-start gap-2 rounded-lg px-2.5 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always]'
+      ? 'group flex flex-row items-center justify-start gap-1.5 rounded-md px-2 py-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always]'
       : 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
   const stateClass = active
     ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
@@ -112,7 +112,7 @@ const StepBadge = ({
       <div
         className={[
           variant === 'carousel'
-            ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition'
+            ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition'
             : 'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
           active
             ? 'bg-white text-blue-600 border-white shadow'
@@ -122,7 +122,7 @@ const StepBadge = ({
         ].join(' ')}
       >
         <i
-          className={`fa-solid ${meta.icon || 'fa-circle-dot'} ${variant === 'carousel' ? 'text-sm' : 'text-base'}`}
+          className={`fa-solid ${meta.icon || 'fa-circle-dot'} ${variant === 'carousel' ? 'text-[11px]' : 'text-base'}`}
         ></i>
       </div>
       <div
@@ -1071,6 +1071,14 @@ const JobCardFormPublic = () => {
   const [wizardFlow, setWizardFlow] = useState('landing');
   /** When editing, keep stable id / createdAt / sync flags for save + localStorage replace */
   const [editingMeta, setEditingMeta] = useState(null);
+  /** Mobile (< xl): collapse wizard header to maximize form area */
+  const [mobileHeaderCollapsed, setMobileHeaderCollapsed] = useState(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('jobcard_wizard_header_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const lastSignatureRestoreRef = useRef(null);
 
   const signatureCanvasRef = useRef(null);
@@ -1101,6 +1109,14 @@ const JobCardFormPublic = () => {
       }
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('jobcard_wizard_header_collapsed', mobileHeaderCollapsed ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [mobileHeaderCollapsed]);
 
   const availableTechnicians = useMemo(
     () => users.filter(u => u.status !== 'inactive' && u.status !== 'suspended'),
@@ -3936,96 +3952,155 @@ const JobCardFormPublic = () => {
         </div>
       </aside>
 
-      {/* Mobile Header */}
-      <header className="xl:hidden flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-blue-500 text-white shadow-lg z-10">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-24 -left-20 h-44 w-44 rounded-full bg-white/15 blur-3xl"></div>
-          <div className="absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
-        </div>
-        <div className="relative px-2 pt-2 pb-2 sm:px-4 sm:py-4">
-          <div className="max-w-4xl mx-auto space-y-2">
-            {/* Title + compact toolbar on one row — avoids tall stacked full-width controls on phones */}
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1 pr-1">
-                <p className="text-[9px] sm:text-[10px] uppercase tracking-wide text-white/70 font-semibold leading-none">
-                  Mobile Job Card
-                </p>
-                <h1 className="text-base sm:text-2xl font-bold leading-tight mt-0.5 text-white">
-                  Job Card App Wizard
-                </h1>
-                {editingMeta && (
-                  <p className="text-[10px] sm:text-xs text-amber-100 font-medium mt-0.5 leading-snug line-clamp-2">
-                    Editing {editingMeta.jobCardNumber || 'draft'}
-                    {editingMeta.synced ? ' · submitted' : ''}
-                  </p>
-                )}
-                <p className="text-xs sm:text-sm text-white/80 mt-1.5 hidden sm:block">
-                  Capture job cards in minutes with a guided, offline-friendly flow.
-                </p>
-              </div>
-              <div className="job-card-header-toolbar flex flex-shrink-0 items-center gap-1 self-start pt-0.5">
-                <span
-                  className={`job-card-online-badge inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none whitespace-nowrap ${
-                    isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                      isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
-                    }`}
-                  />
-                  {isOnline ? 'Online' : 'Off'}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleShareLink}
-                  className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
-                  aria-label="Share job card link"
-                >
-                  <i className="fa-regular fa-share-from-square text-[12px]" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  onClick={exitToMenu}
-                  className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
-                  aria-label="Back to menu"
-                >
-                  <i className="fa-solid fa-house text-[12px]" aria-hidden />
-                </button>
-              </div>
+      {/* Mobile Header — collapsible to maximize form space */}
+      <header className="xl:hidden flex-shrink-0 relative z-10 overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-blue-500 text-white shadow-md">
+        {mobileHeaderCollapsed ? (
+          <div className="job-card-header-collapsed relative flex items-center gap-1.5 border-b border-white/10 px-2 py-1">
+            <button
+              type="button"
+              onClick={() => setMobileHeaderCollapsed(false)}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-white/15 text-white hover:bg-white/25 touch-manipulation"
+              aria-expanded={false}
+              aria-label="Show wizard header and steps"
+            >
+              <i className="fa-solid fa-chevron-down text-[11px]" aria-hidden />
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[10px] font-semibold leading-tight text-white">
+                Step {currentStep + 1}/{STEP_IDS.length} · {(STEP_META[STEP_IDS[currentStep]] || {}).title || STEP_IDS[currentStep]}
+              </p>
+              {editingMeta?.jobCardNumber && (
+                <p className="truncate text-[9px] text-amber-100/90">{editingMeta.jobCardNumber}</p>
+              )}
             </div>
-            <div className="mt-1 sm:mt-2">
-              <div
-                className="mobile-step-scroll flex flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pb-1.5 -mx-2 px-2 sm:-mx-3 sm:px-3 snap-x snap-mandatory scrollbar-hide touch-pan-x"
-                aria-label="Wizard steps — swipe sideways to choose a step"
-              >
-                {STEP_IDS.map((stepId, idx) => (
-                  <StepBadge
-                    key={`mobile-${stepId}`}
-                    variant="carousel"
-                    index={idx}
-                    stepId={stepId}
-                    active={idx === currentStep}
-                    complete={idx < currentStep}
-                    onClick={() => goToStep(idx)}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="mt-1.5 space-y-0.5">
-              <div className="flex items-center justify-between text-[9px] sm:text-xs font-medium text-white/70">
-                <span>Progress</span>
-                <span>{progressPercent}%</span>
-              </div>
-              <div className="h-1 w-full rounded-full bg-white/20 overflow-hidden sm:h-1.5">
+            <div className="min-w-0 flex-1 max-w-[5.5rem] sm:max-w-[7rem]">
+              <div className="h-0.5 w-full rounded-full bg-white/20">
                 <div
-                  className="h-full rounded-full bg-white transition-all duration-500 ease-out"
+                  className="h-full rounded-full bg-white transition-all duration-300"
                   style={{ width: `${progressPercent}%` }}
-                ></div>
+                />
               </div>
+            </div>
+            <span className="flex-shrink-0 text-[9px] tabular-nums text-white/85">{progressPercent}%</span>
+            <div className="job-card-header-toolbar flex flex-shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={handleShareLink}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
+                aria-label="Share job card link"
+              >
+                <i className="fa-regular fa-share-from-square text-[11px]" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={exitToMenu}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
+                aria-label="Back to menu"
+              >
+                <i className="fa-solid fa-house text-[11px]" aria-hidden />
+              </button>
             </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute -top-16 -left-16 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
+              <div className="absolute -bottom-16 right-0 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
+            </div>
+            <div className="relative px-1.5 pb-1 pt-1 sm:px-3 sm:pb-1.5 sm:pt-1.5">
+              <div className="max-w-4xl mx-auto space-y-1 sm:space-y-1.5">
+                <div className="flex items-start justify-between gap-1.5">
+                  <div className="min-w-0 flex-1 pr-[8.75rem] sm:pr-[9.5rem]">
+                    <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-white/65 font-semibold leading-none">
+                      Mobile Job Card
+                    </p>
+                    <h1 className="text-sm sm:text-xl font-bold leading-tight text-white">
+                      Job Card App Wizard
+                    </h1>
+                    {editingMeta && (
+                      <p className="text-[9px] sm:text-xs text-amber-100 font-medium mt-px leading-snug line-clamp-1">
+                        {editingMeta.jobCardNumber || 'draft'}
+                        {editingMeta.synced ? ' · submitted' : ''}
+                      </p>
+                    )}
+                    <p className="text-xs sm:text-sm text-white/80 mt-1 hidden sm:block">
+                      Capture job cards in minutes with a guided, offline-friendly flow.
+                    </p>
+                  </div>
+                  <div className="job-card-header-toolbar absolute right-1 top-0.5 flex items-center gap-0.5 sm:right-1.5 sm:top-1">
+                    <button
+                      type="button"
+                      onClick={() => setMobileHeaderCollapsed(true)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/15 text-white hover:bg-black/25 touch-manipulation"
+                      aria-expanded={true}
+                      aria-label="Hide header"
+                    >
+                      <i className="fa-solid fa-chevron-up text-[11px]" aria-hidden />
+                    </button>
+                    <span
+                      className={`job-card-online-badge inline-flex items-center gap-0.5 rounded-full px-1 py-px text-[8px] font-semibold leading-none whitespace-nowrap ${
+                        isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
+                      }`}
+                    >
+                      <span
+                        className={`h-1 w-1 flex-shrink-0 rounded-full ${
+                          isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
+                        }`}
+                      />
+                      {isOnline ? 'On' : 'Off'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleShareLink}
+                      className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
+                      aria-label="Share job card link"
+                    >
+                      <i className="fa-regular fa-share-from-square text-[11px]" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exitToMenu}
+                      className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
+                      aria-label="Back to menu"
+                    >
+                      <i className="fa-solid fa-house text-[11px]" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-0.5 sm:mt-1">
+                  <div
+                    className="mobile-step-scroll flex flex-nowrap gap-1.5 overflow-x-auto overflow-y-hidden pb-1 -mx-1.5 px-1.5 sm:-mx-2 sm:px-2 snap-x snap-mandatory scrollbar-hide touch-pan-x"
+                    aria-label="Wizard steps — swipe sideways to choose a step"
+                  >
+                    {STEP_IDS.map((stepId, idx) => (
+                      <StepBadge
+                        key={`mobile-${stepId}`}
+                        variant="carousel"
+                        index={idx}
+                        stepId={stepId}
+                        active={idx === currentStep}
+                        complete={idx < currentStep}
+                        onClick={() => goToStep(idx)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-px pt-0.5">
+                  <div className="flex items-center justify-between text-[8px] sm:text-[10px] font-medium text-white/65">
+                    <span>Progress</span>
+                    <span>{progressPercent}%</span>
+                  </div>
+                  <div className="h-0.5 w-full rounded-full bg-white/20 sm:h-1">
+                    <div
+                      className="h-full rounded-full bg-white transition-all duration-500 ease-out"
+                      style={{ width: `${progressPercent}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </header>
 
       {/* Main Content Area - Scrollable */}

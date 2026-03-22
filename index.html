@@ -84,7 +84,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1774182259541'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1774182698437'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload so Chrome gets fresh JS (fixes cached bundle) -->
     <script>
@@ -110,7 +110,7 @@
     <!-- VERSION: 20260129-doc-collection-cache-bust - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1774182259541';
+            var APP_VERSION = '1774182698437';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -367,8 +367,8 @@
     <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20260322-jobcard-mobile"></noscript>
     
     <!-- Public Job Card Mobile Overrides - Defer -->
-    <link rel="preload" href="/job-card-public-mobile.css?v=20260322-jobcard-header-compact" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260322-jobcard-header-compact"></noscript>
+    <link rel="preload" href="/job-card-public-mobile.css?v=20260322-jobcard-header-collapse" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20260322-jobcard-header-collapse"></noscript>
     
     <!-- Font Awesome - Defer non-critical CSS -->
     <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -1191,8 +1191,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1774182259541" as="script">
-    <script defer src="/dist/core-bundle.js?v=1774182259541"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1774182698437" as="script">
+    <script defer src="/dist/core-bundle.js?v=1774182698437"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1563,8 +1563,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1774182259541" as="script">
-    <script defer src="/lazy-load-components.js?v=1774182259541"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1774182698437" as="script">
+    <script defer src="/lazy-load-components.js?v=1774182698437"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
