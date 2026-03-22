@@ -250,7 +250,11 @@ const createMediaRecorder = stream => {
   }
 };
 
-/** Long-form textarea with mic: transcribes speech into the field and saves the audio for replay */
+const getSpeechRecognitionCtor = () =>
+  typeof window !== 'undefined' &&
+  (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+/** Long-form textarea with mic: live transcription (where supported) + saved audio for replay */
 const VoiceNoteTextarea = ({
   sectionId,
   name,
@@ -267,8 +271,28 @@ const VoiceNoteTextarea = ({
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  const speechRef = useRef(null);
+  const sessionActiveRef = useRef(false);
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  const stopSpeech = useCallback(() => {
+    sessionActiveRef.current = false;
+    const sp = speechRef.current;
+    speechRef.current = null;
+    if (!sp) return;
+    try {
+      sp.onresult = null;
+      sp.onerror = null;
+      sp.onend = null;
+      sp.stop();
+    } catch (_) {}
+  }, []);
 
   const stopRecording = useCallback(() => {
+    stopSpeech();
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') {
       try {
@@ -280,9 +304,8 @@ const VoiceNoteTextarea = ({
         mr.stop();
       } catch (_) {}
     }
-    // Mic is stopped inside MediaRecorder `onstop` so chunks flush reliably.
     setRecording(false);
-  }, []);
+  }, [stopSpeech]);
 
   const startRecording = useCallback(async () => {
     setRecordHint('');
@@ -303,9 +326,13 @@ const VoiceNoteTextarea = ({
         }
       });
     } catch (err) {
-      console.warn('getUserMedia:', err);
-      alert('Microphone permission was denied or unavailable.');
-      return;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err2) {
+        console.warn('getUserMedia:', err, err2);
+        alert('Microphone permission was denied or unavailable.');
+        return;
+      }
     }
     streamRef.current = stream;
     const mr = createMediaRecorder(stream);
@@ -321,6 +348,7 @@ const VoiceNoteTextarea = ({
     };
     mr.onstop = () => {
       mediaRecorderRef.current = null;
+      stopSpeech();
       const s = streamRef.current;
       if (s) {
         s.getTracks().forEach(t => t.stop());
@@ -328,8 +356,10 @@ const VoiceNoteTextarea = ({
       }
       const blobType = (mr.mimeType && mr.mimeType.length > 0 ? mr.mimeType : appliedMime) || 'audio/webm';
       const blob = new Blob(chunksRef.current, { type: blobType });
-      if (!blob.size || blob.size < 64) {
-        setRecordHint('No audio captured — hold the button and speak for a second or two, then tap stop.');
+      if (!blob.size || blob.size < 32) {
+        setRecordHint(
+          'No audio captured — tap record, speak for a second or two, then tap stop. On iPhone, use Safari and allow the microphone.'
+        );
         return;
       }
       const reader = new FileReader();
@@ -347,10 +377,78 @@ const VoiceNoteTextarea = ({
       reader.onerror = () => setRecordHint('Could not read recording — try again.');
       reader.readAsDataURL(blob);
     };
-    mr.start(200);
+
+    try {
+      // Safari/iOS: small timeslices often yield empty chunks until stop; omit timeslice for one reliable blob.
+      if (isIOSOrSafari) {
+        mr.start();
+      } else {
+        mr.start(250);
+      }
+    } catch (startErr) {
+      console.warn('MediaRecorder.start failed:', startErr);
+      try {
+        mr.start();
+      } catch (e2) {
+        stream.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+        alert('Could not start audio recording. Try another browser or update this one.');
+        return;
+      }
+    }
+
     mediaRecorderRef.current = mr;
     setRecording(true);
-  }, [onVoiceSaved, sectionId]);
+
+    const SR = getSpeechRecognitionCtor();
+    if (SR) {
+      try {
+        const sp = new SR();
+        sp.continuous = true;
+        sp.interimResults = true;
+        sp.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
+        sessionActiveRef.current = true;
+        speechRef.current = sp;
+        sp.onresult = event => {
+          let piece = '';
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            if (event.results[i].isFinal) {
+              piece += event.results[i][0].transcript;
+            }
+          }
+          if (!piece.trim()) return;
+          const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
+          const joiner = prev && !/\s$/.test(prev) ? ' ' : '';
+          const next = `${prev}${joiner}${piece.trim()}`;
+          valueRef.current = next;
+          onChange({ target: { name, value: next } });
+        };
+        sp.onerror = ev => {
+          if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+            setRecordHint('Speech-to-text blocked — allow microphone or try Chrome / Edge.');
+          }
+        };
+        sp.onend = () => {
+          if (sessionActiveRef.current && speechRef.current === sp) {
+            try {
+              sp.start();
+            } catch (_) {
+              setTimeout(() => {
+                if (sessionActiveRef.current && speechRef.current === sp) {
+                  try {
+                    sp.start();
+                  } catch (_) {}
+                }
+              }, 120);
+            }
+          }
+        };
+        sp.start();
+      } catch (speechErr) {
+        console.warn('SpeechRecognition:', speechErr);
+      }
+    }
+  }, [onVoiceSaved, sectionId, onChange, name, value, stopSpeech]);
 
   const toggle = () => {
     if (recording) {
@@ -380,30 +478,40 @@ const VoiceNoteTextarea = ({
         className={`w-full pl-4 pr-14 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${className}`}
         style={{ fontSize: '16px' }}
       />
-      <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+      <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
         <button
           type="button"
           onClick={toggle}
           title={
             recording
               ? 'Stop and save this recording'
-              : 'Record voice — audio is saved below for playback'
+              : 'Record voice — speak to add text; audio is saved below for playback'
           }
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
             recording
-              ? 'border-red-300 bg-red-50 text-red-600'
+              ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
               : 'border-gray-200 bg-white text-blue-600 hover:bg-blue-50'
           }`}
         >
           <i className={`fas ${recording ? 'fa-stop' : 'fa-microphone'}`} />
         </button>
         {recording && (
-          <span className="text-[10px] font-medium text-red-600">Recording…</span>
+          <span className="rounded bg-red-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow">
+            Rec
+          </span>
         )}
       </div>
+      {recording && (
+        <p className="mt-1 text-[11px] font-medium text-red-600">Recording… speak now, then tap stop.</p>
+      )}
       {recordHint && (
         <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
           {recordHint}
+        </p>
+      )}
+      {!recording && getSpeechRecognitionCtor() && (
+        <p className="mt-1 text-[10px] text-gray-500">
+          Tip: supported browsers add live captions while recording; audio is saved when you stop.
         </p>
       )}
       {voiceClips.length > 0 && (
@@ -417,7 +525,9 @@ const VoiceNoteTextarea = ({
               key={clip.id}
               className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5"
             >
-              <audio controls className="h-8 w-full min-w-0" src={clip.dataUrl} preload="metadata" />
+              <audio controls className="h-8 w-full min-w-0" preload="metadata">
+                <source src={clip.dataUrl} type={clip.mimeType || 'audio/webm'} />
+              </audio>
             </div>
           ))}
         </div>
