@@ -1,10 +1,13 @@
 /**
  * Greenfield ERP Calendar + Google Calendar (read/write via OAuth).
- * Does not use legacy dashboard Calendar, calendar-notes, or GoogleCalendarSync.
+ * Month, week, and day views. Does not use legacy dashboard Calendar.
  */
 const { useState, useEffect, useCallback, useMemo } = React;
 
 const TZ = 'Africa/Johannesburg';
+const GRID_HOUR_START = 6;
+const GRID_HOUR_END = 22;
+const PX_PER_HOUR = 44;
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -37,14 +40,104 @@ function sameDay(a, b) {
   );
 }
 
-function parseGoogleTime(s) {
+function dayBounds(day) {
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999);
+  return { start, end };
+}
+
+/** @returns {{ id: string, source: 'erp'|'google', title: string, start: Date, end: Date, allDay: boolean, raw: any } | null} */
+function normalizeGoogleEvent(e) {
+  const s = e.start;
+  const en = e.end;
   if (!s) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(String(s))) {
+  const allDay = /^\d{4}-\d{2}-\d{2}$/.test(String(s));
+  let start;
+  let end;
+  if (allDay) {
     const [y, mo, d] = String(s).split('-').map(Number);
-    return new Date(y, mo - 1, d, 12, 0, 0);
+    start = new Date(y, mo - 1, d, 0, 0, 0, 0);
+    const endStr = en || s;
+    const [ey, em, ed] = String(endStr).split('-').map(Number);
+    const endExclusive = new Date(ey, em - 1, ed, 0, 0, 0, 0);
+    end = new Date(endExclusive.getTime() - 1);
+  } else {
+    start = new Date(s);
+    end = en ? new Date(en) : new Date(start.getTime() + 3600000);
   }
-  const dt = new Date(s);
-  return Number.isNaN(dt.getTime()) ? null : dt;
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return {
+    id: `g-${e.id}`,
+    source: 'google',
+    title: e.summary || '(No title)',
+    start,
+    end,
+    allDay,
+    raw: e
+  };
+}
+
+function normalizeErpEvent(e) {
+  return {
+    id: e.id,
+    source: 'erp',
+    title: e.title,
+    start: new Date(e.startUtc),
+    end: new Date(e.endUtc),
+    allDay: false,
+    raw: e
+  };
+}
+
+/** Event overlaps local calendar day */
+function eventOverlapsDay(ev, day) {
+  const { start: d0, end: d1 } = dayBounds(day);
+  return ev.start <= d1 && ev.end >= d0;
+}
+
+/** Clip event to local day; returns new object or null */
+function clipEventToDay(ev, day) {
+  const { start: d0, end: d1 } = dayBounds(day);
+  const s = ev.start < d0 ? d0 : ev.start;
+  const en = ev.end > d1 ? d1 : ev.end;
+  if (en <= s) return null;
+  return { ...ev, start: s, end: en };
+}
+
+function windowMinutes() {
+  return {
+    w0: GRID_HOUR_START * 60,
+    w1: GRID_HOUR_END * 60,
+    total: (GRID_HOUR_END - GRID_HOUR_START) * 60
+  };
+}
+
+function minutesSinceMidnight(d) {
+  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+}
+
+/** Layout timed (non-all-day) clipped event in grid window */
+function layoutTimedBlock(clipped) {
+  if (clipped.allDay) return null;
+  const { w0, w1, total } = windowMinutes();
+  const sm = minutesSinceMidnight(clipped.start);
+  const em = minutesSinceMidnight(clipped.end);
+  const clipStart = Math.max(sm, w0);
+  const clipEnd = Math.min(em, w1);
+  if (clipEnd <= clipStart) return null;
+  return {
+    topPct: ((clipStart - w0) / total) * 100,
+    heightPct: ((clipEnd - clipStart) / total) * 100
+  };
+}
+
+function isoLocal(dt) {
+  const y = dt.getFullYear();
+  const m = pad2(dt.getMonth() + 1);
+  const day = pad2(dt.getDate());
+  const h = pad2(dt.getHours());
+  const mi = pad2(dt.getMinutes());
+  return `${y}-${m}-${day}T${h}:${mi}`;
 }
 
 const ErpCalendar = () => {
@@ -59,6 +152,7 @@ const ErpCalendar = () => {
     isDark = false;
   }
 
+  const [viewMode, setViewMode] = useState('month');
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => new Date());
   const [erpEvents, setErpEvents] = useState([]);
@@ -69,6 +163,7 @@ const ErpCalendar = () => {
   const [err, setErr] = useState(null);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState(null);
   const [formTitle, setFormTitle] = useState('');
   const [formStart, setFormStart] = useState('');
   const [formEnd, setFormEnd] = useState('');
@@ -77,6 +172,30 @@ const ErpCalendar = () => {
   const [saving, setSaving] = useState(false);
 
   const token = () => window.storage?.getToken?.();
+
+  const queryRange = useMemo(() => {
+    if (viewMode === 'month') {
+      const y = cursor.getFullYear();
+      const m = cursor.getMonth();
+      const first = new Date(y, m, 1);
+      const gridStart = startOfWeek(first);
+      gridStart.setHours(0, 0, 0, 0);
+      const lastCell = addDays(gridStart, 41);
+      const end = new Date(lastCell.getFullYear(), lastCell.getMonth(), lastCell.getDate(), 23, 59, 59, 999);
+      return { start: gridStart, end };
+    }
+    if (viewMode === 'week') {
+      const ws = startOfWeek(selected);
+      const dayStart = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate(), 0, 0, 0, 0);
+      const last = addDays(ws, 6);
+      const end = new Date(last.getFullYear(), last.getMonth(), last.getDate(), 23, 59, 59, 999);
+      return { start: dayStart, end };
+    }
+    const d = selected;
+    const ds = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    const de = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+    return { start: ds, end: de };
+  }, [viewMode, cursor, selected]);
 
   const loadConnection = useCallback(async () => {
     try {
@@ -92,16 +211,10 @@ const ErpCalendar = () => {
     }
   }, []);
 
-  const loadMonth = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    const y = cursor.getFullYear();
-    const m = cursor.getMonth();
-    const { start, end } = monthRange(y, m);
-    const qs = `start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
-    const gqs = `timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}`;
-
-    try {
+  const loadEventsForRange = useCallback(
+    async (start, end) => {
+      const qs = `start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+      const gqs = `timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}`;
       const [rErp, rG] = await Promise.all([
         fetch(`/api/erp-calendar/erp-events?${qs}`, {
           headers: { Authorization: `Bearer ${token()}` }
@@ -116,9 +229,24 @@ const ErpCalendar = () => {
       if (!rG.ok) throw new Error(jG?.data?.message || jG?.message || 'Google events failed');
       const dE = jErp.data || jErp;
       const dG = jG.data || jG;
-      setErpEvents(Array.isArray(dE.events) ? dE.events : []);
-      setGoogleEvents(Array.isArray(dG.events) ? dG.events : []);
-      setConnected(!!dG.connected);
+      return {
+        erp: Array.isArray(dE.events) ? dE.events : [],
+        google: Array.isArray(dG.events) ? dG.events : [],
+        connected: !!dG.connected
+      };
+    },
+    []
+  );
+
+  const reloadCalendar = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const { start, end } = queryRange;
+      const out = await loadEventsForRange(start, end);
+      setErpEvents(out.erp);
+      setGoogleEvents(out.google);
+      setConnected(out.connected);
     } catch (e) {
       setErr(e.message || 'Failed to load calendar');
       setErpEvents([]);
@@ -126,22 +254,22 @@ const ErpCalendar = () => {
     } finally {
       setLoading(false);
     }
-  }, [cursor]);
+  }, [queryRange, loadEventsForRange]);
 
   useEffect(() => {
     loadConnection();
   }, [loadConnection]);
 
   useEffect(() => {
-    loadMonth();
-  }, [loadMonth]);
+    reloadCalendar();
+  }, [reloadCalendar]);
 
   useEffect(() => {
     const onMsg = (ev) => {
       if (ev.origin !== window.location.origin) return;
       if (ev.data?.type === 'ERP_CALENDAR_OAUTH_OK') {
         loadConnection();
-        loadMonth();
+        reloadCalendar();
       }
       if (ev.data?.type === 'ERP_CALENDAR_OAUTH_ERR') {
         setErr(ev.data.message || 'Google connection failed');
@@ -149,7 +277,17 @@ const ErpCalendar = () => {
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [loadConnection, loadMonth]);
+  }, [loadConnection, reloadCalendar]);
+
+  const normalizedEvents = useMemo(() => {
+    const list = [];
+    erpEvents.forEach((e) => list.push(normalizeErpEvent(e)));
+    googleEvents.forEach((e) => {
+      const n = normalizeGoogleEvent(e);
+      if (n) list.push(n);
+    });
+    return list;
+  }, [erpEvents, googleEvents]);
 
   const connectGoogle = async () => {
     setErr(null);
@@ -185,7 +323,7 @@ const ErpCalendar = () => {
     });
     setConnected(false);
     setGoogleEmail(null);
-    loadMonth();
+    reloadCalendar();
   };
 
   const calendarCells = useMemo(() => {
@@ -202,17 +340,17 @@ const ErpCalendar = () => {
 
   const eventsForDay = useCallback(
     (day) => {
-      const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
-      const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999);
       const erp = erpEvents.filter((e) => {
         const s = new Date(e.startUtc);
         const en = new Date(e.endUtc);
-        return s <= dayEnd && en >= dayStart;
+        const { start: d0, end: d1 } = dayBounds(day);
+        return s <= d1 && en >= d0;
       });
-      const g = googleEvents.filter((e) => {
-        const s = parseGoogleTime(e.start);
-        return s && sameDay(s, day);
-      });
+      const g = googleEvents
+        .map((e) => normalizeGoogleEvent(e))
+        .filter(Boolean)
+        .filter((ev) => eventOverlapsDay(ev, day))
+        .map((ev) => ev.raw);
       return { erp, google: g };
     },
     [erpEvents, googleEvents]
@@ -220,24 +358,45 @@ const ErpCalendar = () => {
 
   const selectedBuckets = useMemo(() => eventsForDay(selected), [selected, eventsForDay]);
 
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingEventId(null);
+  };
+
   const openCreateModal = () => {
     const d = new Date(selected);
     d.setHours(9, 0, 0, 0);
     const end = new Date(d);
     end.setHours(10, 0, 0, 0);
-    const isoLocal = (dt) => {
-      const y = dt.getFullYear();
-      const m = pad2(dt.getMonth() + 1);
-      const day = pad2(dt.getDate());
-      const h = pad2(dt.getHours());
-      const mi = pad2(dt.getMinutes());
-      return `${y}-${m}-${day}T${h}:${mi}`;
-    };
+    setEditingEventId(null);
     setFormTitle('');
     setFormDesc('');
     setFormStart(isoLocal(d));
     setFormEnd(isoLocal(end));
     setFormSync(connected);
+    setModalOpen(true);
+  };
+
+  const openCreateModalFromSlot = (day, hour) => {
+    const d = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0);
+    const end = new Date(d);
+    end.setHours(hour + 1, 0, 0, 0);
+    setEditingEventId(null);
+    setFormTitle('');
+    setFormDesc('');
+    setFormStart(isoLocal(d));
+    setFormEnd(isoLocal(end));
+    setFormSync(connected);
+    setModalOpen(true);
+  };
+
+  const openEditErpModal = (e) => {
+    setEditingEventId(e.id);
+    setFormTitle(e.title || '');
+    setFormDesc(e.description || '');
+    setFormStart(isoLocal(new Date(e.startUtc)));
+    setFormEnd(isoLocal(new Date(e.endUtc)));
+    setFormSync(connected && !!e.googleEventId);
     setModalOpen(true);
   };
 
@@ -254,25 +413,46 @@ const ErpCalendar = () => {
     }
     setSaving(true);
     try {
-      const r = await fetch('/api/erp-calendar/erp-events', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title: formTitle.trim(),
-          description: formDesc.trim(),
-          start: start.toISOString(),
-          end: end.toISOString(),
-          timezone: TZ,
-          syncToGoogle: connected && formSync
-        })
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.data?.message || j?.message || 'Save failed');
-      setModalOpen(false);
-      loadMonth();
+      if (editingEventId) {
+        const r = await fetch('/api/erp-calendar/erp-events', {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: editingEventId,
+            title: formTitle.trim(),
+            description: formDesc.trim(),
+            start: start.toISOString(),
+            end: end.toISOString(),
+            timezone: TZ,
+            syncToGoogle: connected && formSync
+          })
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.data?.message || j?.message || 'Update failed');
+      } else {
+        const r = await fetch('/api/erp-calendar/erp-events', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: formTitle.trim(),
+            description: formDesc.trim(),
+            start: start.toISOString(),
+            end: end.toISOString(),
+            timezone: TZ,
+            syncToGoogle: connected && formSync
+          })
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.data?.message || j?.message || 'Save failed');
+      }
+      closeModal();
+      reloadCalendar();
     } catch (e) {
       alert(e.message || 'Failed to save');
     } finally {
@@ -291,14 +471,172 @@ const ErpCalendar = () => {
       alert(j?.data?.message || j?.message || 'Delete failed');
       return;
     }
-    loadMonth();
+    reloadCalendar();
   };
 
-  const monthLabel = cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+  const goPrev = () => {
+    if (viewMode === 'month') {
+      setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1));
+    } else if (viewMode === 'week') {
+      const n = addDays(selected, -7);
+      setSelected(n);
+      setCursor(n);
+    } else {
+      const n = addDays(selected, -1);
+      setSelected(n);
+      setCursor(n);
+    }
+  };
+
+  const goNext = () => {
+    if (viewMode === 'month') {
+      setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1));
+    } else if (viewMode === 'week') {
+      const n = addDays(selected, 7);
+      setSelected(n);
+      setCursor(n);
+    } else {
+      const n = addDays(selected, 1);
+      setSelected(n);
+      setCursor(n);
+    }
+  };
+
+  const goToday = () => {
+    const t = new Date();
+    setCursor(t);
+    setSelected(t);
+  };
+
+  const headerLabel = useMemo(() => {
+    if (viewMode === 'month') {
+      return cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+    }
+    if (viewMode === 'week') {
+      const ws = startOfWeek(selected);
+      const we = addDays(ws, 6);
+      if (ws.getMonth() === we.getMonth()) {
+        return `${ws.getDate()}–${we.getDate()} ${ws.toLocaleString(undefined, { month: 'long', year: 'numeric' })}`;
+      }
+      return `${ws.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
+    return selected.toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }, [viewMode, cursor, selected]);
+
+  const weekDays = useMemo(() => {
+    const ws = startOfWeek(selected);
+    const days = [];
+    for (let i = 0; i < 7; i++) days.push(addDays(ws, i));
+    return days;
+  }, [selected]);
+
+  const displayWeekDays = viewMode === 'day' ? [new Date(selected)] : weekDays;
+
+  const hourRows = useMemo(() => {
+    const h = [];
+    for (let hr = GRID_HOUR_START; hr < GRID_HOUR_END; hr++) h.push(hr);
+    return h;
+  }, []);
+
+  const gridBodyHeight = (GRID_HOUR_END - GRID_HOUR_START) * PX_PER_HOUR;
 
   const shell = isDark ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900';
   const card = isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
   const muted = isDark ? 'text-gray-400' : 'text-gray-500';
+  const segBtn = (active) =>
+    `px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+      active
+        ? 'bg-indigo-600 text-white'
+        : isDark
+          ? 'text-gray-300 hover:bg-gray-700'
+          : 'text-gray-700 hover:bg-gray-100'
+    }`;
+
+  const renderAllDayChips = (day) => {
+    const chips = normalizedEvents.filter((ev) => ev.allDay && eventOverlapsDay(ev, day));
+    return (
+      <div className={`min-h-[2rem] flex flex-wrap gap-1 p-1 border-b ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-100 bg-gray-50'}`}>
+        {chips.length === 0 ? <span className={`text-xs ${muted} px-1`}> </span> : null}
+        {chips.map((ev) => (
+          <button
+            key={ev.id}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (ev.source === 'erp') openEditErpModal(ev.raw);
+            }}
+            className={`text-xs px-1.5 py-0.5 rounded truncate max-w-full ${
+              ev.source === 'erp'
+                ? isDark
+                  ? 'bg-indigo-900/80 text-indigo-100'
+                  : 'bg-indigo-100 text-indigo-900'
+                : isDark
+                  ? 'bg-green-900/60 text-green-100'
+                  : 'bg-green-100 text-green-900'
+            }`}
+            title={ev.title}
+          >
+            {ev.source === 'google' && <i className="fab fa-google mr-0.5" />}
+            {ev.title}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  const renderTimedColumn = (day) => (
+    <div
+      className={`relative border-l ${isDark ? 'border-gray-700' : 'border-gray-200'}`}
+      style={{ height: gridBodyHeight }}
+    >
+      {hourRows.map((hr) => (
+        <button
+          key={hr}
+          type="button"
+          aria-label={`${day.toDateString()} ${hr}:00`}
+          className={`absolute left-0 right-0 border-b ${isDark ? 'border-gray-700/80 hover:bg-gray-700/20' : 'border-gray-100 hover:bg-gray-50'}`}
+          style={{ top: `${((hr - GRID_HOUR_START) / (GRID_HOUR_END - GRID_HOUR_START)) * 100}%`, height: `${100 / (GRID_HOUR_END - GRID_HOUR_START)}%` }}
+          onClick={() => openCreateModalFromSlot(day, hr)}
+        />
+      ))}
+      {normalizedEvents
+        .filter((ev) => !ev.allDay)
+        .map((ev) => {
+          const clipped = clipEventToDay(ev, day);
+          if (!clipped) return null;
+          const layout = layoutTimedBlock(clipped);
+          if (!layout) return null;
+          return (
+            <button
+              key={`${ev.id}-${day.getTime()}`}
+              type="button"
+              className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-left text-xs overflow-hidden z-10 shadow-sm border ${
+                ev.source === 'erp'
+                  ? isDark
+                    ? 'bg-indigo-800/95 border-indigo-600 text-white'
+                    : 'bg-indigo-100 border-indigo-200 text-indigo-900'
+                  : isDark
+                    ? 'bg-green-900/90 border-green-600 text-green-50'
+                    : 'bg-green-50 border-green-200 text-green-900'
+              }`}
+              style={{ top: `${layout.topPct}%`, height: `${Math.max(layout.heightPct, 2)}%` }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (ev.source === 'erp') openEditErpModal(ev.raw);
+                else if (ev.raw.htmlLink) window.open(ev.raw.htmlLink, '_blank', 'noreferrer');
+              }}
+            >
+              <span className="font-medium line-clamp-2">{ev.title}</span>
+            </button>
+          );
+        })}
+    </div>
+  );
 
   return (
     <div className={`min-h-screen p-4 md:p-8 ${shell}`}>
@@ -343,24 +681,58 @@ const ErpCalendar = () => {
         )}
 
         <div className={`rounded-xl border shadow-sm p-4 md:p-6 ${card}`}>
-          <div className="flex items-center justify-between mb-4">
-            <button
-              type="button"
-              className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-              onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
-              aria-label="Previous month"
-            >
-              <i className="fas fa-chevron-left" />
-            </button>
-            <div className="text-lg font-medium">{monthLabel}</div>
-            <button
-              type="button"
-              className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-              onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
-              aria-label="Next month"
-            >
-              <i className="fas fa-chevron-right" />
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div className="flex flex-wrap items-center gap-1 rounded-lg p-1 bg-black/10 dark:bg-white/5">
+              <button type="button" className={segBtn(viewMode === 'month')} onClick={() => setViewMode('month')}>
+                Month
+              </button>
+              <button
+                type="button"
+                className={segBtn(viewMode === 'week')}
+                onClick={() => {
+                  setCursor(selected);
+                  setViewMode('week');
+                }}
+              >
+                Week
+              </button>
+              <button
+                type="button"
+                className={segBtn(viewMode === 'day')}
+                onClick={() => {
+                  setCursor(selected);
+                  setViewMode('day');
+                }}
+              >
+                Day
+              </button>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-end">
+              <button
+                type="button"
+                className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
+                onClick={goToday}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                onClick={goPrev}
+                aria-label="Previous"
+              >
+                <i className="fas fa-chevron-left" />
+              </button>
+              <div className="text-lg font-medium min-w-[10rem] text-center">{headerLabel}</div>
+              <button
+                type="button"
+                className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                onClick={goNext}
+                aria-label="Next"
+              >
+                <i className="fas fa-chevron-right" />
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -368,7 +740,7 @@ const ErpCalendar = () => {
               <i className="fas fa-spinner fa-spin text-2xl mb-2" />
               <p>Loading…</p>
             </div>
-          ) : (
+          ) : viewMode === 'month' ? (
             <>
               <div
                 className={`grid grid-cols-7 gap-1 text-center text-xs font-medium uppercase tracking-wide mb-2 ${muted}`}
@@ -413,6 +785,51 @@ const ErpCalendar = () => {
                 })}
               </div>
             </>
+          ) : (
+            <div className="overflow-x-auto">
+              <div className="min-w-[640px]">
+                <div className="flex">
+                  <div className={`w-12 flex-shrink-0 ${muted} text-xs`} />
+                  {displayWeekDays.map((day) => (
+                    <div key={day.getTime()} className="flex-1 text-center text-xs font-medium py-2 border-b border-l border-gray-200 dark:border-gray-700">
+                      <div className={sameDay(day, new Date()) ? 'text-indigo-500 font-semibold' : ''}>
+                        {day.toLocaleDateString(undefined, { weekday: 'short' })}
+                      </div>
+                      <div className="text-sm">{day.getDate()}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex">
+                  <div className="w-12 flex-shrink-0" />
+                  {displayWeekDays.map((day) => (
+                    <div key={`ad-${day.getTime()}`} className="flex-1 min-w-0">
+                      {renderAllDayChips(day)}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex">
+                  <div className={`w-12 flex-shrink-0 relative ${muted} text-xs`} style={{ height: gridBodyHeight }}>
+                    {hourRows.map((hr) => (
+                      <div
+                        key={hr}
+                        className="absolute right-1 text-right pr-1"
+                        style={{
+                          top: `${((hr - GRID_HOUR_START) / (GRID_HOUR_END - GRID_HOUR_START)) * 100}%`,
+                          transform: 'translateY(-50%)'
+                        }}
+                      >
+                        {`${pad2(hr)}:00`}
+                      </div>
+                    ))}
+                  </div>
+                  {displayWeekDays.map((day) => (
+                    <div key={`col-${day.getTime()}`} className="flex-1 min-w-0">
+                      {renderTimedColumn(day)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
@@ -444,7 +861,11 @@ const ErpCalendar = () => {
                 key={e.id}
                 className={`flex items-start justify-between gap-3 p-3 rounded-lg ${isDark ? 'bg-gray-700/40' : 'bg-indigo-50'}`}
               >
-                <div>
+                <button
+                  type="button"
+                  className="text-left flex-1"
+                  onClick={() => openEditErpModal(e)}
+                >
                   <div className="font-medium">{e.title}</div>
                   <div className={`text-sm ${muted}`}>
                     {new Date(e.startUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} –{' '}
@@ -455,17 +876,18 @@ const ErpCalendar = () => {
                         target="_blank"
                         rel="noreferrer"
                         className="ml-2 text-blue-500 hover:underline"
+                        onClick={(ev) => ev.stopPropagation()}
                       >
                         Google
                       </a>
                     )}
                   </div>
                   {e.description ? <p className={`text-sm mt-1 ${muted}`}>{e.description}</p> : null}
-                </div>
+                </button>
                 <button
                   type="button"
                   onClick={() => deleteErpEvent(e.id)}
-                  className="text-red-500 hover:text-red-400 text-sm"
+                  className="text-red-500 hover:text-red-400 text-sm flex-shrink-0"
                 >
                   Delete
                 </button>
@@ -497,7 +919,7 @@ const ErpCalendar = () => {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className={`w-full max-w-md rounded-xl border shadow-xl p-6 ${card}`}>
-            <h3 className="text-lg font-semibold mb-4">New event</h3>
+            <h3 className="text-lg font-semibold mb-4">{editingEventId ? 'Edit event' : 'New event'}</h3>
             <label className="block text-sm mb-1">Title</label>
             <input
               className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
@@ -528,14 +950,14 @@ const ErpCalendar = () => {
             {connected && (
               <label className="flex items-center gap-2 mb-4 text-sm cursor-pointer">
                 <input type="checkbox" checked={formSync} onChange={(e) => setFormSync(e.target.checked)} />
-                Also create in Google Calendar
+                {editingEventId ? 'Sync changes to Google Calendar (if linked)' : 'Also create in Google Calendar'}
               </label>
             )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 className={`px-4 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                onClick={() => setModalOpen(false)}
+                onClick={closeModal}
               >
                 Cancel
               </button>
@@ -545,7 +967,7 @@ const ErpCalendar = () => {
                 className="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
                 onClick={saveEvent}
               >
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? 'Saving…' : editingEventId ? 'Update' : 'Save'}
               </button>
             </div>
           </div>
