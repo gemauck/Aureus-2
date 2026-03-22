@@ -4014,16 +4014,16 @@ const JobCardFormPublic = () => {
 
   if (wizardFlow === 'landing') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-700 via-blue-600 to-indigo-900 text-white px-4 py-10">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-blue-50/80 to-slate-100 text-slate-900 px-4 py-10">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center space-y-2">
-            <p className="text-[11px] uppercase tracking-widest text-white/60 font-semibold">
+            <p className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">
               Mobile Job Card
             </p>
-            <h1 className="text-2xl sm:text-3xl font-bold leading-tight text-white">
+            <h1 className="text-2xl sm:text-3xl font-bold leading-tight text-blue-950">
               Job Card App
             </h1>
-            <p className="text-sm text-white/80">
+            <p className="text-sm text-slate-600">
               Continue a draft, edit any saved card (including from the server if you are signed in), or start new.
             </p>
           </div>
@@ -4031,37 +4031,37 @@ const JobCardFormPublic = () => {
             <button
               type="button"
               onClick={startNewJobCard}
-              className="w-full rounded-2xl bg-blue-500/30 backdrop-blur-sm text-white px-5 py-5 text-left shadow-lg hover:bg-blue-500/40 transition touch-manipulation border border-white/25"
+              className="w-full rounded-2xl bg-white text-blue-950 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
             >
               <span className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 text-white">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
                   <i className="fa-solid fa-plus text-xl" aria-hidden />
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="block font-semibold text-base sm:text-lg">Create new job card</span>
-                  <span className="block text-sm text-white/80 mt-0.5">
+                  <span className="block text-sm text-slate-600 mt-0.5">
                     Start the guided wizard for a new visit.
                   </span>
                 </span>
-                <i className="fa-solid fa-chevron-right text-white/50 flex-shrink-0" aria-hidden />
+                <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
               </span>
             </button>
             <button
               type="button"
               onClick={openPriorList}
-              className="w-full rounded-xl bg-white/95 text-blue-900 px-4 py-3 text-left shadow-md hover:bg-white transition touch-manipulation border border-white/40"
+              className="w-full rounded-2xl bg-white text-blue-950 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
             >
-              <span className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-                  <i className="fa-solid fa-clock-rotate-left text-base" aria-hidden />
+              <span className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                  <i className="fa-solid fa-clock-rotate-left text-xl" aria-hidden />
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="block font-semibold text-sm">Edit prior job card</span>
-                  <span className="block text-xs text-blue-800/80 mt-0.5 leading-snug">
+                  <span className="block font-semibold text-base sm:text-lg">Edit prior job card</span>
+                  <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
                     All job cards from the server when signed in, plus this device&apos;s drafts — newest first.
                   </span>
                 </span>
-                <i className="fa-solid fa-chevron-right text-blue-400 text-sm flex-shrink-0" aria-hidden />
+                <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
               </span>
             </button>
           </div>
