@@ -109,15 +109,21 @@ const StepBadge = ({ index, stepId, active, complete, onClick, className = '' })
       >
         <i className={`fa-solid ${meta.icon || 'fa-circle-dot'} text-base`}></i>
       </div>
-      <div className="flex-1 sm:flex sm:w-full sm:flex-col sm:items-center lg:items-start lg:flex-1">
-        <span className={`text-[11px] uppercase tracking-wide font-semibold ${active ? 'text-blue-500' : 'text-white/70'} sm:text-center lg:text-left`}>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:items-center sm:text-center lg:items-start lg:text-left">
+        <span
+          className={`text-[11px] uppercase tracking-wide font-semibold ${active ? '!text-blue-600' : 'text-white/80'} sm:text-center lg:text-left`}
+        >
           Step {index + 1}
         </span>
-        <span className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-white'} sm:text-center lg:text-left`}>
+        <span
+          className={`text-sm font-semibold leading-snug ${active ? '!text-blue-800' : 'text-white'} sm:text-center lg:text-left`}
+        >
           {meta.title || stepId}
         </span>
         {meta.subtitle && (
-          <span className={`text-[11px] sm:text-xs mt-0.5 ${active ? 'text-blue-500/80' : 'text-white/70'} sm:text-center lg:text-left`}>
+          <span
+            className={`text-[11px] sm:text-xs ${active ? '!text-blue-600/90' : 'text-white/75'} sm:text-center lg:text-left`}
+          >
             {meta.subtitle}
           </span>
         )}
@@ -2443,7 +2449,8 @@ const JobCardFormPublic = () => {
 
   const goToStep = (stepIndex) => {
     if (stepIndex === currentStep) return;
-    if (stepIndex > currentStep) {
+    // Already-submitted cards: allow moving between steps to review (saved data may not re-pass assignment checks).
+    if (stepIndex > currentStep && !editingMeta?.synced) {
       const validationError = validateStep(currentStep);
       if (validationError) {
         setStepError(validationError);
@@ -2456,10 +2463,12 @@ const JobCardFormPublic = () => {
   };
 
   const handleNext = () => {
-    const errorMessage = validateStep(currentStep);
-    if (errorMessage) {
-      setStepError(errorMessage);
-      return;
+    if (!editingMeta?.synced) {
+      const errorMessage = validateStep(currentStep);
+      if (errorMessage) {
+        setStepError(errorMessage);
+        return;
+      }
     }
     setStepError('');
     setCurrentStep(prev => Math.min(prev + 1, STEP_IDS.length - 1));

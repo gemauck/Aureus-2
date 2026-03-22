@@ -62,10 +62,11 @@
     display: none !important;
   }
 
-  /* Ensure main content area takes full width */
+  /* Ensure main content area takes full width — flex-basis 0 helps Safari allocate remaining height */
   body.job-card-public .job-card-public-wrapper > div.flex-1 {
-    flex: 1 1 auto !important;
+    flex: 1 1 0% !important;
     min-width: 0 !important;
+    min-height: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     display: flex !important;
@@ -73,14 +74,15 @@
     overflow: hidden !important;
   }
 
-  /* Fixed Header — override global mobile-responsive.css (56px ERP shell header) */
+  /* Fixed Header — override global mobile-responsive.css (56px ERP shell header).
+     Use flex column (not plain block) so inner rows + horizontal step scroller layout correctly. */
   body.job-card-public .job-card-public-wrapper > header {
     flex-shrink: 0 !important;
     position: relative !important;
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
-    min-height: 0 !important;
+    min-height: auto !important;
     max-height: none !important;
     left: 0 !important;
     right: 0 !important;
@@ -88,9 +90,10 @@
     margin: 0 !important;
     padding: 0 !important;
     z-index: 10 !important;
-    display: block !important;
-    align-items: unset !important;
-    justify-content: unset !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
     gap: 0 !important;
   }
 
@@ -451,7 +454,8 @@
   body.job-card-public .job-card-public-wrapper > div.flex-1 {
     width: 100% !important;
     max-width: 100% !important;
-    flex: 1 1 auto !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
   }
 
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
@@ -460,6 +464,8 @@
     -webkit-overflow-scrolling: touch !important;
     width: 100% !important;
     max-width: 100% !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
   }
 
   /* Ensure all content fits */
@@ -575,6 +581,8 @@
   body.job-card-public .job-card-public-wrapper > div.flex-1 {
     width: 100% !important;
     max-width: 100% !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
   }
 }
 
