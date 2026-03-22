@@ -823,18 +823,32 @@ const VoiceNoteTextarea = ({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (res.status === 503 && data.code === 'NO_OPENAI') {
+        const err = data.error && typeof data.error === 'object' ? data.error : null;
+        const errCode =
+          (err && typeof err.code === 'string' && err.code) ||
+          (typeof data.code === 'string' ? data.code : null);
+        const errMsg =
+          err && typeof err.message === 'string'
+            ? err.message
+            : typeof data.error === 'string'
+              ? data.error
+              : null;
+        const errDetails = err && typeof err.details === 'string' ? err.details : null;
+
+        if (
+          res.status === 503 &&
+          (errCode === 'NO_OPENAI' || (errCode && errCode.startsWith('OPENAI_')))
+        ) {
           setRecordHint(
-            'Transcription is not configured on the server. Your admin can enable it with OPENAI_API_KEY, or type the text manually.'
+            errMsg ||
+              'Transcription is not configured on the server. Your admin can enable it with OPENAI_API_KEY, or type the text manually.'
           );
         } else {
-          const apiMsg =
-            typeof data.error === 'string'
-              ? data.error
-              : data.error && typeof data.error.message === 'string'
-                ? data.error.message
-                : null;
-          setRecordHint(apiMsg || 'Transcription failed. Try again or type manually.');
+          setRecordHint(
+            errDetails ||
+              errMsg ||
+              'Transcription failed. Try again or type manually.'
+          );
         }
         return;
       }
