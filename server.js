@@ -44,6 +44,15 @@ if (existsSync(join(__dirname, '.env.local'))) {
   }
 }
 
+// Public job-card voice transcription (Whisper) uses OPENAI_API_KEY from .env next to server.js
+;(function openaiJobCardTranscribeHint() {
+  if ((process.env.OPENAI_API_KEY || '').trim()) {
+    console.log('✅ OPENAI_API_KEY loaded — public /api/public/transcribe-audio is enabled')
+  } else {
+    console.log('ℹ️ OPENAI_API_KEY not set — job card “Transcribe” will return 503 until configured')
+  }
+})()
+
 // ERP Calendar (Google OAuth): warn once at boot if credentials missing (avoids hunting 503s in the browser)
 ;(function erpCalendarOAuthEnvHint() {
   const g =
