@@ -39,8 +39,8 @@ body {
     min-height: 100vh;
   }
   
-  /* ===== HEADER ===== */
-  header {
+  /* ===== HEADER ===== (skip public Job Card wizard — it uses its own tall gradient header) */
+  body:not(.job-card-public) header {
     position: sticky;
     top: 0;
     z-index: 100;
@@ -55,18 +55,18 @@ body {
     gap: 8px;
   }
   
-  .dark header {
+  html.dark body:not(.job-card-public) header {
     background: #1f2937;
     border-bottom-color: #374151;
   }
   
-  header .flex {
+  body:not(.job-card-public) header .flex {
     gap: 8px;
   }
   
   /* Make hamburger menu prominent */
-  header button[aria-label*="menu"],
-  header button[aria-label*="Menu"] {
+  body:not(.job-card-public) header button[aria-label*="menu"],
+  body:not(.job-card-public) header button[aria-label*="Menu"] {
     min-width: 44px;
     min-height: 44px;
     padding: 10px;
@@ -622,7 +622,7 @@ body {
 
 @media (max-width: 400px) {
   
-  header {
+  body:not(.job-card-public) header {
     padding: 6px 8px;
   }
   
