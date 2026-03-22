@@ -1,6 +1,6 @@
 // Public Job Card Form - Accessible without login
 // Standalone form for technicians to submit job cards offline with a mobile-first experience
-const { useState, useEffect, useCallback, useMemo, useRef } = React;
+const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
 
 const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
 
@@ -299,14 +299,19 @@ const createMediaRecorder = stream => {
   }
 };
 
-const getSpeechRecognitionCtor = () =>
-  typeof window !== 'undefined' &&
-  (window.SpeechRecognition || window.webkitSpeechRecognition);
-
-/** Web Speech + MediaRecorder both use the mic; running them together often yields empty/unplayable blobs. Mic = audio only; CC = dictate text only. */
 const MIN_AUDIO_BLOB_BYTES = 512;
 
-/** Long-form textarea: mic saves playable audio; CC button (Chrome/Edge) types what you say — use one mode at a time */
+/** Wrapped transcript for each voice note so multiple clips stay visually distinct in the field */
+const formatVoiceNoteTranscriptBlock = (noteNumber, text) => {
+  const n = Math.max(1, Number(noteNumber) || 1);
+  const body = String(text || '').trim();
+  return `----- Voice note ${n} · start -----\n${body}\n----- Voice note ${n} · end -----\n`;
+};
+
+/**
+ * One mic: record multiple clips per field. Each clip can be transcribed via server (Whisper) into the textarea
+ * with clear start/end markers. No parallel Web Speech during recording (keeps audio playable).
+ */
 const VoiceNoteTextarea = ({
   sectionId,
   name,
@@ -316,38 +321,19 @@ const VoiceNoteTextarea = ({
   className = '',
   placeholder = '',
   onVoiceSaved,
+  onVoiceClipUpdate,
   voiceClips = []
 }) => {
   const [audioRecording, setAudioRecording] = useState(false);
-  const [dictating, setDictating] = useState(false);
   const [recordHint, setRecordHint] = useState('');
+  const [transcribingClipId, setTranscribingClipId] = useState(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
-  const speechRef = useRef(null);
-  const sessionActiveRef = useRef(false);
   const valueRef = useRef(value);
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
-
-  const stopSpeech = useCallback(() => {
-    sessionActiveRef.current = false;
-    const sp = speechRef.current;
-    speechRef.current = null;
-    if (!sp) return;
-    try {
-      sp.onresult = null;
-      sp.onerror = null;
-      sp.onend = null;
-      sp.stop();
-    } catch (_) {}
-  }, []);
-
-  const stopDictation = useCallback(() => {
-    stopSpeech();
-    setDictating(false);
-  }, [stopSpeech]);
 
   const stopAudioRecording = useCallback(() => {
     const mr = mediaRecorderRef.current;
@@ -365,9 +351,6 @@ const VoiceNoteTextarea = ({
   }, []);
 
   const startAudioRecording = useCallback(async () => {
-    if (dictating) {
-      stopDictation();
-    }
     setRecordHint('');
     if (typeof MediaRecorder === 'undefined') {
       alert('Recording is not supported in this browser. Try Chrome, Edge, or Safari on iOS 14.3+.');
@@ -399,6 +382,7 @@ const VoiceNoteTextarea = ({
     const appliedMime =
       mr.mimeType || pickAudioRecorderMimeType() || 'audio/webm';
     chunksRef.current = [];
+    const noteNumber = voiceClips.length + 1;
     mr.ondataavailable = e => {
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
@@ -417,7 +401,7 @@ const VoiceNoteTextarea = ({
       const blob = new Blob(chunksRef.current, { type: blobType });
       if (!blob.size || blob.size < MIN_AUDIO_BLOB_BYTES) {
         setRecordHint(
-          'No usable audio captured — use the mic (not CC), speak for a few seconds, then stop. If this persists, try Safari on iPhone or update Chrome.'
+          'No usable audio captured — speak for a few seconds, then tap stop. On iPhone use Safari and allow the microphone.'
         );
         return;
       }
@@ -428,7 +412,8 @@ const VoiceNoteTextarea = ({
           onVoiceSaved({
             section: sectionId,
             dataUrl,
-            mimeType: blob.type || blobType
+            mimeType: blob.type || blobType,
+            noteNumber
           });
           setRecordHint('');
         }
@@ -457,67 +442,56 @@ const VoiceNoteTextarea = ({
 
     mediaRecorderRef.current = mr;
     setAudioRecording(true);
-  }, [onVoiceSaved, sectionId, dictating, stopDictation]);
+  }, [onVoiceSaved, sectionId, voiceClips.length]);
 
-  const startDictation = useCallback(() => {
-    if (mediaRecorderRef.current) {
-      setRecordHint('Wait a second for the audio clip to finish saving, then tap CC again.');
-      return;
-    }
+  const transcribeClip = async clip => {
+    if (!clip?.dataUrl || transcribingClipId) return;
     setRecordHint('');
-    const SR = getSpeechRecognitionCtor();
-    if (!SR) {
-      setRecordHint('Speech-to-text is not available in this browser. Use Chrome or Edge, or type manually.');
-      return;
-    }
+    setTranscribingClipId(clip.id);
     try {
-      const sp = new SR();
-      sp.continuous = true;
-      sp.interimResults = true;
-      sp.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
-      sessionActiveRef.current = true;
-      speechRef.current = sp;
-      sp.onresult = event => {
-        let piece = '';
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          if (event.results[i].isFinal) {
-            piece += event.results[i][0].transcript;
-          }
+      const comma = clip.dataUrl.indexOf(',');
+      const b64 = comma >= 0 ? clip.dataUrl.slice(comma + 1) : clip.dataUrl;
+      const res = await fetch('/api/public/transcribe-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioBase64: b64,
+          mimeType: clip.mimeType || 'audio/webm'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 503 && data.code === 'NO_OPENAI') {
+          setRecordHint(
+            'Transcription is not configured on the server. Your admin can enable it with OPENAI_API_KEY, or type the text manually.'
+          );
+        } else {
+          const apiMsg =
+            typeof data.error === 'string'
+              ? data.error
+              : data.error && typeof data.error.message === 'string'
+                ? data.error.message
+                : null;
+          setRecordHint(apiMsg || 'Transcription failed. Try again or type manually.');
         }
-        if (!piece.trim()) return;
-        const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
-        const joiner = prev && !/\s$/.test(prev) ? ' ' : '';
-        const next = `${prev}${joiner}${piece.trim()}`;
-        valueRef.current = next;
-        onChange({ target: { name, value: next } });
-      };
-      sp.onerror = ev => {
-        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-          setRecordHint('Speech-to-text blocked — allow microphone or try Chrome / Edge.');
-        }
-      };
-      sp.onend = () => {
-        if (sessionActiveRef.current && speechRef.current === sp) {
-          try {
-            sp.start();
-          } catch (_) {
-            setTimeout(() => {
-              if (sessionActiveRef.current && speechRef.current === sp) {
-                try {
-                  sp.start();
-                } catch (_) {}
-              }
-            }, 120);
-          }
-        }
-      };
-      sp.start();
-      setDictating(true);
-    } catch (speechErr) {
-      console.warn('SpeechRecognition:', speechErr);
-      setRecordHint('Could not start speech-to-text.');
+        return;
+      }
+      const text = typeof data.text === 'string' ? data.text : '';
+      const n = clip.noteNumber != null ? clip.noteNumber : 1;
+      const block = formatVoiceNoteTranscriptBlock(n, text);
+      const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
+      const join = prev.trim() ? '\n\n' : '';
+      const next = `${prev}${join}${block}`;
+      valueRef.current = next;
+      onChange({ target: { name, value: next } });
+      onVoiceClipUpdate?.(clip.id, { transcribed: true });
+    } catch (e) {
+      console.warn('transcribe:', e);
+      setRecordHint('Could not reach the transcription service. Check your connection.');
+    } finally {
+      setTranscribingClipId(null);
     }
-  }, [onChange, name]);
+  };
 
   const toggleMic = () => {
     if (audioRecording) {
@@ -530,31 +504,11 @@ const VoiceNoteTextarea = ({
     });
   };
 
-  const toggleDictation = () => {
-    if (dictating) {
-      stopDictation();
-      return;
-    }
-    if (audioRecording || mediaRecorderRef.current) {
-      if (audioRecording) {
-        stopAudioRecording();
-      }
-      setRecordHint('When the clip is saved, tap CC again to dictate into this field.');
-      return;
-    }
-    startDictation();
-  };
-
-  const busy = audioRecording || dictating;
-
   useEffect(() => {
     return () => {
       stopAudioRecording();
-      stopDictation();
     };
-  }, [stopAudioRecording, stopDictation]);
-
-  const hasSr = Boolean(getSpeechRecognitionCtor());
+  }, [stopAudioRecording]);
 
   return (
     <div className="relative">
@@ -564,7 +518,7 @@ const VoiceNoteTextarea = ({
         onChange={onChange}
         rows={rows}
         placeholder={placeholder}
-        className={`w-full pl-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${hasSr ? 'pr-24' : 'pr-14'} ${className}`}
+        className={`w-full pl-4 pr-14 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${className}`}
         style={{ fontSize: '16px' }}
       />
       <div className="absolute top-2 right-2 z-10 flex flex-row items-start gap-1.5">
@@ -573,8 +527,8 @@ const VoiceNoteTextarea = ({
           onClick={toggleMic}
           title={
             audioRecording
-              ? 'Stop and save audio clip'
-              : 'Record audio clip (saved below for playback)'
+              ? 'Stop and save this voice note'
+              : 'Record a voice note (you can add several per field)'
           }
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
             audioRecording
@@ -584,33 +538,10 @@ const VoiceNoteTextarea = ({
         >
           <i className={`fas ${audioRecording ? 'fa-stop' : 'fa-microphone'}`} />
         </button>
-        {hasSr && (
-          <button
-            type="button"
-            onClick={toggleDictation}
-            title={
-              dictating
-                ? 'Stop typing from speech'
-                : 'Speak to type into this field (no audio file — use mic for that)'
-            }
-            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
-              dictating
-                ? 'border-violet-300 bg-violet-50 text-violet-700 animate-pulse'
-                : 'border-gray-200 bg-white text-violet-600 hover:bg-violet-50'
-            }`}
-          >
-            <i className={`fas ${dictating ? 'fa-stop' : 'fa-closed-captioning'}`} />
-          </button>
-        )}
       </div>
       {audioRecording && (
         <p className="mt-1 text-[11px] font-medium text-red-600">
-          Recording audio… speak, then tap the mic again to save.
-        </p>
-      )}
-      {dictating && !audioRecording && (
-        <p className="mt-1 text-[11px] font-medium text-violet-700">
-          Dictating… text appears as you speak. Tap CC to stop.
+          Recording… speak, then tap the mic again to save this note.
         </p>
       )}
       {recordHint && (
@@ -618,25 +549,44 @@ const VoiceNoteTextarea = ({
           {recordHint}
         </p>
       )}
-      {hasSr && !busy && (
+      {!audioRecording && (
         <p className="mt-1 text-[10px] text-gray-500">
-          Mic = saved audio clip. CC = speech-to-text only (Chrome/Edge). Do not use both at once.
+          Record multiple notes if needed. Use &quot;Transcribe&quot; on each clip to insert text between the marked
+          start/end lines.
         </p>
       )}
       {voiceClips.length > 0 && (
-        <div className="mt-2 space-y-1.5" aria-label="Saved voice recordings for this field">
+        <div className="mt-2 space-y-2" aria-label="Saved voice recordings for this field">
           <p className="text-[10px] font-medium text-gray-500">
             <i className="fas fa-headphones mr-1 text-blue-500" aria-hidden />
-            Saved recording{voiceClips.length > 1 ? 's' : ''} (replay)
+            Voice notes for this field ({voiceClips.length})
           </p>
           {voiceClips.map(clip => (
             <div
               key={clip.id}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5"
+              className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 sm:flex-row sm:items-center"
             >
-              <audio controls className="h-8 w-full min-w-0" preload="metadata">
-                <source src={clip.dataUrl} type={clip.mimeType || 'audio/webm'} />
-              </audio>
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="text-[10px] font-semibold text-gray-500 whitespace-nowrap">
+                  #{clip.noteNumber != null ? clip.noteNumber : '—'}
+                </span>
+                <audio controls className="h-8 w-full min-w-0" preload="metadata">
+                  <source src={clip.dataUrl} type={clip.mimeType || 'audio/webm'} />
+                </audio>
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                {clip.transcribed && (
+                  <span className="text-[10px] font-medium text-emerald-700">Transcribed</span>
+                )}
+                <button
+                  type="button"
+                  disabled={Boolean(transcribingClipId) || clip.transcribed}
+                  onClick={() => transcribeClip(clip)}
+                  className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 touch-manipulation"
+                >
+                  {transcribingClipId === clip.id ? 'Working…' : clip.transcribed ? 'Done' : 'Transcribe'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -773,6 +723,13 @@ const JobCardFormPublic = () => {
         id: `vn_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
       }
     ]);
+  }, []);
+
+  const updateVoiceClip = useCallback((clipId, patch) => {
+    if (!clipId || !patch || typeof patch !== 'object') return;
+    setVoiceAttachments(prev =>
+      prev.map(v => (v.id === clipId ? { ...v, ...patch } : v))
+    );
   }, []);
 
   const leadTechnicianOptions = useMemo(
@@ -2465,6 +2422,7 @@ const JobCardFormPublic = () => {
               rows={3}
               placeholder="Why was the technician requested to attend?"
               onVoiceSaved={addVoiceClip}
+              onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'reasonForVisit')}
             />
           </div>
@@ -2584,6 +2542,7 @@ const JobCardFormPublic = () => {
               rows={4}
               placeholder="e.g., Pump not priming due to airlock in suction line..."
               onVoiceSaved={addVoiceClip}
+              onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'diagnosis')}
             />
       </section>
@@ -2618,6 +2577,7 @@ const JobCardFormPublic = () => {
               rows={4}
               placeholder="Steps taken, parts replaced, calibrations performed..."
               onVoiceSaved={addVoiceClip}
+              onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'actionsTaken')}
             />
       </section>
@@ -2635,6 +2595,7 @@ const JobCardFormPublic = () => {
           rows={3}
           placeholder="Outstanding concerns, customer requests, safety notes..."
           onVoiceSaved={addVoiceClip}
+          onVoiceClipUpdate={updateVoiceClip}
           voiceClips={voiceAttachments.filter(c => c.section === 'otherComments')}
         />
       </section>
@@ -2782,6 +2743,7 @@ const JobCardFormPublic = () => {
                                 onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
                                 rows={3}
                                 onVoiceSaved={addVoiceClip}
+                                onVoiceClipUpdate={updateVoiceClip}
                                 voiceClips={voiceAttachments.filter(
                                   c => c.section === `form_${form.id}_${fieldId}`
                                 )}
@@ -3179,6 +3141,7 @@ const JobCardFormPublic = () => {
               rows={3}
               placeholder="Optional comments from customer"
               onVoiceSaved={addVoiceClip}
+              onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'customerFeedback')}
             />
           </div>
