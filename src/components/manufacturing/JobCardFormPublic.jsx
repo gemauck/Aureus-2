@@ -102,9 +102,18 @@ const SearchableSelect = ({
   const wrapRef = useRef(null);
   const listId = id ? `${id}-listbox` : undefined;
 
+  /** Real choices only — never show "Select…" style rows in the dropdown */
+  const listOptions = useMemo(
+    () =>
+      (options || []).filter(
+        o => o && o.value !== '' && o.value != null && String(o.value).length > 0
+      ),
+    [options]
+  );
+
   const selected = useMemo(
-    () => options.find(o => String(o.value) === String(value)),
-    [options, value]
+    () => listOptions.find(o => String(o.value) === String(value)),
+    [listOptions, value]
   );
 
   useEffect(() => {
@@ -115,13 +124,13 @@ const SearchableSelect = ({
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter(
+    if (!q) return listOptions;
+    return listOptions.filter(
       o =>
         String(o.label).toLowerCase().includes(q) ||
         String(o.value).toLowerCase().includes(q)
     );
-  }, [options, filter]);
+  }, [listOptions, filter]);
 
   useEffect(() => {
     const onDoc = e => {
@@ -145,7 +154,7 @@ const SearchableSelect = ({
         required={required}
         aria-label={ariaLabel}
         autoComplete="off"
-        value={open ? filter : (selected ? selected.label : filter)}
+        value={open ? filter : (selected ? selected.label : '')}
         onChange={e => {
           setFilter(e.target.value);
           setOpen(true);
@@ -153,13 +162,14 @@ const SearchableSelect = ({
         }}
         onFocus={() => {
           setOpen(true);
+          // Empty filter so the full list appears immediately (no fake "Select…" row)
           setFilter(selected ? selected.label : '');
         }}
         placeholder={placeholder}
         className={`w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed`}
         style={{ fontSize: '16px' }}
       />
-      {open && !disabled && filtered.length > 0 && (
+      {open && !disabled && listOptions.length > 0 && filtered.length > 0 && (
         <ul
           id={listId}
           role="listbox"
@@ -183,13 +193,36 @@ const SearchableSelect = ({
           ))}
         </ul>
       )}
-      {open && !disabled && filtered.length === 0 && (
+      {open && !disabled && listOptions.length === 0 && (
+        <div className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg">
+          No options available
+        </div>
+      )}
+      {open && !disabled && listOptions.length > 0 && filtered.length === 0 && (
         <div className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg">
           No matches
         </div>
       )}
     </div>
   );
+};
+
+/** Best MIME type for MediaRecorder (Safari often needs mp4/m4a; Chrome uses webm) */
+const pickAudioRecorderMimeType = () => {
+  if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
+    return '';
+  }
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/aac',
+    'audio/ogg;codecs=opus'
+  ];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return '';
 };
 
 /** Long-form textarea with mic: transcribes speech into the field and saves the audio for replay */
@@ -231,50 +264,65 @@ const VoiceNoteTextarea = ({
       } catch (_) {}
       recognitionRef.current = null;
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') {
       try {
-        if (mediaRecorderRef.current.state === 'recording') {
-          mediaRecorderRef.current.requestData();
+        if (mr.state === 'recording') {
+          mr.requestData();
         }
       } catch (_) {}
-      mediaRecorderRef.current.stop();
+      try {
+        mr.stop();
+      } catch (_) {}
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
+    // Do NOT stop the mic here — wait for MediaRecorder `onstop` or we get empty blobs.
     setRecording(false);
   }, []);
 
   const startRecording = useCallback(async () => {
+    if (typeof MediaRecorder === 'undefined') {
+      alert('Audio recording is not supported in this browser.');
+      return;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
-    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : '';
+    const mime = pickAudioRecorderMimeType();
     const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-    const appliedMime = mr.mimeType || 'audio/webm';
+    const appliedMime = mr.mimeType || mime || 'audio/webm';
     chunksRef.current = [];
     mr.ondataavailable = e => {
       if (e.data && e.data.size) chunksRef.current.push(e.data);
     };
+    mr.onerror = ev => {
+      console.warn('MediaRecorder error:', ev.error);
+    };
     mr.onstop = () => {
+      mediaRecorderRef.current = null;
+      const s = streamRef.current;
+      if (s) {
+        s.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
       const blob = new Blob(chunksRef.current, { type: appliedMime });
+      if (!blob.size || blob.size < 32) {
+        console.warn('Voice note: no audio captured (try recording a few seconds).');
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (reader.result && onVoiceSaved) {
+        const dataUrl = reader.result;
+        if (dataUrl && typeof dataUrl === 'string' && onVoiceSaved) {
           onVoiceSaved({
             section: sectionId,
-            dataUrl: reader.result,
+            dataUrl,
             mimeType: blob.type || appliedMime
           });
         }
       };
       reader.readAsDataURL(blob);
     };
-    mr.start(200);
+    // Timeslice helps Safari/mobile actually populate chunks; stream is only stopped in `onstop`.
+    mr.start(250);
     mediaRecorderRef.current = mr;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -475,32 +523,27 @@ const JobCardFormPublic = () => {
   }, []);
 
   const leadTechnicianOptions = useMemo(
-    () => [
-      { value: '', label: 'Select technician' },
-      ...availableTechnicians.map(tech => ({
+    () =>
+      availableTechnicians.map(tech => ({
         value: tech.name || tech.email,
         label: `${tech.name || tech.email}${tech.department ? ` (${tech.department})` : ''}`
-      }))
-    ],
+      })),
     [availableTechnicians]
   );
 
   const teamTechnicianOptions = useMemo(
-    () => [
-      { value: '', label: '—' },
-      ...availableTechnicians
+    () =>
+      availableTechnicians
         .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
         .map(tech => ({
           value: tech.name || tech.email,
           label: tech.name || tech.email
-        }))
-    ],
+        })),
     [availableTechnicians, formData.otherTechnicians]
   );
 
   const clientSelectOptions = useMemo(
     () => [
-      { value: '', label: 'Select client' },
       ...clients.map(c => ({ value: c.id, label: c.name || c.companyName || c.id })),
       { value: NO_CLIENT_ID, label: 'No Client (enter details manually)' }
     ],
@@ -509,44 +552,29 @@ const JobCardFormPublic = () => {
 
   const siteSelectOptions = useMemo(() => {
     if (!formData.clientId || availableSites.length === 0) {
-      return [
-        {
-          value: '',
-          label:
-            availableSites.length === 0 && formData.clientId && formData.clientId !== NO_CLIENT_ID
-              ? 'No sites available for this client'
-              : 'Select site'
-        }
-      ];
+      return [];
     }
-    return [
-      { value: '', label: 'Select site' },
-      ...availableSites.map(site => ({
-        value: site.id || site.name || site,
-        label: String(site.name || site)
-      }))
-    ];
+    return availableSites.map(site => ({
+      value: site.id || site.name || site,
+      label: String(site.name || site)
+    }));
   }, [formData.clientId, availableSites]);
 
   const stockSkuOptions = useMemo(
-    () => [
-      { value: '', label: 'Select component' },
-      ...inventory.map(item => ({
+    () =>
+      inventory.map(item => ({
         value: item.sku || item.id,
         label: `${item.name} (${item.sku || item.id})`
-      }))
-    ],
+      })),
     [inventory]
   );
 
   const stockLocationOptions = useMemo(
-    () => [
-      { value: '', label: 'Select location' },
-      ...stockLocations.map(loc => ({
+    () =>
+      stockLocations.map(loc => ({
         value: loc.id,
         label: `${loc.name} (${loc.code})`
-      }))
-    ],
+      })),
     [stockLocations]
   );
 
@@ -1915,7 +1943,11 @@ const JobCardFormPublic = () => {
                 value={formData.siteId}
                 onChange={v => handleChange({ target: { name: 'siteId', value: v } })}
                 options={siteSelectOptions}
-                placeholder="Search sites…"
+                placeholder={
+                  availableSites.length === 0 && formData.clientId && formData.clientId !== NO_CLIENT_ID
+                    ? 'No sites for this client'
+                    : 'Search sites…'
+                }
                 disabled={!formData.clientId || formData.clientId === NO_CLIENT_ID || availableSites.length === 0}
               />
             </div>
@@ -2273,12 +2305,9 @@ const JobCardFormPublic = () => {
                         }
 
                         const controlId = `${form.id}_${fieldId}`;
-                        const selectOptionsFromField = [
-                          { value: '', label: 'Select…' },
-                          ...(Array.isArray(field.options)
-                            ? field.options.filter(Boolean).map(opt => ({ value: opt, label: opt }))
-                            : [])
-                        ];
+                        const selectOptionsFromField = Array.isArray(field.options)
+                          ? field.options.filter(Boolean).map(opt => ({ value: opt, label: opt }))
+                          : [];
 
                         return (
                           <div key={fieldId} className="space-y-1">
@@ -2319,11 +2348,10 @@ const JobCardFormPublic = () => {
                                 value={value}
                                 onChange={v => handleFormAnswerChange(form.id, fieldId, v)}
                                 options={[
-                                  { value: '', label: 'Select…' },
                                   { value: 'yes', label: 'Yes' },
                                   { value: 'no', label: 'No' }
                                 ]}
-                                placeholder="Search…"
+                                placeholder="Yes or No…"
                               />
                             ) : field.type === 'select' ? (
                               <SearchableSelect
