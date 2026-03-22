@@ -81,9 +81,21 @@ const STEP_META = {
   }
 };
 
-const StepBadge = ({ index, stepId, active, complete, onClick, className = '' }) => {
+const StepBadge = ({
+  index,
+  stepId,
+  active,
+  complete,
+  onClick,
+  className = '',
+  /** 'carousel' = single horizontal swipe row in mobile header (below xl) */
+  variant = 'default'
+}) => {
   const meta = STEP_META[stepId] || {};
-  const baseClasses = 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
+  const baseClasses =
+    variant === 'carousel'
+      ? 'group flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always]'
+      : 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
   const stateClass = active
     ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
     : complete
@@ -109,20 +121,26 @@ const StepBadge = ({ index, stepId, active, complete, onClick, className = '' })
       >
         <i className={`fa-solid ${meta.icon || 'fa-circle-dot'} text-base`}></i>
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:items-center sm:text-center lg:items-start lg:text-left">
+      <div
+        className={
+          variant === 'carousel'
+            ? 'flex min-w-0 flex-1 flex-col gap-0.5 text-left'
+            : 'flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:items-center sm:text-center lg:items-start lg:text-left'
+        }
+      >
         <span
-          className={`text-[11px] uppercase tracking-wide font-semibold ${active ? '!text-blue-600' : 'text-white/80'} sm:text-center lg:text-left`}
+          className={`text-[11px] uppercase tracking-wide font-semibold ${active ? '!text-blue-600' : 'text-white/80'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
         >
           Step {index + 1}
         </span>
         <span
-          className={`text-sm font-semibold leading-snug ${active ? '!text-blue-800' : 'text-white'} sm:text-center lg:text-left`}
+          className={`text-sm font-semibold leading-snug ${active ? '!text-blue-800' : 'text-white'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
         >
           {meta.title || stepId}
         </span>
         {meta.subtitle && (
           <span
-            className={`text-[11px] sm:text-xs ${active ? '!text-blue-600/90' : 'text-white/75'} sm:text-center lg:text-left`}
+            className={`text-[11px] sm:text-xs ${active ? '!text-blue-600/90' : 'text-white/75'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
           >
             {meta.subtitle}
           </span>
@@ -436,6 +454,136 @@ const MIN_AUDIO_BLOB_BYTES = 80;
 
 /** Timeslice (ms) so browsers reliably emit chunks; avoids empty blobs when start() has no slice (esp. some mobile WebKit). */
 const VOICE_RECORD_TIMESLICE_MS = 500;
+
+/** Decode data URL to ArrayBuffer without fetch() (avoids connect-src / CSP issues). */
+const dataUrlToArrayBuffer = dataUrl => {
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    throw new Error('Invalid audio data')
+  }
+  const comma = dataUrl.indexOf(',')
+  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl
+  const bin = atob(b64.replace(/\s/g, ''))
+  const len = bin.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes.buffer
+}
+
+async function decodeAudioDataCompat(audioContext, arrayBuffer) {
+  const copy = arrayBuffer.slice(0)
+  try {
+    const ret = audioContext.decodeAudioData(copy)
+    if (ret && typeof ret.then === 'function') {
+      return await ret
+    }
+  } catch (_) {
+    /* older WebKit: promise API may throw; use callback form */
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      audioContext.decodeAudioData(arrayBuffer.slice(0), resolve, reject)
+    } catch (e) {
+      reject(e)
+    }
+  })
+}
+
+/**
+ * Play recorded clips via Web Audio API (in-memory decode). Avoids <audio src="data:..."> which strict CSP blocks
+ * when `media-src` is omitted (falls back to `default-src` only).
+ */
+const VoiceClipWebPlayer = ({ dataUrl }) => {
+  const audioCtxRef = useRef(null)
+  const sourceRef = useRef(null)
+  const [playing, setPlaying] = useState(false)
+  const [hint, setHint] = useState('')
+
+  const stop = useCallback(() => {
+    try {
+      sourceRef.current?.stop()
+    } catch (_) {
+      /* already stopped */
+    }
+    sourceRef.current = null
+    setPlaying(false)
+  }, [])
+
+  useEffect(
+    () => () => {
+      stop()
+      try {
+        audioCtxRef.current?.close()
+      } catch (_) {
+        /* */
+      }
+      audioCtxRef.current = null
+    },
+    [stop, dataUrl]
+  )
+
+  const toggle = async () => {
+    if (playing) {
+      stop()
+      return
+    }
+    setHint('')
+    const AC = window.AudioContext || window.webkitAudioContext
+    if (!AC) {
+      setHint('Playback not supported in this browser.')
+      return
+    }
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AC()
+      }
+      const ctx = audioCtxRef.current
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
+      }
+      const ab = dataUrlToArrayBuffer(dataUrl)
+      const buffer = await decodeAudioDataCompat(ctx, ab)
+      stop()
+      const src = ctx.createBufferSource()
+      src.buffer = buffer
+      src.connect(ctx.destination)
+      src.onended = () => {
+        sourceRef.current = null
+        setPlaying(false)
+      }
+      sourceRef.current = src
+      src.start(0)
+      setPlaying(true)
+    } catch (e) {
+      console.warn('Voice clip Web Audio playback failed:', e)
+      setHint('Could not play this clip here (try Chrome, or use Transcribe).')
+      setPlaying(false)
+    }
+  }
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            toggle().catch(err => console.warn('Voice clip toggle:', err))
+          }}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-600 shadow-sm hover:bg-blue-50 touch-manipulation"
+          title={playing ? 'Stop' : 'Play'}
+          aria-label={playing ? 'Stop playback' : 'Play recording'}
+        >
+          <i className={`fas ${playing ? 'fa-stop' : 'fa-play'}`} />
+        </button>
+        <span className="text-[10px] text-gray-500">Listen</span>
+      </div>
+      {hint && (
+        <span className="text-[10px] text-amber-800" role="status">
+          {hint}
+        </span>
+      )}
+    </div>
+  )
+}
 
 /** Wrapped transcript for each voice note so multiple clips stay visually distinct in the field */
 const formatVoiceNoteTranscriptBlock = (noteNumber, text) => {
@@ -812,14 +960,7 @@ const VoiceNoteTextarea = ({
                 <span className="text-[10px] font-semibold text-gray-500 whitespace-nowrap">
                   #{clip.noteNumber != null ? clip.noteNumber : '—'}
                 </span>
-                <audio
-                  controls
-                  className="h-8 w-full min-w-0"
-                  preload="metadata"
-                  src={clip.dataUrl}
-                >
-                  <source src={clip.dataUrl} type={clip.mimeType || 'audio/webm'} />
-                </audio>
+                <VoiceClipWebPlayer dataUrl={clip.dataUrl} />
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
                 {clip.transcribed && (
@@ -3850,18 +3991,18 @@ const JobCardFormPublic = () => {
             </div>
             <div className="mt-3 sm:mt-4">
               <div
-                className="mobile-step-scroll flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 snap-x snap-mandatory scrollbar-hide"
-                aria-label="Wizard steps"
+                className="mobile-step-scroll flex flex-nowrap gap-3 overflow-x-auto overflow-y-hidden pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-hide touch-pan-x"
+                aria-label="Wizard steps — swipe sideways to choose a step"
               >
                 {STEP_IDS.map((stepId, idx) => (
                   <StepBadge
                     key={`mobile-${stepId}`}
+                    variant="carousel"
                     index={idx}
                     stepId={stepId}
                     active={idx === currentStep}
                     complete={idx < currentStep}
                     onClick={() => goToStep(idx)}
-                    className="flex-shrink-0"
                   />
                 ))}
               </div>

@@ -12,6 +12,7 @@ async function handler(req, res) {
     
     // Get only active clients (type = 'client')
     // Status can be 'active', 'Active', or empty - all are considered active for job cards
+    // Client model has no `status` field (use engagementStage in CRM); public form expects legacy `status` for filtering
     const clients = await prisma.client.findMany({
       where: {
         type: 'client'
@@ -19,7 +20,6 @@ async function handler(req, res) {
       select: {
         id: true,
         name: true,
-        status: true,
         type: true,
         sites: true
       },
@@ -41,7 +41,7 @@ async function handler(req, res) {
       return {
         id: client.id,
         name: client.name,
-        status: client.status,
+        status: 'active',
         type: client.type,
         sites: Array.isArray(sites) ? sites : []
       }

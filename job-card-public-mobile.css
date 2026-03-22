@@ -151,15 +151,35 @@
     padding-right: 0.75rem !important;
   }
 
-  /* Step badges mobile scroll */
+  /* Step badges: horizontal swipe (mobile / tablet header — below xl) */
   body.job-card-public .mobile-step-scroll {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;
     scroll-snap-type: x mandatory !important;
+    scroll-padding-inline: 0.75rem !important;
+    touch-action: pan-x !important;
+    overscroll-behavior-x: contain !important;
   }
 
   body.job-card-public .mobile-step-scroll::-webkit-scrollbar {
     display: none !important;
+  }
+
+  /* One card width per “page” so swipe moves step-to-step (max ~304px cap) */
+  body.job-card-public .mobile-step-scroll > button {
+    flex: 0 0 auto !important;
+    width: min(90vw, 19rem) !important;
+    min-width: min(90vw, 19rem) !important;
+    max-width: 19rem !important;
+    box-sizing: border-box !important;
+    scroll-snap-align: start !important;
+    scroll-snap-stop: always !important;
   }
 
   /* Touch-friendly inputs - reasonable sizes */
@@ -497,9 +517,8 @@
     font-size: 0.75rem !important;
   }
 
-  body.job-card-public .job-card-public-wrapper .mobile-step-scroll button {
-    min-width: 140px !important;
-    padding: 0.5rem 0.75rem !important;
+  body.job-card-public .job-card-public-wrapper .mobile-step-scroll > button {
+    padding: 0.5rem 0.65rem !important;
   }
 
   body.job-card-public .job-card-public-wrapper section {
