@@ -2382,6 +2382,17 @@ app.all('/api/public/jobcards', async (req, res, next) => {
   }
 })
 
+app.all('/api/public/transcribe-audio', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'transcribe-audio.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public transcribe-audio API error:', e)
+    return next(e)
+  }
+})
+
 // Explicit mapping for user operations with ID (GET, PUT, DELETE /api/users/[id])
 // IMPORTANT: This must come BEFORE /api/users route so Express matches it first
 app.all('/api/users/:id', async (req, res, next) => {

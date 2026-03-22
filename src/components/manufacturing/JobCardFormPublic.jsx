@@ -4,6 +4,55 @@ const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
 
+/** Base64 payloads: keep video cap lower than express.json (100mb) to leave room for the rest of the payload */
+const JOB_CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+
+function jobCardMediaIsVideoDataUrl(url) {
+  return typeof url === 'string' && /^data:video\//i.test(url);
+}
+
+function jobCardFileLooksImageOrVideo(file) {
+  if (file.type.startsWith('image/') || file.type.startsWith('video/')) return true;
+  return /\.(jpe?g|png|gif|webp|heic|heif|bmp|mp4|webm|mov|mkv)$/i.test(file.name || '');
+}
+
+function jobCardFileIsVideo(file) {
+  if (file.type.startsWith('video/')) return true;
+  return /\.(mp4|webm|mov|mkv)$/i.test(file.name || '');
+}
+
+const JobCardWizardAttachmentPreview = ({ url, index, onRemove }) => {
+  const isVideo = jobCardMediaIsVideoDataUrl(url);
+  return (
+    <div className="relative group rounded-lg overflow-hidden border border-gray-200">
+      {isVideo ? (
+        <video
+          src={url}
+          className="w-full max-h-48 sm:max-h-64 object-contain bg-black"
+          controls
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        <img
+          src={url}
+          alt={`Attachment ${index + 1}`}
+          className="w-full h-24 sm:h-32 object-cover"
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => onRemove(index)}
+        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation z-10"
+        title="Remove"
+      >
+        <i className="fas fa-times text-xs"></i>
+      </button>
+    </div>
+  );
+};
+
 const STEP_META = {
   assignment: {
     title: 'Team & Client',
@@ -1580,17 +1629,33 @@ const JobCardFormPublic = () => {
 
   const handlePhotoUpload = (event) => {
     const files = Array.from(event.target.files || []);
+    const input = event.target;
     if (files.length === 0) return;
 
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result;
-          setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: file.size }]);
-          setFormData(prev => ({ ...prev, photos: [...prev.photos, dataUrl] }));
-        };
-        reader.readAsDataURL(file);
-      });
+    files.forEach(file => {
+      if (!jobCardFileLooksImageOrVideo(file)) {
+        alert('Please choose an image or video file.');
+        return;
+      }
+      const isVid = jobCardFileIsVideo(file);
+      const maxBytes = isVid ? JOB_CARD_VIDEO_MAX_BYTES : JOB_CARD_IMAGE_MAX_BYTES;
+      if (file.size > maxBytes) {
+        alert(
+          isVid
+            ? `Each video must be ${JOB_CARD_VIDEO_MAX_BYTES / 1024 / 1024}MB or smaller.`
+            : `Each image must be ${JOB_CARD_IMAGE_MAX_BYTES / 1024 / 1024}MB or smaller.`
+        );
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result;
+        setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: file.size }]);
+        setFormData(prev => ({ ...prev, photos: [...prev.photos, dataUrl] }));
+      };
+      reader.readAsDataURL(file);
+    });
+    input.value = '';
   };
 
   const handleRemovePhoto = (index) => {
@@ -2577,12 +2642,12 @@ const JobCardFormPublic = () => {
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Photos</h2>
-            <p className="text-sm text-gray-500 mt-1">Add photos of the site, fault, or work completed (optional).</p>
+            <h2 className="text-lg font-semibold text-gray-900">Photos & video</h2>
+            <p className="text-sm text-gray-500 mt-1">Add photos or short videos of the site, fault, or work completed (optional).</p>
           </div>
           {selectedPhotos.length > 0 && (
             <span className="text-sm font-medium text-blue-600">
-              {selectedPhotos.length} photo{selectedPhotos.length === 1 ? '' : 's'}
+              {selectedPhotos.length} attachment{selectedPhotos.length === 1 ? '' : 's'}
             </span>
           )}
         </header>
@@ -2592,40 +2657,34 @@ const JobCardFormPublic = () => {
             id="photoUploadWork"
             onChange={handlePhotoUpload}
             className="hidden"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
           />
           <label
             htmlFor="photoUploadWork"
             className="cursor-pointer block"
           >
-            <i className="fas fa-camera text-3xl sm:text-4xl text-gray-400 mb-2"></i>
+            <span className="inline-flex items-center justify-center gap-3 text-gray-400 mb-2">
+              <i className="fas fa-camera text-3xl sm:text-4xl" />
+              <i className="fas fa-video text-2xl sm:text-3xl" />
+            </span>
             <p className="text-sm sm:text-base text-gray-600">
-              Tap to upload photos or drag and drop
+              Tap to add photos or videos
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              Supports mobile camera capture • Add as many as needed
+              Mobile camera or gallery • Images up to 10MB • Videos up to 50MB each
             </p>
           </label>
         </div>
         {selectedPhotos.length > 0 && (
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
             {selectedPhotos.map((photo, idx) => (
-              <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200">
-                <img
-                  src={typeof photo === 'string' ? photo : photo.url}
-                  alt={`Photo ${idx + 1}`}
-                  className="w-full h-24 sm:h-32 object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRemovePhoto(idx)}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation"
-                  title="Remove photo"
-                >
-                  <i className="fas fa-times text-xs"></i>
-                </button>
-              </div>
+              <JobCardWizardAttachmentPreview
+                key={idx}
+                url={typeof photo === 'string' ? photo : photo.url}
+                index={idx}
+                onRemove={handleRemovePhoto}
+              />
             ))}
           </div>
         )}
@@ -3022,11 +3081,11 @@ const JobCardFormPublic = () => {
         <header className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Attachments</h2>
-            <p className="text-sm text-gray-500 mt-1">Capture supporting photos directly from site.</p>
+            <p className="text-sm text-gray-500 mt-1">Capture supporting photos or videos from site.</p>
           </div>
           {selectedPhotos.length > 0 && (
             <span className="text-sm font-medium text-blue-600">
-              {selectedPhotos.length} photo{selectedPhotos.length === 1 ? '' : 's'}
+              {selectedPhotos.length} attachment{selectedPhotos.length === 1 ? '' : 's'}
             </span>
           )}
         </header>
@@ -3036,40 +3095,34 @@ const JobCardFormPublic = () => {
                 id="photoUpload"
                 onChange={handlePhotoUpload}
                 className="hidden"
-                accept="image/*"
+                accept="image/*,video/*"
                 multiple
               />
               <label
                 htmlFor="photoUpload"
                 className="cursor-pointer block"
               >
-                <i className="fas fa-camera text-3xl sm:text-4xl text-gray-400 mb-2"></i>
+                <span className="inline-flex items-center justify-center gap-3 text-gray-400 mb-2">
+                  <i className="fas fa-camera text-3xl sm:text-4xl" />
+                  <i className="fas fa-video text-2xl sm:text-3xl" />
+                </span>
                 <p className="text-sm sm:text-base text-gray-600">
-              Tap to upload photos or drag and drop
+                  Tap to add photos or videos
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-              Supports mobile camera capture • Max 10MB each
+                  Mobile camera or gallery • Images up to 10MB • Videos up to 50MB each
                 </p>
               </label>
             </div>
             {selectedPhotos.length > 0 && (
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {selectedPhotos.map((photo, idx) => (
-              <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200">
-                    <img
-                      src={typeof photo === 'string' ? photo : photo.url}
-                      alt={`Photo ${idx + 1}`}
-                  className="w-full h-24 sm:h-32 object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(idx)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation"
-                      title="Remove photo"
-                    >
-                      <i className="fas fa-times text-xs"></i>
-                    </button>
-                  </div>
+                  <JobCardWizardAttachmentPreview
+                    key={idx}
+                    url={typeof photo === 'string' ? photo : photo.url}
+                    index={idx}
+                    onRemove={handleRemovePhoto}
+                  />
                 ))}
               </div>
             )}
@@ -3224,7 +3277,7 @@ const JobCardFormPublic = () => {
           <SummaryRow label="Travel Distance" value={travelKm > 0 ? `${travelKm.toFixed(1)} km` : ''} />
           <SummaryRow label="Stock Lines" value={formData.stockUsed.length > 0 ? `${formData.stockUsed.length}` : ''} />
           <SummaryRow label="Materials Cost" value={totalMaterialCost > 0 ? `R ${totalMaterialCost.toFixed(2)}` : ''} />
-          <SummaryRow label="Photos Attached" value={selectedPhotos.length > 0 ? `${selectedPhotos.length}` : ''} />
+          <SummaryRow label="Photos / video" value={selectedPhotos.length > 0 ? `${selectedPhotos.length}` : ''} />
           <SummaryRow label="Customer Signature" value={hasSignature ? 'Captured' : 'Pending'} />
         </div>
       </section>

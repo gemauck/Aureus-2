@@ -10,6 +10,10 @@ const ReactGlobal =
 
 const { useState, useEffect, useMemo } = ReactGlobal;
 
+function jobCardAttachmentUrlIsVideo(url) {
+  return typeof url === 'string' && /^data:video\//i.test(url);
+}
+
 const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const isDark = (typeof window !== 'undefined' && window.useTheme) ? (window.useTheme().isDark) : false;
   if (!useState || !useEffect || !useMemo) {
@@ -1057,7 +1061,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       </span>
                       <div>
                         <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          Photos
+                          Media
                         </div>
                         <div className="text-sm text-slate-100">
                           {detailLoading && !Array.isArray(selectedJobCard.photos) ? (
@@ -1067,7 +1071,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                               {Array.isArray(selectedJobCard.photos)
                                 ? selectedJobCard.photos.length
                                 : 0}{' '}
-                              photo
+                              attachment
                               {Array.isArray(selectedJobCard.photos) &&
                               selectedJobCard.photos.length === 1
                                 ? ''
@@ -1081,7 +1085,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   {detailLoading && !Array.isArray(selectedJobCard.photos) ? (
                     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-8 text-center">
                       <i className="fa-solid fa-spinner fa-spin text-slate-500 text-xl mb-2" />
-                      <p className="text-sm text-slate-400">Loading photos…</p>
+                      <p className="text-sm text-slate-400">Loading attachments…</p>
                     </div>
                   ) : Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -1108,6 +1112,22 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                             </div>
                           );
                         }
+                        if (url && jobCardAttachmentUrlIsVideo(url)) {
+                          return (
+                            <div
+                              key={idx}
+                              className="overflow-hidden rounded-xl border border-slate-700 bg-black"
+                            >
+                              <video
+                                src={url}
+                                className="max-h-64 w-full object-contain"
+                                controls
+                                playsInline
+                                preload="metadata"
+                              />
+                            </div>
+                          );
+                        }
                         return (
                           <figure
                             key={idx}
@@ -1126,10 +1146,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-8 text-center">
                       <i className="fa-regular fa-image text-slate-500 text-xl mb-2" />
                       <p className="text-sm text-slate-300">
-                        No photos have been attached to this job card.
+                        No photos or videos have been attached to this job card.
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        Encourage technicians to capture photos for better traceability.
+                        Encourage technicians to capture site media for better traceability.
                       </p>
                     </div>
                   )}
