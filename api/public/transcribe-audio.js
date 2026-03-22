@@ -19,6 +19,17 @@ function extFromMime(m) {
   return 'webm'
 }
 
+/** Strip codecs/parameters — OpenAI multipart can reject `audio/webm;codecs=opus` */
+function normalizeAudioMime(raw) {
+  if (!raw || typeof raw !== 'string') return 'audio/webm'
+  const base = raw.split(';')[0].trim().toLowerCase()
+  if (!base.startsWith('audio/') && !base.startsWith('video/')) {
+    return 'audio/webm'
+  }
+  if (base === 'video/webm') return 'audio/webm'
+  return base || 'audio/webm'
+}
+
 async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -32,7 +43,9 @@ async function handler(req, res) {
   try {
     const body = req.body || {}
     const audioBase64 = body.audioBase64
-    const mimeType = typeof body.mimeType === 'string' ? body.mimeType : 'audio/webm'
+    const mimeType = normalizeAudioMime(
+      typeof body.mimeType === 'string' ? body.mimeType : 'audio/webm'
+    )
     if (!audioBase64 || typeof audioBase64 !== 'string') {
       return badRequest(res, 'audioBase64 is required')
     }
@@ -53,8 +66,12 @@ async function handler(req, res) {
     const text = typeof tr.text === 'string' ? tr.text : ''
     res.status(200).json({ ok: true, text })
   } catch (error) {
-    console.error('❌ Public transcribe-audio error:', error)
-    return serverError(res, 'Transcription failed', error.message)
+    const detail =
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      String(error)
+    console.error('❌ Public transcribe-audio error:', detail, error)
+    return serverError(res, 'Transcription failed', detail)
   }
 }
 

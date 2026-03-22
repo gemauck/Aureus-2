@@ -428,6 +428,9 @@ const createMediaRecorder = stream => {
 /** Below this, recording is treated as failed (headers-only / silence). Keep low but not zero. */
 const MIN_AUDIO_BLOB_BYTES = 80;
 
+/** Timeslice (ms) so browsers reliably emit chunks; avoids empty blobs when start() has no slice (esp. some mobile WebKit). */
+const VOICE_RECORD_TIMESLICE_MS = 500;
+
 /** Wrapped transcript for each voice note so multiple clips stay visually distinct in the field */
 const formatVoiceNoteTranscriptBlock = (noteNumber, text) => {
   const n = Math.max(1, Number(noteNumber) || 1);
@@ -451,12 +454,14 @@ const VoiceNoteTextarea = ({
   onVoiceClipUpdate,
   voiceClips = []
 }) => {
-  const [audioRecording, setAudioRecording] = useState(false);
+  /** idle → requesting (getUserMedia) → recording; avoids double-start while mic prompt is open */
+  const [micState, setMicState] = useState('idle');
   const [recordHint, setRecordHint] = useState('');
   const [transcribingClipId, setTranscribingClipId] = useState(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  const micAbortRef = useRef(null);
   const valueRef = useRef(value);
   const mountedRef = useRef(true);
   const onVoiceSavedRef = useRef(onVoiceSaved);
@@ -484,13 +489,13 @@ const VoiceNoteTextarea = ({
   const stopAudioRecording = useCallback(() => {
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') {
-      // With start() and no timeslice, the full blob is delivered on stop(). requestData() first
-      // can yield an empty chunk on WebKit and break the merged Blob / playback.
       try {
         mr.stop();
       } catch (_) {}
     }
-    setAudioRecording(false);
+    if (mountedRef.current) {
+      setMicState('idle');
+    }
   }, []);
 
   const startAudioRecording = useCallback(async () => {
@@ -503,23 +508,57 @@ const VoiceNoteTextarea = ({
       alert('Microphone access is not available. Use HTTPS or check browser permissions.');
       return;
     }
+    if (mediaRecorderRef.current) {
+      return;
+    }
+
+    const ac = new AbortController();
+    micAbortRef.current = ac;
+    if (mountedRef.current) {
+      setMicState('requesting');
+    }
+
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true
-        }
-      });
-    } catch (err) {
+      // Plain `audio: true` — advanced constraints can fail or yield silent tracks on some mobile browsers.
+      // `signal` cancels the prompt where supported; older engines fall back without it.
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (err2) {
-        console.warn('getUserMedia:', err, err2);
-        alert('Microphone permission was denied or unavailable.');
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          signal: ac.signal
+        });
+      } catch (inner) {
+        if (inner?.name === 'TypeError') {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } else {
+          throw inner;
+        }
+      }
+    } catch (err) {
+      micAbortRef.current = null;
+      if (err?.name === 'AbortError') {
+        if (mountedRef.current) {
+          setMicState('idle');
+        }
         return;
       }
+      console.warn('getUserMedia:', err);
+      if (mountedRef.current) {
+        setMicState('idle');
+      }
+      alert('Microphone permission was denied or unavailable.');
+      return;
     }
+
+    micAbortRef.current = null;
+    if (ac.signal.aborted) {
+      stream.getTracks().forEach(t => t.stop());
+      if (mountedRef.current) {
+        setMicState('idle');
+      }
+      return;
+    }
+
     streamRef.current = stream;
     const mr = createMediaRecorder(stream);
     const appliedMime =
@@ -533,6 +572,7 @@ const VoiceNoteTextarea = ({
       console.warn('MediaRecorder error:', ev.error);
       if (mountedRef.current) {
         setRecordHint('Recording error — try again.');
+        setMicState('idle');
       }
     };
     mr.onstop = () => {
@@ -543,53 +583,69 @@ const VoiceNoteTextarea = ({
         streamRef.current = null;
       }
       const blobType = (mr.mimeType && mr.mimeType.length > 0 ? mr.mimeType : appliedMime) || 'audio/webm';
-      const blob = new Blob(chunksRef.current, { type: blobType });
-      if (!blob.size || blob.size < MIN_AUDIO_BLOB_BYTES) {
-        console.warn('JobCard voice: empty or tiny blob', blob.size, 'type', blobType);
-        if (mountedRef.current) {
-          setRecordHint(
-            'No audio captured — hold mic, speak 2–3 seconds, tap stop. Try Safari on iPhone, or update Chrome. If it keeps failing, check site microphone permission.'
-          );
-        }
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result;
-        const save = onVoiceSavedRef.current;
-        if (dataUrl && typeof dataUrl === 'string' && save) {
-          save({
-            section: sectionIdRef.current,
-            dataUrl,
-            mimeType: blob.type || blobType,
-            noteNumber: pendingNoteNumberRef.current
-          });
-          if (mountedRef.current) {
-            setRecordHint('');
+
+      const tryPersist = isDeferred => {
+        const blob = new Blob(chunksRef.current, { type: blobType });
+        if (!blob.size || blob.size < MIN_AUDIO_BLOB_BYTES) {
+          if (!isDeferred) {
+            queueMicrotask(() => tryPersist(true));
+          } else {
+            console.warn('JobCard voice: empty or tiny blob', blob.size, 'type', blobType);
+            if (mountedRef.current) {
+              setRecordHint(
+                'No audio captured — hold mic, speak 2–3 seconds, tap stop. Try another browser or check microphone permission (HTTPS required).'
+              );
+            }
           }
+          return;
         }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (!mountedRef.current) {
+            return;
+          }
+          const dataUrl = reader.result;
+          const save = onVoiceSavedRef.current;
+          if (dataUrl && typeof dataUrl === 'string' && save) {
+            save({
+              section: sectionIdRef.current,
+              dataUrl,
+              mimeType: blob.type || blobType,
+              noteNumber: pendingNoteNumberRef.current
+            });
+            setRecordHint('');
+          } else if (!save) {
+            console.warn('JobCard voice: onVoiceSaved missing; clip not stored');
+          }
+        };
+        reader.onerror = () => {
+          if (mountedRef.current) {
+            setRecordHint('Could not read recording — try again.');
+          }
+        };
+        reader.readAsDataURL(blob);
       };
-      reader.onerror = () => {
-        if (mountedRef.current) {
-          setRecordHint('Could not read recording — try again.');
-        }
-      };
-      reader.readAsDataURL(blob);
+
+      tryPersist(false);
     };
 
     try {
-      // No timeslice: browsers emit one blob at stop (timesliced recording often yields empty/unplayable clips).
-      mr.start();
+      mr.start(VOICE_RECORD_TIMESLICE_MS);
     } catch (startErr) {
       console.warn('MediaRecorder.start failed:', startErr);
       stream.getTracks().forEach(t => t.stop());
       streamRef.current = null;
+      if (mountedRef.current) {
+        setMicState('idle');
+      }
       alert('Could not start audio recording. Try another browser or update this one.');
       return;
     }
 
     mediaRecorderRef.current = mr;
-    setAudioRecording(true);
+    if (mountedRef.current) {
+      setMicState('recording');
+    }
   }, []);
 
   const transcribeClip = async clip => {
@@ -642,21 +698,40 @@ const VoiceNoteTextarea = ({
   };
 
   const toggleMic = () => {
-    if (audioRecording) {
+    if (micState === 'recording') {
       stopAudioRecording();
+      return;
+    }
+    if (micState === 'requesting') {
+      micAbortRef.current?.abort();
       return;
     }
     startAudioRecording().catch(err => {
       console.warn('Voice note:', err);
+      if (mountedRef.current) {
+        setMicState('idle');
+      }
       alert(`Could not use the microphone: ${err.message || err}`);
     });
   };
 
   useEffect(() => {
     return () => {
-      stopAudioRecording();
+      micAbortRef.current?.abort();
+      const mr = mediaRecorderRef.current;
+      if (mr && mr.state !== 'inactive') {
+        try {
+          mr.stop();
+        } catch (_) {}
+      }
+      const st = streamRef.current;
+      if (st) {
+        st.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      mediaRecorderRef.current = null;
     };
-  }, [stopAudioRecording]);
+  }, []);
 
   return (
     <div className="relative">
@@ -674,20 +749,33 @@ const VoiceNoteTextarea = ({
           type="button"
           onClick={toggleMic}
           title={
-            audioRecording
+            micState === 'recording'
               ? 'Stop and save this voice note'
-              : 'Record a voice note (you can add several per field)'
+              : micState === 'requesting'
+                ? 'Cancel microphone request'
+                : 'Record a voice note (you can add several per field)'
           }
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
-            audioRecording
+            micState === 'recording'
               ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
-              : 'border-gray-200 bg-white text-blue-600 hover:bg-blue-50'
+              : micState === 'requesting'
+                ? 'border-amber-300 bg-amber-50 text-amber-700 animate-pulse'
+                : 'border-gray-200 bg-white text-blue-600 hover:bg-blue-50'
           }`}
         >
-          <i className={`fas ${audioRecording ? 'fa-stop' : 'fa-microphone'}`} />
+          <i
+            className={`fas ${
+              micState === 'recording' || micState === 'requesting' ? 'fa-stop' : 'fa-microphone'
+            }`}
+          />
         </button>
       </div>
-      {audioRecording && (
+      {micState === 'requesting' && (
+        <p className="mt-1 text-[11px] font-medium text-amber-700">
+          Requesting microphone… allow access, or tap stop to cancel.
+        </p>
+      )}
+      {micState === 'recording' && (
         <p className="mt-1 text-[11px] font-medium text-red-600">
           Recording… speak, then tap the mic again to save this note.
         </p>
@@ -697,7 +785,7 @@ const VoiceNoteTextarea = ({
           {recordHint}
         </p>
       )}
-      {!audioRecording && (
+      {micState === 'idle' && (
         <p className="mt-1 text-[10px] text-gray-500">
           Record multiple notes if needed. Use &quot;Transcribe&quot; on each clip to insert text between the marked
           start/end lines.
