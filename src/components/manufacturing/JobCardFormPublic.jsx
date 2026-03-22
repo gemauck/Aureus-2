@@ -617,7 +617,6 @@ const VoiceNoteTextarea = ({
   const [recordHint, setRecordHint] = useState('');
   const [transcribingClipId, setTranscribingClipId] = useState(null);
   const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
   const streamRef = useRef(null);
   const micAbortRef = useRef(null);
   const valueRef = useRef(value);
@@ -648,6 +647,13 @@ const VoiceNoteTextarea = ({
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') {
       try {
+        if (typeof mr.requestData === 'function') {
+          mr.requestData();
+        }
+      } catch (_) {
+        /* optional final chunk flush */
+      }
+      try {
         mr.stop();
       } catch (_) {}
     }
@@ -666,8 +672,16 @@ const VoiceNoteTextarea = ({
       alert('Microphone access is not available. Use HTTPS or check browser permissions.');
       return;
     }
-    if (mediaRecorderRef.current) {
-      return;
+    /**
+     * After stop(), `onstop` runs async; until then the ref still points at the old recorder.
+     * Starting again immediately would no-op — clear an already-inactive recorder and continue.
+     */
+    const existingMr = mediaRecorderRef.current;
+    if (existingMr) {
+      if (existingMr.state === 'recording' || existingMr.state === 'paused') {
+        return;
+      }
+      mediaRecorderRef.current = null;
     }
 
     const ac = new AbortController();
@@ -717,36 +731,53 @@ const VoiceNoteTextarea = ({
       return;
     }
 
-    streamRef.current = stream;
-    const mr = createMediaRecorder(stream);
+    const recordingStream = stream;
+    streamRef.current = recordingStream;
+    const sessionChunks = [];
+    const mr = createMediaRecorder(recordingStream);
     const appliedMime =
       mr.mimeType || pickAudioRecorderMimeType() || 'audio/webm';
-    chunksRef.current = [];
     pendingNoteNumberRef.current = voiceClipsCountRef.current + 1;
     mr.ondataavailable = e => {
-      if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data && e.data.size > 0) sessionChunks.push(e.data);
     };
     mr.onerror = ev => {
       console.warn('MediaRecorder error:', ev.error);
+      if (mediaRecorderRef.current === mr) {
+        mediaRecorderRef.current = null;
+      }
+      sessionChunks.length = 0;
+      try {
+        recordingStream.getTracks().forEach(t => t.stop());
+      } catch (_) {}
+      if (streamRef.current === recordingStream) {
+        streamRef.current = null;
+      }
       if (mountedRef.current) {
         setRecordHint('Recording error — try again.');
         setMicState('idle');
       }
     };
     mr.onstop = () => {
-      mediaRecorderRef.current = null;
-      const s = streamRef.current;
-      if (s) {
-        s.getTracks().forEach(t => t.stop());
+      if (mediaRecorderRef.current === mr) {
+        mediaRecorderRef.current = null;
+      }
+      try {
+        recordingStream.getTracks().forEach(t => t.stop());
+      } catch (_) {}
+      if (streamRef.current === recordingStream) {
         streamRef.current = null;
       }
       const blobType = (mr.mimeType && mr.mimeType.length > 0 ? mr.mimeType : appliedMime) || 'audio/webm';
 
-      const tryPersist = isDeferred => {
-        const blob = new Blob(chunksRef.current, { type: blobType });
+      /** 0 = immediate, 1 = microtask, 2 = short timeout — some WebKit builds deliver the last slice late */
+      const tryPersist = deferLevel => {
+        const blob = new Blob(sessionChunks, { type: blobType });
         if (!blob.size || blob.size < MIN_AUDIO_BLOB_BYTES) {
-          if (!isDeferred) {
-            queueMicrotask(() => tryPersist(true));
+          if (deferLevel === 0) {
+            queueMicrotask(() => tryPersist(1));
+          } else if (deferLevel === 1) {
+            window.setTimeout(() => tryPersist(2), 96);
           } else {
             console.warn('JobCard voice: empty or tiny blob', blob.size, 'type', blobType);
             if (mountedRef.current) {
@@ -784,7 +815,7 @@ const VoiceNoteTextarea = ({
         reader.readAsDataURL(blob);
       };
 
-      tryPersist(false);
+      tryPersist(0);
     };
 
     try {
