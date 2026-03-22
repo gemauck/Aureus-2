@@ -493,31 +493,31 @@ async function decodeAudioDataCompat(audioContext, arrayBuffer) {
 }
 
 /**
+ * One shared context for all job-card voice clips: a single user-gesture resume() unlocks playback everywhere.
+ * Pre-decode in an effect so Play does not await decode (Safari/iOS drop the gesture chain between await and start()).
+ */
+let jobCardVoicePlaybackCtx = null
+
+const getJobCardVoicePlaybackContext = () => {
+  if (typeof window === 'undefined') return null
+  const AC = window.AudioContext || window.webkitAudioContext
+  if (!AC) return null
+  if (!jobCardVoicePlaybackCtx || jobCardVoicePlaybackCtx.state === 'closed') {
+    jobCardVoicePlaybackCtx = new AC()
+  }
+  return jobCardVoicePlaybackCtx
+}
+
+/**
  * Play recorded clips via Web Audio API (in-memory decode). Avoids <audio src="data:..."> which strict CSP blocks
  * when `media-src` is omitted (falls back to `default-src` only).
  */
 const VoiceClipWebPlayer = ({ dataUrl }) => {
-  const audioCtxRef = useRef(null)
   const sourceRef = useRef(null)
+  const decodedBufferRef = useRef(null)
   const [playing, setPlaying] = useState(false)
   const [hint, setHint] = useState('')
-
-  /**
-   * Browsers tie AudioContext unlock to a user gesture. Any await before playback can break that chain.
-   * Call this synchronously from the Play click (before async decode), then await resume again before start().
-   */
-  const unlockAudioContextSync = useCallback(() => {
-    const AC = window.AudioContext || window.webkitAudioContext
-    if (!AC) return null
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AC()
-    }
-    const ctx = audioCtxRef.current
-    if (ctx.state === 'suspended') {
-      void ctx.resume()
-    }
-    return ctx
-  }, [])
+  const [decodePhase, setDecodePhase] = useState('loading')
 
   const stop = useCallback(() => {
     try {
@@ -529,36 +529,49 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
     setPlaying(false)
   }, [])
 
-  useEffect(
-    () => () => {
-      stop()
-      try {
-        audioCtxRef.current?.close()
-      } catch (_) {
-        /* */
-      }
-      audioCtxRef.current = null
-    },
-    [stop, dataUrl]
-  )
-
-  const toggle = async () => {
-    if (playing) {
-      stop()
-      return
-    }
+  useEffect(() => {
+    stop()
+    decodedBufferRef.current = null
     setHint('')
-    const ctx = audioCtxRef.current
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      setDecodePhase('error')
+      return undefined
+    }
+    setDecodePhase('loading')
+    const ctx = getJobCardVoicePlaybackContext()
     if (!ctx) {
-      setHint('Playback not supported in this browser.')
+      setDecodePhase('error')
+      return undefined
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const ab = dataUrlToArrayBuffer(dataUrl)
+        const buffer = await decodeAudioDataCompat(ctx, ab)
+        if (cancelled) return
+        decodedBufferRef.current = buffer
+        setDecodePhase('ready')
+      } catch (e) {
+        if (cancelled) return
+        decodedBufferRef.current = null
+        setDecodePhase('error')
+        console.warn('Voice clip decode failed:', e)
+      }
+    })()
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [dataUrl, stop])
+
+  const startPlaybackAfterResume = useCallback(() => {
+    const ctx = getJobCardVoicePlaybackContext()
+    const buffer = decodedBufferRef.current
+    if (!ctx || !buffer) {
+      setPlaying(false)
       return
     }
     try {
-      const ab = dataUrlToArrayBuffer(dataUrl)
-      const buffer = await decodeAudioDataCompat(ctx, ab)
-      if (ctx.state === 'suspended') {
-        await ctx.resume()
-      }
       stop()
       const src = ctx.createBufferSource()
       src.buffer = buffer
@@ -575,31 +588,55 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
       setHint('Could not play this clip here (try Chrome, or use Transcribe).')
       setPlaying(false)
     }
-  }
+  }, [stop])
+
+  const onPlayClick = useCallback(() => {
+    setHint('')
+    if (playing) {
+      stop()
+      return
+    }
+    const ctx = getJobCardVoicePlaybackContext()
+    if (!ctx) {
+      setHint('Playback not supported in this browser.')
+      return
+    }
+    if (decodePhase === 'loading' || !decodedBufferRef.current) {
+      setHint(decodePhase === 'loading' ? 'Loading audio…' : 'Could not load this recording.')
+      return
+    }
+    const run = () => {
+      try {
+        startPlaybackAfterResume()
+      } catch (e) {
+        console.warn('Voice clip play:', e)
+        setHint('Could not play this clip here (try Chrome, or use Transcribe).')
+      }
+    }
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(run).catch(err => {
+        console.warn('AudioContext.resume failed:', err)
+        setHint('Tap Play again — audio was blocked.')
+      })
+    } else {
+      run()
+    }
+  }, [playing, stop, decodePhase, startPlaybackAfterResume])
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
-          onClick={() => {
-            if (playing) {
-              toggle().catch(err => console.warn('Voice clip toggle:', err))
-              return
-            }
-            const AC = window.AudioContext || window.webkitAudioContext
-            if (!AC) {
-              setHint('Playback not supported in this browser.')
-              return
-            }
-            unlockAudioContextSync()
-            toggle().catch(err => console.warn('Voice clip toggle:', err))
-          }}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-600 shadow-sm hover:bg-blue-50 touch-manipulation"
-          title={playing ? 'Stop' : 'Play'}
+          onClick={onPlayClick}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-600 shadow-sm hover:bg-blue-50 touch-manipulation disabled:opacity-50"
+          title={playing ? 'Stop' : decodePhase === 'loading' ? 'Loading…' : 'Play'}
           aria-label={playing ? 'Stop playback' : 'Play recording'}
+          disabled={decodePhase === 'loading' && !playing}
         >
-          <i className={`fas ${playing ? 'fa-stop' : 'fa-play'}`} />
+          <i
+            className={`fas ${playing ? 'fa-stop' : decodePhase === 'loading' ? 'fa-spinner fa-spin' : 'fa-play'}`}
+          />
         </button>
         <span className="text-[10px] text-gray-500">Listen</span>
       </div>
