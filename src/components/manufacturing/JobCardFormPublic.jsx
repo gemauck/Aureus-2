@@ -207,7 +207,13 @@ const SearchableSelect = ({
   );
 };
 
-/** Best MIME type for MediaRecorder (Safari often needs mp4/m4a; Chrome uses webm) */
+const isIOSOrSafari =
+  typeof navigator !== 'undefined' &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+    /^((?!chrome|android).)*safari/i.test(navigator.userAgent));
+
+/** Best MIME type for MediaRecorder (omit on iOS — let the browser default; avoids empty blobs) */
 const pickAudioRecorderMimeType = () => {
   if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
     return '';
@@ -225,6 +231,25 @@ const pickAudioRecorderMimeType = () => {
   return '';
 };
 
+/** Create MediaRecorder with fallbacks (iOS: default constructor is most reliable) */
+const createMediaRecorder = stream => {
+  if (isIOSOrSafari) {
+    try {
+      return new MediaRecorder(stream);
+    } catch (e) {
+      console.warn('MediaRecorder (Safari default) failed:', e);
+    }
+  }
+  try {
+    const mime = pickAudioRecorderMimeType();
+    if (mime) return new MediaRecorder(stream, { mimeType: mime });
+    return new MediaRecorder(stream);
+  } catch (e) {
+    console.warn('MediaRecorder (typed) failed, using default:', e);
+    return new MediaRecorder(stream);
+  }
+};
+
 /** Long-form textarea with mic: transcribes speech into the field and saves the audio for replay */
 const VoiceNoteTextarea = ({
   sectionId,
@@ -238,32 +263,12 @@ const VoiceNoteTextarea = ({
   voiceClips = []
 }) => {
   const [recording, setRecording] = useState(false);
+  const [recordHint, setRecordHint] = useState('');
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
-  const recognitionRef = useRef(null);
   const streamRef = useRef(null);
-  const valueRef = useRef(value);
-  useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
-
-  const appendText = useCallback(
-    text => {
-      if (!text || !String(text).trim()) return;
-      const v = valueRef.current;
-      const next = v ? `${String(v).trim()}\n${String(text).trim()}` : String(text).trim();
-      onChange({ target: { name, value: next } });
-    },
-    [name, onChange]
-  );
 
   const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (_) {}
-      recognitionRef.current = null;
-    }
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') {
       try {
@@ -275,26 +280,44 @@ const VoiceNoteTextarea = ({
         mr.stop();
       } catch (_) {}
     }
-    // Do NOT stop the mic here — wait for MediaRecorder `onstop` or we get empty blobs.
+    // Mic is stopped inside MediaRecorder `onstop` so chunks flush reliably.
     setRecording(false);
   }, []);
 
   const startRecording = useCallback(async () => {
+    setRecordHint('');
     if (typeof MediaRecorder === 'undefined') {
-      alert('Audio recording is not supported in this browser.');
+      alert('Recording is not supported in this browser. Try Chrome, Edge, or Safari on iOS 14.3+.');
       return;
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert('Microphone access is not available. Use HTTPS or check browser permissions.');
+      return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      });
+    } catch (err) {
+      console.warn('getUserMedia:', err);
+      alert('Microphone permission was denied or unavailable.');
+      return;
+    }
     streamRef.current = stream;
-    const mime = pickAudioRecorderMimeType();
-    const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-    const appliedMime = mr.mimeType || mime || 'audio/webm';
+    const mr = createMediaRecorder(stream);
+    const appliedMime =
+      mr.mimeType || pickAudioRecorderMimeType() || 'audio/webm';
     chunksRef.current = [];
     mr.ondataavailable = e => {
-      if (e.data && e.data.size) chunksRef.current.push(e.data);
+      if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
     mr.onerror = ev => {
       console.warn('MediaRecorder error:', ev.error);
+      setRecordHint('Recording error — try again.');
     };
     mr.onstop = () => {
       mediaRecorderRef.current = null;
@@ -303,9 +326,10 @@ const VoiceNoteTextarea = ({
         s.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
-      const blob = new Blob(chunksRef.current, { type: appliedMime });
-      if (!blob.size || blob.size < 32) {
-        console.warn('Voice note: no audio captured (try recording a few seconds).');
+      const blobType = (mr.mimeType && mr.mimeType.length > 0 ? mr.mimeType : appliedMime) || 'audio/webm';
+      const blob = new Blob(chunksRef.current, { type: blobType });
+      if (!blob.size || blob.size < 64) {
+        setRecordHint('No audio captured — hold the button and speak for a second or two, then tap stop.');
         return;
       }
       const reader = new FileReader();
@@ -315,40 +339,18 @@ const VoiceNoteTextarea = ({
           onVoiceSaved({
             section: sectionId,
             dataUrl,
-            mimeType: blob.type || appliedMime
+            mimeType: blob.type || blobType
           });
+          setRecordHint('');
         }
       };
+      reader.onerror = () => setRecordHint('Could not read recording — try again.');
       reader.readAsDataURL(blob);
     };
-    // Timeslice helps Safari/mobile actually populate chunks; stream is only stopped in `onstop`.
-    mr.start(250);
+    mr.start(200);
     mediaRecorderRef.current = mr;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = false;
-      rec.lang = navigator.language || 'en-ZA';
-      rec.onresult = ev => {
-        let chunk = '';
-        for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript;
-        }
-        if (chunk.trim()) appendText(chunk.trim());
-      };
-      rec.onerror = () => {};
-      try {
-        rec.start();
-        recognitionRef.current = rec;
-      } catch (_) {
-        recognitionRef.current = null;
-      }
-    }
-
     setRecording(true);
-  }, [appendText, onVoiceSaved, sectionId]);
+  }, [onVoiceSaved, sectionId]);
 
   const toggle = () => {
     if (recording) {
@@ -384,8 +386,8 @@ const VoiceNoteTextarea = ({
           onClick={toggle}
           title={
             recording
-              ? 'Stop: finishes recording, saves audio, and stops dictation'
-              : 'Record: speech is typed into the box and audio is saved for replay'
+              ? 'Stop and save this recording'
+              : 'Record voice — audio is saved below for playback'
           }
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
             recording
@@ -399,6 +401,11 @@ const VoiceNoteTextarea = ({
           <span className="text-[10px] font-medium text-red-600">Recording…</span>
         )}
       </div>
+      {recordHint && (
+        <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          {recordHint}
+        </p>
+      )}
       {voiceClips.length > 0 && (
         <div className="mt-2 space-y-1.5" aria-label="Saved voice recordings for this field">
           <p className="text-[10px] font-medium text-gray-500">
