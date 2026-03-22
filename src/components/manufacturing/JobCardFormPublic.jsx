@@ -502,6 +502,23 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
   const [playing, setPlaying] = useState(false)
   const [hint, setHint] = useState('')
 
+  /**
+   * Browsers tie AudioContext unlock to a user gesture. Any await before playback can break that chain.
+   * Call this synchronously from the Play click (before async decode), then await resume again before start().
+   */
+  const unlockAudioContextSync = useCallback(() => {
+    const AC = window.AudioContext || window.webkitAudioContext
+    if (!AC) return null
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AC()
+    }
+    const ctx = audioCtxRef.current
+    if (ctx.state === 'suspended') {
+      void ctx.resume()
+    }
+    return ctx
+  }, [])
+
   const stop = useCallback(() => {
     try {
       sourceRef.current?.stop()
@@ -531,21 +548,17 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
       return
     }
     setHint('')
-    const AC = window.AudioContext || window.webkitAudioContext
-    if (!AC) {
+    const ctx = audioCtxRef.current
+    if (!ctx) {
       setHint('Playback not supported in this browser.')
       return
     }
     try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new AC()
-      }
-      const ctx = audioCtxRef.current
+      const ab = dataUrlToArrayBuffer(dataUrl)
+      const buffer = await decodeAudioDataCompat(ctx, ab)
       if (ctx.state === 'suspended') {
         await ctx.resume()
       }
-      const ab = dataUrlToArrayBuffer(dataUrl)
-      const buffer = await decodeAudioDataCompat(ctx, ab)
       stop()
       const src = ctx.createBufferSource()
       src.buffer = buffer
@@ -570,6 +583,16 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
         <button
           type="button"
           onClick={() => {
+            if (playing) {
+              toggle().catch(err => console.warn('Voice clip toggle:', err))
+              return
+            }
+            const AC = window.AudioContext || window.webkitAudioContext
+            if (!AC) {
+              setHint('Playback not supported in this browser.')
+              return
+            }
+            unlockAudioContextSync()
             toggle().catch(err => console.warn('Voice clip toggle:', err))
           }}
           className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-600 shadow-sm hover:bg-blue-50 touch-manipulation"
