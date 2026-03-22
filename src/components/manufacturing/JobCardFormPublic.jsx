@@ -3308,7 +3308,9 @@ const JobCardFormPublic = () => {
             <p className="text-[11px] uppercase tracking-widest text-white/60 font-semibold">
               Mobile Job Card
             </p>
-            <h1 className="text-2xl sm:text-3xl font-bold leading-tight">Field Job Card</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold leading-tight text-white">
+              Job Card App
+            </h1>
             <p className="text-sm text-white/80">
               Continue a draft on this device or start a new job card.
             </p>
@@ -3449,8 +3451,8 @@ const JobCardFormPublic = () => {
           <p className="text-[10px] uppercase tracking-wide text-white/70 font-semibold mb-1">
             Mobile Job Card
           </p>
-          <h1 className="text-lg font-bold leading-tight">
-            Field Job Card Wizard
+          <h1 className="text-lg font-bold leading-tight text-white">
+            Job Card App Wizard
           </h1>
           {editingMeta && (
             <p className="text-xs text-amber-100 mt-1.5 font-medium">
@@ -3531,8 +3533,8 @@ const JobCardFormPublic = () => {
                 <p className="text-[10px] sm:text-[11px] uppercase tracking-wide text-white/70 font-semibold">
                   Mobile Job Card
                 </p>
-                <h1 className="text-lg sm:text-2xl font-bold leading-tight mt-1">
-                  Field Job Card Wizard
+                <h1 className="text-lg sm:text-2xl font-bold leading-tight mt-1 text-white">
+                  Job Card App Wizard
                 </h1>
                 {editingMeta && (
                   <p className="text-[11px] sm:text-xs text-amber-100 font-medium mt-1">
