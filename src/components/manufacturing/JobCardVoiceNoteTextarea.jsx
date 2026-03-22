@@ -593,7 +593,7 @@ const VoiceNoteTextarea = ({
           );
         } else if (res.status === 502 || res.status === 504) {
           setRecordHint(
-            'Transcription hit a gateway timeout (server proxy closed before Whisper finished). Try a shorter clip, retry in a moment, or ask your admin to raise nginx proxy_read_timeout for /api/ (e.g. 300s).'
+            'Gateway timeout (502/504): the server proxy closed before Whisper finished. Try a shorter clip or retry. Admin: raise nginx proxy_read_timeout for /api/ to 300s (see scripts/nginx-bump-proxy-timeouts-300s.sh).'
           );
         } else {
           setRecordHint(
