@@ -254,7 +254,10 @@ const getSpeechRecognitionCtor = () =>
   typeof window !== 'undefined' &&
   (window.SpeechRecognition || window.webkitSpeechRecognition);
 
-/** Long-form textarea with mic: live transcription (where supported) + saved audio for replay */
+/** Web Speech + MediaRecorder both use the mic; running them together often yields empty/unplayable blobs. Mic = audio only; CC = dictate text only. */
+const MIN_AUDIO_BLOB_BYTES = 512;
+
+/** Long-form textarea: mic saves playable audio; CC button (Chrome/Edge) types what you say — use one mode at a time */
 const VoiceNoteTextarea = ({
   sectionId,
   name,
@@ -266,7 +269,8 @@ const VoiceNoteTextarea = ({
   onVoiceSaved,
   voiceClips = []
 }) => {
-  const [recording, setRecording] = useState(false);
+  const [audioRecording, setAudioRecording] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const [recordHint, setRecordHint] = useState('');
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -291,8 +295,12 @@ const VoiceNoteTextarea = ({
     } catch (_) {}
   }, []);
 
-  const stopRecording = useCallback(() => {
+  const stopDictation = useCallback(() => {
     stopSpeech();
+    setDictating(false);
+  }, [stopSpeech]);
+
+  const stopAudioRecording = useCallback(() => {
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') {
       try {
@@ -304,10 +312,13 @@ const VoiceNoteTextarea = ({
         mr.stop();
       } catch (_) {}
     }
-    setRecording(false);
-  }, [stopSpeech]);
+    setAudioRecording(false);
+  }, []);
 
-  const startRecording = useCallback(async () => {
+  const startAudioRecording = useCallback(async () => {
+    if (dictating) {
+      stopDictation();
+    }
     setRecordHint('');
     if (typeof MediaRecorder === 'undefined') {
       alert('Recording is not supported in this browser. Try Chrome, Edge, or Safari on iOS 14.3+.');
@@ -348,7 +359,6 @@ const VoiceNoteTextarea = ({
     };
     mr.onstop = () => {
       mediaRecorderRef.current = null;
-      stopSpeech();
       const s = streamRef.current;
       if (s) {
         s.getTracks().forEach(t => t.stop());
@@ -356,9 +366,9 @@ const VoiceNoteTextarea = ({
       }
       const blobType = (mr.mimeType && mr.mimeType.length > 0 ? mr.mimeType : appliedMime) || 'audio/webm';
       const blob = new Blob(chunksRef.current, { type: blobType });
-      if (!blob.size || blob.size < 32) {
+      if (!blob.size || blob.size < MIN_AUDIO_BLOB_BYTES) {
         setRecordHint(
-          'No audio captured — tap record, speak for a second or two, then tap stop. On iPhone, use Safari and allow the microphone.'
+          'No usable audio captured — use the mic (not CC), speak for a few seconds, then stop. If this persists, try Safari on iPhone or update Chrome.'
         );
         return;
       }
@@ -379,7 +389,6 @@ const VoiceNoteTextarea = ({
     };
 
     try {
-      // Safari/iOS: small timeslices often yield empty chunks until stop; omit timeslice for one reliable blob.
       if (isIOSOrSafari) {
         mr.start();
       } else {
@@ -398,74 +407,105 @@ const VoiceNoteTextarea = ({
     }
 
     mediaRecorderRef.current = mr;
-    setRecording(true);
+    setAudioRecording(true);
+  }, [onVoiceSaved, sectionId, dictating, stopDictation]);
 
-    const SR = getSpeechRecognitionCtor();
-    if (SR) {
-      try {
-        const sp = new SR();
-        sp.continuous = true;
-        sp.interimResults = true;
-        sp.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
-        sessionActiveRef.current = true;
-        speechRef.current = sp;
-        sp.onresult = event => {
-          let piece = '';
-          for (let i = event.resultIndex; i < event.results.length; i += 1) {
-            if (event.results[i].isFinal) {
-              piece += event.results[i][0].transcript;
-            }
-          }
-          if (!piece.trim()) return;
-          const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
-          const joiner = prev && !/\s$/.test(prev) ? ' ' : '';
-          const next = `${prev}${joiner}${piece.trim()}`;
-          valueRef.current = next;
-          onChange({ target: { name, value: next } });
-        };
-        sp.onerror = ev => {
-          if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-            setRecordHint('Speech-to-text blocked — allow microphone or try Chrome / Edge.');
-          }
-        };
-        sp.onend = () => {
-          if (sessionActiveRef.current && speechRef.current === sp) {
-            try {
-              sp.start();
-            } catch (_) {
-              setTimeout(() => {
-                if (sessionActiveRef.current && speechRef.current === sp) {
-                  try {
-                    sp.start();
-                  } catch (_) {}
-                }
-              }, 120);
-            }
-          }
-        };
-        sp.start();
-      } catch (speechErr) {
-        console.warn('SpeechRecognition:', speechErr);
-      }
-    }
-  }, [onVoiceSaved, sectionId, onChange, name, value, stopSpeech]);
-
-  const toggle = () => {
-    if (recording) {
-      stopRecording();
+  const startDictation = useCallback(() => {
+    if (mediaRecorderRef.current) {
+      setRecordHint('Wait a second for the audio clip to finish saving, then tap CC again.');
       return;
     }
-    startRecording().catch(err => {
+    setRecordHint('');
+    const SR = getSpeechRecognitionCtor();
+    if (!SR) {
+      setRecordHint('Speech-to-text is not available in this browser. Use Chrome or Edge, or type manually.');
+      return;
+    }
+    try {
+      const sp = new SR();
+      sp.continuous = true;
+      sp.interimResults = true;
+      sp.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
+      sessionActiveRef.current = true;
+      speechRef.current = sp;
+      sp.onresult = event => {
+        let piece = '';
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          if (event.results[i].isFinal) {
+            piece += event.results[i][0].transcript;
+          }
+        }
+        if (!piece.trim()) return;
+        const prev = typeof valueRef.current === 'string' ? valueRef.current : '';
+        const joiner = prev && !/\s$/.test(prev) ? ' ' : '';
+        const next = `${prev}${joiner}${piece.trim()}`;
+        valueRef.current = next;
+        onChange({ target: { name, value: next } });
+      };
+      sp.onerror = ev => {
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          setRecordHint('Speech-to-text blocked — allow microphone or try Chrome / Edge.');
+        }
+      };
+      sp.onend = () => {
+        if (sessionActiveRef.current && speechRef.current === sp) {
+          try {
+            sp.start();
+          } catch (_) {
+            setTimeout(() => {
+              if (sessionActiveRef.current && speechRef.current === sp) {
+                try {
+                  sp.start();
+                } catch (_) {}
+              }
+            }, 120);
+          }
+        }
+      };
+      sp.start();
+      setDictating(true);
+    } catch (speechErr) {
+      console.warn('SpeechRecognition:', speechErr);
+      setRecordHint('Could not start speech-to-text.');
+    }
+  }, [onChange, name]);
+
+  const toggleMic = () => {
+    if (audioRecording) {
+      stopAudioRecording();
+      return;
+    }
+    startAudioRecording().catch(err => {
       console.warn('Voice note:', err);
       alert(`Could not use the microphone: ${err.message || err}`);
     });
   };
 
+  const toggleDictation = () => {
+    if (dictating) {
+      stopDictation();
+      return;
+    }
+    if (audioRecording || mediaRecorderRef.current) {
+      if (audioRecording) {
+        stopAudioRecording();
+      }
+      setRecordHint('When the clip is saved, tap CC again to dictate into this field.');
+      return;
+    }
+    startDictation();
+  };
+
+  const busy = audioRecording || dictating;
+
   useEffect(() => {
     return () => {
-      stopRecording();
+      stopAudioRecording();
+      stopDictation();
     };
-  }, [stopRecording]);
+  }, [stopAudioRecording, stopDictation]);
+
+  const hasSr = Boolean(getSpeechRecognitionCtor());
 
   return (
     <div className="relative">
@@ -475,43 +515,63 @@ const VoiceNoteTextarea = ({
         onChange={onChange}
         rows={rows}
         placeholder={placeholder}
-        className={`w-full pl-4 pr-14 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${className}`}
+        className={`w-full pl-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${hasSr ? 'pr-24' : 'pr-14'} ${className}`}
         style={{ fontSize: '16px' }}
       />
-      <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+      <div className="absolute top-2 right-2 z-10 flex flex-row items-start gap-1.5">
         <button
           type="button"
-          onClick={toggle}
+          onClick={toggleMic}
           title={
-            recording
-              ? 'Stop and save this recording'
-              : 'Record voice — speak to add text; audio is saved below for playback'
+            audioRecording
+              ? 'Stop and save audio clip'
+              : 'Record audio clip (saved below for playback)'
           }
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
-            recording
+            audioRecording
               ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
               : 'border-gray-200 bg-white text-blue-600 hover:bg-blue-50'
           }`}
         >
-          <i className={`fas ${recording ? 'fa-stop' : 'fa-microphone'}`} />
+          <i className={`fas ${audioRecording ? 'fa-stop' : 'fa-microphone'}`} />
         </button>
-        {recording && (
-          <span className="rounded bg-red-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow">
-            Rec
-          </span>
+        {hasSr && (
+          <button
+            type="button"
+            onClick={toggleDictation}
+            title={
+              dictating
+                ? 'Stop typing from speech'
+                : 'Speak to type into this field (no audio file — use mic for that)'
+            }
+            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
+              dictating
+                ? 'border-violet-300 bg-violet-50 text-violet-700 animate-pulse'
+                : 'border-gray-200 bg-white text-violet-600 hover:bg-violet-50'
+            }`}
+          >
+            <i className={`fas ${dictating ? 'fa-stop' : 'fa-closed-captioning'}`} />
+          </button>
         )}
       </div>
-      {recording && (
-        <p className="mt-1 text-[11px] font-medium text-red-600">Recording… speak now, then tap stop.</p>
+      {audioRecording && (
+        <p className="mt-1 text-[11px] font-medium text-red-600">
+          Recording audio… speak, then tap the mic again to save.
+        </p>
+      )}
+      {dictating && !audioRecording && (
+        <p className="mt-1 text-[11px] font-medium text-violet-700">
+          Dictating… text appears as you speak. Tap CC to stop.
+        </p>
       )}
       {recordHint && (
         <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
           {recordHint}
         </p>
       )}
-      {!recording && getSpeechRecognitionCtor() && (
+      {hasSr && !busy && (
         <p className="mt-1 text-[10px] text-gray-500">
-          Tip: supported browsers add live captions while recording; audio is saved when you stop.
+          Mic = saved audio clip. CC = speech-to-text only (Chrome/Edge). Do not use both at once.
         </p>
       )}
       {voiceClips.length > 0 && (
@@ -3256,38 +3316,38 @@ const JobCardFormPublic = () => {
           <div className="space-y-3">
             <button
               type="button"
-              onClick={openPriorList}
-              className="w-full rounded-2xl bg-white/95 text-blue-900 px-5 py-4 text-left shadow-lg hover:bg-white transition touch-manipulation border border-white/40"
-            >
-              <span className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                  <i className="fa-solid fa-clock-rotate-left text-lg" aria-hidden />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block font-semibold text-base">Edit prior job card</span>
-                  <span className="block text-sm text-blue-800/80 mt-0.5">
-                    Open drafts saved on this phone or tablet, newest first.
-                  </span>
-                </span>
-                <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
-              </span>
-            </button>
-            <button
-              type="button"
               onClick={startNewJobCard}
-              className="w-full rounded-2xl bg-blue-500/30 backdrop-blur-sm text-white px-5 py-4 text-left shadow-lg hover:bg-blue-500/40 transition touch-manipulation border border-white/25"
+              className="w-full rounded-2xl bg-blue-500/30 backdrop-blur-sm text-white px-5 py-5 text-left shadow-lg hover:bg-blue-500/40 transition touch-manipulation border border-white/25"
             >
               <span className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white">
-                  <i className="fa-solid fa-plus text-lg" aria-hidden />
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 text-white">
+                  <i className="fa-solid fa-plus text-xl" aria-hidden />
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="block font-semibold text-base">Create new job card</span>
+                  <span className="block font-semibold text-base sm:text-lg">Create new job card</span>
                   <span className="block text-sm text-white/80 mt-0.5">
                     Start the guided wizard for a new visit.
                   </span>
                 </span>
                 <i className="fa-solid fa-chevron-right text-white/50 flex-shrink-0" aria-hidden />
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={openPriorList}
+              className="w-full rounded-xl bg-white/95 text-blue-900 px-4 py-3 text-left shadow-md hover:bg-white transition touch-manipulation border border-white/40"
+            >
+              <span className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                  <i className="fa-solid fa-clock-rotate-left text-base" aria-hidden />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-sm">Edit prior job card</span>
+                  <span className="block text-xs text-blue-800/80 mt-0.5 leading-snug">
+                    Open drafts saved on this phone or tablet, newest first.
+                  </span>
+                </span>
+                <i className="fa-solid fa-chevron-right text-blue-400 text-sm flex-shrink-0" aria-hidden />
               </span>
             </button>
           </div>
