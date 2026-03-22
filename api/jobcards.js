@@ -557,12 +557,18 @@ async function handler(req, res) {
       try {
         const instances = await prisma.serviceFormInstance.findMany({
           where: { jobCardId: id },
-          orderBy: { createdAt: 'asc' }
+          orderBy: { createdAt: 'asc' },
+          include: {
+            template: {
+              select: { id: true, name: true, description: true, fields: true, version: true }
+            }
+          }
         })
 
         const formatted = instances.map((inst) => ({
           ...inst,
-          answers: parseJson(inst.answers, [])
+          answers: parseJson(inst.answers, []),
+          templateFields: parseJson(inst.template?.fields, [])
         }))
 
         return ok(res, { forms: formatted })

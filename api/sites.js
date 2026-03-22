@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
+import { getSitesForClientRead } from './_lib/getSitesForClientRead.js'
 
 async function handler(req, res) {
   try {
@@ -30,56 +31,7 @@ async function handler(req, res) {
           return badRequest(res, 'Invalid clientId format')
         }
         const tid = clientId.trim()
-
-        let sites = []
-        try {
-          // Phase 6: Use normalized ClientSite table
-          sites = await prisma.clientSite.findMany({
-            where: { clientId: tid },
-            orderBy: { createdAt: 'asc' }
-          })
-        } catch (findErr) {
-          console.warn('⚠️ ClientSite.findMany failed for', tid, findErr.message)
-          sites = []
-        }
-
-        // Fallback: If no sites in normalized table, try JSON field (backward compatibility)
-        // Use quoted column names: PostgreSQL lowercases unquoted identifiers so "sitesJsonb" must be quoted
-        if (sites.length === 0) {
-          let result = null
-          try {
-            result = await prisma.$queryRawUnsafe(
-              'SELECT "sites", "sitesJsonb" FROM "Client" WHERE id = $1 LIMIT 1',
-              tid
-            )
-          } catch (jsonbErr) {
-            const msg = String(jsonbErr?.message || '')
-            if (/column.*sitesjsonb|sitesJsonb.*does not exist/i.test(msg)) {
-              try {
-                result = await prisma.$queryRawUnsafe('SELECT "sites" FROM "Client" WHERE id = $1 LIMIT 1', tid)
-              } catch (sitesOnlyErr) {
-                console.warn('⚠️ Fallback query for sites failed:', sitesOnlyErr.message)
-              }
-            } else {
-              console.warn('⚠️ Fallback query for sites failed:', msg)
-            }
-          }
-          if (result && result[0]) {
-            const row = result[0]
-            let jsonSites = []
-            if (row.sitesJsonb && Array.isArray(row.sitesJsonb) && row.sitesJsonb.length > 0) {
-              jsonSites = row.sitesJsonb
-            } else if (row.sites != null && typeof row.sites === 'string') {
-              try {
-                jsonSites = JSON.parse(row.sites)
-              } catch (e) {
-                jsonSites = []
-              }
-            }
-            return ok(res, { sites: jsonSites })
-          }
-        }
-
+        const sites = await getSitesForClientRead(tid)
         return ok(res, { sites })
       } catch (err) {
         // Never 500 on GET: return empty sites so UI does not retry and hit rate limits

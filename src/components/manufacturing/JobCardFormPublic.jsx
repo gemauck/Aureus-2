@@ -8,6 +8,33 @@ const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
 const JOB_CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 
+/** Ids of job cards created/updated via the public API on this browser — used for GET /api/public/jobcards?ids= */
+const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
+const MAX_PUBLIC_PRIOR_IDS = 200;
+
+function readPublicPriorJobCardIds() {
+  try {
+    const raw = localStorage.getItem(JOB_CARD_PUBLIC_PRIOR_IDS_KEY);
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr)
+      ? arr.filter(id => typeof id === 'string' && id.length > 0).slice(0, MAX_PUBLIC_PRIOR_IDS)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberPublicPriorJobCardId(id) {
+  if (!id || typeof id !== 'string') return;
+  try {
+    const existing = readPublicPriorJobCardIds();
+    const next = [id, ...existing.filter(x => x !== id)].slice(0, MAX_PUBLIC_PRIOR_IDS);
+    localStorage.setItem(JOB_CARD_PUBLIC_PRIOR_IDS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
 function jobCardMediaIsVideoDataUrl(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
@@ -486,6 +513,17 @@ const dataUrlToBlob = dataUrl => {
   return new Blob([ab], { type: mime })
 }
 
+const VOICE_CLIP_PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 2]
+
+const formatVoiceClipClock = sec => {
+  if (!Number.isFinite(sec) || sec < 0) {
+    return '0:00'
+  }
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 /**
  * Play voice clips with HTMLMediaElement + blob URL — not Web Audio.
  * On iOS Safari, AudioContext output is often silent until the mic is active (play-and-record session);
@@ -494,13 +532,21 @@ const dataUrlToBlob = dataUrl => {
 const VoiceClipWebPlayer = ({ dataUrl }) => {
   const audioRef = useRef(null)
   const objectUrlRef = useRef(null)
+  const scrubbingRef = useRef(false)
   const [playing, setPlaying] = useState(false)
   const [hint, setHint] = useState('')
   const [loadPhase, setLoadPhase] = useState('loading')
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [speedIdx, setSpeedIdx] = useState(1)
 
   useEffect(() => {
     setHint('')
     setPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
+    setSpeedIdx(1)
+    scrubbingRef.current = false
     const prevUrl = objectUrlRef.current
     if (prevUrl) {
       URL.revokeObjectURL(prevUrl)
@@ -524,6 +570,7 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
       objectUrlRef.current = url
       el.src = url
       el.load()
+      el.playbackRate = VOICE_CLIP_PLAYBACK_SPEEDS[1]
       if (!cancelled) setLoadPhase('ready')
     } catch (e) {
       if (!cancelled) {
@@ -547,6 +594,13 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
     }
   }, [dataUrl])
 
+  useEffect(() => {
+    const el = audioRef.current
+    if (el && loadPhase === 'ready') {
+      el.playbackRate = VOICE_CLIP_PLAYBACK_SPEEDS[speedIdx] ?? 1
+    }
+  }, [speedIdx, loadPhase])
+
   const onPlayClick = useCallback(() => {
     setHint('')
     const el = audioRef.current
@@ -562,6 +616,7 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
         /* */
       }
       setPlaying(false)
+      setCurrentTime(0)
       return
     }
     el.play()
@@ -573,30 +628,111 @@ const VoiceClipWebPlayer = ({ dataUrl }) => {
       })
   }, [playing, loadPhase])
 
+  const cycleSpeed = useCallback(() => {
+    setSpeedIdx(i => (i + 1) % VOICE_CLIP_PLAYBACK_SPEEDS.length)
+  }, [])
+
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0
+  const speedLabel =
+    VOICE_CLIP_PLAYBACK_SPEEDS[speedIdx] === 1
+      ? '1×'
+      : `${String(VOICE_CLIP_PLAYBACK_SPEEDS[speedIdx]).replace(/\.0+$/, '')}×`
+
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center">
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
       <audio
         ref={audioRef}
         playsInline
         preload="auto"
         className="sr-only"
         aria-hidden
-        onEnded={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false)
+          setCurrentTime(0)
+        }}
+        onLoadedMetadata={e => {
+          const d = e.currentTarget.duration
+          setDuration(Number.isFinite(d) ? d : 0)
+        }}
+        onDurationChange={e => {
+          const d = e.currentTarget.duration
+          if (Number.isFinite(d) && d > 0) {
+            setDuration(d)
+          }
+        }}
+        onTimeUpdate={e => {
+          if (scrubbingRef.current) {
+            return
+          }
+          setCurrentTime(e.currentTarget.currentTime)
+        }}
       />
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <button
-          type="button"
-          onClick={onPlayClick}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-600 shadow-sm hover:bg-blue-50 touch-manipulation disabled:opacity-50"
-          title={playing ? 'Stop' : loadPhase === 'loading' ? 'Loading…' : 'Play'}
-          aria-label={playing ? 'Stop playback' : 'Play recording'}
-          disabled={loadPhase === 'loading' && !playing}
-        >
-          <i
-            className={`fas ${playing ? 'fa-stop' : loadPhase === 'loading' ? 'fa-spinner fa-spin' : 'fa-play'}`}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onPlayClick}
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white text-xs text-blue-600 shadow-sm hover:bg-blue-50 touch-manipulation disabled:opacity-50"
+            title={playing ? 'Stop' : loadPhase === 'loading' ? 'Loading…' : 'Play'}
+            aria-label={playing ? 'Stop playback' : 'Play recording'}
+            disabled={loadPhase === 'loading' && !playing}
+          >
+            <i
+              className={`fas ${playing ? 'fa-stop' : loadPhase === 'loading' ? 'fa-spinner fa-spin' : 'fa-play'}`}
+            />
+          </button>
+          <span
+            className="text-[10px] tabular-nums text-gray-600"
+            aria-label="Playback position and duration"
+          >
+            {formatVoiceClipClock(currentTime)} /{' '}
+            {safeDuration > 0 ? formatVoiceClipClock(safeDuration) : loadPhase === 'loading' ? '…' : '0:00'}
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <input
+            type="range"
+            min={0}
+            max={safeDuration > 0 ? safeDuration : 0}
+            step={0.01}
+            value={safeDuration > 0 ? Math.min(currentTime, safeDuration) : 0}
+            disabled={loadPhase !== 'ready' || safeDuration <= 0}
+            onMouseDown={() => {
+              scrubbingRef.current = true
+            }}
+            onMouseUp={() => {
+              scrubbingRef.current = false
+            }}
+            onTouchStart={() => {
+              scrubbingRef.current = true
+            }}
+            onTouchEnd={() => {
+              scrubbingRef.current = false
+            }}
+            onTouchCancel={() => {
+              scrubbingRef.current = false
+            }}
+            onChange={e => {
+              const el = audioRef.current
+              const next = parseFloat(e.target.value)
+              if (!el || Number.isNaN(next)) {
+                return
+              }
+              el.currentTime = next
+              setCurrentTime(next)
+            }}
+            className="h-1.5 min-w-[72px] flex-1 cursor-pointer accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Playback position"
           />
-        </button>
-        <span className="text-[10px] text-gray-500">Listen</span>
+          <button
+            type="button"
+            onClick={cycleSpeed}
+            title="Playback speed"
+            className="flex-shrink-0 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-gray-700 hover:bg-gray-50 touch-manipulation"
+          >
+            {speedLabel}
+          </button>
+        </div>
       </div>
       {hint && (
         <span className="text-[10px] text-amber-800" role="status">
@@ -962,7 +1098,7 @@ const VoiceNoteTextarea = ({
         onChange={onChange}
         rows={rows}
         placeholder={placeholder}
-        className={`w-full pl-4 pr-14 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${className}`}
+        className={`w-full pl-4 pr-12 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y ${className}`}
         style={{ fontSize: '16px' }}
       />
       <div className="absolute top-2 right-2 z-10 flex flex-row items-start gap-1.5">
@@ -976,7 +1112,7 @@ const VoiceNoteTextarea = ({
                 ? 'Cancel microphone request'
                 : 'Record a voice note (you can add several per field)'
           }
-          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border text-sm shadow-sm touch-manipulation ${
+          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border text-xs shadow-sm touch-manipulation ${
             micState === 'recording'
               ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
               : micState === 'requesting'
@@ -1591,23 +1727,44 @@ const JobCardFormPublic = () => {
 
   useEffect(() => {
     if (wizardFlow !== 'prior_list') return;
-    const token = window.storage?.getToken?.();
-    if (!token) {
-      setServerPriorList([]);
-      return;
-    }
     let cancelled = false;
+    const token = window.storage?.getToken?.();
+
     (async () => {
-      try {
-        const r = await fetch(
-          '/api/jobcards?page=1&pageSize=500&sortField=updatedAt&sortDirection=desc',
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
+      if (token) {
+        try {
+          const r = await fetch(
+            '/api/jobcards?page=1&pageSize=500&sortField=updatedAt&sortDirection=desc',
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
             }
+          );
+          if (!r.ok) {
+            if (!cancelled) setServerPriorList([]);
+            return;
           }
-        );
+          const raw = await r.json();
+          const list = raw.jobCards || raw.data?.jobCards || [];
+          if (!cancelled) setServerPriorList(Array.isArray(list) ? list : []);
+        } catch {
+          if (!cancelled) setServerPriorList([]);
+        }
+        return;
+      }
+
+      const ids = readPublicPriorJobCardIds();
+      if (ids.length === 0) {
+        if (!cancelled) setServerPriorList([]);
+        return;
+      }
+      try {
+        const q = encodeURIComponent(ids.join(','));
+        const r = await fetch(`/api/public/jobcards?ids=${q}`, {
+          headers: { 'Content-Type': 'application/json' }
+        });
         if (!r.ok) {
           if (!cancelled) setServerPriorList([]);
           return;
@@ -1619,6 +1776,7 @@ const JobCardFormPublic = () => {
         if (!cancelled) setServerPriorList([]);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -1626,9 +1784,10 @@ const JobCardFormPublic = () => {
 
   const mergedPriorJobCards = useMemo(() => {
     if (wizardFlow !== 'prior_list') return [];
+    const token = typeof window !== 'undefined' ? window.storage?.getToken?.() : null;
     const rows = serverPriorList.map(jc => ({
       ...jc,
-      source: 'server',
+      source: token ? 'server' : 'public',
       serverJobCardId: jc.id,
       synced: true
     }));
@@ -1982,7 +2141,7 @@ const JobCardFormPublic = () => {
         // Also try to load from API if online
         if (isOnline && sites.length === 0) {
           try {
-            const response = await fetch(`/api/sites/client/${formData.clientId}`, {
+            const response = await fetch(`/api/public/sites/client/${encodeURIComponent(formData.clientId)}`, {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json'
@@ -2473,7 +2632,7 @@ const JobCardFormPublic = () => {
 
     let full = card;
     const token = window.storage?.getToken?.();
-    if (card.source === 'server' && token) {
+    if (token) {
       try {
         const r = await fetch(`/api/jobcards/${encodeURIComponent(card.id)}`, {
           headers: {
@@ -2490,6 +2649,21 @@ const JobCardFormPublic = () => {
         }
       } catch (e) {
         console.warn('JobCardFormPublic: could not load full job card from server', e);
+      }
+    } else {
+      try {
+        const r = await fetch(`/api/public/jobcards/${encodeURIComponent(card.id)}`, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (r.ok) {
+          const data = await r.json();
+          const apiCard = data.jobCard || data.data?.jobCard;
+          if (apiCard && apiCard.id) {
+            full = apiCard;
+          }
+        }
+      } catch (e) {
+        console.warn('JobCardFormPublic: could not load job card (public GET)', e);
       }
     }
 
@@ -2669,7 +2843,11 @@ const JobCardFormPublic = () => {
             });
             if (authRes.ok) {
               serverReachOk = true;
-              await authRes.json().catch(() => ({}));
+              const authData = await authRes.json().catch(() => ({}));
+              const ac = authData.data?.jobCard || authData.jobCard;
+              if (ac?.id && (ac.ownerId == null || ac.ownerId === '')) {
+                rememberPublicPriorJobCardId(String(ac.id));
+              }
             }
           } catch (e) {
             console.warn('JobCardFormPublic: authenticated PATCH failed, trying public PATCH', e);
@@ -2685,6 +2863,7 @@ const JobCardFormPublic = () => {
             if (pubRes.ok) {
               serverReachOk = true;
               await pubRes.json().catch(() => ({}));
+              rememberPublicPriorJobCardId(String(serverJobCardId));
             } else {
               const text = await pubRes.text().catch(() => '');
               console.warn('⚠️ JobCardFormPublic: public PATCH failed', pubRes.status, text);
@@ -2706,7 +2885,11 @@ const JobCardFormPublic = () => {
             console.warn('⚠️ JobCardFormPublic: Public POST error', response.status, text);
           } else {
             serverReachOk = true;
-            await response.json().catch(() => ({}));
+            const result = await response.json().catch(() => ({}));
+            const jc = result?.data?.jobCard || result?.jobCard;
+            if (jc?.id) {
+              rememberPublicPriorJobCardId(String(jc.id));
+            }
           }
         } catch (error) {
           console.warn('⚠️ JobCardFormPublic: Public POST failed:', error.message);
@@ -3880,7 +4063,8 @@ const JobCardFormPublic = () => {
               Job Card App
             </h1>
             <p className="text-sm text-slate-600">
-              Sign in to open or edit job cards stored on the server, or start a new card.
+              Open job cards you submitted from this browser, or sign in for the full server list. You can also start
+              a new card.
             </p>
           </div>
           <div className="space-y-3">
@@ -3914,7 +4098,8 @@ const JobCardFormPublic = () => {
                 <span className="flex-1 min-w-0">
                   <span className="block font-semibold text-base sm:text-lg">Edit prior job card</span>
                   <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
-                    Job cards from the server when you are signed in — newest first.
+                    Signed in: all job cards from the server. Not signed in: cards submitted from this browser — newest
+                    first.
                   </span>
                 </span>
                 <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
@@ -3940,7 +4125,7 @@ const JobCardFormPublic = () => {
           </button>
           <h1 className="text-xl font-bold">Prior job cards</h1>
           <p className="text-sm text-white/80 mt-1">
-            Newest first — tap a card to continue. You must be signed in to the ERP to load this list.
+            Newest first — tap a card to continue. Without signing in, only cards submitted from this browser appear.
           </p>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-8">
@@ -3949,8 +4134,8 @@ const JobCardFormPublic = () => {
               <i className="fa-regular fa-folder-open text-3xl text-gray-400 mb-3" aria-hidden />
               <p className="font-medium text-gray-800">No job cards to show</p>
               <p className="text-sm mt-2">
-                Sign in to the ERP in this browser to load your job cards from the server. This list is not stored on
-                the device.
+                Sign in to load the full list from the server, or submit a job card from this browser — then it will
+                appear here for editing.
               </p>
               <button
                 type="button"

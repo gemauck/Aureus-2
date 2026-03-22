@@ -14,6 +14,105 @@ function jobCardAttachmentUrlIsVideo(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
 
+/** Job card JSON fields may arrive parsed or as a string from older clients. */
+function parseJsonArrayLoose(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const p = JSON.parse(value);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/** Service form answers: array of { fieldId, value } or a plain object (wizard-style). */
+function jobCardAnswerRows(answers) {
+  if (Array.isArray(answers)) {
+    return answers
+      .filter((a) => a && (a.fieldId != null || a.field_id != null))
+      .map((a) => ({
+        fieldId: a.fieldId ?? a.field_id,
+        value: a.value != null ? String(a.value) : '',
+      }));
+  }
+  if (answers && typeof answers === 'object') {
+    return Object.entries(answers).map(([fieldId, value]) => ({
+      fieldId,
+      value: value != null ? String(value) : '',
+    }));
+  }
+  return [];
+}
+
+function labelForTemplateField(templateFields, fieldId) {
+  const arr = Array.isArray(templateFields) ? templateFields : [];
+  const f = arr.find((x) => x && (x.id === fieldId || x.fieldId === fieldId));
+  return f && f.label ? f.label : fieldId;
+}
+
+/** Resolve a human label for `form_<id>_<fieldId>` voice keys (wizard id may not match server instance id). */
+function labelOrphanFormVoiceKey(forms, key) {
+  if (!key || typeof key !== 'string' || !key.startsWith('form_')) return key;
+  const parsed = key.slice(5);
+  const lastUs = parsed.lastIndexOf('_');
+  const fieldOnly = lastUs > 0 ? parsed.slice(lastUs + 1) : key;
+  if (Array.isArray(forms)) {
+    for (const form of forms) {
+      const fields = Array.isArray(form.templateFields) ? form.templateFields : [];
+      const lbl = labelForTemplateField(fields, fieldOnly);
+      if (lbl !== fieldOnly) return lbl;
+    }
+  }
+  return fieldOnly.replace(/_/g, ' ');
+}
+
+/** Split photos array into gallery items vs voice clips (which carry `kind` + `section`). */
+function partitionJobCardAttachments(photosInput) {
+  const photos = parseJsonArrayLoose(photosInput);
+  const visualItems = [];
+  const voicesBySection = {};
+  photos.forEach((p, idx) => {
+    const url = typeof p === 'string' ? p : p?.url;
+    const isVoice = typeof p === 'object' && p && p.kind === 'voice';
+    if (isVoice && url) {
+      const sec =
+        p.section != null && String(p.section).trim() !== ''
+          ? String(p.section)
+          : 'otherComments';
+      if (!voicesBySection[sec]) voicesBySection[sec] = [];
+      voicesBySection[sec].push({ url, mimeType: p.mimeType, idx });
+      return;
+    }
+    if (url) {
+      visualItems.push({ raw: p, url, idx });
+    }
+  });
+  return { visualItems, voicesBySection };
+}
+
+function JobCardVoiceClips({ items }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-2">
+      {items.map((item) => (
+        <div
+          key={item.idx}
+          className="rounded-lg border border-pink-500/25 bg-slate-950/60 p-2"
+        >
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-pink-300/90">
+            <i className="fa-solid fa-microphone text-pink-400" aria-hidden />
+            Voice recording
+          </div>
+          <audio controls className="h-8 w-full max-w-md" src={item.url} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const isDark = (typeof window !== 'undefined' && window.useTheme) ? (window.useTheme().isDark) : false;
   if (!useState || !useEffect || !useMemo || !useCallback) {
@@ -42,6 +141,31 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  /** Checklist / service form instances for the open detail view (GET /api/jobcards/:id/forms). */
+  const [detailServiceForms, setDetailServiceForms] = useState([]);
+
+  const attachmentParts = useMemo(
+    () => partitionJobCardAttachments(selectedJobCard?.photos),
+    [selectedJobCard?.photos]
+  );
+
+  /** Keys like `form_<instanceId>_<fieldId>` for checklist fields we can place next to answers. */
+  const checklistFieldVoiceKeys = useMemo(() => {
+    const s = new Set();
+    detailServiceForms.forEach((form) => {
+      jobCardAnswerRows(form.answers).forEach(({ fieldId }) => {
+        s.add(`form_${form.id}_${fieldId}`);
+      });
+    });
+    return s;
+  }, [detailServiceForms]);
+
+  const orphanChecklistVoiceKeys = useMemo(() => {
+    const v = attachmentParts.voicesBySection;
+    return Object.keys(v).filter(
+      (k) => k.startsWith('form_') && !checklistFieldVoiceKeys.has(k)
+    );
+  }, [attachmentParts, checklistFieldVoiceKeys]);
 
   const pageSize = 25;
 
@@ -229,21 +353,33 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     }
     if (!jobCard?.id) {
       setSelectedJobCard(jobCard);
+      setDetailServiceForms([]);
       setShowDetail(true);
       return;
     }
     setDetailLoading(true);
     setShowDetail(true);
     setSelectedJobCard(jobCard);
+    setDetailServiceForms([]);
     try {
       const token = window.storage?.getToken?.();
-      const response = await fetch(`/api/jobcards/${jobCard.id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const [cardResponse, formsResponse] = await Promise.all([
+        fetch(`/api/jobcards/${jobCard.id}`, { headers }),
+        fetch(`/api/jobcards/${jobCard.id}/forms`, { headers }),
+      ]);
+      if (cardResponse.ok) {
+        const data = await cardResponse.json();
         const full = data?.jobCard ?? data;
         if (full && full.id) setSelectedJobCard(full);
+      }
+      if (formsResponse.ok) {
+        try {
+          const fr = await formsResponse.json();
+          setDetailServiceForms(Array.isArray(fr.forms) ? fr.forms : []);
+        } catch {
+          setDetailServiceForms([]);
+        }
       }
     } catch (e) {
       console.warn('Failed to load full job card details, showing list data', e);
@@ -633,6 +769,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 onClick={() => {
                   setShowDetail(false);
                   setSelectedJobCard(null);
+                  setDetailServiceForms([]);
                 }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800/70 text-slate-100 hover:bg-slate-700"
                 aria-label="Back to job cards"
@@ -718,6 +855,24 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   </div>
 
+                  {parseJsonArrayLoose(selectedJobCard.otherTechnicians).length > 0 && (
+                    <div className="mt-4 border-t border-slate-800 pt-4">
+                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                        Also on site
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {parseJsonArrayLoose(selectedJobCard.otherTechnicians).map((name, idx) => (
+                          <span
+                            key={idx}
+                            className="rounded-full border border-slate-600 bg-slate-800/80 px-3 py-1 text-xs text-slate-200"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-4 grid gap-4 sm:grid-cols-3 text-xs text-slate-300">
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500">
@@ -756,13 +911,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-primary-300">
                       <i className="fa-solid fa-clipboard-list text-sm" />
                     </span>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                         Visit summary
                       </div>
                       <div className="text-sm text-slate-100">
                         {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
                       </div>
+                      <JobCardVoiceClips
+                        items={attachmentParts.voicesBySection.reasonForVisit}
+                      />
                     </div>
                   </header>
 
@@ -774,6 +932,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.diagnosis || 'No diagnosis captured.'}
                       </p>
+                      <JobCardVoiceClips
+                        items={attachmentParts.voicesBySection.diagnosis}
+                      />
                     </div>
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500">
@@ -782,20 +943,214 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.actionsTaken || 'No actions recorded.'}
                       </p>
+                      <JobCardVoiceClips
+                        items={attachmentParts.voicesBySection.actionsTaken}
+                      />
                     </div>
                   </div>
 
-                  {selectedJobCard.otherComments ? (
+                  {(selectedJobCard.otherComments ||
+                    (attachmentParts.voicesBySection.otherComments &&
+                      attachmentParts.voicesBySection.otherComments.length > 0)) && (
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
-                        Customer feedback &amp; notes
+                        Additional notes
                       </div>
-                      <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-100 whitespace-pre-wrap">
-                        {selectedJobCard.otherComments}
+                      {selectedJobCard.otherComments ? (
+                        <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-100 whitespace-pre-wrap">
+                          {selectedJobCard.otherComments}
+                        </div>
+                      ) : null}
+                      <JobCardVoiceClips
+                        items={attachmentParts.voicesBySection.otherComments}
+                      />
+                    </div>
+                  )}
+
+                  {attachmentParts.voicesBySection.customerFeedback &&
+                  attachmentParts.voicesBySection.customerFeedback.length > 0 ? (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                        Customer feedback
                       </div>
+                      <JobCardVoiceClips
+                        items={attachmentParts.voicesBySection.customerFeedback}
+                      />
                     </div>
                   ) : null}
                 </section>
+
+                {/* Job checklists / service forms (wizard &quot;Add a Checklist&quot;) */}
+                {(detailServiceForms.length > 0 ||
+                  detailLoading ||
+                  orphanChecklistVoiceKeys.length > 0) && (
+                  <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+                    <header className="flex items-center gap-2">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-300">
+                        <i className="fa-solid fa-list-check text-sm" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Job checklists &amp; forms
+                        </div>
+                        <div className="text-sm text-slate-100">
+                          {detailLoading && detailServiceForms.length === 0
+                            ? 'Loading…'
+                            : detailServiceForms.length > 0
+                              ? `${detailServiceForms.length} form${
+                                  detailServiceForms.length === 1 ? '' : 's'
+                                }`
+                              : orphanChecklistVoiceKeys.length > 0
+                                ? 'Checklist voice notes (see below)'
+                                : '—'}
+                        </div>
+                      </div>
+                    </header>
+                    {detailServiceForms.length > 0 && (
+                      <div className="space-y-4">
+                        {detailServiceForms.map((form) => {
+                          const rows = jobCardAnswerRows(form.answers);
+                          const fields = Array.isArray(form.templateFields) ? form.templateFields : [];
+                          return (
+                            <div
+                              key={form.id}
+                              className="rounded-xl border border-slate-700 bg-slate-950/40 p-4"
+                            >
+                              <div className="text-sm font-semibold text-slate-100">
+                                {form.templateName || 'Checklist'}
+                              </div>
+                              {rows.length === 0 ? (
+                                <p className="mt-2 text-xs text-slate-500">No answers recorded.</p>
+                              ) : (
+                                <dl className="mt-3 space-y-2 text-sm">
+                                  {rows.map(({ fieldId, value }) => {
+                                    const formVoiceKey = `form_${form.id}_${fieldId}`;
+                                    return (
+                                      <div key={fieldId} className="grid gap-1 sm:grid-cols-3 sm:gap-3">
+                                        <dt className="text-[11px] font-medium uppercase text-slate-500 sm:col-span-1">
+                                          {labelForTemplateField(fields, fieldId)}
+                                        </dt>
+                                        <dd className="text-slate-100 sm:col-span-2 whitespace-pre-wrap">
+                                          <span className="block">{value || '—'}</span>
+                                          <JobCardVoiceClips
+                                            items={attachmentParts.voicesBySection[formVoiceKey]}
+                                          />
+                                        </dd>
+                                      </div>
+                                    );
+                                  })}
+                                </dl>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {orphanChecklistVoiceKeys.length > 0 && (
+                      <div className="mt-4 rounded-xl border border-dashed border-slate-600 bg-slate-950/30 p-4">
+                        <div className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                          Other checklist recordings
+                        </div>
+                        <p className="mb-3 text-[10px] text-slate-500">
+                          Saved under a different form instance id than on the server; audio is still shown
+                          here.
+                        </p>
+                        <div className="space-y-4">
+                          {orphanChecklistVoiceKeys.map((key) => (
+                            <div key={key}>
+                              <div className="text-[10px] font-medium text-slate-400 mb-1">
+                                {labelOrphanFormVoiceKey(detailServiceForms, key)}
+                              </div>
+                              <JobCardVoiceClips
+                                items={attachmentParts.voicesBySection[key]}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!detailLoading &&
+                      detailServiceForms.length === 0 &&
+                      orphanChecklistVoiceKeys.length === 0 && (
+                        <p className="text-xs text-slate-500">No checklists attached to this job card.</p>
+                      )}
+                  </section>
+                )}
+
+                {/* Stock & materials (wizard stock step) */}
+                {(parseJsonArrayLoose(selectedJobCard.stockUsed).length > 0 ||
+                  parseJsonArrayLoose(selectedJobCard.materialsBought).length > 0) && (
+                  <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+                    <header className="flex items-center gap-2">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/10 text-amber-300">
+                        <i className="fa-solid fa-boxes-stacked text-sm" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Stock &amp; materials
+                        </div>
+                        <div className="text-sm text-slate-100">
+                          Inventory usage and purchases
+                        </div>
+                      </div>
+                    </header>
+                    {parseJsonArrayLoose(selectedJobCard.stockUsed).length > 0 && (
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase text-slate-500 mb-2">
+                          Stock used
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-100">
+                          {parseJsonArrayLoose(selectedJobCard.stockUsed).map((item, idx) => (
+                            <li
+                              key={item.id || idx}
+                              className="rounded-lg border border-slate-700 bg-slate-950/40 px-3 py-2"
+                            >
+                              <div className="font-medium">{item.itemName || item.sku || 'Item'}</div>
+                              <div className="mt-0.5 text-xs text-slate-400">
+                                {[item.locationName, item.sku ? `SKU ${item.sku}` : null, item.quantity != null ? `Qty ${item.quantity}` : null]
+                                  .filter(Boolean)
+                                  .join(' · ') || '—'}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {parseJsonArrayLoose(selectedJobCard.materialsBought).length > 0 && (
+                      <div>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="text-[11px] font-semibold uppercase text-slate-500">
+                            Materials bought
+                          </div>
+                          <div className="text-xs font-semibold text-amber-200">
+                            {typeof selectedJobCard.totalMaterialsCost === 'number'
+                              ? `Total R ${selectedJobCard.totalMaterialsCost.toFixed(2)}`
+                              : null}
+                          </div>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-100">
+                          {parseJsonArrayLoose(selectedJobCard.materialsBought).map((item, idx) => (
+                            <li
+                              key={item.id || idx}
+                              className="rounded-lg border border-slate-700 bg-slate-950/40 px-3 py-2"
+                            >
+                              <div className="font-medium">{item.itemName || 'Material'}</div>
+                              {item.description && (
+                                <div className="mt-0.5 text-xs text-slate-400">{item.description}</div>
+                              )}
+                              {item.reason && (
+                                <div className="mt-0.5 text-xs text-slate-500">Reason: {item.reason}</div>
+                              )}
+                              <div className="mt-1 text-xs font-semibold text-slate-200">
+                                {item.cost != null ? `R ${Number(item.cost).toFixed(2)}` : '—'}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </section>
+                )}
 
                 {/* Travel & vehicle */}
                 <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
@@ -952,7 +1307,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   </div>
                 </section>
 
-                {/* Photos */}
+                {/* Photos & videos only (voice notes appear under their sections above) */}
                 <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
                   <header className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -961,21 +1316,15 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       </span>
                       <div>
                         <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          Media
+                          Photos &amp; videos
                         </div>
                         <div className="text-sm text-slate-100">
                           {detailLoading && !Array.isArray(selectedJobCard.photos) ? (
                             <span className="text-slate-400">Loading…</span>
                           ) : (
                             <>
-                              {Array.isArray(selectedJobCard.photos)
-                                ? selectedJobCard.photos.length
-                                : 0}{' '}
-                              attachment
-                              {Array.isArray(selectedJobCard.photos) &&
-                              selectedJobCard.photos.length === 1
-                                ? ''
-                                : 's'}
+                              {attachmentParts.visualItems.length} visual attachment
+                              {attachmentParts.visualItems.length === 1 ? '' : 's'}
                             </>
                           )}
                         </div>
@@ -987,31 +1336,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <i className="fa-solid fa-spinner fa-spin text-slate-500 text-xl mb-2" />
                       <p className="text-sm text-slate-400">Loading attachments…</p>
                     </div>
-                  ) : Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
+                  ) : attachmentParts.visualItems.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {selectedJobCard.photos.map((photo, idx) => {
-                        const url = typeof photo === 'string' ? photo : photo?.url;
-                        const isVoice =
-                          typeof photo === 'object' &&
-                          photo &&
-                          photo.kind === 'voice';
-                        if (isVoice && url) {
-                          const sec = photo.section ? String(photo.section) : '';
-                          const secLabel =
-                            sec.startsWith('form_') ? 'Checklist field' : sec.replace(/_/g, ' ');
-                          return (
-                            <div
-                              key={idx}
-                              className="rounded-xl border border-slate-700 bg-slate-800/80 p-3"
-                            >
-                              <p className="mb-2 text-xs font-medium text-slate-300">
-                                <i className="fa-solid fa-microphone mr-1.5 text-pink-400" />
-                                Voice note{secLabel ? ` · ${secLabel}` : ''}
-                              </p>
-                              <audio controls className="h-9 w-full" src={url} />
-                            </div>
-                          );
-                        }
+                      {attachmentParts.visualItems.map(({ url, idx }) => {
                         if (url && jobCardAttachmentUrlIsVideo(url)) {
                           return (
                             <div
@@ -1046,10 +1373,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-8 text-center">
                       <i className="fa-regular fa-image text-slate-500 text-xl mb-2" />
                       <p className="text-sm text-slate-300">
-                        No photos or videos have been attached to this job card.
+                        No photos or videos attached.
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        Encourage technicians to capture site media for better traceability.
+                        Voice notes are listed next to the relevant visit, work, or checklist fields.
                       </p>
                     </div>
                   )}
@@ -1071,6 +1398,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 onClick={() => {
                   setShowDetail(false);
                   setSelectedJobCard(null);
+                  setDetailServiceForms([]);
                 }}
               >
                 <i className="fa-solid fa-xmark" />
@@ -1102,6 +1430,15 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 try {
   if (typeof window !== 'undefined') {
     window.JobCards = JobCards;
+    window.JobCardVoiceClips = JobCardVoiceClips;
+    window.JobCardAttachmentUtils = {
+      parseJsonArrayLoose,
+      jobCardAnswerRows,
+      labelForTemplateField,
+      labelOrphanFormVoiceKey,
+      partitionJobCardAttachments,
+      jobCardAttachmentUrlIsVideo
+    };
     window.dispatchEvent(new Event('jobcardsComponentReady'));
   }
 } catch (error) {

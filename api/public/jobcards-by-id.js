@@ -1,5 +1,5 @@
-// Public PATCH for job cards created via /job-card (no auth; id acts as capability URL).
-// Prefer authenticated PATCH /api/jobcards/:id when the user has permission.
+// Public GET/PATCH for job cards created via /job-card (no auth; id acts as capability URL).
+// Prefer authenticated /api/jobcards/:id when the user has permission.
 import { prisma } from '../_lib/prisma.js'
 import { ok, serverError, badRequest, notFound } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
@@ -13,10 +13,48 @@ function parseJson(str, defaultValue = []) {
   }
 }
 
+function formatDate(date) {
+  if (!date) return null
+  if (date instanceof Date) return date.toISOString()
+  return new Date(date).toISOString()
+}
+
 async function handler(req, res) {
   const id = req.params?.id
   if (!id || typeof id !== 'string') {
     return badRequest(res, 'Job card id is required')
+  }
+
+  if (req.method === 'GET') {
+    try {
+      const jobCard = await prisma.jobCard.findUnique({
+        where: { id }
+      })
+      if (!jobCard) {
+        return notFound(res, 'Job card not found')
+      }
+      if (jobCard.ownerId) {
+        return notFound(res, 'Job card not found')
+      }
+      return ok(res, {
+        jobCard: {
+          ...jobCard,
+          otherTechnicians: parseJson(jobCard.otherTechnicians),
+          photos: parseJson(jobCard.photos),
+          stockUsed: parseJson(jobCard.stockUsed || '[]'),
+          materialsBought: parseJson(jobCard.materialsBought || '[]'),
+          timeOfDeparture: formatDate(jobCard.timeOfDeparture),
+          timeOfArrival: formatDate(jobCard.timeOfArrival),
+          submittedAt: formatDate(jobCard.submittedAt),
+          completedAt: formatDate(jobCard.completedAt),
+          createdAt: formatDate(jobCard.createdAt),
+          updatedAt: formatDate(jobCard.updatedAt)
+        }
+      })
+    } catch (error) {
+      console.error('❌ Public job card GET error:', error)
+      return serverError(res, 'Failed to get job card', error.message)
+    }
   }
 
   if (req.method !== 'PATCH') {

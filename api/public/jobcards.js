@@ -1,7 +1,64 @@
-// Public API endpoint for job card form - creates job cards without authentication
+// Public API: create job cards (POST) and list prior cards by id (GET ?ids=) — no auth
 import { prisma } from '../_lib/prisma.js'
-import { created, serverError, badRequest } from '../_lib/response.js'
+import { ok, created, serverError, badRequest } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
+
+function formatDate(date) {
+  if (!date) return null
+  if (date instanceof Date) return date.toISOString()
+  return new Date(date).toISOString()
+}
+
+/** GET /api/public/jobcards?ids=id1,id2 — only unowned cards whose ids are requested (capability URLs). */
+async function handleGetList(req, res) {
+  try {
+    const url = new URL(req.url, 'http://localhost')
+    const idsParam = url.searchParams.get('ids') || ''
+    const ids = [...new Set(
+      idsParam
+        .split(',')
+        .map(s => s.trim())
+        .filter(id => typeof id === 'string' && id.length >= 15 && id.length <= 36)
+    )].slice(0, 100)
+
+    if (ids.length === 0) {
+      return ok(res, { jobCards: [] })
+    }
+
+    const jobCards = await prisma.jobCard.findMany({
+      where: {
+        id: { in: ids },
+        ownerId: null
+      },
+      select: {
+        id: true,
+        jobCardNumber: true,
+        agentName: true,
+        clientId: true,
+        clientName: true,
+        siteName: true,
+        status: true,
+        reasonForVisit: true,
+        diagnosis: true,
+        ownerId: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+
+    const formatted = jobCards.map(jc => ({
+      ...jc,
+      createdAt: formatDate(jc.createdAt),
+      updatedAt: formatDate(jc.updatedAt)
+    }))
+
+    return ok(res, { jobCards: formatted })
+  } catch (error) {
+    console.error('❌ Public job cards GET list error:', error)
+    return serverError(res, 'Failed to list job cards', error.message)
+  }
+}
 
 async function computeNextJobCardNumber() {
   const lastJobCard = await prisma.jobCard.findFirst({
@@ -19,6 +76,9 @@ async function computeNextJobCardNumber() {
 }
 
 async function handler(req, res) {
+  if (req.method === 'GET') {
+    return handleGetList(req, res)
+  }
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

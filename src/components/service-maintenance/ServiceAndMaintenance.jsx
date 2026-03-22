@@ -1,6 +1,6 @@
 // Use React from window (fallback to global React if needed)
 const ReactGlobal = (typeof window !== 'undefined' && window.React) || (typeof React !== 'undefined' && React) || {};
-const { useState, useEffect } = ReactGlobal;
+const { useState, useEffect, useMemo } = ReactGlobal;
 
 const PermissionGate =
   (typeof window !== 'undefined' && window.PermissionGate) ||
@@ -351,8 +351,19 @@ const ServiceAndMaintenance = () => {
     return date.toLocaleString();
   };
 
+  const attachmentParts = useMemo(() => {
+    const part = window.JobCardAttachmentUtils?.partitionJobCardAttachments;
+    if (typeof part === 'function') {
+      return part(selectedJobCard?.photos);
+    }
+    return { visualItems: [], voicesBySection: {} };
+  }, [selectedJobCard?.photos]);
+
+  const DetailVoice =
+    typeof window.JobCardVoiceClips === 'function' ? window.JobCardVoiceClips : null;
+
 // Job card forms & checklists section (attached dynamic forms)
-const JobCardFormsSection = ({ jobCard }) => {
+const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
   if (!useState || !useEffect || !jobCard || !jobCard.id) {
     return null;
   }
@@ -371,6 +382,26 @@ const JobCardFormsSection = ({ jobCard }) => {
 
   const token = window.storage?.getToken?.();
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
+
+  const checklistFieldVoiceKeys = useMemo(() => {
+    const s = new Set();
+    forms.forEach((form) => {
+      const tpl = templates.find((t) => t.id === form.templateId) || {};
+      const fieldList = Array.isArray(tpl.fields) ? tpl.fields : [];
+      fieldList.forEach((field, idx) => {
+        const fid = field.id || `field_${idx}`;
+        s.add(`form_${form.id}_${fid}`);
+      });
+    });
+    return s;
+  }, [forms, templates]);
+
+  const orphanChecklistVoiceKeys = useMemo(() => {
+    if (!voicesBySection || typeof voicesBySection !== 'object') return [];
+    return Object.keys(voicesBySection).filter(
+      (k) => k.startsWith('form_') && !checklistFieldVoiceKeys.has(k)
+    );
+  }, [voicesBySection, checklistFieldVoiceKeys]);
 
   const syncAnswersState = (instances) => {
     const next = {};
@@ -815,6 +846,11 @@ const JobCardFormsSection = ({ jobCard }) => {
                             {field.helpText}
                           </p>
                         )}
+                        {window.JobCardVoiceClips ? (
+                          <window.JobCardVoiceClips
+                            items={voicesBySection[`form_${form.id}_${fieldId}`] || []}
+                          />
+                        ) : null}
                       </div>
                     );
                   })}
@@ -823,6 +859,32 @@ const JobCardFormsSection = ({ jobCard }) => {
             </div>
           );
         })}
+        {orphanChecklistVoiceKeys.length > 0 && !featureUnavailable && (
+          <div
+            className={`rounded-xl border border-dashed p-4 ${isDark ? 'border-gray-700 bg-gray-950' : 'border-gray-200 bg-gray-50'}`}
+          >
+            <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Other checklist recordings
+            </div>
+            <p className={`mb-3 text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+              Saved under a different form instance id than on the server; audio is still shown here.
+            </p>
+            <div className="space-y-4">
+              {orphanChecklistVoiceKeys.map((key) => (
+                <div key={key}>
+                  <div className={`text-[10px] font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {window.JobCardAttachmentUtils?.labelOrphanFormVoiceKey
+                      ? window.JobCardAttachmentUtils.labelOrphanFormVoiceKey(forms, key)
+                      : key.replace(/^form_/, '')}
+                  </div>
+                  {window.JobCardVoiceClips ? (
+                    <window.JobCardVoiceClips items={voicesBySection[key] || []} />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1272,13 +1334,16 @@ const JobCardFormsSection = ({ jobCard }) => {
                     <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
                       <i className="fa-solid fa-clipboard-list text-sm" />
                     </span>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Visit summary
                       </div>
                       <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                         {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
                       </div>
+                      {DetailVoice ? (
+                        <DetailVoice items={attachmentParts.voicesBySection.reasonForVisit} />
+                      ) : null}
                     </div>
                   </header>
 
@@ -1290,6 +1355,9 @@ const JobCardFormsSection = ({ jobCard }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.diagnosis || 'No diagnosis captured.'}
                       </p>
+                      {DetailVoice ? (
+                        <DetailVoice items={attachmentParts.voicesBySection.diagnosis} />
+                      ) : null}
                     </div>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
@@ -1298,17 +1366,39 @@ const JobCardFormsSection = ({ jobCard }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.actionsTaken || 'No actions recorded.'}
                       </p>
+                      {DetailVoice ? (
+                        <DetailVoice items={attachmentParts.voicesBySection.actionsTaken} />
+                      ) : null}
                     </div>
                   </div>
 
-                  {selectedJobCard.otherComments ? (
+                  {(selectedJobCard.otherComments ||
+                    (attachmentParts.voicesBySection.otherComments &&
+                      attachmentParts.voicesBySection.otherComments.length > 0)) && (
                     <div>
                       <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                        Customer feedback &amp; notes
+                        Additional notes
                       </div>
-                      <div className={`rounded-xl border border-dashed p-3 text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-100' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                        {selectedJobCard.otherComments}
+                      {selectedJobCard.otherComments ? (
+                        <div className={`rounded-xl border border-dashed p-3 text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-100' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                          {selectedJobCard.otherComments}
+                        </div>
+                      ) : null}
+                      {DetailVoice ? (
+                        <DetailVoice items={attachmentParts.voicesBySection.otherComments} />
+                      ) : null}
+                    </div>
+                  )}
+
+                  {attachmentParts.voicesBySection.customerFeedback &&
+                  attachmentParts.voicesBySection.customerFeedback.length > 0 ? (
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                        Customer feedback
                       </div>
+                      {DetailVoice ? (
+                        <DetailVoice items={attachmentParts.voicesBySection.customerFeedback} />
+                      ) : null}
                     </div>
                   ) : null}
                 </section>
@@ -1360,7 +1450,10 @@ const JobCardFormsSection = ({ jobCard }) => {
                 </section>
 
                 {/* Forms & checklists attached to this job card */}
-                <JobCardFormsSection jobCard={selectedJobCard} />
+                <JobCardFormsSection
+                  jobCard={selectedJobCard}
+                  voicesBySection={attachmentParts.voicesBySection}
+                />
               </div>
 
               {/* Right column: map + photos */}
@@ -1471,7 +1564,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                   </div>
                 </section>
 
-                {/* Photos */}
+                {/* Photos & videos only (voice notes appear under their fields above) */}
                 <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 shadow-sm`}>
                   <header className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -1480,21 +1573,15 @@ const JobCardFormsSection = ({ jobCard }) => {
                       </span>
                       <div>
                         <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          Photos
+                          Photos &amp; videos
                         </div>
                         <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                           {loadingJobCard && !Array.isArray(selectedJobCard.photos) ? (
                             <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading…</span>
                           ) : (
                             <>
-                              {Array.isArray(selectedJobCard.photos)
-                                ? selectedJobCard.photos.length
-                                : 0}{' '}
-                              photo
-                              {Array.isArray(selectedJobCard.photos) &&
-                              selectedJobCard.photos.length === 1
-                                ? ''
-                                : 's'}
+                              {attachmentParts.visualItems.length} visual attachment
+                              {attachmentParts.visualItems.length === 1 ? '' : 's'}
                             </>
                           )}
                         </div>
@@ -1504,30 +1591,27 @@ const JobCardFormsSection = ({ jobCard }) => {
                   {loadingJobCard && !Array.isArray(selectedJobCard.photos) ? (
                     <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
                       <i className="fa-solid fa-spinner fa-spin text-xl mb-2" />
-                      <p className="text-sm">Loading photos…</p>
+                      <p className="text-sm">Loading attachments…</p>
                     </div>
-                  ) : Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
+                  ) : attachmentParts.visualItems.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {selectedJobCard.photos.map((photo, idx) => {
-                        const url = typeof photo === 'string' ? photo : photo?.url;
-                        const isVoice =
-                          typeof photo === 'object' &&
-                          photo &&
-                          photo.kind === 'voice';
-                        if (isVoice && url) {
-                          const sec = photo.section ? String(photo.section) : '';
-                          const secLabel =
-                            sec.startsWith('form_') ? 'Checklist field' : sec.replace(/_/g, ' ');
+                      {attachmentParts.visualItems.map(({ url, idx }) => {
+                        const isVid = window.JobCardAttachmentUtils?.jobCardAttachmentUrlIsVideo
+                          ? window.JobCardAttachmentUtils.jobCardAttachmentUrlIsVideo(url)
+                          : false;
+                        if (isVid) {
                           return (
                             <div
                               key={idx}
-                              className={`rounded-xl border p-3 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}
+                              className={`overflow-hidden rounded-xl border ${isDark ? 'border-gray-700 bg-black' : 'border-gray-200 bg-black'}`}
                             >
-                              <p className={`mb-2 text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                                <i className="fa-solid fa-microphone mr-1.5 text-pink-400" />
-                                Voice note{secLabel ? ` · ${secLabel}` : ''}
-                              </p>
-                              <audio controls className="h-9 w-full" src={url} />
+                              <video
+                                src={url}
+                                className="max-h-64 w-full object-contain"
+                                controls
+                                playsInline
+                                preload="metadata"
+                              />
                             </div>
                           );
                         }
@@ -1548,11 +1632,9 @@ const JobCardFormsSection = ({ jobCard }) => {
                   ) : (
                     <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'}`}>
                       <i className={`fa-regular fa-image text-xl mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
-                      <p className="text-sm">
-                        No photos have been attached to this job card.
-                      </p>
+                      <p className="text-sm">No photos or videos attached.</p>
                       <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                        Encourage technicians to capture photos for better traceability.
+                        Voice notes are listed next to the relevant visit, work, or checklist fields.
                       </p>
                     </div>
                   )}
