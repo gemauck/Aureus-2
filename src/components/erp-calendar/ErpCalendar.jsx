@@ -1355,7 +1355,18 @@ const ErpCalendar = () => {
                 const isUnread = Array.isArray(m.labelIds) && m.labelIds.includes('UNREAD');
                 const isSelected = mailSelectedIds.includes(m.id);
                 return (
-                  <div key={m.id} className={`grid grid-cols-12 gap-2 items-center px-3 py-2 border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/40' : 'border-gray-100 hover:bg-gray-50'} ${mailSelectedId === m.id ? (isDark ? 'bg-gray-800' : 'bg-blue-50') : ''}`}>
+                  <div
+                    key={m.id}
+                    className={`grid grid-cols-12 gap-2 items-center px-3 py-2 border-b ${
+                      isUnread
+                        ? isDark
+                          ? 'bg-blue-900/20 border-blue-800/40'
+                          : 'bg-blue-50/70 border-blue-100'
+                        : isDark
+                          ? 'border-gray-800 hover:bg-gray-800/40'
+                          : 'border-gray-100 hover:bg-gray-50'
+                    } ${mailSelectedId === m.id ? (isDark ? 'ring-1 ring-blue-500/60 bg-gray-800' : 'ring-1 ring-blue-300 bg-blue-50') : ''}`}
+                  >
                     <div className="col-span-1">
                       <input type="checkbox" checked={isSelected} onChange={(e) => setMailSelectedIds((prev) => (e.target.checked ? prev.concat(m.id).filter((v, i, arr) => arr.indexOf(v) === i) : prev.filter((x) => x !== m.id)))} />
                     </div>
@@ -1369,10 +1380,20 @@ const ErpCalendar = () => {
                       }}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <div className={`text-sm truncate ${isUnread ? 'font-semibold' : 'font-medium'}`}>{m.from || '(Unknown sender)'}</div>
+                        <div className={`text-sm truncate ${isUnread ? 'font-bold' : 'font-medium'}`}>
+                          {isUnread ? <span className={`inline-block w-2 h-2 rounded-full mr-2 align-middle ${isDark ? 'bg-blue-400' : 'bg-blue-600'}`} /> : null}
+                          {m.from || '(Unknown sender)'}
+                        </div>
                         <div className={`text-xs ${muted}`}>{fmtMailDate(m.date || m.internalDate)}</div>
                       </div>
-                      <div className="text-sm truncate">{m.subject || '(No subject)'}</div>
+                      <div className={`text-sm truncate ${isUnread ? (isDark ? 'text-blue-200 font-semibold' : 'text-blue-900 font-semibold') : ''}`}>
+                        {m.subject || '(No subject)'}
+                        {isUnread ? (
+                          <span className={`ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${isDark ? 'bg-blue-800 text-blue-100' : 'bg-blue-600 text-white'}`}>
+                            UNREAD
+                          </span>
+                        ) : null}
+                      </div>
                       <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
                     </button>
                   </div>
