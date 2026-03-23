@@ -124,6 +124,7 @@ export function buildRawMimeEmail({
   subject,
   textBody,
   htmlBody,
+  attachments,
   inReplyTo,
   references
 }) {
@@ -137,7 +138,50 @@ export function buildRawMimeEmail({
   if (inReplyTo) lines.push(`In-Reply-To: ${inReplyTo}`)
   if (references) lines.push(`References: ${references}`)
 
-  if (htmlBody) {
+  const files = Array.isArray(attachments) ? attachments.filter(Boolean) : []
+  if (files.length) {
+    const mixedBoundary = `abco-mixed-${Date.now().toString(16)}`
+    lines.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`)
+    lines.push('')
+    lines.push(`--${mixedBoundary}`)
+    if (htmlBody) {
+      const altBoundary = `abco-alt-${Date.now().toString(16)}`
+      lines.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`)
+      lines.push('')
+      lines.push(`--${altBoundary}`)
+      lines.push('Content-Type: text/plain; charset=UTF-8')
+      lines.push('Content-Transfer-Encoding: 7bit')
+      lines.push('')
+      lines.push(textBody || '')
+      lines.push(`--${altBoundary}`)
+      lines.push('Content-Type: text/html; charset=UTF-8')
+      lines.push('Content-Transfer-Encoding: 7bit')
+      lines.push('')
+      lines.push(htmlBody)
+      lines.push(`--${altBoundary}--`)
+    } else {
+      lines.push('Content-Type: text/plain; charset=UTF-8')
+      lines.push('Content-Transfer-Encoding: 7bit')
+      lines.push('')
+      lines.push(textBody || '')
+    }
+
+    files.forEach((file) => {
+      const mimeType = String(file.mimeType || 'application/octet-stream')
+      const filename = String(file.filename || 'attachment')
+      const b64 = String(file.contentBase64 || '')
+        .replace(/\r?\n/g, '')
+        .trim()
+      if (!b64) return
+      lines.push(`--${mixedBoundary}`)
+      lines.push(`Content-Type: ${mimeType}; name="${filename}"`)
+      lines.push('Content-Transfer-Encoding: base64')
+      lines.push(`Content-Disposition: attachment; filename="${filename}"`)
+      lines.push('')
+      for (let i = 0; i < b64.length; i += 76) lines.push(b64.slice(i, i + 76))
+    })
+    lines.push(`--${mixedBoundary}--`)
+  } else if (htmlBody) {
     const boundary = `abco-${Date.now().toString(16)}`
     lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
     lines.push('')

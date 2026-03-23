@@ -4,7 +4,7 @@ import { badRequest, ok } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { requireErpCalendarAccess } from '../_lib/erpCalendarAccess.js'
-import { buildRawMimeEmail, createGmailMailboxClient } from '../_lib/gmailMailboxClient.js'
+import { buildRawMimeEmail, createGmailMailboxClient, handleGmailApiError } from '../_lib/gmailMailboxClient.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Method not allowed')
@@ -20,6 +20,7 @@ async function handler(req, res) {
     const textBody = body.textBody || ''
     const htmlBody = body.htmlBody || ''
     const threadId = (body.threadId || '').trim() || undefined
+    const attachments = Array.isArray(body.attachments) ? body.attachments : []
 
     if (!to) return badRequest(res, 'to is required')
     if (!from) return badRequest(res, 'from is required')
@@ -32,6 +33,7 @@ async function handler(req, res) {
       subject,
       textBody,
       htmlBody,
+      attachments,
       inReplyTo: body.inReplyTo || '',
       references: body.references || ''
     })

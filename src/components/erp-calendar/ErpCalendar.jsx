@@ -2,7 +2,7 @@
  * Greenfield ERP Calendar + Google Calendar (read/write via OAuth).
  * Month, week, and day views. Does not use legacy dashboard Calendar.
  */
-const { useState, useEffect, useCallback, useMemo } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const TZ = 'Africa/Johannesburg';
 const GRID_HOUR_START = 6;
@@ -152,6 +152,27 @@ function stripGoogleIdPrefix(id) {
   return String(id || '').replace(/^g-/, '');
 }
 
+function splitEmailList(v) {
+  return String(v || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function htmlToPlainText(html) {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = String(html);
+  return tmp.textContent || tmp.innerText || '';
+}
+
+function fmtMailDate(input) {
+  if (!input) return '';
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return String(input);
+  return d.toLocaleString();
+}
+
 const ErpCalendar = () => {
   let isDark = false;
   try {
@@ -212,14 +233,33 @@ const ErpCalendar = () => {
   const [mailSelectedId, setMailSelectedId] = useState(null);
   const [mailThread, setMailThread] = useState([]);
   const [mailThreadLoading, setMailThreadLoading] = useState(false);
+  const [mailExpandedIds, setMailExpandedIds] = useState([]);
+  const [mailSelectedIds, setMailSelectedIds] = useState([]);
+  const [mailFromFilter, setMailFromFilter] = useState('');
+  const [mailSubjectFilter, setMailSubjectFilter] = useState('');
+  const [mailAfterFilter, setMailAfterFilter] = useState('');
+  const [mailBeforeFilter, setMailBeforeFilter] = useState('');
+  const [mailHasAttachment, setMailHasAttachment] = useState(false);
+  const [mailLoadingMore, setMailLoadingMore] = useState(false);
+  const [mailActionBusy, setMailActionBusy] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [mailDrafts, setMailDrafts] = useState([]);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composeMode, setComposeMode] = useState('new');
+  const [composeDraftId, setComposeDraftId] = useState('');
   const [composeTo, setComposeTo] = useState('');
   const [composeCc, setComposeCc] = useState('');
   const [composeBcc, setComposeBcc] = useState('');
   const [composeSubject, setComposeSubject] = useState('');
   const [composeBody, setComposeBody] = useState('');
+  const [composeHtmlBody, setComposeHtmlBody] = useState('');
+  const [composeInReplyTo, setComposeInReplyTo] = useState('');
+  const [composeReferences, setComposeReferences] = useState('');
   const [composeThreadId, setComposeThreadId] = useState('');
+  const [composeAttachments, setComposeAttachments] = useState([]);
+  const [composeSavingDraft, setComposeSavingDraft] = useState(false);
   const [mailSending, setMailSending] = useState(false);
+  const attachmentInputRef = useRef(null);
 
   const token = () => window.storage?.getToken?.();
 
@@ -422,11 +462,17 @@ const ErpCalendar = () => {
     async (opts) => {
       const append = !!opts?.append;
       const nextToken = append ? mailNextPageToken : null;
-      setMailLoading(true);
+      if (append) setMailLoadingMore(true);
+      else setMailLoading(true);
       try {
         const params = new URLSearchParams();
         params.set('labelIds', mailLabelFilter || 'INBOX');
         if (mailQuery.trim()) params.set('q', mailQuery.trim());
+        if (mailFromFilter.trim()) params.set('from', mailFromFilter.trim());
+        if (mailSubjectFilter.trim()) params.set('subject', mailSubjectFilter.trim());
+        if (mailAfterFilter) params.set('after', mailAfterFilter);
+        if (mailBeforeFilter) params.set('before', mailBeforeFilter);
+        if (mailHasAttachment) params.set('hasAttachment', '1');
         if (nextToken) params.set('pageToken', nextToken);
         params.set('maxResults', '30');
         const r = await fetch(`/api/erp-mail/messages?${params.toString()}`, {
@@ -437,22 +483,60 @@ const ErpCalendar = () => {
           throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load messages');
         }
         const rows = j?.data?.messages || [];
-        setMailMessages((prev) => (append ? prev.concat(rows) : rows));
+        setMailMessages((prev) => {
+          const nextRows = append ? prev.concat(rows) : rows;
+          if (
+            prev.length === nextRows.length &&
+            prev.every((item, idx) => item?.id === nextRows[idx]?.id)
+          ) {
+            return prev;
+          }
+          return nextRows;
+        });
         setMailNextPageToken(j?.data?.nextPageToken || null);
       } catch (e) {
         setErr(e.message || 'Failed to load messages');
       } finally {
-        setMailLoading(false);
+        if (append) setMailLoadingMore(false);
+        else setMailLoading(false);
       }
     },
-    [mailLabelFilter, mailQuery, mailNextPageToken]
+    [
+      mailLabelFilter,
+      mailQuery,
+      mailFromFilter,
+      mailSubjectFilter,
+      mailAfterFilter,
+      mailBeforeFilter,
+      mailHasAttachment,
+      mailNextPageToken
+    ]
   );
+
+  const loadMailDrafts = useCallback(async () => {
+    try {
+      const r = await fetch('/api/erp-mail/drafts?maxResults=30', {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load drafts');
+      const drafts = Array.isArray(j?.data?.drafts) ? j.data.drafts : [];
+      setMailDrafts(drafts);
+    } catch (e) {
+      setErr(e.message || 'Failed to load drafts');
+    }
+  }, []);
 
   useEffect(() => {
     if (workspaceTab !== 'mail') return;
     loadMailLabels();
     loadMailMessages({});
   }, [workspaceTab, loadMailLabels, loadMailMessages]);
+
+  useEffect(() => {
+    if (!draftsOpen) return;
+    loadMailDrafts();
+  }, [draftsOpen, loadMailDrafts]);
 
   const loadMailThread = useCallback(async (threadId, selectedId) => {
     if (!threadId) return;
@@ -465,6 +549,7 @@ const ErpCalendar = () => {
       if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load thread');
       const msgs = j?.data?.messages || [];
       setMailThread(Array.isArray(msgs) ? msgs : []);
+      setMailExpandedIds((msgs || []).map((m) => m.id).filter(Boolean));
       setMailSelectedId(selectedId || (msgs[0] && msgs[0].id) || null);
     } catch (e) {
       setErr(e.message || 'Failed to load thread');
@@ -474,22 +559,118 @@ const ErpCalendar = () => {
     }
   }, []);
 
-  const openCompose = (replyTo) => {
+  const openCompose = (replyTo, mode = 'new') => {
+    setComposeMode(mode);
+    setComposeDraftId('');
+    setComposeAttachments([]);
+    setComposeInReplyTo('');
+    setComposeReferences('');
     if (replyTo) {
-      setComposeTo(replyTo.from || '');
-      setComposeSubject(replyTo.subject?.toLowerCase().startsWith('re:') ? replyTo.subject : `Re: ${replyTo.subject || ''}`);
-      const ref = replyTo.messageId || '';
+      const prefix = mode === 'forward' ? 'Fwd:' : 'Re:';
+      setComposeTo(mode === 'forward' ? '' : replyTo.from || '');
+      setComposeSubject(replyTo.subject?.toLowerCase().startsWith(prefix.toLowerCase()) ? replyTo.subject : `${prefix} ${replyTo.subject || ''}`);
       setComposeThreadId(replyTo.threadId || '');
-      setComposeBody(`\n\n--- Original message ---\nFrom: ${replyTo.from || ''}\nDate: ${replyTo.date || ''}\n\n${replyTo.bodyText || ''}`);
+      setComposeInReplyTo(replyTo.messageId || '');
+      setComposeReferences(replyTo.references || replyTo.messageId || '');
+      const quoted = `\n\n--- Original message ---\nFrom: ${replyTo.from || ''}\nDate: ${replyTo.date || ''}\n\n${replyTo.bodyText || ''}`;
+      setComposeBody(quoted);
+      setComposeHtmlBody(`<p><br/></p><hr/><p><strong>From:</strong> ${replyTo.from || ''}</p><p><strong>Date:</strong> ${replyTo.date || ''}</p><blockquote>${(replyTo.bodyHtml || replyTo.bodyText || '').replace(/\n/g, '<br/>')}</blockquote>`);
     } else {
       setComposeTo('');
       setComposeSubject('');
       setComposeBody('');
+      setComposeHtmlBody('');
       setComposeThreadId('');
     }
     setComposeCc('');
     setComposeBcc('');
     setComposeOpen(true);
+  };
+
+  const openDraft = async (draftId) => {
+    try {
+      const r = await fetch(`/api/erp-mail/drafts?id=${encodeURIComponent(draftId)}`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to open draft');
+      const msg = j?.data?.message || {};
+      setComposeMode('draft');
+      setComposeDraftId(draftId);
+      setComposeTo(msg.to || '');
+      setComposeCc(msg.cc || '');
+      setComposeBcc(msg.bcc || '');
+      setComposeSubject(msg.subject || '');
+      setComposeBody(msg.bodyText || '');
+      setComposeHtmlBody(msg.bodyHtml || '');
+      setComposeThreadId(msg.threadId || '');
+      setComposeInReplyTo(msg.inReplyTo || '');
+      setComposeReferences(msg.references || '');
+      setComposeAttachments(Array.isArray(msg.attachments) ? [] : []);
+      setComposeOpen(true);
+    } catch (e) {
+      setErr(e.message || 'Failed to open draft');
+    }
+  };
+
+  const downloadAttachment = async (messageId, att) => {
+    if (!messageId || !att?.attachmentId) return;
+    try {
+      const qs = new URLSearchParams({
+        messageId,
+        attachmentId: att.attachmentId,
+        filename: att.filename || 'attachment',
+        mimeType: att.mimeType || 'application/octet-stream'
+      });
+      const r = await fetch(`/api/erp-mail/attachment?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Attachment download failed');
+      const d = j?.data || {};
+      const bin = atob(String(d.dataBase64 || '').replace(/-/g, '+').replace(/_/g, '/'));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: d.mimeType || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = d.filename || 'attachment';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e.message || 'Attachment download failed');
+    }
+  };
+
+  const onPickAttachments = async (ev) => {
+    const files = Array.from(ev.target?.files || []);
+    if (!files.length) return;
+    const loaded = await Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = String(reader.result || '');
+              const contentBase64 = result.includes(',') ? result.split(',')[1] : '';
+              resolve({
+                id: `${file.name}-${file.size}-${Date.now()}`,
+                filename: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                size: file.size || 0,
+                contentBase64
+              });
+            };
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(file);
+          })
+      )
+    );
+    setComposeAttachments((prev) => prev.concat(loaded.filter(Boolean)));
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
   };
 
   const sendMail = async () => {
@@ -510,18 +691,68 @@ const ErpCalendar = () => {
           cc: composeCc.trim(),
           bcc: composeBcc.trim(),
           subject: composeSubject.trim(),
-          textBody: composeBody,
-          threadId: composeThreadId || undefined
+          textBody: composeBody || htmlToPlainText(composeHtmlBody),
+          htmlBody: composeHtmlBody || undefined,
+          threadId: composeThreadId || undefined,
+          inReplyTo: composeInReplyTo || undefined,
+          references: composeReferences || undefined,
+          attachments: composeAttachments.map((a) => ({
+            filename: a.filename,
+            mimeType: a.mimeType,
+            contentBase64: a.contentBase64
+          }))
         })
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Send failed');
       setComposeOpen(false);
+      setComposeAttachments([]);
       loadMailMessages({});
     } catch (e) {
       alert(e.message || 'Failed to send email');
     } finally {
       setMailSending(false);
+    }
+  };
+
+  const saveDraft = async () => {
+    setComposeSavingDraft(true);
+    try {
+      const r = await fetch('/api/erp-mail/drafts', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'save',
+          id: composeDraftId || undefined,
+          to: composeTo.trim(),
+          cc: composeCc.trim(),
+          bcc: composeBcc.trim(),
+          subject: composeSubject.trim(),
+          textBody: composeBody || htmlToPlainText(composeHtmlBody),
+          htmlBody: composeHtmlBody || undefined,
+          threadId: composeThreadId || undefined,
+          inReplyTo: composeInReplyTo || undefined,
+          references: composeReferences || undefined,
+          attachments: composeAttachments.map((a) => ({
+            filename: a.filename,
+            mimeType: a.mimeType,
+            contentBase64: a.contentBase64
+          }))
+        })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to save draft');
+      const draftId = j?.data?.draft?.id || '';
+      if (draftId) setComposeDraftId(draftId);
+      setComposeMode('draft');
+      loadMailDrafts();
+    } catch (e) {
+      setErr(e.message || 'Failed to save draft');
+    } finally {
+      setComposeSavingDraft(false);
     }
   };
 
@@ -538,19 +769,55 @@ const ErpCalendar = () => {
     } catch (_) {}
   };
 
-  const trashMailMessage = async (id) => {
-    if (!id) return;
+  const runBulkModify = async (addLabelIds, removeLabelIds) => {
+    if (!mailSelectedIds.length) return;
+    setMailActionBusy(true);
     try {
-      await fetch('/api/erp-mail/trash', {
+      await fetch('/api/erp-mail/modify', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token()}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ ids: mailSelectedIds, addLabelIds, removeLabelIds })
       });
-      setMailMessages((prev) => prev.filter((m) => m.id !== id));
-      setMailThread((prev) => prev.filter((m) => m.id !== id));
+      await loadMailMessages({});
+      setMailSelectedIds([]);
+    } catch (e) {
+      setErr(e.message || 'Bulk action failed');
+    } finally {
+      setMailActionBusy(false);
+    }
+  };
+
+  const promptApplyLabel = async () => {
+    if (!mailSelectedIds.length) return;
+    const options = mailLabels.map((l) => `${l.id}:${l.name}`).join('\n');
+    const value = prompt(`Enter Gmail label ID to apply to selected messages:\n${options}`);
+    const labelId = String(value || '').trim();
+    if (!labelId) return;
+    await runBulkModify([labelId], []);
+  };
+
+  const trashMailMessage = async (id) => {
+    const ids = id ? [id] : mailSelectedIds;
+    if (!ids.length) return;
+    try {
+      await Promise.all(
+        ids.map((x) =>
+          fetch('/api/erp-mail/trash', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token()}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id: x })
+          })
+        )
+      );
+      setMailMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
+      setMailThread((prev) => prev.filter((m) => !ids.includes(m.id)));
+      setMailSelectedIds([]);
     } catch (_) {}
   };
 
@@ -1008,153 +1275,173 @@ const ErpCalendar = () => {
     [mailThread, mailSelectedId]
   );
 
-  const renderMailWorkspace = () => (
-    <div className={`rounded-xl border shadow-sm ${card}`}>
-      <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => openCompose(null)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700"
-          >
-            <i className="fas fa-pen mr-1" /> Compose
-          </button>
-          <input
-            value={mailQuery}
-            onChange={(e) => setMailQuery(e.target.value)}
-            placeholder="Search mail"
-            className={`px-3 py-2 rounded-lg border text-sm min-w-[220px] ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
-          />
-          <button
-            type="button"
-            onClick={() => loadMailMessages({})}
-            className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
-          >
-            Search
-          </button>
+  const renderMailWorkspace = () => {
+    const allSelected = !!mailMessages.length && mailSelectedIds.length === mailMessages.length;
+    return (
+      <div className={`rounded-xl border shadow-sm ${card}`}>
+        <div className={`p-3 border-b space-y-2 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => openCompose(null, 'new')} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700">
+              <i className="fas fa-pen mr-1" /> New mail
+            </button>
+            <button type="button" disabled={!selectedThreadMessage} onClick={() => openCompose(selectedThreadMessage, 'reply')} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Reply</button>
+            <button type="button" disabled={!selectedThreadMessage} onClick={() => openCompose(selectedThreadMessage, 'forward')} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Forward</button>
+            <button type="button" disabled={!mailSelectedIds.length || mailActionBusy} onClick={() => runBulkModify([], ['UNREAD'])} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Mark read</button>
+            <button type="button" disabled={!mailSelectedIds.length || mailActionBusy} onClick={() => runBulkModify(['UNREAD'], [])} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Mark unread</button>
+            <button type="button" disabled={!mailSelectedIds.length || mailActionBusy} onClick={() => runBulkModify(['STARRED'], [])} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Add star</button>
+            <button type="button" disabled={!mailSelectedIds.length || mailActionBusy} onClick={promptApplyLabel} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Apply label</button>
+            <button type="button" disabled={!mailSelectedIds.length} onClick={() => trashMailMessage()} className="px-3 py-1.5 rounded-lg text-sm border border-red-400/50 text-red-500 disabled:opacity-50">Delete</button>
+            <button type="button" onClick={() => setDraftsOpen((v) => !v)} className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>{draftsOpen ? 'Hide drafts' : 'Show drafts'}</button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <input value={mailQuery} onChange={(e) => setMailQuery(e.target.value)} placeholder="Search text" className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
+            <input value={mailFromFilter} onChange={(e) => setMailFromFilter(e.target.value)} placeholder="From" className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
+            <input value={mailSubjectFilter} onChange={(e) => setMailSubjectFilter(e.target.value)} placeholder="Subject contains" className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
+            <input type="date" value={mailAfterFilter} onChange={(e) => setMailAfterFilter(e.target.value)} className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
+            <input type="date" value={mailBeforeFilter} onChange={(e) => setMailBeforeFilter(e.target.value)} className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
+            <label className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}><input type="checkbox" checked={mailHasAttachment} onChange={(e) => setMailHasAttachment(e.target.checked)} />Has attachment</label>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => loadMailMessages({})} className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Apply filters</button>
+            <button type="button" onClick={() => { setMailQuery(''); setMailFromFilter(''); setMailSubjectFilter(''); setMailAfterFilter(''); setMailBeforeFilter(''); setMailHasAttachment(false); }} className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Clear</button>
+          </div>
         </div>
-      </div>
-      {err ? (
-        <div className={`mx-4 mt-4 p-3 rounded-lg border text-sm ${isDark ? 'bg-red-900/30 border-red-700 text-red-200' : 'bg-red-50 border-red-200 text-red-800'}`}>
-          {err}
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-12 min-h-[62vh]">
-        <aside className={`col-span-12 md:col-span-2 border-r p-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className={`text-xs uppercase mb-2 ${muted}`}>Labels</div>
-          <div className="space-y-1 max-h-[56vh] overflow-y-auto">
-            {mailLabels.map((l) => (
-              <button
-                key={l.id}
-                type="button"
-                onClick={() => {
-                  setMailLabelFilter(l.id);
-                  setMailMessages([]);
-                  setMailThread([]);
-                  setMailSelectedId(null);
-                }}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm ${mailLabelFilter === l.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
-              >
-                <span>{l.name}</span>
-                {l.messagesUnread ? <span className={`ml-1 ${muted}`}>({l.messagesUnread})</span> : null}
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <section className={`col-span-12 md:col-span-4 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className={`p-3 text-sm border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            {mailLabelFilter} {mailLoading ? '· Loading…' : ''}
-          </div>
-          <div className="max-h-[56vh] overflow-y-auto">
-            {mailMessages.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={async () => {
-                  setMailSelectedId(m.id);
-                  await modifyMailMessage(m.id, [], ['UNREAD']);
-                  loadMailThread(m.threadId, m.id);
-                }}
-                className={`w-full text-left px-3 py-2 border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/40' : 'border-gray-100 hover:bg-gray-50'} ${mailSelectedId === m.id ? (isDark ? 'bg-gray-800' : 'bg-blue-50') : ''}`}
-              >
-                <div className="text-sm font-medium truncate">{m.subject || '(No subject)'}</div>
-                <div className={`text-xs truncate ${muted}`}>{m.from}</div>
-                <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
-              </button>
-            ))}
-            {!mailMessages.length && !mailLoading ? <div className={`p-4 text-sm ${muted}`}>No messages.</div> : null}
-          </div>
-          {mailNextPageToken ? (
-            <div className="p-2 border-t border-gray-200 dark:border-gray-700">
-              <button
-                type="button"
-                onClick={() => loadMailMessages({ append: true })}
-                className={`w-full px-3 py-1.5 rounded text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
-              >
-                Load more
-              </button>
+        {err ? (
+          <div className={`mx-3 mt-3 p-3 rounded-lg border text-sm ${isDark ? 'bg-red-900/30 border-red-700 text-red-200' : 'bg-red-50 border-red-200 text-red-800'}`}>{err}</div>
+        ) : null}
+        <div className="grid grid-cols-12 min-h-[64vh]">
+          <aside className={`col-span-12 md:col-span-2 border-r p-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className={`text-xs uppercase mb-2 ${muted}`}>Labels</div>
+            <div className="space-y-1 max-h-[32vh] overflow-y-auto">
+              {mailLabels.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => {
+                    setMailLabelFilter(l.id);
+                    setMailMessages([]);
+                    setMailThread([]);
+                    setMailSelectedId(null);
+                    setMailSelectedIds([]);
+                  }}
+                  className={`w-full text-left px-2 py-1.5 rounded text-sm ${mailLabelFilter === l.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
+                >
+                  <span>{l.name}</span>
+                  {l.messagesUnread ? <span className={`ml-1 ${muted}`}>({l.messagesUnread})</span> : null}
+                </button>
+              ))}
             </div>
-          ) : null}
-        </section>
-
-        <section className="col-span-12 md:col-span-6 p-4">
-          {mailThreadLoading ? (
-            <p className={muted}>Loading thread…</p>
-          ) : selectedThreadMessage ? (
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <h3 className="text-lg font-semibold">{selectedThreadMessage.subject || '(No subject)'}</h3>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openCompose(selectedThreadMessage)}
-                    className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
-                  >
-                    Reply
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => trashMailMessage(selectedThreadMessage.id)}
-                    className="px-2 py-1 rounded text-xs text-red-500 border border-red-400/40"
-                  >
-                    Trash
-                  </button>
+            {draftsOpen ? (
+              <div className="mt-4">
+                <div className={`text-xs uppercase mb-2 ${muted}`}>Drafts</div>
+                <div className="space-y-1 max-h-[20vh] overflow-y-auto">
+                  {mailDrafts.map((d) => (
+                    <button key={d.id} type="button" onClick={() => openDraft(d.id)} className={`w-full text-left px-2 py-1.5 rounded text-sm ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}>
+                      {d.message?.id || d.id}
+                    </button>
+                  ))}
+                  {!mailDrafts.length ? <div className={`text-xs ${muted}`}>No drafts found.</div> : null}
                 </div>
               </div>
-              <div className={`text-xs mb-3 ${muted}`}>
-                From: {selectedThreadMessage.from} · To: {selectedThreadMessage.to || 'me'}
+            ) : null}
+          </aside>
+          <section className={`col-span-12 md:col-span-5 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className={`px-3 py-2 text-sm border-b flex items-center justify-between ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={allSelected} onChange={(e) => setMailSelectedIds(e.target.checked ? mailMessages.map((m) => m.id) : [])} />{mailLabelFilter}</label>
+              <span className={muted}>{mailLoading ? 'Loading…' : `${mailMessages.length} messages`}</span>
+            </div>
+            <div className="max-h-[56vh] overflow-y-auto">
+              {mailMessages.map((m) => {
+                const isUnread = Array.isArray(m.labelIds) && m.labelIds.includes('UNREAD');
+                const isSelected = mailSelectedIds.includes(m.id);
+                return (
+                  <div key={m.id} className={`grid grid-cols-12 gap-2 items-center px-3 py-2 border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/40' : 'border-gray-100 hover:bg-gray-50'} ${mailSelectedId === m.id ? (isDark ? 'bg-gray-800' : 'bg-blue-50') : ''}`}>
+                    <div className="col-span-1">
+                      <input type="checkbox" checked={isSelected} onChange={(e) => setMailSelectedIds((prev) => (e.target.checked ? prev.concat(m.id).filter((v, i, arr) => arr.indexOf(v) === i) : prev.filter((x) => x !== m.id)))} />
+                    </div>
+                    <button
+                      type="button"
+                      className="col-span-11 text-left"
+                      onClick={async () => {
+                        setMailSelectedId(m.id);
+                        await modifyMailMessage(m.id, [], ['UNREAD']);
+                        loadMailThread(m.threadId, m.id);
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className={`text-sm truncate ${isUnread ? 'font-semibold' : 'font-medium'}`}>{m.from || '(Unknown sender)'}</div>
+                        <div className={`text-xs ${muted}`}>{fmtMailDate(m.date || m.internalDate)}</div>
+                      </div>
+                      <div className="text-sm truncate">{m.subject || '(No subject)'}</div>
+                      <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
+                    </button>
+                  </div>
+                );
+              })}
+              {!mailMessages.length && !mailLoading ? <div className={`p-4 text-sm ${muted}`}>No messages.</div> : null}
+            </div>
+            {mailNextPageToken ? (
+              <div className="p-2 border-t border-gray-200 dark:border-gray-700">
+                <button type="button" onClick={() => loadMailMessages({ append: true })} className={`w-full px-3 py-1.5 rounded text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>
+                  {mailLoadingMore ? 'Loading…' : 'Load more'}
+                </button>
               </div>
-              <div className={`whitespace-pre-wrap text-sm rounded-lg p-3 border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
-                {selectedThreadMessage.bodyText || selectedThreadMessage.snippet || '(No message body)'}
-              </div>
-              {mailThread.length > 1 ? (
-                <div className="mt-4">
-                  <div className={`text-xs uppercase mb-2 ${muted}`}>Thread</div>
-                  <div className="space-y-2 max-h-[28vh] overflow-y-auto">
-                    {mailThread.map((m) => (
-                      <button
-                        type="button"
-                        key={m.id}
-                        onClick={() => setMailSelectedId(m.id)}
-                        className={`w-full text-left p-2 rounded border ${mailSelectedId === m.id ? (isDark ? 'border-blue-500 bg-blue-900/20' : 'border-blue-300 bg-blue-50') : isDark ? 'border-gray-700' : 'border-gray-200'}`}
-                      >
-                        <div className="text-sm font-medium truncate">{m.from}</div>
-                        <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
-                      </button>
-                    ))}
+            ) : null}
+          </section>
+          <section className="col-span-12 md:col-span-5 p-4">
+            {mailThreadLoading ? (
+              <p className={muted}>Loading thread…</p>
+            ) : selectedThreadMessage ? (
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h3 className="text-lg font-semibold">{selectedThreadMessage.subject || '(No subject)'}</h3>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => openCompose(selectedThreadMessage, 'reply')} className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Reply</button>
+                    <button type="button" onClick={() => openCompose(selectedThreadMessage, 'forward')} className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Forward</button>
+                    <button type="button" onClick={() => trashMailMessage(selectedThreadMessage.id)} className="px-2 py-1 rounded text-xs text-red-500 border border-red-400/40">Trash</button>
                   </div>
                 </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className={muted}>Select an email to read.</p>
-          )}
-        </section>
+                <div className="space-y-3 max-h-[54vh] overflow-y-auto pr-1">
+                  {mailThread.map((m) => {
+                    const expanded = mailExpandedIds.includes(m.id);
+                    return (
+                      <div key={m.id} className={`rounded-lg border ${mailSelectedId === m.id ? (isDark ? 'border-blue-500 bg-blue-900/10' : 'border-blue-300 bg-blue-50') : isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <button type="button" onClick={() => { setMailSelectedId(m.id); setMailExpandedIds((prev) => (prev.includes(m.id) ? prev.filter((x) => x !== m.id) : prev.concat(m.id))); }} className="w-full text-left p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-sm font-medium truncate">{m.from || '(Unknown sender)'}</div>
+                            <div className={`text-xs ${muted}`}>{fmtMailDate(m.date || m.internalDate)}</div>
+                          </div>
+                          <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
+                        </button>
+                        {expanded ? (
+                          <div className={`px-3 pb-3 text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                            <div className={`text-xs mb-2 ${muted}`}>To: {m.to || 'me'}</div>
+                            <div className={`whitespace-pre-wrap rounded-lg p-3 border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>{m.bodyText || m.snippet || '(No message body)'}</div>
+                            {Array.isArray(m.attachments) && m.attachments.length ? (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {m.attachments.map((att) => (
+                                  <button key={`${m.id}-${att.attachmentId}`} type="button" onClick={() => downloadAttachment(m.id, att)} className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>
+                                    <i className="fas fa-paperclip mr-1" />
+                                    {att.filename || 'attachment'}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p className={muted}>Select an email to read.</p>
+            )}
+          </section>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className={`min-h-screen p-4 md:p-8 ${shell}`}>
@@ -1470,8 +1757,10 @@ const ErpCalendar = () => {
 
       {composeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className={`w-full max-w-2xl rounded-xl border shadow-xl p-6 ${card}`}>
-            <h3 className="text-lg font-semibold mb-4">Compose email</h3>
+          <div className={`w-full max-w-5xl rounded-xl border shadow-xl p-6 ${card}`}>
+            <h3 className="text-lg font-semibold mb-4">
+              {composeMode === 'forward' ? 'Forward email' : composeMode === 'reply' ? 'Reply email' : composeMode === 'draft' ? 'Edit draft' : 'Compose email'}
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm mb-1">To</label>
@@ -1506,13 +1795,54 @@ const ErpCalendar = () => {
                 />
               </div>
             </div>
-            <label className="block text-sm mt-3 mb-1">Body</label>
-            <textarea
-              rows={12}
-              value={composeBody}
-              onChange={(e) => setComposeBody(e.target.value)}
-              className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
-            />
+            <div className="mt-3">
+              <label className="block text-sm mb-1">Body</label>
+              {window.RichTextEditor ? (
+                <window.RichTextEditor
+                  value={composeHtmlBody}
+                  onChange={(html) => {
+                    setComposeHtmlBody(html || '');
+                    setComposeBody(htmlToPlainText(html || ''));
+                  }}
+                  placeholder="Write your email..."
+                  rows={12}
+                  isDark={isDark}
+                />
+              ) : (
+                <textarea
+                  rows={12}
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                />
+              )}
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                <input ref={attachmentInputRef} type="file" multiple className="hidden" onChange={onPickAttachments} />
+                <button
+                  type="button"
+                  onClick={() => attachmentInputRef.current?.click()}
+                  className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
+                >
+                  <i className="fas fa-paperclip mr-1" />
+                  Add attachment
+                </button>
+                {composeAttachments.length ? <span className={`text-xs ${muted}`}>{composeAttachments.length} file(s) attached</span> : null}
+              </div>
+              {composeAttachments.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {composeAttachments.map((att) => (
+                    <span key={att.id} className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+                      {att.filename}
+                      <button type="button" onClick={() => setComposeAttachments((prev) => prev.filter((x) => x.id !== att.id))} className="text-red-500">
+                        <i className="fas fa-times" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className="flex justify-end gap-2 mt-4">
               <button
                 type="button"
@@ -1520,6 +1850,14 @@ const ErpCalendar = () => {
                 onClick={() => setComposeOpen(false)}
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                disabled={composeSavingDraft}
+                className={`px-4 py-2 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'} disabled:opacity-50`}
+                onClick={saveDraft}
+              >
+                {composeSavingDraft ? 'Saving…' : 'Save draft'}
               </button>
               <button
                 type="button"
