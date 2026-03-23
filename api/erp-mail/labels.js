@@ -13,13 +13,30 @@ async function handler(req, res) {
     const gmail = await createGmailMailboxClient(req, req.user?.sub)
     await gmail.users.getProfile({ userId: 'me' })
     const out = await gmail.users.labels.list({ userId: 'me' })
-    const labels = (out.data.labels || []).map((l) => ({
-      id: l.id,
-      name: l.name,
-      type: l.type,
-      messagesTotal: l.messagesTotal || 0,
-      messagesUnread: l.messagesUnread || 0
-    }))
+    const baseLabels = out.data.labels || []
+    const labels = await Promise.all(
+      baseLabels.map(async (l) => {
+        try {
+          const detail = await gmail.users.labels.get({ userId: 'me', id: l.id })
+          const d = detail?.data || {}
+          return {
+            id: d.id || l.id,
+            name: d.name || l.name,
+            type: d.type || l.type,
+            messagesTotal: Number.isFinite(Number(d.messagesTotal)) ? Number(d.messagesTotal) : 0,
+            messagesUnread: Number.isFinite(Number(d.messagesUnread)) ? Number(d.messagesUnread) : 0
+          }
+        } catch (_) {
+          return {
+            id: l.id,
+            name: l.name,
+            type: l.type,
+            messagesTotal: Number.isFinite(Number(l.messagesTotal)) ? Number(l.messagesTotal) : 0,
+            messagesUnread: Number.isFinite(Number(l.messagesUnread)) ? Number(l.messagesUnread) : 0
+          }
+        }
+      })
+    )
     return ok(res, { labels })
   } catch (e) {
     console.error('erp-mail labels:', e)
