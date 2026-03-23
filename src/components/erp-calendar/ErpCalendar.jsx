@@ -323,12 +323,6 @@ const ErpCalendar = () => {
   }, [reloadCalendar]);
 
   useEffect(() => {
-    if (workspaceTab !== 'mail') return;
-    loadMailLabels();
-    loadMailMessages({});
-  }, [workspaceTab, loadMailLabels, loadMailMessages]);
-
-  useEffect(() => {
     const onMsg = (ev) => {
       if (ev.origin !== window.location.origin) return;
       if (ev.data?.type === 'ERP_CALENDAR_OAUTH_OK') {
@@ -449,6 +443,12 @@ const ErpCalendar = () => {
     },
     [mailLabelFilter, mailQuery, mailNextPageToken]
   );
+
+  useEffect(() => {
+    if (workspaceTab !== 'mail') return;
+    loadMailLabels();
+    loadMailMessages({});
+  }, [workspaceTab, loadMailLabels, loadMailMessages]);
 
   const loadMailThread = useCallback(async (threadId, selectedId) => {
     if (!threadId) return;
