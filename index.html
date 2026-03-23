@@ -962,7 +962,6 @@
     <script>
         (function() {
             const VERSION_STORAGE_KEY = 'abcotronics_app_version';
-            const VERSION_DISMISSED_KEY = 'abcotronics_version_dismissed';
             const VERSION_CHECK_INTERVAL_MS = 60 * 1000; // 60 seconds - industry standard
             const VERSION_ENDPOINT = '/version';
             let versionCheckTimer = null;
@@ -984,24 +983,6 @@
                     }
                 } catch {
                     // Ignore storage errors (private mode, etc.)
-                }
-            }
-
-            function getDismissedVersion() {
-                try {
-                    return localStorage.getItem(VERSION_DISMISSED_KEY) || null;
-                } catch {
-                    return null;
-                }
-            }
-
-            function setDismissedVersion(version) {
-                try {
-                    if (version) {
-                        localStorage.setItem(VERSION_DISMISSED_KEY, version);
-                    }
-                } catch {
-                    // Ignore storage errors
                 }
             }
 
@@ -1062,11 +1043,7 @@
                 if (dismissBtn) {
                     dismissBtn.onclick = function() {
                         banner.style.display = 'none';
-                        // Store the dismissed version - banner won't reappear for this version
-                        const latest = getStoredVersion();
-                        if (latest) {
-                            setDismissedVersion(latest);
-                        }
+                        // Dismiss is temporary; the banner should reappear while mismatch remains.
                     };
                 }
             }
@@ -1086,7 +1063,6 @@
                 }
 
                 const stored = getStoredVersion();
-                const dismissed = getDismissedVersion();
                 const latestVersion = latest.version;
                 const summary = latest.summary || '';
 
@@ -1095,12 +1071,8 @@
 
                 if (stored && stored !== latestVersion) {
                     console.log('✅ New version detected!', { old: stored, new: latestVersion, summary: summary || undefined });
-                    if (dismissed !== latestVersion || forceShow) {
-                        console.log('📢 Showing update notification banner');
-                        showBanner(summary);
-                    } else if (versionDebug) {
-                        console.log('ℹ️ New version available but user dismissed it');
-                    }
+                    console.log('📢 Showing update notification banner');
+                    showBanner(summary);
                 } else if (!stored) {
                     if (versionDebug) console.log('📦 First version check - storing version:', latestVersion);
                 } else if (versionDebug) {
