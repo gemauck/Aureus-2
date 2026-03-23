@@ -14,6 +14,7 @@ const ServiceAndMaintenance = () => {
   const [jobCardsReady, setJobCardsReady] = useState(!!window.JobCards);
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [copyStatus, setCopyStatus] = useState('Copy share link');
+  const [calendarCopyStatus, setCalendarCopyStatus] = useState('Copy calendar link');
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showJobCardDetail, setShowJobCardDetail] = useState(false);
   const [loadingJobCard, setLoadingJobCard] = useState(false);
@@ -278,6 +279,42 @@ const ServiceAndMaintenance = () => {
       setCopyStatus('Copy failed');
       setTimeout(() => setCopyStatus('Copy share link'), 2500);
     }
+  };
+
+  const calendarUrl = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return '/api/public/jobcards-calendar.ics';
+    }
+    const base = `${window.location.origin}/api/public/jobcards-calendar.ics`;
+    const token = window.storage?.getToken?.();
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  }, []);
+
+  const handleCopyCalendarLink = async () => {
+    if (!navigator.clipboard?.writeText) {
+      setCalendarCopyStatus('Copy unavailable');
+      setTimeout(() => setCalendarCopyStatus('Copy calendar link'), 2500);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(calendarUrl);
+      setCalendarCopyStatus('Calendar link copied');
+    } catch (error) {
+      console.error('Failed to copy calendar link:', error);
+      setCalendarCopyStatus('Copy failed');
+    } finally {
+      setTimeout(() => setCalendarCopyStatus('Copy calendar link'), 2500);
+    }
+  };
+
+  const handleSubscribeCalendar = () => {
+    let target = calendarUrl;
+    if (target.startsWith('https://')) {
+      target = `webcal://${target.slice('https://'.length)}`;
+    } else if (target.startsWith('http://')) {
+      target = `webcal://${target.slice('http://'.length)}`;
+    }
+    window.open(target, '_blank', 'noopener,noreferrer');
   };
 
   const handleOpenJobCardDetail = async (jobCard) => {
@@ -1169,6 +1206,31 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                   {copyStatus}
                 </button>
               </div>
+              <div className="mt-3 flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleSubscribeCalendar}
+                  disabled={!window.storage?.getToken?.()}
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed ${isDark ? 'bg-white/10 hover:bg-white/20 focus-visible:ring-white/60' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 focus-visible:ring-blue-300'}`}
+                >
+                  <i className="fa-regular fa-calendar-plus text-xs" />
+                  Subscribe calendar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyCalendarLink}
+                  disabled={!window.storage?.getToken?.()}
+                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed ${isDark ? 'bg-white/10 hover:bg-white/20 focus-visible:ring-white/60' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 focus-visible:ring-blue-300'}`}
+                >
+                  <i className="fa-regular fa-copy text-xs" />
+                  {calendarCopyStatus}
+                </button>
+              </div>
+              {!window.storage?.getToken?.() ? (
+                <p className={`mt-2 text-[11px] ${isDark ? 'text-white/70' : 'text-blue-700/80'}`}>
+                  Sign in to generate your calendar feed link with all scheduled job card follow-up entries.
+                </p>
+              ) : null}
             </div>
           </div>
         </div>
