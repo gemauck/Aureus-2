@@ -1932,7 +1932,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         { value: 'in-progress', label: 'Started', color: 'bg-amber-200 text-amber-800 font-semibold dark:bg-amber-900/60 dark:text-amber-200', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm dark:bg-amber-900/60 dark:border-amber-500', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
         { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } }
     ];
-    const statusOptions = isJsonOnlyTracker ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions;
+    // Compliance Review statuses only
+    const complianceReviewStatusOptions = [
+        { value: 'no-reviewed', label: 'No Reviewed', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-700 dark:text-gray-200', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-700 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } },
+        { value: 'reviewed-in-order', label: 'Reviewed - In order', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
+        { value: 'reviewed-issue', label: 'Reviewed - Issue', color: 'bg-red-200 text-red-800 font-semibold dark:bg-red-900/60 dark:text-red-200', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm dark:bg-red-900/60 dark:border-red-500', optionStyle: { backgroundColor: '#fecaca', color: '#9f1239' } },
+        { value: 'in-progress', label: 'In Progress', color: 'bg-amber-200 text-amber-800 font-semibold dark:bg-amber-900/60 dark:text-amber-200', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm dark:bg-amber-900/60 dark:border-amber-500', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } }
+    ];
+    const statusOptions = isComplianceReview
+        ? complianceReviewStatusOptions
+        : (isJsonOnlyTracker ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions);
+
+    // Keep old compliance values visible after rollout by mapping to new values.
+    const normalizeComplianceStatusValue = (status) => {
+        if (!isComplianceReview || !status) return status;
+        const normalized = String(status).toLowerCase();
+        if (normalized === 'not-done') return 'no-reviewed';
+        if (normalized === 'done') return 'reviewed-in-order';
+        return status;
+    };
 
     const getStatusConfig = (status) => {
         if (!status || status === '' || status === 'Select Status') {
@@ -2944,7 +2962,8 @@ const getAssigneeColor = (identifier, users) => {
     };
     
     const getDocumentStatus = (doc, month) => {
-        return getStatusForYear(doc.collectionStatus, month, selectedYear);
+        const status = getStatusForYear(doc.collectionStatus, month, selectedYear);
+        return normalizeComplianceStatusValue(status);
     };
     
     const isEmailActivityComment = (comment) => {
@@ -4511,7 +4530,9 @@ Abcotronics`;
         const [removeExternalLinks, setRemoveExternalLinks] = useState(true);
         const [sendPlainTextOnly, setSendPlainTextOnly] = useState(false);
         const [scheduleFrequency, setScheduleFrequency] = useState('none');
-        const defaultStopWhenStatus = isJsonOnlyTracker ? 'done' : 'collected';
+        const defaultStopWhenStatus = isComplianceReview
+            ? 'reviewed-in-order'
+            : (isJsonOnlyTracker ? 'done' : 'collected');
         const [scheduleStopStatus, setScheduleStopStatus] = useState(defaultStopWhenStatus);
         const [sending, setSending] = useState(false);
         const [savingTemplate, setSavingTemplate] = useState(false);
@@ -5271,7 +5292,9 @@ Abcotronics`;
                             ...section,
                             documents: (section.documents || []).map(doc => {
                                 if (String(doc.id) !== String(ctx.doc.id)) return doc;
-                                const statusAfterSend = isJsonOnlyTracker ? 'not-done' : 'requested';
+                                const statusAfterSend = isComplianceReview
+                                    ? 'no-reviewed'
+                                    : (isJsonOnlyTracker ? 'not-done' : 'requested');
                                 const updatedStatus = setStatusForYear(doc.collectionStatus || {}, ctx.month, statusAfterSend, selectedYear);
                                 return { ...doc, collectionStatus: updatedStatus };
                             })

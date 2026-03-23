@@ -1655,6 +1655,8 @@ function initializeProjectDetail() {
         const dirtyRef = useRef(false);
         const lastSeedRawRef = useRef('');
         const driveLinksFallbackLoadedForRef = useRef(null);
+        const autoSaveTimerRef = useRef(null);
+        const lastSavedPayloadRef = useRef('');
         // Always read latest serialized value without putting it in effect deps (parent re-fetches would reset inputs).
         const initialSerializedRef = useRef(initialSerialized);
         initialSerializedRef.current = initialSerialized;
@@ -1781,6 +1783,7 @@ function initializeProjectDetail() {
                     { id: projectId, onlineDriveLinks: payload };
                 dirtyRef.current = false;
                 lastSeedRawRef.current = payload;
+                lastSavedPayloadRef.current = payload;
                 if (typeof onProjectUpdate === 'function') onProjectUpdate(updatedProject);
                 if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
                     window.updateViewingProject(updatedProject);
@@ -1790,11 +1793,31 @@ function initializeProjectDetail() {
             } catch (err) {
                 console.error('Failed to save online drive links:', err);
                 setSaveHint('error');
-                alert('Failed to save online drive links. Please try again.');
             } finally {
                 setSaving(false);
             }
         };
+
+        useEffect(() => {
+            if (!projectId || !window.DatabaseAPI?.updateProject) return;
+            if (!dirtyRef.current || saving) return;
+            const payload = JSON.stringify(normalizeForApi(links));
+            if (payload === lastSavedPayloadRef.current) return;
+            if (autoSaveTimerRef.current) {
+                window.clearTimeout(autoSaveTimerRef.current);
+            }
+            autoSaveTimerRef.current = window.setTimeout(() => {
+                autoSaveTimerRef.current = null;
+                if (!dirtyRef.current || saving) return;
+                handleSave();
+            }, 900);
+            return () => {
+                if (autoSaveTimerRef.current) {
+                    window.clearTimeout(autoSaveTimerRef.current);
+                    autoSaveTimerRef.current = null;
+                }
+            };
+        }, [links, projectId, saving, normalizeForApi]);
 
         // Render helper (not a nested component) so React does not remount the list on each render.
         const renderDriveBlock = (provider, title, subtitle, iconClass, placeholder, accentClass) => (
