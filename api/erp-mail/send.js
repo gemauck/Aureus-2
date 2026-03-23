@@ -36,7 +36,7 @@ async function handler(req, res) {
       references: body.references || ''
     })
 
-    const gmail = createGmailMailboxClient(req)
+    const gmail = await createGmailMailboxClient(req, req.user?.sub)
     const sent = await gmail.users.messages.send({
       userId: 'me',
       requestBody: {

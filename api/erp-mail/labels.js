@@ -10,7 +10,8 @@ async function handler(req, res) {
   if (!(await requireErpCalendarAccess(req, res))) return
 
   try {
-    const gmail = createGmailMailboxClient(req)
+    const gmail = await createGmailMailboxClient(req, req.user?.sub)
+    await gmail.users.getProfile({ userId: 'me' })
     const out = await gmail.users.labels.list({ userId: 'me' })
     const labels = (out.data.labels || []).map((l) => ({
       id: l.id,

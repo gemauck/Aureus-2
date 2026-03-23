@@ -14,7 +14,7 @@ async function handler(req, res) {
     const body = await parseJsonBody(req)
     const ids = Array.isArray(body.ids) ? body.ids : body.id ? [body.id] : []
     if (!ids.length) return badRequest(res, 'id or ids is required')
-    const gmail = createGmailMailboxClient(req)
+    const gmail = await createGmailMailboxClient(req, req.user?.sub)
     await Promise.all(ids.map((id) => gmail.users.messages.trash({ userId: 'me', id })))
     return ok(res, { trashed: ids.length })
   } catch (e) {

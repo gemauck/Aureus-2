@@ -14,7 +14,7 @@ async function handler(req, res) {
   if (!id) return badRequest(res, 'id query parameter is required')
 
   try {
-    const gmail = createGmailMailboxClient(req)
+    const gmail = await createGmailMailboxClient(req, req.user?.sub)
     const out = await gmail.users.threads.get({
       userId: 'me',
       id,

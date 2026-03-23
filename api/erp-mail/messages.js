@@ -17,7 +17,7 @@ async function handler(req, res) {
   const labelIds = labelRaw ? labelRaw.split(',').map((x) => x.trim()).filter(Boolean) : []
 
   try {
-    const gmail = createGmailMailboxClient(req)
+    const gmail = await createGmailMailboxClient(req, req.user?.sub)
     const list = await gmail.users.messages.list({
       userId: 'me',
       q: q || undefined,

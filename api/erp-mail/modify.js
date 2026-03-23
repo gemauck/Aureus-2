@@ -17,7 +17,7 @@ async function handler(req, res) {
     const removeLabelIds = Array.isArray(body.removeLabelIds) ? body.removeLabelIds : []
     if (!ids.length) return badRequest(res, 'id or ids is required')
 
-    const gmail = createGmailMailboxClient(req)
+    const gmail = await createGmailMailboxClient(req, req.user?.sub)
     await Promise.all(
       ids.map((id) =>
         gmail.users.messages.modify({

@@ -1,4 +1,5 @@
 import { google } from 'googleapis'
+import { getAuthorizedCalendarClient } from './erpGoogleCalendar.js'
 
 function requireEnv(name) {
   const v = (process.env[name] || '').trim()
@@ -8,7 +9,16 @@ function requireEnv(name) {
   return v
 }
 
-export function createGmailMailboxClient(req) {
+export async function createGmailMailboxClient(req, userId) {
+  // Preferred mode: per-user OAuth connection already stored by ERP Calendar flow.
+  if (userId) {
+    const auth = await getAuthorizedCalendarClient(userId)
+    if (auth?.oauth2) {
+      return google.gmail({ version: 'v1', auth: auth.oauth2 })
+    }
+  }
+
+  // Fallback mode: shared mailbox credentials from env.
   const clientId = requireEnv('GMAIL_CLIENT_ID')
   const clientSecret = requireEnv('GMAIL_CLIENT_SECRET')
   const refreshToken = requireEnv('GMAIL_REFRESH_TOKEN')
