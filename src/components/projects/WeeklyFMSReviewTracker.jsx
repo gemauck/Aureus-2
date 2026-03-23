@@ -2266,8 +2266,11 @@ const getAssigneeColor = (identifier, users) => {
         const metadata = {
             projectId: project?.id,
             projectName: project?.name,
+            source: 'weeklyFMSReview',
             sectionId,
+            sectionName: priorSection?.name || '',
             documentId,
+            documentName: priorDoc?.name || '',
             week: weekLabel,
             docYear: selectedYear,
             year: selectedYear,

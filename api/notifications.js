@@ -199,7 +199,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 if (taskTitle) enhancedMessage += `<p style="color:#555;margin:5px 0;"><strong>Task:</strong> ${escapeHtml(taskTitle)}</p>`;
                 enhancedMessage += '</div>';
             }
-            // Source heading: where the comment comes from (e.g. Projects, Monthly FMS review, May 2026)
+            // Source heading: where the comment comes from (e.g. Projects, Document Collection, Photos of meters, February 2026)
             const hasPeriod = metadataObj && (metadataObj.month != null || metadataObj.docYear != null || metadataObj.year != null);
             const hasDocCollectionMeta = metadataObj && (metadataObj.sectionId || metadataObj.documentId || metadataObj.projectId) && hasPeriod;
             if (hasDocCollectionMeta) {
@@ -235,7 +235,17 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                         ? `${monthLabel} ${year}`
                         : (year != null && year !== '' ? String(year) : sourceTypeLabel));
 
-                const sourceLabel = `Projects, ${sourceTypeLabel}${periodLabel ? `, ${periodLabel}` : ''}`;
+                const sourceLabelTitleCase = sourceTypeLabel
+                    .replace(/^document collection$/i, 'Document Collection')
+                    .replace(/^monthly fms review$/i, 'Monthly FMS review')
+                    .replace(/^weekly fms review$/i, 'Weekly FMS review');
+                const sectionName = (metadataObj.sectionName != null ? String(metadataObj.sectionName).trim() : '');
+                const documentName = (metadataObj.documentName != null ? String(metadataObj.documentName).trim() : '');
+                const pathParts = ['Projects', sourceLabelTitleCase];
+                if (sectionName) pathParts.push(sectionName);
+                if (documentName) pathParts.push(documentName);
+                if (periodLabel) pathParts.push(periodLabel);
+                const sourceLabel = pathParts.join(', ');
                 enhancedMessage += `<div style="background:#f0f4f8;border-left:4px solid #64748b;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📍 Where</h3><p style="color:#555;margin:5px 0;">${escapeHtml(sourceLabel)}</p></div>`;
             }
             if (commentText) {

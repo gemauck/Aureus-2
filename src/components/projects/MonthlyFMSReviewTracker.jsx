@@ -1916,12 +1916,14 @@ const getAssigneeColor = (identifier, users) => {
         const metadata = {
             projectId: project?.id,
             projectName: project?.name,
+            source: 'monthlyFMSReview',
             sectionId,
+            sectionName: priorSection?.name || '',
             documentId,
+            documentName: priorDoc?.name || '',
             month,
             docYear: selectedYear,
             year: selectedYear,
-            source: 'monthlyFMSReview',
             commentId: newCommentId
         };
         try {
