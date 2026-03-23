@@ -201,6 +201,25 @@ const ErpCalendar = () => {
   const [gHtmlLink, setGHtmlLink] = useState(null);
   const [gHangoutLink, setGHangoutLink] = useState(null);
   const [gAddMeet, setGAddMeet] = useState(false);
+  const [workspaceTab, setWorkspaceTab] = useState('calendar');
+
+  const [mailLabels, setMailLabels] = useState([]);
+  const [mailLabelFilter, setMailLabelFilter] = useState('INBOX');
+  const [mailQuery, setMailQuery] = useState('');
+  const [mailMessages, setMailMessages] = useState([]);
+  const [mailNextPageToken, setMailNextPageToken] = useState(null);
+  const [mailLoading, setMailLoading] = useState(false);
+  const [mailSelectedId, setMailSelectedId] = useState(null);
+  const [mailThread, setMailThread] = useState([]);
+  const [mailThreadLoading, setMailThreadLoading] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeTo, setComposeTo] = useState('');
+  const [composeCc, setComposeCc] = useState('');
+  const [composeBcc, setComposeBcc] = useState('');
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeBody, setComposeBody] = useState('');
+  const [composeThreadId, setComposeThreadId] = useState('');
+  const [mailSending, setMailSending] = useState(false);
 
   const token = () => window.storage?.getToken?.();
 
@@ -304,6 +323,12 @@ const ErpCalendar = () => {
   }, [reloadCalendar]);
 
   useEffect(() => {
+    if (workspaceTab !== 'mail') return;
+    loadMailLabels();
+    loadMailMessages({});
+  }, [workspaceTab, loadMailLabels, loadMailMessages]);
+
+  useEffect(() => {
     const onMsg = (ev) => {
       if (ev.origin !== window.location.origin) return;
       if (ev.data?.type === 'ERP_CALENDAR_OAUTH_OK') {
@@ -381,6 +406,148 @@ const ErpCalendar = () => {
     setConnected(false);
     setGoogleEmail(null);
     reloadCalendar();
+  };
+
+  const loadMailLabels = useCallback(async () => {
+    try {
+      const r = await fetch('/api/erp-mail/labels', {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Failed to load labels');
+      const labels = j?.data?.labels || [];
+      setMailLabels(Array.isArray(labels) ? labels : []);
+    } catch (e) {
+      setErr(e.message || 'Failed to load labels');
+    }
+  }, []);
+
+  const loadMailMessages = useCallback(
+    async (opts) => {
+      const append = !!opts?.append;
+      const nextToken = append ? mailNextPageToken : null;
+      setMailLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('labelIds', mailLabelFilter || 'INBOX');
+        if (mailQuery.trim()) params.set('q', mailQuery.trim());
+        if (nextToken) params.set('pageToken', nextToken);
+        params.set('maxResults', '30');
+        const r = await fetch(`/api/erp-mail/messages?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token()}` }
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Failed to load messages');
+        const rows = j?.data?.messages || [];
+        setMailMessages((prev) => (append ? prev.concat(rows) : rows));
+        setMailNextPageToken(j?.data?.nextPageToken || null);
+      } catch (e) {
+        setErr(e.message || 'Failed to load messages');
+      } finally {
+        setMailLoading(false);
+      }
+    },
+    [mailLabelFilter, mailQuery, mailNextPageToken]
+  );
+
+  const loadMailThread = useCallback(async (threadId, selectedId) => {
+    if (!threadId) return;
+    setMailThreadLoading(true);
+    try {
+      const r = await fetch(`/api/erp-mail/thread?id=${encodeURIComponent(threadId)}`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Failed to load thread');
+      const msgs = j?.data?.messages || [];
+      setMailThread(Array.isArray(msgs) ? msgs : []);
+      setMailSelectedId(selectedId || (msgs[0] && msgs[0].id) || null);
+    } catch (e) {
+      setErr(e.message || 'Failed to load thread');
+      setMailThread([]);
+    } finally {
+      setMailThreadLoading(false);
+    }
+  }, []);
+
+  const openCompose = (replyTo) => {
+    if (replyTo) {
+      setComposeTo(replyTo.from || '');
+      setComposeSubject(replyTo.subject?.toLowerCase().startsWith('re:') ? replyTo.subject : `Re: ${replyTo.subject || ''}`);
+      const ref = replyTo.messageId || '';
+      setComposeThreadId(replyTo.threadId || '');
+      setComposeBody(`\n\n--- Original message ---\nFrom: ${replyTo.from || ''}\nDate: ${replyTo.date || ''}\n\n${replyTo.bodyText || ''}`);
+    } else {
+      setComposeTo('');
+      setComposeSubject('');
+      setComposeBody('');
+      setComposeThreadId('');
+    }
+    setComposeCc('');
+    setComposeBcc('');
+    setComposeOpen(true);
+  };
+
+  const sendMail = async () => {
+    if (!composeTo.trim()) {
+      alert('Recipient is required');
+      return;
+    }
+    setMailSending(true);
+    try {
+      const r = await fetch('/api/erp-mail/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          to: composeTo.trim(),
+          cc: composeCc.trim(),
+          bcc: composeBcc.trim(),
+          subject: composeSubject.trim(),
+          textBody: composeBody,
+          threadId: composeThreadId || undefined
+        })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Send failed');
+      setComposeOpen(false);
+      loadMailMessages({});
+    } catch (e) {
+      alert(e.message || 'Failed to send email');
+    } finally {
+      setMailSending(false);
+    }
+  };
+
+  const modifyMailMessage = async (id, addLabelIds, removeLabelIds) => {
+    try {
+      await fetch('/api/erp-mail/modify', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id, addLabelIds, removeLabelIds })
+      });
+    } catch (_) {}
+  };
+
+  const trashMailMessage = async (id) => {
+    if (!id) return;
+    try {
+      await fetch('/api/erp-mail/trash', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id })
+      });
+      setMailMessages((prev) => prev.filter((m) => m.id !== id));
+      setMailThread((prev) => prev.filter((m) => m.id !== id));
+    } catch (_) {}
   };
 
   const calendarCells = useMemo(() => {
@@ -832,14 +999,162 @@ const ErpCalendar = () => {
     </div>
   );
 
+  const selectedThreadMessage = useMemo(
+    () => mailThread.find((m) => m.id === mailSelectedId) || mailThread[mailThread.length - 1] || null,
+    [mailThread, mailSelectedId]
+  );
+
+  const renderMailWorkspace = () => (
+    <div className={`rounded-xl border shadow-sm ${card}`}>
+      <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openCompose(null)}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+          >
+            <i className="fas fa-pen mr-1" /> Compose
+          </button>
+          <input
+            value={mailQuery}
+            onChange={(e) => setMailQuery(e.target.value)}
+            placeholder="Search mail"
+            className={`px-3 py-2 rounded-lg border text-sm min-w-[220px] ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+          />
+          <button
+            type="button"
+            onClick={() => loadMailMessages({})}
+            className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
+          >
+            Search
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 min-h-[62vh]">
+        <aside className={`col-span-12 md:col-span-2 border-r p-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className={`text-xs uppercase mb-2 ${muted}`}>Labels</div>
+          <div className="space-y-1 max-h-[56vh] overflow-y-auto">
+            {mailLabels.map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => {
+                  setMailLabelFilter(l.id);
+                  setMailMessages([]);
+                  setMailThread([]);
+                  setMailSelectedId(null);
+                }}
+                className={`w-full text-left px-2 py-1.5 rounded text-sm ${mailLabelFilter === l.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
+              >
+                <span>{l.name}</span>
+                {l.messagesUnread ? <span className={`ml-1 ${muted}`}>({l.messagesUnread})</span> : null}
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className={`col-span-12 md:col-span-4 border-r ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className={`p-3 text-sm border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            {mailLabelFilter} {mailLoading ? '· Loading…' : ''}
+          </div>
+          <div className="max-h-[56vh] overflow-y-auto">
+            {mailMessages.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={async () => {
+                  setMailSelectedId(m.id);
+                  await modifyMailMessage(m.id, [], ['UNREAD']);
+                  loadMailThread(m.threadId, m.id);
+                }}
+                className={`w-full text-left px-3 py-2 border-b ${isDark ? 'border-gray-800 hover:bg-gray-800/40' : 'border-gray-100 hover:bg-gray-50'} ${mailSelectedId === m.id ? (isDark ? 'bg-gray-800' : 'bg-blue-50') : ''}`}
+              >
+                <div className="text-sm font-medium truncate">{m.subject || '(No subject)'}</div>
+                <div className={`text-xs truncate ${muted}`}>{m.from}</div>
+                <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
+              </button>
+            ))}
+            {!mailMessages.length && !mailLoading ? <div className={`p-4 text-sm ${muted}`}>No messages.</div> : null}
+          </div>
+          {mailNextPageToken ? (
+            <div className="p-2 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => loadMailMessages({ append: true })}
+                className={`w-full px-3 py-1.5 rounded text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
+              >
+                Load more
+              </button>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="col-span-12 md:col-span-6 p-4">
+          {mailThreadLoading ? (
+            <p className={muted}>Loading thread…</p>
+          ) : selectedThreadMessage ? (
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h3 className="text-lg font-semibold">{selectedThreadMessage.subject || '(No subject)'}</h3>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openCompose(selectedThreadMessage)}
+                    className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
+                  >
+                    Reply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => trashMailMessage(selectedThreadMessage.id)}
+                    className="px-2 py-1 rounded text-xs text-red-500 border border-red-400/40"
+                  >
+                    Trash
+                  </button>
+                </div>
+              </div>
+              <div className={`text-xs mb-3 ${muted}`}>
+                From: {selectedThreadMessage.from} · To: {selectedThreadMessage.to || 'me'}
+              </div>
+              <div className={`whitespace-pre-wrap text-sm rounded-lg p-3 border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
+                {selectedThreadMessage.bodyText || selectedThreadMessage.snippet || '(No message body)'}
+              </div>
+              {mailThread.length > 1 ? (
+                <div className="mt-4">
+                  <div className={`text-xs uppercase mb-2 ${muted}`}>Thread</div>
+                  <div className="space-y-2 max-h-[28vh] overflow-y-auto">
+                    {mailThread.map((m) => (
+                      <button
+                        type="button"
+                        key={m.id}
+                        onClick={() => setMailSelectedId(m.id)}
+                        className={`w-full text-left p-2 rounded border ${mailSelectedId === m.id ? (isDark ? 'border-blue-500 bg-blue-900/20' : 'border-blue-300 bg-blue-50') : isDark ? 'border-gray-700' : 'border-gray-200'}`}
+                      >
+                        <div className="text-sm font-medium truncate">{m.from}</div>
+                        <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className={muted}>Select an email to read.</p>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+
   return (
     <div className={`min-h-screen p-4 md:p-8 ${shell}`}>
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Mail and Calendar</h1>
             <p className={`text-sm ${muted} mt-1`}>
-              ERP events with optional sync to your Google Calendar ({TZ}).
+              Unified workspace with Gmail and Google Calendar integration ({TZ}).
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -870,6 +1185,27 @@ const ErpCalendar = () => {
           </div>
         </div>
 
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setWorkspaceTab('mail')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${workspaceTab === 'mail' ? 'bg-green-600 text-white' : isDark ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-700 border border-gray-300'}`}
+          >
+            Mail
+          </button>
+          <button
+            type="button"
+            onClick={() => setWorkspaceTab('calendar')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${workspaceTab === 'calendar' ? 'bg-indigo-600 text-white' : isDark ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-700 border border-gray-300'}`}
+          >
+            Calendar
+          </button>
+        </div>
+
+        {workspaceTab === 'mail' ? (
+          renderMailWorkspace()
+        ) : (
+          <>
         {err && (
           <div className="mb-4 p-3 rounded-lg bg-red-900/30 border border-red-700 text-red-200 text-sm">{err}</div>
         )}
@@ -1119,7 +1455,75 @@ const ErpCalendar = () => {
             ))}
           </div>
         </div>
+          </>
+        )}
       </div>
+
+      {composeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className={`w-full max-w-2xl rounded-xl border shadow-xl p-6 ${card}`}>
+            <h3 className="text-lg font-semibold mb-4">Compose email</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm mb-1">To</label>
+                <input
+                  value={composeTo}
+                  onChange={(e) => setComposeTo(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Cc</label>
+                <input
+                  value={composeCc}
+                  onChange={(e) => setComposeCc(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Bcc</label>
+                <input
+                  value={composeBcc}
+                  onChange={(e) => setComposeBcc(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Subject</label>
+                <input
+                  value={composeSubject}
+                  onChange={(e) => setComposeSubject(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                />
+              </div>
+            </div>
+            <label className="block text-sm mt-3 mb-1">Body</label>
+            <textarea
+              rows={12}
+              value={composeBody}
+              onChange={(e) => setComposeBody(e.target.value)}
+              className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                className={`px-4 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                onClick={() => setComposeOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={mailSending}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                onClick={sendMail}
+              >
+                {mailSending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

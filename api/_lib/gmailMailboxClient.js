@@ -1,0 +1,152 @@
+import { google } from 'googleapis'
+
+function requireEnv(name) {
+  const v = (process.env[name] || '').trim()
+  if (!v) {
+    throw new Error(`Missing ${name} in server environment`)
+  }
+  return v
+}
+
+export function createGmailMailboxClient(req) {
+  const clientId = requireEnv('GMAIL_CLIENT_ID')
+  const clientSecret = requireEnv('GMAIL_CLIENT_SECRET')
+  const refreshToken = requireEnv('GMAIL_REFRESH_TOKEN')
+  const redirect =
+    (process.env.GMAIL_REDIRECT_URI || '').trim() ||
+    `${req.headers?.host?.includes('localhost') ? 'http' : 'https'}://${req.headers?.host}/api/helpdesk/gmail-callback`
+
+  const oauth2 = new google.auth.OAuth2(clientId, clientSecret, redirect)
+  oauth2.setCredentials({ refresh_token: refreshToken })
+  return google.gmail({ version: 'v1', auth: oauth2 })
+}
+
+function decodeBase64Url(input) {
+  if (!input) return ''
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = normalized.length % 4
+  const padded = normalized + (pad ? '='.repeat(4 - pad) : '')
+  return Buffer.from(padded, 'base64').toString('utf8')
+}
+
+function walkPartsForBody(part, out) {
+  if (!part) return
+  if (part.mimeType === 'text/plain' && part.body?.data && !out.text) {
+    out.text = decodeBase64Url(part.body.data)
+  }
+  if (part.mimeType === 'text/html' && part.body?.data && !out.html) {
+    out.html = decodeBase64Url(part.body.data)
+  }
+  if (Array.isArray(part.parts)) {
+    part.parts.forEach((p) => walkPartsForBody(p, out))
+  }
+}
+
+function collectAttachments(part, list) {
+  if (!part) return
+  if (part.filename && part.body?.attachmentId) {
+    list.push({
+      filename: part.filename,
+      mimeType: part.mimeType || 'application/octet-stream',
+      size: part.body.size || 0,
+      attachmentId: part.body.attachmentId
+    })
+  }
+  if (Array.isArray(part.parts)) {
+    part.parts.forEach((p) => collectAttachments(p, list))
+  }
+}
+
+function headerMap(headers = []) {
+  const out = {}
+  headers.forEach((h) => {
+    const k = (h.name || '').toLowerCase()
+    if (k) out[k] = h.value || ''
+  })
+  return out
+}
+
+export function parseGmailMessageData(messageData) {
+  const payload = messageData?.payload || {}
+  const headers = headerMap(payload.headers || [])
+  const bodyOut = { text: '', html: '' }
+
+  if (payload.body?.data) {
+    bodyOut.text = decodeBase64Url(payload.body.data)
+  } else {
+    walkPartsForBody(payload, bodyOut)
+  }
+
+  const attachments = []
+  collectAttachments(payload, attachments)
+
+  return {
+    id: messageData?.id,
+    threadId: messageData?.threadId,
+    snippet: messageData?.snippet || '',
+    labelIds: messageData?.labelIds || [],
+    internalDate: messageData?.internalDate || null,
+    from: headers.from || '',
+    to: headers.to || '',
+    cc: headers.cc || '',
+    bcc: headers.bcc || '',
+    subject: headers.subject || '(No subject)',
+    messageId: headers['message-id'] || '',
+    references: headers.references || '',
+    inReplyTo: headers['in-reply-to'] || '',
+    date: headers.date || '',
+    bodyText: bodyOut.text || '',
+    bodyHtml: bodyOut.html || '',
+    attachments
+  }
+}
+
+function encodeBase64Url(input) {
+  return Buffer.from(input, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+export function buildRawMimeEmail({
+  from,
+  to,
+  cc,
+  bcc,
+  subject,
+  textBody,
+  htmlBody,
+  inReplyTo,
+  references
+}) {
+  const lines = []
+  lines.push(`From: ${from}`)
+  lines.push(`To: ${to}`)
+  if (cc) lines.push(`Cc: ${cc}`)
+  if (bcc) lines.push(`Bcc: ${bcc}`)
+  lines.push(`Subject: ${subject || ''}`)
+  lines.push('MIME-Version: 1.0')
+  if (inReplyTo) lines.push(`In-Reply-To: ${inReplyTo}`)
+  if (references) lines.push(`References: ${references}`)
+
+  if (htmlBody) {
+    const boundary = `abco-${Date.now().toString(16)}`
+    lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
+    lines.push('')
+    lines.push(`--${boundary}`)
+    lines.push('Content-Type: text/plain; charset=UTF-8')
+    lines.push('Content-Transfer-Encoding: 7bit')
+    lines.push('')
+    lines.push(textBody || '')
+    lines.push(`--${boundary}`)
+    lines.push('Content-Type: text/html; charset=UTF-8')
+    lines.push('Content-Transfer-Encoding: 7bit')
+    lines.push('')
+    lines.push(htmlBody)
+    lines.push(`--${boundary}--`)
+  } else {
+    lines.push('Content-Type: text/plain; charset=UTF-8')
+    lines.push('Content-Transfer-Encoding: 7bit')
+    lines.push('')
+    lines.push(textBody || '')
+  }
+
+  return encodeBase64Url(lines.join('\r\n'))
+}
