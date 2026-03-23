@@ -1133,12 +1133,6 @@ const JobCardFormPublic = () => {
     return buildMergedWizardJobCardRows(serverPriorList);
   }, [wizardFlow, serverPriorList, localDraftsTick]);
 
-  /** Landing preview: same merge rules, capped for compact display */
-  const landingPreviewRows = useMemo(() => {
-    if (wizardFlow !== 'landing') return [];
-    return buildMergedWizardJobCardRows(serverPriorList).slice(0, 8);
-  }, [wizardFlow, serverPriorList, localDraftsTick]);
-
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
@@ -3399,13 +3393,8 @@ const JobCardFormPublic = () => {
   }
 
   if (wizardFlow === 'landing') {
-    const previewSubtitle =
-      window.storage?.getToken?.() != null
-        ? 'Signed in: includes job cards from the server. Not synced = saved on this device only until upload succeeds.'
-        : 'Submitted from this browser appear from the server. Not synced = saved on this device only (offline or upload failed).';
-
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-blue-50/80 to-slate-100 text-slate-900 px-4 py-10">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-start overflow-y-auto bg-gradient-to-b from-slate-50 via-blue-50/80 to-slate-100 text-slate-900 px-4 py-10">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center space-y-2">
             <p className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">
@@ -3418,81 +3407,6 @@ const JobCardFormPublic = () => {
               Open job cards from the server or drafts stored on this device, or start a new card.
             </p>
           </div>
-
-          {(landingPreviewRows.length > 0 || serverPriorLoading) && (
-            <div className="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent job cards</p>
-                  <p className="text-xs text-slate-600 mt-0.5 leading-snug">{previewSubtitle}</p>
-                </div>
-                {serverPriorLoading && (
-                  <span className="text-[10px] font-medium text-slate-500 shrink-0" aria-live="polite">
-                    <i className="fa-solid fa-circle-notch fa-spin mr-1" aria-hidden />
-                    Updating
-                  </span>
-                )}
-              </div>
-              {landingPreviewRows.length === 0 && serverPriorLoading ? (
-                <p className="text-sm text-slate-500 py-2">Loading recent cards…</p>
-              ) : (
-                <ul className="space-y-2">
-                  {landingPreviewRows.map(jc => {
-                    const when = jc.updatedAt || jc.createdAt;
-                    const whenLabel = when
-                      ? new Date(when).toLocaleString(undefined, {
-                          dateStyle: 'short',
-                          timeStyle: 'short'
-                        })
-                      : '';
-                    const title =
-                      jc.jobCardNumber ||
-                      (jc.clientName ? `${jc.clientName}` : 'Job card draft');
-                    const isLocal = jc.source === 'local' || jc.synced === false;
-                    return (
-                      <li key={`landing-${jc.source || 'x'}-${String(jc.id)}`}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectPriorCard(jc)}
-                          className="w-full text-left rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 hover:border-blue-300 hover:bg-white transition touch-manipulation"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium text-sm text-slate-900 truncate">{title}</p>
-                              <p className="text-xs text-slate-600 truncate mt-0.5">
-                                {[jc.agentName, jc.siteName].filter(Boolean).join(' · ') || 'No site'}
-                              </p>
-                              {whenLabel && (
-                                <p className="text-[10px] text-slate-500 mt-1">{whenLabel}</p>
-                              )}
-                            </div>
-                            <span
-                              className={
-                                isLocal
-                                  ? 'text-[9px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full shrink-0'
-                                  : 'text-[9px] font-semibold uppercase tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0'
-                              }
-                            >
-                              {isLocal ? 'Not synced' : 'Server'}
-                            </span>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {landingPreviewRows.length > 0 && (
-                <button
-                  type="button"
-                  onClick={openPriorList}
-                  className="w-full text-center text-sm font-semibold text-blue-700 hover:text-blue-900 py-1 touch-manipulation"
-                >
-                  View all job cards
-                </button>
-              )}
-            </div>
-          )}
 
           <div className="space-y-3">
             <button
