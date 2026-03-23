@@ -1859,8 +1859,8 @@ const ErpCalendar = () => {
                     className={`grid grid-cols-12 gap-2 items-center px-3 py-2 border-b ${
                       isUnread
                         ? isDark
-                          ? 'bg-blue-900/20 border-blue-800/40'
-                          : 'bg-blue-50/70 border-blue-100'
+                          ? 'bg-blue-900/25 border-blue-700/60 border-l-4 border-l-blue-400'
+                          : 'bg-blue-50 border-blue-200 border-l-4 border-l-blue-500'
                         : isDark
                           ? 'border-gray-800 hover:bg-gray-800/40'
                           : 'border-gray-100 hover:bg-gray-50'
@@ -1874,7 +1874,6 @@ const ErpCalendar = () => {
                       className="col-span-11 text-left"
                       onClick={async () => {
                         setMailSelectedId(m.id);
-                        await modifyMailMessage(m.id, [], ['UNREAD']);
                         loadMailThread(m.threadId, m.id);
                       }}
                     >
