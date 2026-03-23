@@ -1,6 +1,6 @@
 import { authRequired } from '../_lib/authRequired.js'
 import { parseJsonBody } from '../_lib/body.js'
-import { badRequest, ok, serverError } from '../_lib/response.js'
+import { badRequest, ok } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { requireErpCalendarAccess } from '../_lib/erpCalendarAccess.js'
@@ -48,11 +48,7 @@ async function handler(req, res) {
     return ok(res, { id: sent.data.id, threadId: sent.data.threadId })
   } catch (e) {
     console.error('erp-mail send:', e)
-    return serverError(
-      res,
-      'Failed to send Gmail message',
-      e.message || 'Ensure GMAIL OAuth includes send permissions'
-    )
+    return handleGmailApiError(res, e, 'send Gmail message')
   }
 }
 

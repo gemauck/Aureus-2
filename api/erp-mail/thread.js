@@ -1,9 +1,9 @@
 import { authRequired } from '../_lib/authRequired.js'
-import { badRequest, ok, serverError } from '../_lib/response.js'
+import { badRequest, ok } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { requireErpCalendarAccess } from '../_lib/erpCalendarAccess.js'
-import { createGmailMailboxClient, parseGmailMessageData } from '../_lib/gmailMailboxClient.js'
+import { createGmailMailboxClient, handleGmailApiError, parseGmailMessageData } from '../_lib/gmailMailboxClient.js'
 
 async function handler(req, res) {
   if (req.method !== 'GET') return badRequest(res, 'Method not allowed')
@@ -24,7 +24,7 @@ async function handler(req, res) {
     return ok(res, { threadId: id, messages, historyId: out.data.historyId || null })
   } catch (e) {
     console.error('erp-mail thread:', e)
-    return serverError(res, 'Failed to load Gmail thread', e.message)
+    return handleGmailApiError(res, e, 'load Gmail thread')
   }
 }
 

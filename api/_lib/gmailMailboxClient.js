@@ -1,5 +1,6 @@
 import { google } from 'googleapis'
 import { getAuthorizedCalendarClient } from './erpGoogleCalendar.js'
+import { badRequest, serverError } from './response.js'
 
 function requireEnv(name) {
   const v = (process.env[name] || '').trim()
@@ -159,4 +160,27 @@ export function buildRawMimeEmail({
   }
 
   return encodeBase64Url(lines.join('\r\n'))
+}
+
+export function handleGmailApiError(res, error, actionLabel = 'perform Gmail action') {
+  const status = error?.response?.status
+  const wwwAuth = String(error?.response?.headers?.['www-authenticate'] || '')
+  const message = error?.response?.data?.error?.message || error?.message || 'Gmail API request failed'
+
+  // Most common production issue: token exists but missing Gmail scopes.
+  if (status === 403 && /insufficient_scope/i.test(wwwAuth)) {
+    return badRequest(
+      res,
+      `Cannot ${actionLabel}: Google account is connected without Gmail permissions.`,
+      'Reconnect Google in ERP Calendar (Disconnect -> Connect) to grant Gmail scopes, then retry.'
+    )
+  }
+  if (status === 401) {
+    return badRequest(
+      res,
+      `Cannot ${actionLabel}: Google authorization expired or invalid.`,
+      'Reconnect Google in ERP Calendar and try again.'
+    )
+  }
+  return serverError(res, `Failed to ${actionLabel}`, message)
 }

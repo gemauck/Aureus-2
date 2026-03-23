@@ -1,10 +1,10 @@
 import { authRequired } from '../_lib/authRequired.js'
 import { parseJsonBody } from '../_lib/body.js'
-import { badRequest, ok, serverError } from '../_lib/response.js'
+import { badRequest, ok } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { requireErpCalendarAccess } from '../_lib/erpCalendarAccess.js'
-import { createGmailMailboxClient } from '../_lib/gmailMailboxClient.js'
+import { createGmailMailboxClient, handleGmailApiError } from '../_lib/gmailMailboxClient.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Method not allowed')
@@ -19,7 +19,7 @@ async function handler(req, res) {
     return ok(res, { trashed: ids.length })
   } catch (e) {
     console.error('erp-mail trash:', e)
-    return serverError(res, 'Failed to trash Gmail message', e.message)
+    return handleGmailApiError(res, e, 'trash Gmail message')
   }
 }
 
