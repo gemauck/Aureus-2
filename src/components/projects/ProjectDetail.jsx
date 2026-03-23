@@ -1654,6 +1654,7 @@ function initializeProjectDetail() {
         const lastProjectIdRef = useRef(null);
         const dirtyRef = useRef(false);
         const lastSeedRawRef = useRef('');
+        const driveLinksFallbackLoadedForRef = useRef(null);
         // Always read latest serialized value without putting it in effect deps (parent re-fetches would reset inputs).
         const initialSerializedRef = useRef(initialSerialized);
         initialSerializedRef.current = initialSerialized;
@@ -1665,7 +1666,32 @@ function initializeProjectDetail() {
                 lastProjectIdRef.current = projectId;
                 dirtyRef.current = false;
                 lastSeedRawRef.current = raw;
+                driveLinksFallbackLoadedForRef.current = null;
                 setLinks(parseOnlineDriveLinks(initialSerializedRef.current));
+                if (!raw) {
+                    driveLinksFallbackLoadedForRef.current = String(projectId);
+                    const token =
+                        window.storage?.getToken?.() ||
+                        localStorage.getItem('abcotronics_token') ||
+                        localStorage.getItem('authToken') ||
+                        '';
+                    fetch(`/api/projects/${projectId}?driveLinksOnly=1`, {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                        }
+                    })
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then((payload) => {
+                            const projectPayload = payload?.project || payload?.data?.project || payload?.data || {};
+                            const fetchedRaw = projectPayload?.onlineDriveLinks;
+                            if (!fetchedRaw || dirtyRef.current) return;
+                            const fetchedString = String(fetchedRaw);
+                            lastSeedRawRef.current = fetchedString;
+                            setLinks(parseOnlineDriveLinks(fetchedString));
+                        })
+                        .catch(() => {});
+                }
                 setSaveHint(null);
                 return;
             }
@@ -1673,6 +1699,32 @@ function initializeProjectDetail() {
             if (!dirtyRef.current && raw !== lastSeedRawRef.current) {
                 lastSeedRawRef.current = raw;
                 setLinks(parseOnlineDriveLinks(initialSerializedRef.current));
+            }
+
+            // Fallback hydration: if project payload did not include onlineDriveLinks, fetch it directly.
+            if (!dirtyRef.current && !raw && driveLinksFallbackLoadedForRef.current !== String(projectId)) {
+                driveLinksFallbackLoadedForRef.current = String(projectId);
+                const token =
+                    window.storage?.getToken?.() ||
+                    localStorage.getItem('abcotronics_token') ||
+                    localStorage.getItem('authToken') ||
+                    '';
+                fetch(`/api/projects/${projectId}?driveLinksOnly=1`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    }
+                })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((payload) => {
+                        const projectPayload = payload?.project || payload?.data?.project || payload?.data || {};
+                        const fetchedRaw = projectPayload?.onlineDriveLinks;
+                        if (!fetchedRaw || dirtyRef.current) return;
+                        const fetchedString = String(fetchedRaw);
+                        lastSeedRawRef.current = fetchedString;
+                        setLinks(parseOnlineDriveLinks(fetchedString));
+                    })
+                    .catch(() => {});
             }
         }, [projectId, initialSerialized, parseOnlineDriveLinks]);
 

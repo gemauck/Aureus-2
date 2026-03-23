@@ -202,6 +202,29 @@ async function loadProjectWithRelations(projectId) {
   return project;
 }
 
+async function hydrateProjectDriveLinks(project) {
+  if (!project || !project.id) return project;
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT "googleDriveLink", "onlineDriveLinks"
+      FROM "Project"
+      WHERE id = ${project.id}
+      LIMIT 1
+    `;
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row) return project;
+    if (row.googleDriveLink !== undefined && row.googleDriveLink !== null) {
+      project.googleDriveLink = String(row.googleDriveLink);
+    }
+    if (row.onlineDriveLinks !== undefined && row.onlineDriveLinks !== null) {
+      project.onlineDriveLinks = String(row.onlineDriveLinks);
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not hydrate project drive links:', e?.message || e);
+  }
+  return project;
+}
+
 async function handler(req, res) {
   try {
     // Extract ID from Express params first (most reliable)
@@ -315,6 +338,37 @@ async function handler(req, res) {
             return p.get('summary') === '1' || p.get('summary') === 'true';
           } catch (_) { return false; }
         })();
+        const driveLinksOnly = req.query?.driveLinksOnly === '1' || req.query?.driveLinksOnly === 'true' || (() => {
+          try {
+            const q = (req.url || '').split('?')[1] || '';
+            const p = new URLSearchParams(q);
+            return p.get('driveLinksOnly') === '1' || p.get('driveLinksOnly') === 'true';
+          } catch (_) { return false; }
+        })();
+
+        if (driveLinksOnly) {
+          try {
+            const rows = await prisma.$queryRaw`
+              SELECT id, "googleDriveLink", "onlineDriveLinks"
+              FROM "Project"
+              WHERE id = ${id}
+              LIMIT 1
+            `;
+            const row = Array.isArray(rows) ? rows[0] : null;
+            if (!row) return notFound(res);
+            return ok(res, {
+              project: {
+                id: row.id,
+                googleDriveLink: row.googleDriveLink != null ? String(row.googleDriveLink) : '',
+                onlineDriveLinks: row.onlineDriveLinks != null ? String(row.onlineDriveLinks) : ''
+              }
+            });
+          } catch (linksErr) {
+            console.error('❌ GET project drive links error:', linksErr?.message || linksErr, 'projectId:', id);
+            return serverError(res, linksErr?.message || 'Failed to load project drive links', linksErr?.message);
+          }
+        }
+
         if (summaryOnly) {
           try {
             // Explicit select so we never request columns that might not exist yet (avoids 500 after schema deploy)
@@ -385,6 +439,7 @@ async function handler(req, res) {
               customFieldDefinitions: [],
               activityLog: []
             };
+            await hydrateProjectDriveLinks(projectSummary);
             return ok(res, { project: projectSummary });
           } catch (summaryErr) {
             console.error('❌ GET project summary error:', summaryErr?.message || summaryErr, 'projectId:', id);
@@ -935,6 +990,8 @@ async function handler(req, res) {
         if (transformedProject.complianceReviewChecklist === undefined) transformedProject.complianceReviewChecklist = '[]';
         if (transformedProject.complianceReviewSections === undefined) transformedProject.complianceReviewSections = '{}';
 
+        await hydrateProjectDriveLinks(transformedProject);
+
         // Prevent caching so section deletes and edits always show after refresh
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
         res.setHeader('Pragma', 'no-cache')
@@ -1371,6 +1428,17 @@ async function handler(req, res) {
           delete updateData[key]
         }
       })
+
+      // Some local environments run an older generated Prisma client that does not yet
+      // include onlineDriveLinks on Project. Persist this field via raw SQL so PUT works
+      // even when Prisma schema/client is temporarily out of sync.
+      const onlineDriveLinksPayload =
+        Object.prototype.hasOwnProperty.call(updateData, 'onlineDriveLinks')
+          ? updateData.onlineDriveLinks
+          : null;
+      if (Object.prototype.hasOwnProperty.call(updateData, 'onlineDriveLinks')) {
+        delete updateData.onlineDriveLinks;
+      }
       
       // Check if project exists and load current values for activity log diff
       const existingProject = await prisma.project.findUnique({
@@ -1414,6 +1482,14 @@ async function handler(req, res) {
             where: { id }, 
             data: updateData 
           });
+
+          if (onlineDriveLinksPayload !== null) {
+            await tx.$executeRaw`
+              UPDATE "Project"
+              SET "onlineDriveLinks" = ${onlineDriveLinksPayload}
+              WHERE id = ${id}
+            `;
+          }
           
           // CRITICAL: Save documentSections and weeklyFMSReviewSections to tables
           // The GET endpoint reads from tables, so we must save to tables for persistence
