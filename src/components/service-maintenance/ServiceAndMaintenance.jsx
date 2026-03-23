@@ -388,6 +388,20 @@ const ServiceAndMaintenance = () => {
     return date.toLocaleString();
   };
 
+  const parseJobCardList = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value !== 'string' || !value.trim()) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+      return value
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+    }
+  };
+
   const attachmentParts = useMemo(() => {
     const part = window.JobCardAttachmentUtils?.partitionJobCardAttachments;
     if (typeof part === 'function') {
@@ -1432,6 +1446,19 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         <DetailVoice items={attachmentParts.voicesBySection.actionsTaken} />
                       ) : null}
                     </div>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                        Future actions to be taken
+                      </div>
+                      <p className="mt-1 leading-relaxed whitespace-pre-wrap">
+                        {selectedJobCard.futureWorkRequired || 'No future actions recorded.'}
+                      </p>
+                      {selectedJobCard.futureWorkScheduledAt ? (
+                        <p className={`mt-2 text-xs ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                          Scheduled for: {formatDate(selectedJobCard.futureWorkScheduledAt)}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
 
                   {(selectedJobCard.otherComments ||
@@ -1509,6 +1536,75 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       </div>
                     </div>
                   </div>
+                </section>
+
+                {/* Full job card snapshot */}
+                <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-4`}>
+                  <header className="flex items-center gap-2">
+                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-600'}`}>
+                      <i className="fa-solid fa-rectangle-list text-sm" />
+                    </span>
+                    <div>
+                      <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Full job card details
+                      </div>
+                      <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        Additional operational fields captured for this report.
+                      </div>
+                    </div>
+                  </header>
+
+                  <div className={`grid gap-4 sm:grid-cols-2 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Other technicians</div>
+                      <div className="mt-1">
+                        {parseJobCardList(selectedJobCard.otherTechnicians).length > 0
+                          ? parseJobCardList(selectedJobCard.otherTechnicians).join(', ')
+                          : 'None recorded'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Status timestamps</div>
+                      <div className="mt-1 text-xs space-y-1">
+                        <div>Submitted: {formatDate(selectedJobCard.submittedAt) || '—'}</div>
+                        <div>Completed: {formatDate(selectedJobCard.completedAt) || '—'}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Site timing</div>
+                      <div className="mt-1 text-xs space-y-1">
+                        <div>Departure from site: {formatDate(selectedJobCard.departureFromSite) || '—'}</div>
+                        <div>Arrival at office: {formatDate(selectedJobCard.arrivalBackAtOffice) || '—'}</div>
+                        <div>Total time: {selectedJobCard.totalTimeMinutes ? `${selectedJobCard.totalTimeMinutes} min` : '—'}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Materials and stock</div>
+                      <div className="mt-1 text-xs space-y-1">
+                        <div>Materials bought: {parseJobCardList(selectedJobCard.materialsBought).length}</div>
+                        <div>Stock used: {parseJobCardList(selectedJobCard.stockUsed).length}</div>
+                        <div>Total materials cost: {Number.isFinite(Number(selectedJobCard.totalMaterialsCost)) ? Number(selectedJobCard.totalMaterialsCost).toFixed(2) : '0.00'}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {parseJobCardList(selectedJobCard.materialsBought).length > 0 ? (
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Materials bought list</div>
+                      <div className={`rounded-xl border border-dashed p-3 text-xs whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                        {parseJobCardList(selectedJobCard.materialsBought).join('\n')}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {parseJobCardList(selectedJobCard.stockUsed).length > 0 ? (
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Stock used list</div>
+                      <div className={`rounded-xl border border-dashed p-3 text-xs whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                        {parseJobCardList(selectedJobCard.stockUsed).join('\n')}
+                      </div>
+                    </div>
+                  ) : null}
                 </section>
 
                 {/* Forms & checklists attached to this job card */}
