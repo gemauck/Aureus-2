@@ -10,6 +10,24 @@ const ReactGlobal =
 
 const { useState, useEffect, useMemo, useCallback } = ReactGlobal;
 
+function normalizeRole(role) {
+  if (!role) return '';
+  return String(role).trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function isAdminOrSuperAdminRole(role) {
+  const normalized = normalizeRole(role);
+  return [
+    'admin',
+    'administrator',
+    'superadmin',
+    'super-admin',
+    'super_admin',
+    'super_administrator',
+    'system_admin',
+  ].includes(normalized);
+}
+
 function jobCardAttachmentUrlIsVideo(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
@@ -178,6 +196,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJobCard, setEditingJobCard] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [deletingJobCardId, setDeletingJobCardId] = useState(null);
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -208,6 +227,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   }, [attachmentParts, checklistFieldVoiceKeys]);
 
   const pageSize = 25;
+  const currentUser = useMemo(
+    () => (typeof window !== 'undefined' && window.storage?.getUser ? window.storage.getUser() : null),
+    []
+  );
+  const canDeleteJobCards = isAdminOrSuperAdminRole(currentUser?.role);
 
   /** Match Prisma cuid or UUID so we query by clientId; otherwise filter by clientName (contains). */
   const clientFilterLooksLikeId = (value) => {
@@ -508,6 +532,37 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     }
   };
 
+  const handleDeleteJobCard = async (jobCard) => {
+    if (!canDeleteJobCards) return;
+    if (!jobCard?.id) return;
+    if (deletingJobCardId) return;
+
+    const jobCardLabel = jobCard.jobCardNumber || 'this job card';
+    const confirmed = window.confirm(
+      `Delete ${jobCardLabel}? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingJobCardId(jobCard.id);
+      if (!window.DatabaseAPI?.deleteJobCard) {
+        throw new Error('Delete job card API is unavailable.');
+      }
+      await window.DatabaseAPI.deleteJobCard(jobCard.id);
+      if (selectedJobCard?.id === jobCard.id) {
+        setShowDetail(false);
+        setSelectedJobCard(null);
+        setDetailServiceForms([]);
+      }
+      await reloadJobCards();
+    } catch (e) {
+      console.error('❌ Failed to delete job card:', e);
+      alert(e?.message || 'Failed to delete job card. Please try again.');
+    } finally {
+      setDeletingJobCardId(null);
+    }
+  };
+
   // Safely parse GPS coordinates from a job card record
   const getJobCardCoordinates = (jobCard) => {
     if (!jobCard) return null;
@@ -693,6 +748,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     {renderSortIcon('createdAt')}
                   </button>
                 </th>
+                {canDeleteJobCards ? (
+                  <th className="px-4 py-2 text-right">
+                    <span className="font-semibold">Actions</span>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody className={`divide-y ${isDark ? 'divide-slate-800 bg-slate-900' : 'divide-slate-100 bg-white'}`}>
@@ -747,6 +807,34 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {formatDate(jc.createdAt)}
                       </div>
                     </td>
+                    {canDeleteJobCards ? (
+                      <td className="px-4 py-2 whitespace-nowrap text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteJobCard(jc);
+                          }}
+                          disabled={deletingJobCardId === jc.id}
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+                            deletingJobCardId === jc.id
+                              ? isDark
+                                ? 'border-slate-700 text-slate-500 cursor-not-allowed'
+                                : 'border-slate-200 text-slate-300 cursor-not-allowed'
+                              : isDark
+                                ? 'border-rose-500/40 text-rose-300 hover:bg-rose-500/10'
+                                : 'border-rose-300 text-rose-700 hover:bg-rose-50'
+                          }`}
+                          aria-label={`Delete ${jc.jobCardNumber || 'job card'}`}
+                          title={`Delete ${jc.jobCardNumber || 'job card'}`}
+                        >
+                          <i className="fa-solid fa-trash-can" />
+                          <span>
+                            {deletingJobCardId === jc.id ? 'Deleting…' : 'Delete'}
+                          </span>
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
