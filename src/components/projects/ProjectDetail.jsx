@@ -1591,14 +1591,56 @@ function initializeProjectDetail() {
             });
             const empty = { googleDrive: [mk('')], oneDrive: [mk('')] };
             if (!rawValue) return empty;
+
+            const parseMaybeNestedJson = (value) => {
+                if (value == null) return null;
+                if (typeof value === 'object') return value;
+                if (typeof value !== 'string') return null;
+                let cleaned = value.trim();
+                if (!cleaned) return null;
+                let attempts = 0;
+                while (attempts < 8) {
+                    try {
+                        const parsed = JSON.parse(cleaned);
+                        if (typeof parsed === 'string') {
+                            cleaned = parsed.trim();
+                            attempts++;
+                            continue;
+                        }
+                        return parsed;
+                    } catch (_) {
+                        let nextCleaned = cleaned;
+                        if (nextCleaned.startsWith('"') && nextCleaned.endsWith('"')) {
+                            nextCleaned = nextCleaned.slice(1, -1);
+                        }
+                        nextCleaned = nextCleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                        if (nextCleaned === cleaned) break;
+                        cleaned = nextCleaned;
+                        attempts++;
+                    }
+                }
+                return null;
+            };
+
+            const normalizeProviderArray = (rawList) => {
+                if (!Array.isArray(rawList)) return [mk('')];
+                const mapped = rawList.map((entry) => {
+                    if (typeof entry === 'string') return mk(entry);
+                    if (entry && typeof entry === 'object') {
+                        if (typeof entry.url === 'string') return mk(entry.url);
+                        if (typeof entry.link === 'string') return mk(entry.link);
+                    }
+                    return mk('');
+                });
+                return mapped.length > 0 ? mapped : [mk('')];
+            };
+
             try {
-                const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+                const parsed = parseMaybeNestedJson(rawValue);
                 if (!parsed || typeof parsed !== 'object') return empty;
-                const g = Array.isArray(parsed.googleDrive) ? parsed.googleDrive : [];
-                const o = Array.isArray(parsed.oneDrive) ? parsed.oneDrive : [];
                 return {
-                    googleDrive: g.length > 0 ? g.map((s) => mk(s)) : [mk('')],
-                    oneDrive: o.length > 0 ? o.map((s) => mk(s)) : [mk('')]
+                    googleDrive: normalizeProviderArray(parsed.googleDrive),
+                    oneDrive: normalizeProviderArray(parsed.oneDrive)
                 };
             } catch (e) {
                 console.warn('Failed to parse onlineDriveLinks:', e);
