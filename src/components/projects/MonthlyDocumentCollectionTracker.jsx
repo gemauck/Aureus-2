@@ -2778,14 +2778,19 @@ const getAssigneeColor = (identifier, users) => {
                         usersResponse?.users ||
                         [];
                     
+                    const linkedSection = currentYearSections.find((s) => String(s.id) === String(linkSectionId));
+                    const linkedDoc = (linkedSection?.documents || []).find((d) => String(d.id) === String(linkDocumentId));
                     const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
                     // Deep-link using link* IDs (from cellKey when provided) so email link matches the open cell
                     const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
+                        source: 'documentCollection',
                         sectionId: linkSectionId,
+                        sectionName: linkedSection?.name || section?.name || '',
                         documentId: linkDocumentId,
+                        documentName: linkedDoc?.name || doc?.name || '',
                         month: linkMonth,
                         commentId: newCommentId,
                         docYear: selectedYear,
@@ -2814,6 +2819,8 @@ const getAssigneeColor = (identifier, users) => {
         // Notify prior participants (prior commenters + prior @mentioned) so they get notified on every new comment
         if (priorComments.length > 0 && window.DatabaseAPI?.makeRequest) {
             try {
+                const linkedSection = currentYearSections.find((s) => String(s.id) === String(linkSectionId));
+                const linkedDoc = (linkedSection?.documents || []).find((d) => String(d.id) === String(linkDocumentId));
                 const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
                 const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                 await window.DatabaseAPI.makeRequest('/notifications/comment-participants', {
@@ -2831,8 +2838,11 @@ const getAssigneeColor = (identifier, users) => {
                         metadata: {
                             projectId: project?.id,
                             projectName: project?.name,
+                            source: 'documentCollection',
                             sectionId: linkSectionId,
+                            sectionName: linkedSection?.name || section?.name || '',
                             documentId: linkDocumentId,
+                            documentName: linkedDoc?.name || doc?.name || '',
                             month: linkMonth,
                             commentId: newCommentId,
                             docYear: selectedYear,
@@ -4473,7 +4483,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
         const defaultSubject = sectionName
             ? `Abco Document / Data request: ${projectName} – ${sectionName} – ${documentLabel} – ${currentPeriodText}`
             : `Abco Document / Data request: ${projectName} – ${documentLabel} – ${currentPeriodText}`;
-        const defaultBody = `Hello Recipient Name,
+        const defaultBody = `Dear Recipient Name,
 
 We are following up regarding the documents below. This request is for our internal records and audit trail.
 
@@ -5018,7 +5028,7 @@ Abcotronics`;
             if (firstIdx === -1) return text;
             const first = lines[firstIdx].trim();
             if (/^(hello|hi|dear)\b/i.test(first)) {
-                lines[firstIdx] = `Hello ${n},`;
+                lines[firstIdx] = `Dear ${n},`;
                 return lines.join('\n');
             }
             return text;
@@ -5030,9 +5040,9 @@ Abcotronics`;
             const firstIdx = lines.findIndex((l) => l.trim().length > 0);
             if (firstIdx === -1) return text;
             const first = lines[firstIdx].trim();
-            if (/^dear\b/i.test(first)) {
+            if (/^(hello|hi|dear)\b/i.test(first)) {
                 const n = (name || '').trim();
-                lines[firstIdx] = n ? `Hello ${n},` : 'Hello,';
+                lines[firstIdx] = n ? `Dear ${n},` : 'Dear,';
                 return lines.join('\n');
             }
             return text;
@@ -5314,7 +5324,7 @@ Abcotronics`;
         const bodyStats = sanitizeBodyText(bodyPreview, false);
         const bodyCharCount = (bodyPreview || '').trim().length;
         const urlCount = bodyStats.allUrls.length;
-        const greetingPreview = recipientName.trim() ? `Hello ${recipientName.trim()},` : '';
+        const greetingPreview = recipientName.trim() ? `Dear ${recipientName.trim()},` : '';
         const firstBodyLine = (body || '').split('\n').find((line) => line.trim().length > 0) || '';
         const greetingApplies = /^(hello|hi|dear)\b/i.test(firstBodyLine.trim());
 
@@ -5484,13 +5494,13 @@ Abcotronics`;
                                 placeholder="e.g., Thabo"
                             />
                             <p className="text-xs text-gray-500 mt-2">
-                                Applies when the message starts with “Hello”, “Hi”, or “Dear”.
+                                Applies when the message starts with “Hello”, “Hi”, or “Dear” (it will be converted to “Dear”).
                             </p>
                             {recipientName.trim() && (
                                 <p className={`text-xs mt-2 ${greetingApplies ? 'text-emerald-700' : 'text-amber-700'}`}>
                                     {greetingApplies
                                         ? `Greeting preview: ${greetingPreview}`
-                                        : `Greeting preview: ${greetingPreview} (will apply when the message starts with Hello/Hi/Dear)`}
+                                        : `Greeting preview: ${greetingPreview} (will apply when the message starts with Hello/Hi/Dear, then convert to Dear)`}
                                 </p>
                             )}
                         </div>

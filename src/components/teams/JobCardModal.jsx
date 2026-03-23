@@ -575,16 +575,18 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         }));
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (e, options = {}) => {
+        if (e?.preventDefault) e.preventDefault();
+        const targetStatus = options.forceStatus || formData.status || 'draft';
+        const requiresVisitReason = targetStatus !== 'draft';
 
-        if (!String(formData.reasonForVisit || '').trim()) {
-            alert('Please enter a reason for the visit.');
+        if (requiresVisitReason && !String(formData.reasonForVisit || '').trim()) {
+            alert('Please enter a reason for the visit before submitting.');
             return;
         }
 
         // If marking as completed, ensure all attached service forms are completed
-        if (jobCard && formData.status === 'completed') {
+        if (jobCard && targetStatus === 'completed') {
             try {
                 const token = window.storage?.getToken?.();
                 if (token && jobCard.id) {
@@ -663,6 +665,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             const { serviceForms: _sf, ...formWithoutForms } = formData;
             const jobCardData = {
                 ...formWithoutForms,
+                status: targetStatus,
                 materialsBought,
                 stockUsed,
                 totalMaterialsCost,
@@ -672,7 +675,11 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 customerSignature: sigDataUrl || '',
                 id: jobCard?.id || Date.now().toString(),
                 createdAt: jobCard?.createdAt || new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                submittedAt:
+                    targetStatus === 'submitted' || targetStatus === 'completed'
+                        ? (jobCard?.submittedAt || new Date().toISOString())
+                        : null
             };
 
             const saveResult = await onSave(jobCardData);
@@ -1575,6 +1582,14 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                         >
                             Cancel
+                        </button>
+                        <button
+                            type="button"
+                            disabled={saving}
+                            onClick={(ev) => handleSubmit(ev, { forceStatus: 'draft' })}
+                            className="flex-1 rounded-lg border border-primary-300 bg-primary-50 px-4 py-2.5 text-sm font-medium text-primary-700 transition hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-200 dark:hover:bg-primary-900/50"
+                        >
+                            {saving ? 'Saving…' : 'Save Draft'}
                         </button>
                         <button
                             type="submit"
