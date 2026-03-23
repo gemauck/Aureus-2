@@ -2936,11 +2936,18 @@ const Projects = () => {
                 setViewingProject(prev => {
                     if (!prev) return normalized;
                     if (prev.id !== normalized.id) return normalized;
-                    // If update is partial, only merge weeklyFMSReviewSections into current project; never replace with thin object
-                    const effective = isPartial && updatedProject.weeklyFMSReviewSections != null
-                        ? { ...prev, weeklyFMSReviewSections: normalized.weeklyFMSReviewSections }
-                        : normalized;
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
+                    // If update is partial, merge only the fields the API sent into current project (never replace with a thin object)
+                    let effective = normalized;
+                    if (isPartial) {
+                        const patch = {};
+                        if (updatedProject.weeklyFMSReviewSections != null) patch.weeklyFMSReviewSections = normalized.weeklyFMSReviewSections;
+                        if (updatedProject.onlineDriveLinks != null) patch.onlineDriveLinks = normalized.onlineDriveLinks;
+                        if (updatedProject.googleDriveLink != null) patch.googleDriveLink = normalized.googleDriveLink;
+                        if (Object.keys(patch).length > 0) {
+                            effective = { ...prev, ...patch };
+                        }
+                    }
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections', 'onlineDriveLinks', 'googleDriveLink'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
                         const newValue = effective[field];

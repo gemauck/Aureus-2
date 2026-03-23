@@ -610,6 +610,7 @@ const JobCardFormPublic = () => {
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [shareStatus, setShareStatus] = useState('Copy share link');
+  const [calendarStatus, setCalendarStatus] = useState('Copy calendar link');
   /** Voice clips recorded from text fields: saved with the job card and keyed by section */
   const [voiceAttachments, setVoiceAttachments] = useState([]);
   // Service form templates and selection state
@@ -775,6 +776,15 @@ const JobCardFormPublic = () => {
     return `${window.location.origin}/job-card`;
   }, []);
 
+  const calendarUrl = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return '/api/public/jobcards-calendar.ics';
+    }
+    const base = `${window.location.origin}/api/public/jobcards-calendar.ics`;
+    const token = window.storage?.getToken?.();
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  }, []);
+
   const resizeSignatureCanvas = useCallback(() => {
     const canvas = signatureCanvasRef.current;
     const wrapper = signatureWrapperRef.current;
@@ -903,6 +913,34 @@ const JobCardFormPublic = () => {
     const classicUrl = `${window.location.origin}/service-maintenance`;
     window.open(classicUrl, '_blank', 'noopener,noreferrer');
   }, []);
+
+  const handleCopyCalendarLink = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      setCalendarStatus('Copy unavailable');
+      setTimeout(() => setCalendarStatus('Copy calendar link'), 2500);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(calendarUrl);
+      setCalendarStatus('Calendar link copied');
+    } catch (error) {
+      console.error('Calendar link copy failed:', error);
+      setCalendarStatus('Copy unavailable');
+    } finally {
+      setTimeout(() => setCalendarStatus('Copy calendar link'), 2500);
+    }
+  }, [calendarUrl]);
+
+  const handleSubscribeCalendar = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    let target = calendarUrl;
+    if (target.startsWith('https://')) {
+      target = `webcal://${target.slice('https://'.length)}`;
+    } else if (target.startsWith('http://')) {
+      target = `webcal://${target.slice('http://'.length)}`;
+    }
+    window.open(target, '_blank', 'noopener,noreferrer');
+  }, [calendarUrl]);
 
   // Map selection functions
   const reverseGeocode = useCallback(async (lat, lng) => {
@@ -3558,6 +3596,40 @@ const JobCardFormPublic = () => {
               </span>
             </button>
           </div>
+
+          <section className="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Follow-up calendar</p>
+              <p className="text-xs text-slate-600 mt-0.5 leading-snug">
+                Subscribe to an ICS feed for scheduled future-work job card events.
+              </p>
+              {!window.storage?.getToken?.() && (
+                <p className="text-[11px] text-amber-700 mt-1">
+                  Sign in first to generate a personal calendar URL.
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleSubscribeCalendar}
+                disabled={!window.storage?.getToken?.()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fa-regular fa-calendar-plus" aria-hidden />
+                Subscribe calendar
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyCalendarLink}
+                disabled={!window.storage?.getToken?.()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fa-regular fa-copy" aria-hidden />
+                {calendarStatus}
+              </button>
+            </div>
+          </section>
         </div>
       </div>
     );
