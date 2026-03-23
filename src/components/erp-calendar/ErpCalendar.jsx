@@ -408,7 +408,9 @@ const ErpCalendar = () => {
         headers: { Authorization: `Bearer ${token()}` }
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Failed to load labels');
+      if (!r.ok) {
+        throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load labels');
+      }
       const labels = j?.data?.labels || [];
       setMailLabels(Array.isArray(labels) ? labels : []);
     } catch (e) {
@@ -431,7 +433,9 @@ const ErpCalendar = () => {
           headers: { Authorization: `Bearer ${token()}` }
         });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Failed to load messages');
+        if (!r.ok) {
+          throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load messages');
+        }
         const rows = j?.data?.messages || [];
         setMailMessages((prev) => (append ? prev.concat(rows) : rows));
         setMailNextPageToken(j?.data?.nextPageToken || null);
@@ -458,7 +462,7 @@ const ErpCalendar = () => {
         headers: { Authorization: `Bearer ${token()}` }
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Failed to load thread');
+      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load thread');
       const msgs = j?.data?.messages || [];
       setMailThread(Array.isArray(msgs) ? msgs : []);
       setMailSelectedId(selectedId || (msgs[0] && msgs[0].id) || null);
@@ -511,7 +515,7 @@ const ErpCalendar = () => {
         })
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Send failed');
+      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Send failed');
       setComposeOpen(false);
       loadMailMessages({});
     } catch (e) {
@@ -1030,6 +1034,11 @@ const ErpCalendar = () => {
           </button>
         </div>
       </div>
+      {err ? (
+        <div className={`mx-4 mt-4 p-3 rounded-lg border text-sm ${isDark ? 'bg-red-900/30 border-red-700 text-red-200' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          {err}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-12 min-h-[62vh]">
         <aside className={`col-span-12 md:col-span-2 border-r p-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
