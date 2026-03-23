@@ -32,9 +32,10 @@ function jobCardMutateRole(user) {
 
 /** Owner may edit own card; elevated roles may edit any card. Unowned (public) cards: elevated roles only. */
 function canMutateJobCard(jobCard, user) {
-  if (!user?.sub) return false
   if (jobCardMutateRole(user)) return true
-  if (jobCard.ownerId && jobCard.ownerId === user.sub) return true
+  const userId = user?.sub || user?.id || null
+  if (!userId) return false
+  if (jobCard.ownerId && jobCard.ownerId === userId) return true
   return false
 }
 
