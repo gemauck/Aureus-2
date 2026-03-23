@@ -1274,6 +1274,14 @@ const ErpCalendar = () => {
     () => mailThread.find((m) => m.id === mailSelectedId) || mailThread[mailThread.length - 1] || null,
     [mailThread, mailSelectedId]
   );
+  const mailUnreadTotal = useMemo(
+    () =>
+      (mailLabels || []).reduce(
+        (sum, l) => sum + (Number.isFinite(Number(l?.messagesUnread)) ? Number(l.messagesUnread) : 0),
+        0
+      ),
+    [mailLabels]
+  );
 
   const renderMailWorkspace = () => {
     const allSelected = !!mailMessages.length && mailSelectedIds.length === mailMessages.length;
@@ -1311,7 +1319,12 @@ const ErpCalendar = () => {
         ) : null}
         <div className="grid grid-cols-12 min-h-[64vh]">
           <aside className={`col-span-12 md:col-span-2 border-r p-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`text-xs uppercase mb-2 ${muted}`}>Labels</div>
+            <div className={`text-xs uppercase mb-2 ${muted}`}>
+              Labels
+              <span className="ml-1 normal-case">
+                ({mailUnreadTotal} unread)
+              </span>
+            </div>
             <div className="space-y-1 max-h-[32vh] overflow-y-auto">
               {mailLabels.map((l) => (
                 <button
@@ -1327,7 +1340,9 @@ const ErpCalendar = () => {
                   className={`w-full text-left px-2 py-1.5 rounded text-sm ${mailLabelFilter === l.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
                 >
                   <span>{l.name}</span>
-                  {l.messagesUnread ? <span className={`ml-1 ${muted}`}>({l.messagesUnread})</span> : null}
+                  <span className={`ml-1 ${muted}`}>
+                    ({Number(l.messagesUnread || 0)} unread / {Number(l.messagesTotal || 0)} total)
+                  </span>
                 </button>
               ))}
             </div>
