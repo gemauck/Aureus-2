@@ -298,6 +298,11 @@ const ErpCalendar = () => {
     setMailHasAttachment(!!view.mailHasAttachment);
   }, []);
 
+  const selectedThreadMessage = useMemo(
+    () => mailThread.find((m) => m.id === mailSelectedId) || mailThread[mailThread.length - 1] || null,
+    [mailThread, mailSelectedId]
+  );
+
   const queryRange = useMemo(() => {
     if (viewMode === 'month') {
       const y = cursor.getFullYear();
@@ -1736,10 +1741,6 @@ const ErpCalendar = () => {
     </div>
   );
 
-  const selectedThreadMessage = useMemo(
-    () => mailThread.find((m) => m.id === mailSelectedId) || mailThread[mailThread.length - 1] || null,
-    [mailThread, mailSelectedId]
-  );
   const mailUnreadTotal = useMemo(
     () =>
       (mailLabels || []).reduce(
