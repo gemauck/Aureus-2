@@ -25,6 +25,22 @@ function parseDate(s) {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+async function findConflicts(userId, startUtc, endUtc, excludeId, travelBufferMinutes) {
+  const bufferMs = Math.max(0, Number(travelBufferMinutes) || 0) * 60000
+  const startWithBuffer = new Date(startUtc.getTime() - bufferMs)
+  const endWithBuffer = new Date(endUtc.getTime() + bufferMs)
+  return prisma.erpCalendarEvent.findMany({
+    where: {
+      userId,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      startUtc: { lt: endWithBuffer },
+      endUtc: { gt: startWithBuffer }
+    },
+    orderBy: { startUtc: 'asc' },
+    take: 10
+  })
+}
+
 async function handler(req, res) {
   const userId = req.user?.sub
   if (!userId) {
@@ -76,9 +92,24 @@ async function handler(req, res) {
     const timezone = (body.timezone || TZ).trim() || TZ
     const description = (body.description || '').trim()
     const syncToGoogle = !!body.syncToGoogle
+    const ignoreConflicts = !!body.ignoreConflicts
+    const travelBufferMinutes =
+      Number.isFinite(Number(body.travelBufferMinutes))
+        ? Number(body.travelBufferMinutes)
+        : Number(process.env.ERP_CALENDAR_TRAVEL_BUFFER_MINUTES || 15)
 
     if (!title || !startUtc || !endUtc || endUtc <= startUtc) {
       return badRequest(res, 'title, start, end required; end must be after start')
+    }
+    if (!ignoreConflicts) {
+      const conflicts = await findConflicts(userId, startUtc, endUtc, null, travelBufferMinutes)
+      if (conflicts.length) {
+        return badRequest(
+          res,
+          'Scheduling conflict detected',
+          `This event overlaps with ${conflicts.length} existing event(s) when applying a ${travelBufferMinutes} minute travel buffer.`
+        )
+      }
     }
 
     let row = await prisma.erpCalendarEvent.create({
@@ -139,9 +170,24 @@ async function handler(req, res) {
     const startUtc = body.start != null ? parseDate(body.start) : existing.startUtc
     const endUtc = body.end != null ? parseDate(body.end) : existing.endUtc
     const timezone = body.timezone != null ? String(body.timezone).trim() : existing.timezone
+    const ignoreConflicts = !!body.ignoreConflicts
+    const travelBufferMinutes =
+      Number.isFinite(Number(body.travelBufferMinutes))
+        ? Number(body.travelBufferMinutes)
+        : Number(process.env.ERP_CALENDAR_TRAVEL_BUFFER_MINUTES || 15)
 
     if (!startUtc || !endUtc || endUtc <= startUtc) {
       return badRequest(res, 'Invalid start/end')
+    }
+    if (!ignoreConflicts) {
+      const conflicts = await findConflicts(userId, startUtc, endUtc, id, travelBufferMinutes)
+      if (conflicts.length) {
+        return badRequest(
+          res,
+          'Scheduling conflict detected',
+          `This update overlaps with ${conflicts.length} existing event(s) when applying a ${travelBufferMinutes} minute travel buffer.`
+        )
+      }
     }
 
     let row = await prisma.erpCalendarEvent.update({

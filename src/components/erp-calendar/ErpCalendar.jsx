@@ -173,6 +173,10 @@ function fmtMailDate(input) {
   return d.toLocaleString();
 }
 
+const MAIL_VIEWS_STORAGE_KEY = 'erp_mail_saved_views_v1';
+const MAIL_FOLLOWUP_STORAGE_KEY = 'erp_mail_followups_v1';
+const MAIL_COMPOSE_LOCAL_DRAFT_KEY = 'erp_mail_compose_local_draft_v1';
+
 const ErpCalendar = () => {
   let isDark = false;
   try {
@@ -202,6 +206,7 @@ const ErpCalendar = () => {
   const [formEnd, setFormEnd] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formSync, setFormSync] = useState(true);
+  const [formTravelBufferMinutes, setFormTravelBufferMinutes] = useState(15);
   const [saving, setSaving] = useState(false);
 
   const [googleModalOpen, setGoogleModalOpen] = useState(false);
@@ -240,6 +245,8 @@ const ErpCalendar = () => {
   const [mailAfterFilter, setMailAfterFilter] = useState('');
   const [mailBeforeFilter, setMailBeforeFilter] = useState('');
   const [mailHasAttachment, setMailHasAttachment] = useState(false);
+  const [mailSavedViews, setMailSavedViews] = useState([]);
+  const [mailActiveViewId, setMailActiveViewId] = useState('');
   const [mailLoadingMore, setMailLoadingMore] = useState(false);
   const [mailActionBusy, setMailActionBusy] = useState(false);
   const [draftsOpen, setDraftsOpen] = useState(false);
@@ -259,9 +266,37 @@ const ErpCalendar = () => {
   const [composeAttachments, setComposeAttachments] = useState([]);
   const [composeSavingDraft, setComposeSavingDraft] = useState(false);
   const [mailSending, setMailSending] = useState(false);
+  const [attachmentPreview, setAttachmentPreview] = useState(null);
+  const [followUpByMessageId, setFollowUpByMessageId] = useState({});
+  const [draggingErpEventId, setDraggingErpEventId] = useState(null);
+  const [resizingErpEventId, setResizingErpEventId] = useState(null);
   const attachmentInputRef = useRef(null);
 
   const token = () => window.storage?.getToken?.();
+
+  const serializeMailFilters = useCallback(
+    () => ({
+      mailLabelFilter,
+      mailQuery,
+      mailFromFilter,
+      mailSubjectFilter,
+      mailAfterFilter,
+      mailBeforeFilter,
+      mailHasAttachment
+    }),
+    [mailLabelFilter, mailQuery, mailFromFilter, mailSubjectFilter, mailAfterFilter, mailBeforeFilter, mailHasAttachment]
+  );
+
+  const applyMailView = useCallback((view) => {
+    if (!view) return;
+    setMailLabelFilter(view.mailLabelFilter || 'INBOX');
+    setMailQuery(view.mailQuery || '');
+    setMailFromFilter(view.mailFromFilter || '');
+    setMailSubjectFilter(view.mailSubjectFilter || '');
+    setMailAfterFilter(view.mailAfterFilter || '');
+    setMailBeforeFilter(view.mailBeforeFilter || '');
+    setMailHasAttachment(!!view.mailHasAttachment);
+  }, []);
 
   const queryRange = useMemo(() => {
     if (viewMode === 'month') {
@@ -387,7 +422,7 @@ const ErpCalendar = () => {
       if (document.visibilityState === 'visible') {
         reloadCalendar({ silent: true });
       }
-    }, 120000);
+    }, 30000);
     document.addEventListener('visibilitychange', onVis);
     return () => {
       clearInterval(id);
@@ -534,9 +569,173 @@ const ErpCalendar = () => {
   }, [workspaceTab, loadMailLabels, loadMailMessages]);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(MAIL_VIEWS_STORAGE_KEY);
+      const next = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(next) && next.length) {
+        setMailSavedViews(next);
+      } else {
+        setMailSavedViews([
+          { id: 'default-unread-attachments', name: 'Unread + Attachments', mailLabelFilter: 'INBOX', mailQuery: '', mailFromFilter: '', mailSubjectFilter: '', mailAfterFilter: '', mailBeforeFilter: '', mailHasAttachment: true },
+          { id: 'default-this-week', name: 'This Week Meetings', mailLabelFilter: 'INBOX', mailQuery: 'meeting OR schedule', mailFromFilter: '', mailSubjectFilter: '', mailAfterFilter: '', mailBeforeFilter: '', mailHasAttachment: false }
+        ]);
+      }
+    } catch (_) {
+      setMailSavedViews([]);
+    }
+    try {
+      const raw = localStorage.getItem(MAIL_FOLLOWUP_STORAGE_KEY);
+      const next = raw ? JSON.parse(raw) : {};
+      setFollowUpByMessageId(next && typeof next === 'object' ? next : {});
+    } catch (_) {
+      setFollowUpByMessageId({});
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MAIL_VIEWS_STORAGE_KEY, JSON.stringify(mailSavedViews || []));
+    } catch (_) {}
+  }, [mailSavedViews]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MAIL_FOLLOWUP_STORAGE_KEY, JSON.stringify(followUpByMessageId || {}));
+    } catch (_) {}
+  }, [followUpByMessageId]);
+
+  useEffect(() => {
     if (!draftsOpen) return;
     loadMailDrafts();
   }, [draftsOpen, loadMailDrafts]);
+
+  useEffect(() => {
+    if (!composeOpen) return;
+    const id = setInterval(() => {
+      const hasContent =
+        composeTo.trim() ||
+        composeCc.trim() ||
+        composeBcc.trim() ||
+        composeSubject.trim() ||
+        composeBody.trim() ||
+        composeHtmlBody.trim() ||
+        composeAttachments.length;
+      if (!hasContent) return;
+      saveDraft();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [composeOpen, composeTo, composeCc, composeBcc, composeSubject, composeBody, composeHtmlBody, composeAttachments]);
+
+  useEffect(() => {
+    if (!composeOpen) return;
+    const hasContent =
+      composeTo.trim() ||
+      composeCc.trim() ||
+      composeBcc.trim() ||
+      composeSubject.trim() ||
+      composeBody.trim() ||
+      composeHtmlBody.trim();
+    try {
+      if (hasContent) {
+        localStorage.setItem(
+          MAIL_COMPOSE_LOCAL_DRAFT_KEY,
+          JSON.stringify({
+            to: composeTo,
+            cc: composeCc,
+            bcc: composeBcc,
+            subject: composeSubject,
+            body: composeBody,
+            htmlBody: composeHtmlBody,
+            updatedAt: new Date().toISOString()
+          })
+        );
+      }
+    } catch (_) {}
+  }, [composeOpen, composeTo, composeCc, composeBcc, composeSubject, composeBody, composeHtmlBody]);
+
+  useEffect(() => {
+    if (workspaceTab !== 'mail') return;
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      loadMailLabels();
+      loadMailMessages({ append: false });
+    }, 30000);
+    return () => clearInterval(id);
+  }, [workspaceTab, loadMailLabels, loadMailMessages]);
+
+  useEffect(() => {
+    if (workspaceTab !== 'mail') return;
+    const onKey = (e) => {
+      const target = e.target;
+      const tag = String(target?.tagName || '').toLowerCase();
+      const isTyping = tag === 'input' || tag === 'textarea' || target?.isContentEditable;
+      if (isTyping) return;
+      const key = String(e.key || '').toLowerCase();
+      if (key === 'c') {
+        e.preventDefault();
+        openCompose(null, 'new');
+      } else if (key === 'r' && selectedThreadMessage) {
+        e.preventDefault();
+        openCompose(selectedThreadMessage, 'reply');
+      } else if (key === 'f' && selectedThreadMessage) {
+        e.preventDefault();
+        openCompose(selectedThreadMessage, 'forward');
+      } else if (key === 'u' && mailSelectedId) {
+        e.preventDefault();
+        modifyMailMessage(mailSelectedId, ['UNREAD'], []);
+      } else if (key === 'j') {
+        e.preventDefault();
+        const idx = mailMessages.findIndex((m) => m.id === mailSelectedId);
+        const next = mailMessages[idx + 1] || mailMessages[0];
+        if (next) {
+          setMailSelectedId(next.id);
+          loadMailThread(next.threadId, next.id);
+        }
+      } else if (key === 'k') {
+        e.preventDefault();
+        const idx = mailMessages.findIndex((m) => m.id === mailSelectedId);
+        const prev = mailMessages[idx - 1] || mailMessages[mailMessages.length - 1];
+        if (prev) {
+          setMailSelectedId(prev.id);
+          loadMailThread(prev.threadId, prev.id);
+        }
+      } else if ((key === 'delete' || key === 'backspace') && (mailSelectedIds.length || mailSelectedId)) {
+        e.preventDefault();
+        trashMailMessage(mailSelectedId || undefined);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [workspaceTab, selectedThreadMessage, mailSelectedId, mailSelectedIds, mailMessages, loadMailThread]);
+
+  useEffect(() => {
+    if (!resizingErpEventId) return;
+    const [eventId, dayTs] = String(resizingErpEventId).split('::');
+    const day = new Date(Number(dayTs || Date.now()));
+    const source = erpEvents.find((x) => x.id === eventId);
+    if (!source) {
+      setResizingErpEventId(null);
+      return;
+    }
+    const onMouseUp = async (e) => {
+      try {
+        const grid = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-calendar-time-grid="1"]');
+        if (!grid) return;
+        const rect = grid.getBoundingClientRect();
+        const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+        const mins = GRID_HOUR_START * 60 + (y / rect.height) * ((GRID_HOUR_END - GRID_HOUR_START) * 60);
+        const snapped = Math.max(Math.round(mins / 15) * 15, minutesSinceMidnight(new Date(source.startUtc)) + 15);
+        const end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, snapped, 0, 0);
+        await updateErpEventTime(eventId, new Date(source.startUtc).toISOString(), end.toISOString());
+      } catch (err) {
+        alert(err.message || 'Failed to resize event');
+      } finally {
+        setResizingErpEventId(null);
+      }
+    };
+    window.addEventListener('mouseup', onMouseUp, { once: true });
+    return () => window.removeEventListener('mouseup', onMouseUp);
+  }, [resizingErpEventId, erpEvents]);
 
   const loadMailThread = useCallback(async (threadId, selectedId) => {
     if (!threadId) return;
@@ -576,14 +775,33 @@ const ErpCalendar = () => {
       setComposeBody(quoted);
       setComposeHtmlBody(`<p><br/></p><hr/><p><strong>From:</strong> ${replyTo.from || ''}</p><p><strong>Date:</strong> ${replyTo.date || ''}</p><blockquote>${(replyTo.bodyHtml || replyTo.bodyText || '').replace(/\n/g, '<br/>')}</blockquote>`);
     } else {
-      setComposeTo('');
-      setComposeSubject('');
-      setComposeBody('');
-      setComposeHtmlBody('');
+      let localDraft = null;
+      try {
+        localDraft = JSON.parse(localStorage.getItem(MAIL_COMPOSE_LOCAL_DRAFT_KEY) || 'null');
+      } catch (_) {
+        localDraft = null;
+      }
+      if (mode === 'new' && localDraft) {
+        setComposeTo(localDraft.to || '');
+        setComposeCc(localDraft.cc || '');
+        setComposeBcc(localDraft.bcc || '');
+        setComposeSubject(localDraft.subject || '');
+        setComposeBody(localDraft.body || '');
+        setComposeHtmlBody(localDraft.htmlBody || '');
+      } else {
+        setComposeTo('');
+        setComposeCc('');
+        setComposeBcc('');
+        setComposeSubject('');
+        setComposeBody('');
+        setComposeHtmlBody('');
+      }
       setComposeThreadId('');
     }
-    setComposeCc('');
-    setComposeBcc('');
+    if (replyTo) {
+      setComposeCc('');
+      setComposeBcc('');
+    }
     setComposeOpen(true);
   };
 
@@ -632,6 +850,19 @@ const ErpCalendar = () => {
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const blob = new Blob([bytes], { type: d.mimeType || 'application/octet-stream' });
+      const mime = String(d.mimeType || 'application/octet-stream');
+      if (/^image\//.test(mime) || mime === 'application/pdf') {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachmentPreview({
+            filename: d.filename || 'attachment',
+            mimeType: mime,
+            src: String(reader.result || '')
+          });
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -707,6 +938,9 @@ const ErpCalendar = () => {
       if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Send failed');
       setComposeOpen(false);
       setComposeAttachments([]);
+      try {
+        localStorage.removeItem(MAIL_COMPOSE_LOCAL_DRAFT_KEY);
+      } catch (_) {}
       loadMailMessages({});
     } catch (e) {
       alert(e.message || 'Failed to send email');
@@ -799,6 +1033,135 @@ const ErpCalendar = () => {
     await runBulkModify([labelId], []);
   };
 
+  const runThreadAction = async (action) => {
+    if (!mailThread.length) return;
+    const ids = mailThread.map((m) => m.id).filter(Boolean);
+    if (!ids.length) return;
+    setMailActionBusy(true);
+    try {
+      if (action === 'archive') {
+        await fetch('/api/erp-mail/modify', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ ids, addLabelIds: [], removeLabelIds: ['INBOX'] })
+        });
+      } else if (action === 'category-updates') {
+        await fetch('/api/erp-mail/modify', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ ids, addLabelIds: ['CATEGORY_UPDATES'], removeLabelIds: [] })
+        });
+      } else if (action === 'snooze') {
+        await fetch('/api/erp-mail/modify', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ ids, addLabelIds: ['STARRED'], removeLabelIds: ['INBOX'] })
+        });
+      } else if (action === 'move-label') {
+        const options = mailLabels.map((l) => `${l.id}:${l.name}`).join('\n');
+        const value = prompt(`Move thread to label ID:\n${options}`);
+        const labelId = String(value || '').trim();
+        if (!labelId) return;
+        await fetch('/api/erp-mail/modify', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ ids, addLabelIds: [labelId], removeLabelIds: ['INBOX'] })
+        });
+      }
+      await loadMailMessages({});
+    } catch (e) {
+      setErr(e.message || 'Thread action failed');
+    } finally {
+      setMailActionBusy(false);
+    }
+  };
+
+  const saveCurrentView = () => {
+    const name = prompt('Name this search view');
+    const clean = String(name || '').trim();
+    if (!clean) return;
+    const view = {
+      id: `view-${Date.now()}`,
+      name: clean,
+      ...serializeMailFilters()
+    };
+    setMailSavedViews((prev) => [view, ...prev.filter((v) => v.name !== clean)].slice(0, 15));
+    setMailActiveViewId(view.id);
+  };
+
+  const applySavedViewById = (id) => {
+    const view = (mailSavedViews || []).find((v) => v.id === id);
+    if (!view) return;
+    setMailActiveViewId(id);
+    applyMailView(view);
+    setTimeout(() => loadMailMessages({}), 0);
+  };
+
+  const removeSavedViewById = (id) => {
+    setMailSavedViews((prev) => prev.filter((v) => v.id !== id));
+    if (mailActiveViewId === id) setMailActiveViewId('');
+  };
+
+  const setFollowUpReminder = (messageId) => {
+    if (!messageId) return;
+    const existing = followUpByMessageId[messageId]?.dueAt || '';
+    const value = prompt('Follow-up due at (YYYY-MM-DDTHH:mm)', existing);
+    const clean = String(value || '').trim();
+    if (!clean) {
+      setFollowUpByMessageId((prev) => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+      return;
+    }
+    const dt = new Date(clean);
+    if (Number.isNaN(dt.getTime())) {
+      alert('Invalid date format');
+      return;
+    }
+    setFollowUpByMessageId((prev) => ({
+      ...prev,
+      [messageId]: { dueAt: dt.toISOString() }
+    }));
+  };
+
+  const quickCreateCalendarFromMail = () => {
+    if (!selectedThreadMessage) return;
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 1);
+    const end = new Date(now.getTime() + 3600000);
+    setEditingEventId(null);
+    setFormTitle(selectedThreadMessage.subject || 'Follow-up');
+    const attendees = splitEmailList(selectedThreadMessage.to || '');
+    setFormDesc(
+      [
+        `From: ${selectedThreadMessage.from || ''}`,
+        `To: ${selectedThreadMessage.to || ''}`,
+        '',
+        selectedThreadMessage.bodyText || selectedThreadMessage.snippet || ''
+      ].join('\n')
+    );
+    setFormStart(isoLocal(now));
+    setFormEnd(isoLocal(end));
+    setFormSync(connected);
+    setModalOpen(true);
+    if (attendees.length) setErr(`Tip: add attendees in Google event edit if needed (${attendees.join(', ')})`);
+  };
+
   const trashMailMessage = async (id) => {
     const ids = id ? [id] : mailSelectedIds;
     if (!ids.length) return;
@@ -869,6 +1232,7 @@ const ErpCalendar = () => {
     setFormStart(isoLocal(d));
     setFormEnd(isoLocal(end));
     setFormSync(connected);
+    setFormTravelBufferMinutes(15);
     setModalOpen(true);
   };
 
@@ -882,6 +1246,7 @@ const ErpCalendar = () => {
     setFormStart(isoLocal(d));
     setFormEnd(isoLocal(end));
     setFormSync(connected);
+    setFormTravelBufferMinutes(15);
     setModalOpen(true);
   };
 
@@ -892,6 +1257,7 @@ const ErpCalendar = () => {
     setFormStart(isoLocal(new Date(e.startUtc)));
     setFormEnd(isoLocal(new Date(e.endUtc)));
     setFormSync(connected && !!e.googleEventId);
+    setFormTravelBufferMinutes(15);
     setModalOpen(true);
   };
 
@@ -908,6 +1274,15 @@ const ErpCalendar = () => {
     }
     setSaving(true);
     try {
+      const payloadBase = {
+        title: formTitle.trim(),
+        description: formDesc.trim(),
+        start: start.toISOString(),
+        end: end.toISOString(),
+        timezone: TZ,
+        syncToGoogle: connected && formSync,
+        travelBufferMinutes: Number(formTravelBufferMinutes) || 0
+      };
       if (editingEventId) {
         const r = await fetch('/api/erp-calendar/erp-events', {
           method: 'PATCH',
@@ -915,18 +1290,27 @@ const ErpCalendar = () => {
             Authorization: `Bearer ${token()}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            id: editingEventId,
-            title: formTitle.trim(),
-            description: formDesc.trim(),
-            start: start.toISOString(),
-            end: end.toISOString(),
-            timezone: TZ,
-            syncToGoogle: connected && formSync
-          })
+          body: JSON.stringify({ id: editingEventId, ...payloadBase })
         });
         const j = await r.json();
-        if (!r.ok) throw new Error(j?.data?.message || j?.message || 'Update failed');
+        if (!r.ok) {
+          const msg = j?.error?.message || j?.data?.message || j?.message || 'Update failed';
+          const details = j?.error?.details || '';
+          if (/Scheduling conflict detected/i.test(msg) && confirm(`${msg}\n${details}\n\nSave anyway?`)) {
+            const r2 = await fetch('/api/erp-calendar/erp-events', {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token()}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ id: editingEventId, ...payloadBase, ignoreConflicts: true })
+            });
+            const j2 = await r2.json().catch(() => ({}));
+            if (!r2.ok) throw new Error(j2?.error?.details || j2?.error?.message || j2?.message || 'Update failed');
+          } else {
+            throw new Error(details || msg);
+          }
+        }
       } else {
         const r = await fetch('/api/erp-calendar/erp-events', {
           method: 'POST',
@@ -934,17 +1318,27 @@ const ErpCalendar = () => {
             Authorization: `Bearer ${token()}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            title: formTitle.trim(),
-            description: formDesc.trim(),
-            start: start.toISOString(),
-            end: end.toISOString(),
-            timezone: TZ,
-            syncToGoogle: connected && formSync
-          })
+          body: JSON.stringify(payloadBase)
         });
         const j = await r.json();
-        if (!r.ok) throw new Error(j?.data?.message || j?.message || 'Save failed');
+        if (!r.ok) {
+          const msg = j?.error?.message || j?.data?.message || j?.message || 'Save failed';
+          const details = j?.error?.details || '';
+          if (/Scheduling conflict detected/i.test(msg) && confirm(`${msg}\n${details}\n\nSave anyway?`)) {
+            const r2 = await fetch('/api/erp-calendar/erp-events', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token()}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ ...payloadBase, ignoreConflicts: true })
+            });
+            const j2 = await r2.json().catch(() => ({}));
+            if (!r2.ok) throw new Error(j2?.error?.details || j2?.error?.message || j2?.message || 'Save failed');
+          } else {
+            throw new Error(details || msg);
+          }
+        }
       }
       closeModal();
       reloadCalendar();
@@ -967,6 +1361,30 @@ const ErpCalendar = () => {
       return;
     }
     reloadCalendar();
+  };
+
+  const updateErpEventTime = async (eventId, startIso, endIso) => {
+    const target = erpEvents.find((e) => e.id === eventId);
+    if (!target) return;
+    const r = await fetch('/api/erp-calendar/erp-events', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token()}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: eventId,
+        title: target.title,
+        description: target.description || '',
+        start: startIso,
+        end: endIso,
+        timezone: target.timezone || TZ,
+        syncToGoogle: connected && !!target.googleEventId
+      })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to update event timing');
+    await reloadCalendar({ silent: true });
   };
 
   const closeGoogleModal = () => {
@@ -1225,6 +1643,30 @@ const ErpCalendar = () => {
     <div
       className={`relative border-l ${isDark ? 'border-gray-700' : 'border-gray-200'}`}
       style={{ height: gridBodyHeight }}
+      data-calendar-time-grid="1"
+      onDragOver={(e) => {
+        if (draggingErpEventId) e.preventDefault();
+      }}
+      onDrop={async (e) => {
+        if (!draggingErpEventId) return;
+        e.preventDefault();
+        const source = erpEvents.find((x) => x.id === draggingErpEventId);
+        if (!source) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+        const mins = GRID_HOUR_START * 60 + (y / rect.height) * ((GRID_HOUR_END - GRID_HOUR_START) * 60);
+        const snapped = Math.round(mins / 15) * 15;
+        const durationMs = new Date(source.endUtc).getTime() - new Date(source.startUtc).getTime();
+        const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, snapped, 0, 0);
+        const end = new Date(start.getTime() + durationMs);
+        try {
+          await updateErpEventTime(source.id, start.toISOString(), end.toISOString());
+        } catch (err) {
+          alert(err.message || 'Failed to move event');
+        } finally {
+          setDraggingErpEventId(null);
+        }
+      }}
     >
       {hourRows.map((hr) => (
         <button
@@ -1244,9 +1686,10 @@ const ErpCalendar = () => {
           const layout = layoutTimedBlock(clipped);
           if (!layout) return null;
           return (
-            <button
+            <div
               key={`${ev.id}-${day.getTime()}`}
-              type="button"
+              role="button"
+              tabIndex={0}
               className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-left text-xs overflow-hidden z-10 shadow-sm border ${
                 ev.source === 'erp'
                   ? isDark
@@ -1257,14 +1700,37 @@ const ErpCalendar = () => {
                     : 'bg-green-50 border-green-200 text-green-900'
               }`}
               style={{ top: `${layout.topPct}%`, height: `${Math.max(layout.heightPct, 2)}%` }}
+              draggable={ev.source === 'erp'}
+              onDragStart={() => {
+                if (ev.source === 'erp') setDraggingErpEventId(ev.raw.id);
+              }}
+              onDragEnd={() => setDraggingErpEventId(null)}
               onClick={(e) => {
                 e.stopPropagation();
                 if (ev.source === 'erp') openEditErpModal(ev.raw);
                 else openGoogleModal(ev.raw.id);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (ev.source === 'erp') openEditErpModal(ev.raw);
+                  else openGoogleModal(ev.raw.id);
+                }
+              }}
             >
               <span className="font-medium line-clamp-2">{ev.title}</span>
-            </button>
+              {ev.source === 'erp' ? (
+                <button
+                  type="button"
+                  className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize bg-black/20"
+                  title="Resize event"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setResizingErpEventId(`${ev.raw.id}::${day.getTime()}`);
+                  }}
+                />
+              ) : null}
+            </div>
           );
         })}
     </div>
@@ -1299,7 +1765,13 @@ const ErpCalendar = () => {
             <button type="button" disabled={!mailSelectedIds.length || mailActionBusy} onClick={() => runBulkModify(['STARRED'], [])} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Add star</button>
             <button type="button" disabled={!mailSelectedIds.length || mailActionBusy} onClick={promptApplyLabel} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Apply label</button>
             <button type="button" disabled={!mailSelectedIds.length} onClick={() => trashMailMessage()} className="px-3 py-1.5 rounded-lg text-sm border border-red-400/50 text-red-500 disabled:opacity-50">Delete</button>
+            <button type="button" disabled={!mailThread.length || mailActionBusy} onClick={() => runThreadAction('archive')} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Archive thread</button>
+            <button type="button" disabled={!mailThread.length || mailActionBusy} onClick={() => runThreadAction('move-label')} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Move thread</button>
+            <button type="button" disabled={!mailThread.length || mailActionBusy} onClick={() => runThreadAction('snooze')} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Snooze thread</button>
+            <button type="button" disabled={!mailThread.length || mailActionBusy} onClick={() => runThreadAction('category-updates')} className={`px-3 py-1.5 rounded-lg text-sm border disabled:opacity-50 ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Category updates</button>
             <button type="button" onClick={() => setDraftsOpen((v) => !v)} className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>{draftsOpen ? 'Hide drafts' : 'Show drafts'}</button>
+            <button type="button" onClick={saveCurrentView} className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Save view</button>
+            <span className={`text-xs ${muted}`}>Shortcuts: C compose, R reply, F forward, J/K navigate, U unread</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
             <input value={mailQuery} onChange={(e) => setMailQuery(e.target.value)} placeholder="Search text" className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
@@ -1312,6 +1784,14 @@ const ErpCalendar = () => {
           <div className="flex gap-2">
             <button type="button" onClick={() => loadMailMessages({})} className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Apply filters</button>
             <button type="button" onClick={() => { setMailQuery(''); setMailFromFilter(''); setMailSubjectFilter(''); setMailAfterFilter(''); setMailBeforeFilter(''); setMailHasAttachment(false); }} className={`px-3 py-1.5 rounded-lg text-sm border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Clear</button>
+            {(mailSavedViews || []).map((v) => (
+              <span key={v.id} className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ${mailActiveViewId === v.id ? (isDark ? 'border-blue-500 text-blue-300' : 'border-blue-400 text-blue-700') : isDark ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'}`}>
+                <button type="button" onClick={() => applySavedViewById(v.id)}>{v.name}</button>
+                <button type="button" className="text-red-500" onClick={() => removeSavedViewById(v.id)}>
+                  <i className="fas fa-times" />
+                </button>
+              </span>
+            ))}
           </div>
         </div>
         {err ? (
@@ -1369,6 +1849,9 @@ const ErpCalendar = () => {
               {mailMessages.map((m) => {
                 const isUnread = Array.isArray(m.labelIds) && m.labelIds.includes('UNREAD');
                 const isSelected = mailSelectedIds.includes(m.id);
+                const followUp = followUpByMessageId[m.id];
+                const isOverdue = followUp?.dueAt ? new Date(followUp.dueAt).getTime() < Date.now() : false;
+                const ageDays = m.date ? Math.floor((Date.now() - new Date(m.date).getTime()) / 86400000) : 0;
                 return (
                   <div
                     key={m.id}
@@ -1408,6 +1891,16 @@ const ErpCalendar = () => {
                             UNREAD
                           </span>
                         ) : null}
+                        {followUp?.dueAt ? (
+                          <span className={`ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${isOverdue ? 'bg-amber-500 text-white' : isDark ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-700'}`}>
+                            Follow-up {new Date(followUp.dueAt).toLocaleString()}
+                          </span>
+                        ) : null}
+                        {!followUp?.dueAt && isUnread && ageDays >= 3 ? (
+                          <span className={`ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${isDark ? 'bg-orange-800 text-orange-100' : 'bg-orange-100 text-orange-800'}`}>
+                            No reply {ageDays}d
+                          </span>
+                        ) : null}
                       </div>
                       <div className={`text-xs truncate ${muted}`}>{m.snippet}</div>
                     </button>
@@ -1434,6 +1927,8 @@ const ErpCalendar = () => {
                   <div className="flex gap-2">
                     <button type="button" onClick={() => openCompose(selectedThreadMessage, 'reply')} className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Reply</button>
                     <button type="button" onClick={() => openCompose(selectedThreadMessage, 'forward')} className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Forward</button>
+                    <button type="button" onClick={() => setFollowUpReminder(selectedThreadMessage.id)} className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Set follow-up</button>
+                    <button type="button" onClick={quickCreateCalendarFromMail} className={`px-2 py-1 rounded text-xs border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}>Create calendar event</button>
                     <button type="button" onClick={() => trashMailMessage(selectedThreadMessage.id)} className="px-2 py-1 rounded text-xs text-red-500 border border-red-400/40">Trash</button>
                   </div>
                 </div>
@@ -1908,6 +2403,33 @@ const ErpCalendar = () => {
         </div>
       )}
 
+      {attachmentPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className={`w-full max-w-4xl rounded-xl border shadow-xl p-4 ${card}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">{attachmentPreview.filename}</h3>
+              <div className="flex gap-2">
+                <a
+                  href={attachmentPreview.src}
+                  download={attachmentPreview.filename}
+                  className={`px-3 py-1 rounded border ${isDark ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'}`}
+                >
+                  Download
+                </a>
+                <button type="button" onClick={() => setAttachmentPreview(null)} className={`px-3 py-1 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}>
+                  Close
+                </button>
+              </div>
+            </div>
+            {attachmentPreview.mimeType === 'application/pdf' ? (
+              <iframe title={attachmentPreview.filename} src={attachmentPreview.src} className="w-full h-[70vh] rounded border border-gray-300 dark:border-gray-700" />
+            ) : (
+              <img src={attachmentPreview.src} alt={attachmentPreview.filename} className="max-h-[70vh] w-auto mx-auto rounded" />
+            )}
+          </div>
+        </div>
+      )}
+
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className={`w-full max-w-md rounded-xl border shadow-xl p-6 ${card}`}>
@@ -1938,6 +2460,15 @@ const ErpCalendar = () => {
               rows={3}
               value={formDesc}
               onChange={(e) => setFormDesc(e.target.value)}
+            />
+            <label className="block text-sm mb-1">Travel buffer (minutes)</label>
+            <input
+              type="number"
+              min="0"
+              max="180"
+              className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+              value={formTravelBufferMinutes}
+              onChange={(e) => setFormTravelBufferMinutes(Math.max(0, Number(e.target.value) || 0))}
             />
             {connected && (
               <label className="flex items-center gap-2 mb-4 text-sm cursor-pointer">
