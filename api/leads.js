@@ -11,17 +11,13 @@ import { withLogging } from './_lib/logger.js'
 import { logDatabaseError } from './_lib/dbErrorHandler.js'
 import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 /** Return null for empty engagementStage/aidaStatus so Pipeline can show "—" for blank */
 function blankStagesForLead(parsed) {
   if (parsed.engagementStage != null && String(parsed.engagementStage).trim() === '') parsed.engagementStage = null
   if (parsed.aidaStatus != null && String(parsed.aidaStatus).trim() === '') parsed.aidaStatus = null
   return parsed
-}
-
-function hasAdminOrSuperAdminRole(user) {
-  const role = (user?.role || '').toString().trim().toLowerCase()
-  return role === 'admin' || role === 'superadmin' || role === 'super-admin' || role === 'super_admin'
 }
 
 // Phase 2: JSON field parsing and dual-write utilities moved to shared module
@@ -1823,7 +1819,7 @@ async function handler(req, res) {
 
           // In-place lead -> client conversion (same record id, preserve all linked data)
           if (body.type === 'client') {
-            if (!hasAdminOrSuperAdminRole(req.user)) {
+            if (!isAdminRole(req.user?.role)) {
               return res.status(403).json({ error: 'Forbidden', message: 'Only Admin/SuperAdmin can convert leads to clients' })
             }
             if (existing.type !== 'lead') {

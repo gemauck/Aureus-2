@@ -1393,8 +1393,7 @@ const MainLayout = () => {
     }, [menuItems]);
 
     const isAdmin = React.useMemo(() => {
-        const userRole = user?.role?.toLowerCase();
-        return ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
+        return typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
     }, [user?.role]);
 
     React.useEffect(() => {

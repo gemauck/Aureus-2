@@ -37,16 +37,25 @@ async function handler(req, res) {
     }
 
     const { calendar } = auth
-    const response = await calendar.events.list({
-      calendarId: 'primary',
-      timeMin,
-      timeMax,
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults: 250
-    })
+    let items = []
+    let pageToken
+    const maxPages = 24
 
-    const items = response.data.items || []
+    for (let page = 0; page < maxPages; page++) {
+      const response = await calendar.events.list({
+        calendarId: 'primary',
+        timeMin,
+        timeMax,
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 250,
+        pageToken: pageToken || undefined
+      })
+      const batch = response.data.items || []
+      items = items.concat(batch)
+      pageToken = response.data.nextPageToken
+      if (!pageToken) break
+    }
     const events = items.map((ev) => ({
       id: ev.id,
       summary: ev.summary || '(No title)',

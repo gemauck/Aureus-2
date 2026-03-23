@@ -19,7 +19,7 @@ const LeadDetailModal = ({
 }) => {
     // Check if current user is admin (must be before useState that uses it)
     const user = window.storage?.getUser?.() || {};
-    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
     const { isDark } = window.useTheme?.() || { isDark: false };
     
     // Modal owns its state - start with any provided lead data for instant rendering

@@ -223,7 +223,7 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
         let currentPermissions = formData.customPermissions;
         if (currentPermissions.length === 0) {
             // Initialize with all permissions except admin-only ones if user is not admin
-            const isAdmin = formData.role?.toLowerCase() === 'admin';
+            const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(formData.role);
             currentPermissions = allPermissions.filter(perm => {
                 const category = Object.values(permissionCategories).find(cat => cat.permission === perm);
                 return !category?.adminOnly || isAdmin;
@@ -242,7 +242,7 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
     // Check if a permission category is enabled
     const isPermissionEnabled = (category) => {
         // Admin-only categories can only be enabled for admins
-        if (category.adminOnly && formData.role?.toLowerCase() !== 'admin') {
+        if (category.adminOnly && !(typeof window.isAdminRole === 'function' && window.isAdminRole(formData.role))) {
             return false;
         }
         
@@ -264,7 +264,7 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
         return role.permissions;
     };
 
-    const isAdmin = formData.role?.toLowerCase() === 'admin';
+    const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(formData.role);
     
     // Check if user has access to a permission category
     const hasCategoryAccess = (category) => {

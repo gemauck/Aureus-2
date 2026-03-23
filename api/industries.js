@@ -5,6 +5,7 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -14,8 +15,7 @@ async function handler(req, res) {
     const id = pathSegments[pathSegments.length - 1] === 'industries' ? null : pathSegments[pathSegments.length - 1]
 
     // Check admin role for POST, PATCH, DELETE operations
-    const userRole = req.user?.role?.toLowerCase()
-    const isAdmin = userRole === 'admin'
+    const isAdmin = isAdminRole(req.user?.role)
     const requiresAdmin = ['POST', 'PATCH', 'DELETE'].includes(req.method)
 
     if (requiresAdmin && !isAdmin) {

@@ -125,7 +125,7 @@ try {
   };
 
   const currentUser = useMemo(() => user || getCurrentUser(), [user]);
-  const isAdmin = (currentUser?.role || '').toLowerCase() === 'admin';
+  const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(currentUser?.role);
   
   // Helper function to safely call DatabaseAPI methods
   const safeCallAPI = async (methodName, ...args) => {

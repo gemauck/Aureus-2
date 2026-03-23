@@ -5,6 +5,7 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 // Helper function to parse JSON fields from database responses
 function parseTicketJsonFields(ticket) {
@@ -558,7 +559,7 @@ async function handler(req, res) {
           }
 
           // Check permissions - only creator or admin can delete
-          if (ticket.createdById !== userId && req.user?.role !== 'admin') {
+          if (ticket.createdById !== userId && !isAdminRole(req.user?.role)) {
             return badRequest(res, 'You do not have permission to delete this ticket')
           }
 

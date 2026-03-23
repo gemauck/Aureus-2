@@ -387,14 +387,14 @@ const MainLayout = () => {
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
                 // Strict admin-only access - no fallbacks
-                return userRole === 'admin';
+                return typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
             }
             return true;
         });
         
         // Log only if Users menu visibility changes for debugging
         const hasUsersMenu = filtered.some(i => i.id === 'users');
-        if (hasUsersMenu && userRole !== 'admin') {
+        if (hasUsersMenu && !(typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role))) {
             console.warn('⚠️ WARNING: Users menu visible but user is not admin!', { userRole, hasUsersMenu });
         }
         
@@ -403,8 +403,7 @@ const MainLayout = () => {
 
     // Check if user is admin (case-insensitive) - strict check, no fallbacks
     const isAdmin = React.useMemo(() => {
-        const userRole = user?.role?.toLowerCase();
-        return userRole === 'admin';
+        return typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
     }, [user?.role]);
 
     // Redirect non-admin users away from admin-only pages

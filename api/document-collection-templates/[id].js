@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { isAdminRole } from '../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -97,7 +98,7 @@ async function handler(req, res) {
         }
         
         // Prevent editing default templates (unless it's the system)
-        if (existing.isDefault && req.user?.role !== 'admin') {
+        if (existing.isDefault && !isAdminRole(req.user?.role)) {
           return badRequest(res, 'Default templates cannot be edited')
         }
         
@@ -114,7 +115,7 @@ async function handler(req, res) {
             ? body.sections
             : JSON.stringify(body.sections || [])
         }
-        if (body.isDefault !== undefined && req.user?.role === 'admin') {
+        if (body.isDefault !== undefined && isAdminRole(req.user?.role)) {
           updateData.isDefault = body.isDefault === true
         }
         updateData.updatedBy = req.user?.name || req.user?.email || ''

@@ -7,11 +7,7 @@ import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/clientJsonFields.js'
-
-function hasAdminOrSuperAdminRole(user) {
-  const role = (user?.role || '').toString().trim().toLowerCase()
-  return role === 'admin' || role === 'superadmin' || role === 'super-admin' || role === 'super_admin'
-}
+import { isAdminRole } from '../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -469,7 +465,7 @@ async function handler(req, res) {
 
         // In-place lead -> client conversion (preserve same record + all related rows)
         if (body.type === 'client') {
-          if (!hasAdminOrSuperAdminRole(req.user)) {
+          if (!isAdminRole(req.user?.role)) {
             return res.status(403).json({ error: 'Forbidden', message: 'Only Admin/SuperAdmin can convert leads to clients' })
           }
           if (existing.type !== 'lead') {

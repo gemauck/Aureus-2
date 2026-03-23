@@ -670,8 +670,8 @@ const DashboardLive = () => {
 
             // Only fetch users for admins to avoid unnecessary 401s and load
             try {
-                const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
-                if (role === 'admin') {
+                const role = window.storage?.getUser?.()?.role;
+                if (typeof window.isAdminRole === 'function' && window.isAdminRole(role)) {
                     syncPromises.push(
                         window.DatabaseAPI.getUsers().catch(err => {
                             console.warn('User sync failed:', err);
@@ -687,8 +687,8 @@ const DashboardLive = () => {
                 const mappedResults = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
                 
                 // Get the role to determine if users promise was added
-                const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
-                const isAdmin = role === 'admin';
+                const role = window.storage?.getUser?.()?.role;
+                const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(role);
                 
                 // Extract responses - usersRes might not exist if user is not admin
                 const clientsRes = mappedResults[0] || { data: [] };

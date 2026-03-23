@@ -18,3 +18,16 @@ export function isAdminRole(role) {
   return ADMIN_ROLE_SET.has(normalizeRole(role))
 }
 
+/** Super-admin tier only (excludes plain `admin`) — stricter than {@link isAdminRole}. */
+const SUPER_ADMIN_TIER_SET = new Set([
+  'superadmin',
+  'super-admin',
+  'super_admin',
+  'super_administrator',
+  'system_admin',
+])
+
+export function isSuperAdminRole(role) {
+  return SUPER_ADMIN_TIER_SET.has(normalizeRole(role))
+}
+

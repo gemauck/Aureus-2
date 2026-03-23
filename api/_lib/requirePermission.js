@@ -1,6 +1,7 @@
 // Server-side permission checking middleware
 // Aligns with the frontend permission system in src/utils/permissions.js
 import { forbidden } from './response.js'
+import { isAdminRole } from './authRoles.js'
 
 // Permission constants matching frontend
 const PERMISSIONS = {
@@ -17,7 +18,7 @@ const PERMISSIONS = {
 function hasPermission(user, permission) {
     if (!user || !user.role) return false
     
-    const isAdmin = user.role?.toLowerCase() === 'admin'
+    const isAdmin = isAdminRole(user.role)
     
     // Admin-only permissions: Users
     const adminOnlyPermissions = [

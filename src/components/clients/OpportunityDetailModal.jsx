@@ -21,7 +21,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
     
     // Check if current user is admin
     const user = window.storage?.getUser?.() || {};
-    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
     
     // Modal owns its state - fetch data when opportunityId changes
     const [opportunity, setOpportunity] = useState(null);

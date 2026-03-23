@@ -140,6 +140,18 @@ function isoLocal(dt) {
   return `${y}-${m}-${day}T${h}:${mi}`;
 }
 
+/** Google all-day end.date is exclusive; convert to inclusive YYYY-MM-DD for form */
+function exclusiveEndToInclusiveYmd(ymdExclusive) {
+  const [y, m, d] = String(ymdExclusive).split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - 1);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+}
+
+function stripGoogleIdPrefix(id) {
+  return String(id || '').replace(/^g-/, '');
+}
+
 const ErpCalendar = () => {
   let isDark = false;
   try {
@@ -170,6 +182,25 @@ const ErpCalendar = () => {
   const [formDesc, setFormDesc] = useState('');
   const [formSync, setFormSync] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [googleModalOpen, setGoogleModalOpen] = useState(false);
+  const [googleModalLoading, setGoogleModalLoading] = useState(false);
+  const [googleSaving, setGoogleSaving] = useState(false);
+  const [googleEventId, setGoogleEventId] = useState(null);
+  const [gTitle, setGTitle] = useState('');
+  const [gDesc, setGDesc] = useState('');
+  const [gLocation, setGLocation] = useState('');
+  const [gAllDay, setGAllDay] = useState(false);
+  const [gTimedStart, setGTimedStart] = useState('');
+  const [gTimedEnd, setGTimedEnd] = useState('');
+  const [gDateStart, setGDateStart] = useState('');
+  const [gDateEndInclusive, setGDateEndInclusive] = useState('');
+  const [gAttendees, setGAttendees] = useState('');
+  const [gScope, setGScope] = useState('instance');
+  const [gRecurringEventId, setGRecurringEventId] = useState(null);
+  const [gHtmlLink, setGHtmlLink] = useState(null);
+  const [gHangoutLink, setGHangoutLink] = useState(null);
+  const [gAddMeet, setGAddMeet] = useState(false);
 
   const token = () => window.storage?.getToken?.();
 
@@ -238,23 +269,31 @@ const ErpCalendar = () => {
     []
   );
 
-  const reloadCalendar = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const { start, end } = queryRange;
-      const out = await loadEventsForRange(start, end);
-      setErpEvents(out.erp);
-      setGoogleEvents(out.google);
-      setConnected(out.connected);
-    } catch (e) {
-      setErr(e.message || 'Failed to load calendar');
-      setErpEvents([]);
-      setGoogleEvents([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [queryRange, loadEventsForRange]);
+  const reloadCalendar = useCallback(
+    async (opts) => {
+      const silent = opts && opts.silent === true;
+      if (!silent) {
+        setLoading(true);
+        setErr(null);
+      }
+      try {
+        const { start, end } = queryRange;
+        const out = await loadEventsForRange(start, end);
+        setErpEvents(out.erp);
+        setGoogleEvents(out.google);
+        setConnected(out.connected);
+      } catch (e) {
+        if (!silent) {
+          setErr(e.message || 'Failed to load calendar');
+          setErpEvents([]);
+          setGoogleEvents([]);
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [queryRange, loadEventsForRange]
+  );
 
   useEffect(() => {
     loadConnection();
@@ -278,6 +317,24 @@ const ErpCalendar = () => {
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [loadConnection, reloadCalendar]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        reloadCalendar({ silent: true });
+      }
+    };
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        reloadCalendar({ silent: true });
+      }
+    }, 120000);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [reloadCalendar]);
 
   const normalizedEvents = useMemo(() => {
     const list = [];
@@ -474,6 +531,142 @@ const ErpCalendar = () => {
     reloadCalendar();
   };
 
+  const closeGoogleModal = () => {
+    setGoogleModalOpen(false);
+    setGoogleEventId(null);
+    setGoogleModalLoading(false);
+  };
+
+  const populateGoogleFormFromApi = (ev) => {
+    setGTitle(ev.summary || '');
+    setGDesc(ev.description || '');
+    setGLocation(ev.location || '');
+    setGHtmlLink(ev.htmlLink || null);
+    setGHangoutLink(ev.hangoutLink || null);
+    setGRecurringEventId(ev.recurringEventId || null);
+    setGScope('instance');
+    setGAddMeet(false);
+    setGAttendees((ev.attendees || []).map((a) => a.email).filter(Boolean).join(', '));
+
+    if (ev.allDay && ev.start?.date) {
+      setGAllDay(true);
+      setGDateStart(ev.start.date);
+      const endEx = ev.end?.date || ev.start.date;
+      setGDateEndInclusive(exclusiveEndToInclusiveYmd(endEx));
+    } else {
+      setGAllDay(false);
+      const s = ev.start?.dateTime ? new Date(ev.start.dateTime) : new Date();
+      const en = ev.end?.dateTime ? new Date(ev.end.dateTime) : new Date(s.getTime() + 3600000);
+      setGTimedStart(isoLocal(s));
+      setGTimedEnd(isoLocal(en));
+    }
+  };
+
+  const openGoogleModal = async (rawOrId) => {
+    const id = stripGoogleIdPrefix(typeof rawOrId === 'string' ? rawOrId : rawOrId?.id);
+    if (!id || !connected) return;
+    setGoogleModalOpen(true);
+    setGoogleModalLoading(true);
+    setGoogleEventId(id);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/erp-calendar/google-event?id=${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        const msg = j?.error?.message || j?.message || `Failed (${r.status})`;
+        throw new Error(msg);
+      }
+      const ev = j.data?.event || j.data;
+      if (!ev) throw new Error('No event data');
+      populateGoogleFormFromApi(ev);
+    } catch (e) {
+      setErr(e.message || 'Failed to load Google event');
+      setGoogleModalOpen(false);
+    } finally {
+      setGoogleModalLoading(false);
+    }
+  };
+
+  const saveGoogleEvent = async () => {
+    if (!googleEventId || !gTitle.trim()) {
+      alert('Title is required');
+      return;
+    }
+    const body = {
+      id: googleEventId,
+      recurringEventId: gRecurringEventId,
+      scope: gRecurringEventId && gScope === 'series' ? 'series' : 'instance',
+      summary: gTitle.trim(),
+      description: gDesc.trim(),
+      location: gLocation.trim(),
+      allDay: gAllDay,
+      sendUpdates: 'all'
+    };
+    if (gAllDay) {
+      if (!gDateStart || !gDateEndInclusive) {
+        alert('Start and end dates are required for all-day events');
+        return;
+      }
+      body.startDate = gDateStart;
+      body.endInclusiveDate = gDateEndInclusive;
+    } else {
+      const s = new Date(gTimedStart);
+      const en = new Date(gTimedEnd);
+      if (!(en > s)) {
+        alert('End must be after start');
+        return;
+      }
+      body.start = s.toISOString();
+      body.end = en.toISOString();
+    }
+    if (gAttendees.trim()) {
+      body.attendees = gAttendees.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+    }
+    if (gAddMeet) body.addMeet = true;
+
+    setGoogleSaving(true);
+    try {
+      const r = await fetch('/api/erp-calendar/google-event', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Update failed');
+      closeGoogleModal();
+      reloadCalendar({ silent: true });
+    } catch (e) {
+      alert(e.message || 'Failed to save');
+    } finally {
+      setGoogleSaving(false);
+    }
+  };
+
+  const deleteGoogleEvent = async () => {
+    if (!googleEventId) return;
+    if (!confirm('Delete this Google Calendar event? Attendees may be notified.')) return;
+    setGoogleSaving(true);
+    try {
+      const r = await fetch(
+        `/api/erp-calendar/google-event?id=${encodeURIComponent(googleEventId)}&sendUpdates=all`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token()}` } }
+      );
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || j?.message || 'Delete failed');
+      closeGoogleModal();
+      reloadCalendar({ silent: true });
+    } catch (e) {
+      alert(e.message || 'Failed to delete');
+    } finally {
+      setGoogleSaving(false);
+    }
+  };
+
   const goPrev = () => {
     if (viewMode === 'month') {
       setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1));
@@ -569,6 +762,7 @@ const ErpCalendar = () => {
             onClick={(e) => {
               e.stopPropagation();
               if (ev.source === 'erp') openEditErpModal(ev.raw);
+              else openGoogleModal(ev.raw.id);
             }}
             className={`text-xs px-1.5 py-0.5 rounded truncate max-w-full ${
               ev.source === 'erp'
@@ -628,7 +822,7 @@ const ErpCalendar = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 if (ev.source === 'erp') openEditErpModal(ev.raw);
-                else if (ev.raw.htmlLink) window.open(ev.raw.htmlLink, '_blank', 'noreferrer');
+                else openGoogleModal(ev.raw.id);
               }}
             >
               <span className="font-medium line-clamp-2">{ev.title}</span>
@@ -896,20 +1090,31 @@ const ErpCalendar = () => {
             {selectedBuckets.google.map((e) => (
               <div
                 key={`g-${e.id}`}
-                className={`p-3 rounded-lg ${isDark ? 'bg-gray-700/40' : 'bg-green-50'}`}
+                className={`p-3 rounded-lg flex items-start justify-between gap-3 ${isDark ? 'bg-gray-700/40' : 'bg-green-50'}`}
               >
-                <div className="font-medium flex items-center gap-2">
-                  <i className="fab fa-google text-green-600" />
-                  {e.summary}
-                </div>
-                <div className={`text-sm ${muted}`}>
-                  {e.start ? new Date(e.start).toLocaleString() : ''}
-                  {e.htmlLink && (
-                    <a href={e.htmlLink} target="_blank" rel="noreferrer" className="ml-2 text-blue-500 hover:underline">
-                      Open
-                    </a>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  className="text-left flex-1 min-w-0"
+                  onClick={() => openGoogleModal(e.id)}
+                >
+                  <div className="font-medium flex items-center gap-2">
+                    <i className="fab fa-google text-green-600" />
+                    {e.summary}
+                  </div>
+                  <div className={`text-sm ${muted}`}>
+                    {e.start ? new Date(e.start).toLocaleString() : ''}
+                  </div>
+                </button>
+                {e.htmlLink && (
+                  <a
+                    href={e.htmlLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-blue-500 hover:underline flex-shrink-0"
+                  >
+                    Open in Google
+                  </a>
+                )}
               </div>
             ))}
           </div>
@@ -970,6 +1175,148 @@ const ErpCalendar = () => {
                 {saving ? 'Saving…' : editingEventId ? 'Update' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {googleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className={`w-full max-w-lg rounded-xl border shadow-xl p-6 max-h-[90vh] overflow-y-auto ${card}`}>
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <i className="fab fa-google text-green-600" />
+              Google Calendar event
+            </h3>
+            {googleModalLoading ? (
+              <p className={muted}>Loading…</p>
+            ) : (
+              <>
+                {gRecurringEventId ? (
+                  <label className="block text-sm mb-3">
+                    <span className={muted}>Edit scope</span>
+                    <select
+                      className={`w-full mt-1 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                      value={gScope}
+                      onChange={(e) => setGScope(e.target.value)}
+                    >
+                      <option value="instance">This occurrence only</option>
+                      <option value="series">All events in series</option>
+                    </select>
+                  </label>
+                ) : null}
+                <label className="block text-sm mb-1">Title</label>
+                <input
+                  className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                  value={gTitle}
+                  onChange={(e) => setGTitle(e.target.value)}
+                />
+                <label className="block text-sm mb-1">Location</label>
+                <input
+                  className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                  value={gLocation}
+                  onChange={(e) => setGLocation(e.target.value)}
+                  placeholder="Optional"
+                />
+                <label className="flex items-center gap-2 mb-3 text-sm cursor-pointer">
+                  <input type="checkbox" checked={gAllDay} onChange={(e) => setGAllDay(e.target.checked)} />
+                  All day
+                </label>
+                {gAllDay ? (
+                  <>
+                    <label className="block text-sm mb-1">Start date</label>
+                    <input
+                      type="date"
+                      className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                      value={gDateStart}
+                      onChange={(e) => setGDateStart(e.target.value)}
+                    />
+                    <label className="block text-sm mb-1">End date (inclusive)</label>
+                    <input
+                      type="date"
+                      className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                      value={gDateEndInclusive}
+                      onChange={(e) => setGDateEndInclusive(e.target.value)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-sm mb-1">Start</label>
+                    <input
+                      type="datetime-local"
+                      className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                      value={gTimedStart}
+                      onChange={(e) => setGTimedStart(e.target.value)}
+                    />
+                    <label className="block text-sm mb-1">End</label>
+                    <input
+                      type="datetime-local"
+                      className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                      value={gTimedEnd}
+                      onChange={(e) => setGTimedEnd(e.target.value)}
+                    />
+                  </>
+                )}
+                <label className="block text-sm mb-1">Description</label>
+                <textarea
+                  className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                  rows={3}
+                  value={gDesc}
+                  onChange={(e) => setGDesc(e.target.value)}
+                />
+                <label className="block text-sm mb-1">Attendees (comma-separated emails)</label>
+                <input
+                  className={`w-full mb-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                  value={gAttendees}
+                  onChange={(e) => setGAttendees(e.target.value)}
+                  placeholder="a@x.com, b@y.com"
+                />
+                <label className="flex items-center gap-2 mb-3 text-sm cursor-pointer">
+                  <input type="checkbox" checked={gAddMeet} onChange={(e) => setGAddMeet(e.target.checked)} />
+                  Add or refresh Google Meet link
+                </label>
+                {(gHangoutLink || gHtmlLink) && (
+                  <div className={`text-sm mb-3 space-x-3 ${muted}`}>
+                    {gHangoutLink ? (
+                      <a href={gHangoutLink} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+                        Join Meet
+                      </a>
+                    ) : null}
+                    {gHtmlLink ? (
+                      <a href={gHtmlLink} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+                        Open in Google Calendar
+                      </a>
+                    ) : null}
+                  </div>
+                )}
+                <div className="flex flex-wrap justify-between gap-2 mt-4">
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded-lg text-sm text-red-500 hover:text-red-400"
+                    disabled={googleSaving}
+                    onClick={deleteGoogleEvent}
+                  >
+                    Delete
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={`px-4 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      disabled={googleSaving}
+                      onClick={closeGoogleModal}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={googleSaving}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                      onClick={saveGoogleEvent}
+                    >
+                      {googleSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

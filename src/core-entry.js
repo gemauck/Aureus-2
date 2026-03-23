@@ -13,6 +13,7 @@
 import './utils/timezone.js';
 import './utils/mobileTableConverter.js';
 import './utils/debug.js';
+import './utils/authRoles.js';
 import './utils/routeState.js';
 import './utils/entityUrl.js';
 import './utils/notificationUrlHelper.js';

@@ -7,10 +7,9 @@ const Reports = () => {
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
-    const role = user?.role?.toLowerCase();
-    const isAdmin = role === 'admin';
-    const canViewAuditTrail = role === 'superadmin';
-    const canViewFeedback = isAdmin || canViewAuditTrail; // Admin and Superadmin can see User Feedback
+    const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
+    const canViewAuditTrail = typeof window.isSuperAdminRole === 'function' && window.isSuperAdminRole(user?.role);
+    const canViewFeedback = isAdmin || canViewAuditTrail; // Admin-equivalent and super-admin tier can see User Feedback
 
     const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
     const [myFeedbackViewerReady, setMyFeedbackViewerReady] = useState(!!window.MyFeedbackViewer);

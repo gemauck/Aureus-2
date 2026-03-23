@@ -4,6 +4,7 @@ import { ok, created, badRequest, notFound, serverError, forbidden } from './_li
 import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 const INVENTORY_TEMPLATE_FIELDS = {
   sku: true,
@@ -1534,8 +1535,7 @@ async function handler(req, res) {
     // DELETE (DELETE /api/manufacturing/inventory/:id)
     if (req.method === 'DELETE' && id) {
       try {
-        const userRole = (req.user?.role || '').toLowerCase()
-        if (userRole !== 'admin') {
+        if (!isAdminRole(req.user?.role)) {
           return forbidden(res, 'Only admins can delete inventory items.')
         }
 

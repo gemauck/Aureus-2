@@ -1618,15 +1618,21 @@ function initializeProjectDetail() {
 
         useEffect(() => {
             if (!projectId) return;
+            const raw = String(initialSerializedRef.current ?? '');
             if (lastProjectIdRef.current !== projectId) {
                 lastProjectIdRef.current = projectId;
                 dirtyRef.current = false;
-                const raw = String(initialSerializedRef.current ?? '');
                 lastSeedRawRef.current = raw;
                 setLinks(parseOnlineDriveLinks(initialSerializedRef.current));
                 setSaveHint(null);
+                return;
             }
-        }, [projectId, parseOnlineDriveLinks]);
+            // Same project: when summary loads first then full project arrives, or after refetch — re-seed if user has not edited.
+            if (!dirtyRef.current && raw !== lastSeedRawRef.current) {
+                lastSeedRawRef.current = raw;
+                setLinks(parseOnlineDriveLinks(initialSerializedRef.current));
+            }
+        }, [projectId, initialSerialized, parseOnlineDriveLinks]);
 
         const normalizeForApi = useCallback((state) => ({
             googleDrive: (state?.googleDrive || []).map((r) => String(r?.url || '').trim()),

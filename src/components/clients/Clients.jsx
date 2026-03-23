@@ -1273,7 +1273,7 @@ const Clients = React.memo(() => {
     
     // Get current user and check if admin
     const currentUser = window.storage?.getUser?.();
-    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(currentUser?.role);
     
     // Debug logging removed for performance - only log in development mode if needed
     // useEffect(() => {
@@ -6922,8 +6922,7 @@ const Clients = React.memo(() => {
         }
         try {
             const user = window.storage?.getUser?.() || {};
-            const normalizedRole = (user?.role || '').toString().trim().toLowerCase();
-            const canRevert = normalizedRole === 'admin' || normalizedRole === 'superadmin' || normalizedRole === 'super-admin' || normalizedRole === 'super_admin';
+            const canRevert = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
             const updateClientFn = window.api?.updateClient || window.DatabaseAPI?.updateClient || (async (id, payload) => {
                 const token = window.storage?.getToken?.();
                 const response = await fetch(`/api/clients/${id}`, {

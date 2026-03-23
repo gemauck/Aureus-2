@@ -414,8 +414,8 @@ class LiveDataSync {
 
             // Only sync users if admin to avoid unnecessary 401s and extra load
             try {
-                const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
-                if (role === 'admin') {
+                const role = window.storage?.getUser?.()?.role;
+                if (typeof window.isAdminRole === 'function' && window.isAdminRole(role)) {
                     // Add users sync with delay after other calls
                     const usersDelay = syncCalls.length * 2000; // After all other calls (2 seconds per call to prevent rate limiting)
                     const usersPromise = new Promise(resolve => {

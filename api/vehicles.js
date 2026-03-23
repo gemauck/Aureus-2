@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -50,7 +51,7 @@ async function handler(req, res) {
     // Create Vehicle (POST /api/vehicles) - Admin only
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'vehicles') {
       // Check if user is admin
-      if (req.user.role !== 'admin') {
+      if (!isAdminRole(req.user?.role)) {
         return badRequest(res, 'Only admins can create vehicles')
       }
 
@@ -92,7 +93,7 @@ async function handler(req, res) {
     // Update Vehicle (PATCH /api/vehicles/:id) - Admin only
     if (req.method === 'PATCH' && id && pathSegments[0] === 'vehicles') {
       // Check if user is admin
-      if (req.user.role !== 'admin') {
+      if (!isAdminRole(req.user?.role)) {
         return badRequest(res, 'Only admins can update vehicles')
       }
 
@@ -139,7 +140,7 @@ async function handler(req, res) {
     // Delete Vehicle (DELETE /api/vehicles/:id) - Admin only
     if (req.method === 'DELETE' && id && pathSegments[0] === 'vehicles') {
       // Check if user is admin
-      if (req.user.role !== 'admin') {
+      if (!isAdminRole(req.user?.role)) {
         return badRequest(res, 'Only admins can delete vehicles')
       }
 

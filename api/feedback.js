@@ -4,6 +4,7 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { verifyToken } from './_lib/jwt.js'
+import { isAdminRole } from './_lib/authRoles.js'
 // Note: We'll use sendNotificationEmail from email.js
 
 // Notify admins when feedback is submitted
@@ -340,12 +341,6 @@ async function handler(req, res) {
       }
     }
 
-    const isAdminUser = (user) => {
-      if (!user) return false
-      const role = (user.role || '').toString().trim().toLowerCase()
-      return role === 'admin' || role === 'superadmin'
-    }
-
     // Parse query parameters safely and get path without query string
     const parseQueryParams = (urlString) => {
       const params = {}
@@ -508,7 +503,7 @@ async function handler(req, res) {
     if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[0] === 'feedback' && pathSegments[1] === 'mark-old-done') {
       if (!req.user) return unauthorized(res, 'Authentication required')
       const currentUser = await ensureUserLoaded()
-      if (!isAdminUser(currentUser)) return forbidden(res, 'Only administrators can mark old feedback as done')
+      if (!isAdminRole(currentUser?.role)) return forbidden(res, 'Only administrators can mark old feedback as done')
       try {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
         const result = await prisma.feedback.updateMany({
@@ -530,7 +525,7 @@ async function handler(req, res) {
       if (!feedbackId) return badRequest(res, 'feedbackId required')
       if (!req.user) return unauthorized(res, 'Authentication required')
       const currentUser = await ensureUserLoaded()
-      if (!isAdminUser(currentUser)) {
+      if (!isAdminRole(currentUser?.role)) {
         return forbidden(res, 'Only administrators can update feedback')
       }
       let body = req.body
@@ -591,7 +586,7 @@ async function handler(req, res) {
       }
 
       const currentUser = await ensureUserLoaded()
-      if (!isAdminUser(currentUser)) {
+      if (!isAdminRole(currentUser?.role)) {
         console.warn('⚠️ Non-admin attempted to reply to feedback', {
           userId: currentUser?.id || req.user?.sub,
           email: currentUser?.email || req.user?.email,

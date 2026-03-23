@@ -6,6 +6,7 @@ import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, badRequest, serverError } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 async function handler(req, res) {
   // Only allow POST and require admin role
@@ -14,7 +15,7 @@ async function handler(req, res) {
   }
 
   // Check if user is admin
-  if (req.user?.role?.toLowerCase() !== 'admin') {
+  if (!isAdminRole(req.user?.role)) {
     return badRequest(res, 'Admin access required')
   }
 

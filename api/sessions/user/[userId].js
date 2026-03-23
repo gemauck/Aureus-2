@@ -3,6 +3,7 @@ import { prisma } from '../../../_lib/prisma.js'
 import { badRequest, ok, serverError, forbidden } from '../../../_lib/response.js'
 import { withHttp } from '../../../_lib/withHttp.js'
 import { withLogging } from '../../../_lib/logger.js'
+import { isAdminRole } from '../../../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -29,7 +30,7 @@ async function handler(req, res) {
     const targetUserId = requestedUserId || currentUserId
 
     // Check permission
-    if (targetUserId !== currentUserId && currentUser.role !== 'admin') {
+    if (targetUserId !== currentUserId && !isAdminRole(currentUser.role)) {
       return forbidden(res, 'You can only view your own sessions')
     }
 

@@ -34,7 +34,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
   });
 
   const user = window.storage?.getUser?.();
-  const isAdmin = user?.role?.toLowerCase?.() === 'admin';
+  const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
   const [featureUnavailable, setFeatureUnavailable] = useState(false);
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
 

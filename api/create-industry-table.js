@@ -3,6 +3,7 @@ import { prisma } from './_lib/prisma.js'
 import { ok, serverError, unauthorized } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 async function handler(req, res) {
   // Only allow POST and only for admins
@@ -10,10 +11,7 @@ async function handler(req, res) {
     return unauthorized(res, 'Method not allowed')
   }
 
-  const userRole = req.user?.role?.toLowerCase()
-  const isAdmin = userRole === 'admin'
-
-  if (!isAdmin) {
+  if (!isAdminRole(req.user?.role)) {
     return unauthorized(res, 'Admin access required')
   }
 

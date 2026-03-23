@@ -1,11 +1,11 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
-// Simple admin-only check: only users with role === 'admin' may manage templates
+// Admin-equivalent roles (see api/_lib/authRoles.js) may manage templates
 function requireAdmin(req, res) {
-  const role = req.user?.role?.toLowerCase?.() || 'user'
-  if (role !== 'admin') {
+  if (!isAdminRole(req.user?.role)) {
     res.statusCode = 403
     res.setHeader('Content-Type', 'application/json')
     res.end(

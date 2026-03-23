@@ -134,12 +134,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         return parsedClient;
     });
     
-    // Check if current user is admin
+    // Check if current user has admin-equivalent access (admin, superadmin, system_admin, …)
     const user = window.storage?.getUser?.() || {};
-    const normalizedUserRole = (user?.role || '').toString().trim().toLowerCase();
-    const isAdmin = normalizedUserRole === 'admin';
-    const isSuperAdmin = normalizedUserRole === 'superadmin' || normalizedUserRole === 'super-admin' || normalizedUserRole === 'super_admin';
-    const canManageLeadClientConversion = isAdmin || isSuperAdmin;
+    const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
+    const canManageLeadClientConversion = isAdmin;
     const canViewContracts = isAdmin;
     
     // Now initialize other state and refs AFTER formData

@@ -378,7 +378,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
   const [featureUnavailable, setFeatureUnavailable] = useState(false);
 
   const user = window.storage?.getUser?.();
-  const isAdmin = user?.role?.toLowerCase?.() === 'admin';
+  const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
 
   const token = window.storage?.getToken?.();
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
@@ -1019,7 +1019,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               >
                 {(() => {
                   const user = window.storage?.getUser?.();
-                  const isAdmin = user?.role?.toLowerCase?.() === 'admin';
+                  const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
                   if (!isAdmin) return null;
                   return (
                     <div className={`mt-4 rounded-xl border border-dashed px-3 py-3 text-xs ${isDark ? 'border-gray-800 bg-gray-900/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>

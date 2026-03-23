@@ -2,6 +2,7 @@ import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError, forbidden } from './_lib/response.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 // Some deployments may not yet have the optional service form tables used by
 // the job card forms feature. When those tables are missing, Prisma throws
@@ -24,8 +25,9 @@ function isMissingServiceFormInstanceTables(error) {
 
 /** Roles that may create, update, or delete any job card (including public submissions with no owner). */
 function jobCardMutateRole(user) {
+  if (isAdminRole(user?.role)) return true
   const role = String(user?.role || 'user').toLowerCase()
-  return role === 'admin' || role === 'service' || role === 'manager'
+  return role === 'service' || role === 'manager'
 }
 
 /** Owner may edit own card; elevated roles may edit any card. Unowned (public) cards: elevated roles only. */

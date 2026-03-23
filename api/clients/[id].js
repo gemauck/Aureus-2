@@ -8,11 +8,7 @@ import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_KYC } from '../_lib/clientJsonFields.js'
 import { notifyCommentParticipants } from '../_lib/notifyCommentParticipants.js'
-
-function hasAdminOrSuperAdminRole(user) {
-  const role = (user?.role || '').toString().trim().toLowerCase()
-  return role === 'admin' || role === 'superadmin' || role === 'super-admin' || role === 'super_admin'
-}
+import { isAdminRole } from '../_lib/authRoles.js'
 
 async function handler(req, res) {
   try {
@@ -426,7 +422,7 @@ async function handler(req, res) {
         // Convert client back to lead: body.type === 'lead' and current type is client
         const convertingToLead = existing.type === 'client' && body.type === 'lead'
         if (convertingToLead) {
-          if (!hasAdminOrSuperAdminRole(req.user)) {
+          if (!isAdminRole(req.user?.role)) {
             return res.status(403).json({ error: 'Forbidden', message: 'Only Admin/SuperAdmin can revert clients to leads' })
           }
           const activityLog = Array.isArray(existing.activityLogJsonb) ? existing.activityLogJsonb : (typeof existing.activityLog === 'string' && existing.activityLog.trim() ? (() => { try { return JSON.parse(existing.activityLog); } catch (_) { return []; } })() : [])

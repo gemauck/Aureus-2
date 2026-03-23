@@ -2,6 +2,7 @@ import { prisma } from './_lib/prisma.js';
 import { verifyToken } from './_lib/jwt.js';
 import { parseJsonBody } from './_lib/body.js';
 import { created, ok, badRequest, serverError, unauthorized, forbidden } from './_lib/response.js';
+import { isAdminRole } from './_lib/authRoles.js';
 
 async function handler(req, res) {
   try {
@@ -63,7 +64,7 @@ async function handler(req, res) {
       let actorRole = user.role || 'System';
       
       // If admin and body has userId (migration scenario), try to use that user
-      const isAdmin = user.role?.toLowerCase() === 'admin';
+      const isAdmin = isAdminRole(user.role);
       if (isAdmin && body.userId && body.userId !== 'system' && body.userId !== user.id) {
         try {
           const originalUser = await prisma.user.findUnique({

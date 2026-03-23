@@ -61,6 +61,7 @@
     const componentPaths = [
         // Core utilities
         'utils/debug.js',
+        'utils/authRoles.js',
         'utils/api.js',
         'utils/localStorage.js',
         'utils/dataService.js',
