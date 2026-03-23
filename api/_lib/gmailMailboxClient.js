@@ -182,5 +182,12 @@ export function handleGmailApiError(res, error, actionLabel = 'perform Gmail act
       'Reconnect Google in ERP Calendar and try again.'
     )
   }
+  if (status === 403 && /gmail api has not been used|disabled/i.test(message)) {
+    return badRequest(
+      res,
+      `Cannot ${actionLabel}: Gmail API is disabled in the connected Google project.`,
+      'Enable Gmail API in Google Cloud Console for this OAuth client project, wait 1-5 minutes, then reconnect Google in ERP.'
+    )
+  }
   return serverError(res, `Failed to ${actionLabel}`, message)
 }
