@@ -1274,7 +1274,7 @@ const MainLayout = () => {
     // Filter menu items based on permissions
     const allMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large', permission: null }, // Always accessible
-        { id: 'erp-calendar', label: 'Calendar', icon: 'fa-calendar-week', permission: null },
+        { id: 'erp-calendar', label: 'Calendare and Mail', icon: 'fa-calendar-week', permission: null },
         { id: 'clients', label: 'CRM', icon: 'fa-users', permission: 'ACCESS_CRM' },
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
