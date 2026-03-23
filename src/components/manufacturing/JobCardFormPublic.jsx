@@ -2133,6 +2133,13 @@ const JobCardFormPublic = () => {
       }));
       jobCardData.photos = [...(formData.photos || []), ...voicePhotoEntries];
 
+      // Wizard submit: persist as submitted so ERP Job Cards filters (e.g. Submitted) match.
+      jobCardData.status = 'submitted';
+      jobCardData.submittedAt = nowIso;
+      if (jobCardData.clientId === NO_CLIENT_ID) {
+        jobCardData.clientId = null;
+      }
+
       if (formData.stockUsed && formData.stockUsed.length > 0) {
         const jobCardReference = `Job Card ${jobCardData.id}`;
         for (const stockItem of formData.stockUsed) {
@@ -2164,10 +2171,64 @@ const JobCardFormPublic = () => {
           ? String(editingMeta.localId)
           : null);
 
-      const payloadJson = JSON.stringify(jobCardData);
       let serverReachOk = false;
+      let lastSyncError = '';
+
+      const parseSyncFailureMessage = (status, text) => {
+        if (status === 413) {
+          return 'Payload too large for the server (try fewer or smaller photos/videos).';
+        }
+        if (!text) return `HTTP ${status}`;
+        try {
+          const j = JSON.parse(text);
+          return (
+            j?.error?.message ||
+            j?.message ||
+            j?.data?.message ||
+            (typeof text === 'string' ? text.slice(0, 280) : String(text))
+          );
+        } catch {
+          return typeof text === 'string' ? text.slice(0, 280) : String(text);
+        }
+      };
+
+      const attemptPostCreate = async () => {
+        const createPayload = { ...jobCardData, id: Date.now().toString() };
+        delete createPayload.serverJobCardId;
+        try {
+          const response = await fetch('/api/public/jobcards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(createPayload)
+          });
+          const text = await response.text().catch(() => '');
+          if (!response.ok) {
+            lastSyncError = parseSyncFailureMessage(response.status, text);
+            console.warn('⚠️ JobCardFormPublic: Public POST error', response.status, text);
+            return false;
+          }
+          let result = {};
+          try {
+            result = text ? JSON.parse(text) : {};
+          } catch {
+            result = {};
+          }
+          const jc = result?.data?.jobCard || result?.jobCard;
+          if (jc?.id) {
+            rememberPublicPriorJobCardId(String(jc.id));
+          }
+          return true;
+        } catch (error) {
+          lastSyncError = error.message || 'Network error';
+          console.warn('⚠️ JobCardFormPublic: Public POST failed:', error.message);
+          return false;
+        }
+      };
+
+      let publicPatchStatus = -1;
 
       if (serverJobCardId) {
+        const payloadJson = JSON.stringify(jobCardData);
         const token = window.storage?.getToken?.();
         if (token) {
           try {
@@ -2186,9 +2247,13 @@ const JobCardFormPublic = () => {
               if (ac?.id && (ac.ownerId == null || ac.ownerId === '')) {
                 rememberPublicPriorJobCardId(String(ac.id));
               }
+            } else {
+              const text = await authRes.text().catch(() => '');
+              lastSyncError = parseSyncFailureMessage(authRes.status, text);
             }
           } catch (e) {
             console.warn('JobCardFormPublic: authenticated PATCH failed, trying public PATCH', e);
+            lastSyncError = e.message || 'Network error';
           }
         }
         if (!serverReachOk) {
@@ -2198,52 +2263,51 @@ const JobCardFormPublic = () => {
               headers: { 'Content-Type': 'application/json' },
               body: payloadJson
             });
+            publicPatchStatus = pubRes.status;
             if (pubRes.ok) {
               serverReachOk = true;
               await pubRes.json().catch(() => ({}));
               rememberPublicPriorJobCardId(String(serverJobCardId));
             } else {
               const text = await pubRes.text().catch(() => '');
+              lastSyncError = parseSyncFailureMessage(pubRes.status, text);
               console.warn('⚠️ JobCardFormPublic: public PATCH failed', pubRes.status, text);
             }
           } catch (e) {
             console.warn('⚠️ JobCardFormPublic: public PATCH error', e);
+            lastSyncError = e.message || 'Network error';
           }
+        }
+        if (!serverReachOk && publicPatchStatus === 404) {
+          serverReachOk = await attemptPostCreate();
         }
       } else {
-        try {
-          const response = await fetch('/api/public/jobcards', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: payloadJson
-          });
-
-          if (!response.ok) {
-            const text = await response.text();
-            console.warn('⚠️ JobCardFormPublic: Public POST error', response.status, text);
-          } else {
-            serverReachOk = true;
-            const result = await response.json().catch(() => ({}));
-            const jc = result?.data?.jobCard || result?.jobCard;
-            if (jc?.id) {
-              rememberPublicPriorJobCardId(String(jc.id));
-            }
-          }
-        } catch (error) {
-          console.warn('⚠️ JobCardFormPublic: Public POST failed:', error.message);
-        }
+        serverReachOk = await attemptPostCreate();
       }
 
       if (serverReachOk) {
         removeLocalPendingJobCard(jobCardData.id);
-        alert(
-          '✅ Job card saved to the server. It appears in Service & Maintenance → Job Cards for everyone.'
-        );
+        const token = window.storage?.getToken?.();
+        if (token && typeof window !== 'undefined') {
+          const openMain = window.confirm(
+            'Job card saved to the server.\n\nOpen Service & Maintenance (Job Cards list) now?'
+          );
+          if (openMain) {
+            setIsSubmitting(false);
+            window.location.assign('/service-maintenance');
+            return;
+          }
+        } else {
+          alert(
+            '✅ Job card saved to the server. Sign in to the main app and open Service & Maintenance → Job Cards to view it.'
+          );
+        }
       } else {
         upsertLocalPendingJobCard(jobCardData);
         setLocalDraftsTick(t => t + 1);
+        const hint = lastSyncError ? `\n\nDetails: ${lastSyncError}` : '';
         alert(
-          '⚠️ Saved on this device only (not synced). Your card is listed under “Not synced” until the server accepts it. Check connection or sign in, then open the card and submit again.'
+          `⚠️ Saved on this device only (not synced).${hint}\n\nCheck your connection or try again with smaller photos. Open “Edit prior job card” to resubmit.`
         );
       }
       setEditingMeta(null);

@@ -158,7 +158,10 @@ async function handler(req, res) {
 
     if (body.agentName !== undefined) data.agentName = body.agentName
     if (otherTechnicians !== undefined) data.otherTechnicians = otherTechnicians
-    if (body.clientId !== undefined) data.clientId = body.clientId || null
+    if (body.clientId !== undefined) {
+      data.clientId =
+        !body.clientId || body.clientId === 'NO_CLIENT' ? null : String(body.clientId)
+    }
     if (body.clientName !== undefined) data.clientName = body.clientName
     if (body.siteId !== undefined) data.siteId = body.siteId
     if (body.siteName !== undefined) data.siteName = body.siteName

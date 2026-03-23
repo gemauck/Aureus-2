@@ -130,7 +130,8 @@ async function handler(req, res) {
         jobCardNumber,
         agentName: body.agentName || '',
         otherTechnicians: JSON.stringify(otherTechnicians),
-        clientId: body.clientId || null,
+        clientId:
+          !body.clientId || body.clientId === 'NO_CLIENT' ? null : String(body.clientId),
         clientName: body.clientName || '',
         siteId: body.siteId || '',
         siteName: body.siteName || '',
