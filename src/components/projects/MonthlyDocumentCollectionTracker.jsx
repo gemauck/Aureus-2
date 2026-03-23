@@ -4515,6 +4515,7 @@ Abcotronics`;
         const [scheduleStopStatus, setScheduleStopStatus] = useState(defaultStopWhenStatus);
         const [sending, setSending] = useState(false);
         const [savingTemplate, setSavingTemplate] = useState(false);
+        const [deletingTemplate, setDeletingTemplate] = useState(false);
         const [result, setResult] = useState(null);
         const [emailActivity, setEmailActivity] = useState({ sent: [], received: [] });
         const [loadingActivity, setLoadingActivity] = useState(false);
@@ -5128,6 +5129,67 @@ Abcotronics`;
             }
         };
 
+        const handleDeleteSavedTemplate = async () => {
+            if (!ctx?.section?.id || !ctx?.doc?.id) return;
+            if (!confirm('Delete the saved request template for this document? This will reset recipients, subject, body, and schedule.')) return;
+            setDeletingTemplate(true);
+            setResult(null);
+            try {
+                const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0
+                    ? sectionsRef.current
+                    : sectionsByYear;
+                const currentYearSections = latestSectionsByYear?.[selectedYear] || [];
+                const updated = currentYearSections.map((section) => {
+                    if (String(section.id) !== String(ctx.section.id)) return section;
+                    return {
+                        ...section,
+                        documents: (section.documents || []).map((doc) => {
+                            if (String(doc.id) !== String(ctx.doc.id)) return doc;
+                            return { ...doc, emailRequestByMonth: {} };
+                        })
+                    };
+                });
+                const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+                sectionsRef.current = updatedSectionsByYear;
+                setSectionsByYear(updatedSectionsByYear);
+                lastSavedDataRef.current = null;
+                if (saveTimeoutRef.current) {
+                    clearTimeout(saveTimeoutRef.current);
+                    saveTimeoutRef.current = null;
+                }
+                await saveToDatabase({ skipParentUpdate: true });
+
+                const clearedTemplate = normalizeTemplate({
+                    recipients: [],
+                    cc: [],
+                    subject: defaultSubject,
+                    body: defaultBody,
+                    recipientName: '',
+                    sendPlainTextOnly: false,
+                    schedule: { frequency: 'none', stopWhenStatus: defaultStopWhenStatus }
+                });
+                setContacts([]);
+                setContactsCc([]);
+                setSubject(defaultSubject);
+                setBody(defaultBody);
+                setRecipientName('');
+                setSendPlainTextOnly(false);
+                setScheduleFrequency('none');
+                setScheduleStopStatus(defaultStopWhenStatus);
+                setLastSavedTemplate(clearedTemplate);
+                setJustSaved(false);
+                setPlainTextPreferenceFallback(ctx?.section?.id, ctx?.doc?.id, false);
+                showSaveNotice({ type: 'success', message: 'Saved request deleted' });
+                setResult({ saved: true, message: 'Saved request deleted', source: 'save' });
+            } catch (err) {
+                console.error('Failed to delete saved email template:', err);
+                setResult({ error: 'Delete failed. Please try again.', source: 'save' });
+                showSaveNotice({ type: 'error', message: 'Delete failed. Please try again.' });
+            } finally {
+                setDeletingTemplate(false);
+            }
+        };
+
         const buildStyledEmailHtml = (subjectLine, bodyText) => {
             const escapeHtml = (t) => {
                 if (!t) return '';
@@ -5320,6 +5382,7 @@ Abcotronics`;
         const hasUnsavedChanges = lastSavedTemplate
             ? JSON.stringify(currentTemplate) !== JSON.stringify(lastSavedTemplate)
             : false;
+        const hasSavedRequestTemplate = !isDefaultLikeTemplate(lastSavedTemplate || buildTemplateFromSaved(getLatestEmailRequest()));
         const bodyPreview = applyGreeting(body || '', recipientName);
         const bodyStats = sanitizeBodyText(bodyPreview, false);
         const bodyCharCount = (bodyPreview || '').trim().length;
@@ -5923,6 +5986,16 @@ Abcotronics`;
 
                     {/* Footer */}
                     <div className="flex flex-wrap justify-end gap-3 px-5 py-4 bg-white border-t border-gray-100">
+                        {hasSavedRequestTemplate && (
+                            <button
+                                type="button"
+                                onClick={handleDeleteSavedTemplate}
+                                disabled={deletingTemplate || savingTemplate || sending}
+                                className="px-4 py-2.5 text-sm font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors border border-rose-200 disabled:opacity-60"
+                            >
+                                {deletingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Deleting…</> : <><i className="fas fa-trash-alt mr-1.5"></i>Delete saved request</>}
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={async () => {
