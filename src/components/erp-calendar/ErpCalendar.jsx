@@ -658,6 +658,27 @@ const ErpCalendar = () => {
     } catch (_) {}
   }, [composeOpen, composeTo, composeCc, composeBcc, composeSubject, composeBody, composeHtmlBody]);
 
+  const loadMailThread = useCallback(async (threadId, selectedId) => {
+    if (!threadId) return;
+    setMailThreadLoading(true);
+    try {
+      const r = await fetch(`/api/erp-mail/thread?id=${encodeURIComponent(threadId)}`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load thread');
+      const msgs = j?.data?.messages || [];
+      setMailThread(Array.isArray(msgs) ? msgs : []);
+      setMailExpandedIds((msgs || []).map((m) => m.id).filter(Boolean));
+      setMailSelectedId(selectedId || (msgs[0] && msgs[0].id) || null);
+    } catch (e) {
+      setErr(e.message || 'Failed to load thread');
+      setMailThread([]);
+    } finally {
+      setMailThreadLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (workspaceTab !== 'mail') return;
     const id = setInterval(() => {
@@ -741,27 +762,6 @@ const ErpCalendar = () => {
     window.addEventListener('mouseup', onMouseUp, { once: true });
     return () => window.removeEventListener('mouseup', onMouseUp);
   }, [resizingErpEventId, erpEvents]);
-
-  const loadMailThread = useCallback(async (threadId, selectedId) => {
-    if (!threadId) return;
-    setMailThreadLoading(true);
-    try {
-      const r = await fetch(`/api/erp-mail/thread?id=${encodeURIComponent(threadId)}`, {
-        headers: { Authorization: `Bearer ${token()}` }
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j?.error?.details || j?.error?.message || j?.message || 'Failed to load thread');
-      const msgs = j?.data?.messages || [];
-      setMailThread(Array.isArray(msgs) ? msgs : []);
-      setMailExpandedIds((msgs || []).map((m) => m.id).filter(Boolean));
-      setMailSelectedId(selectedId || (msgs[0] && msgs[0].id) || null);
-    } catch (e) {
-      setErr(e.message || 'Failed to load thread');
-      setMailThread([]);
-    } finally {
-      setMailThreadLoading(false);
-    }
-  }, []);
 
   const openCompose = (replyTo, mode = 'new') => {
     setComposeMode(mode);
