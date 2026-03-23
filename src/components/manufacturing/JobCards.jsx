@@ -995,6 +995,25 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         items={attachmentParts.voicesBySection.actionsTaken}
                       />
                     </div>
+                    {(selectedJobCard.futureWorkRequired || selectedJobCard.futureWorkScheduledAt) && (
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase text-slate-500">
+                          Future work
+                        </div>
+                        <p className="mt-1 leading-relaxed">
+                          {selectedJobCard.futureWorkRequired || 'Follow-up work scheduled.'}
+                        </p>
+                        {selectedJobCard.futureWorkScheduledAt ? (
+                          <p className="mt-2 text-xs text-slate-300">
+                            Scheduled: {formatDate(selectedJobCard.futureWorkScheduledAt)}
+                          </p>
+                        ) : null}
+                        <JobCardVoiceClips
+                          tone="dark"
+                          items={attachmentParts.voicesBySection.futureWorkRequired}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {(selectedJobCard.otherComments ||

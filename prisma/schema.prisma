@@ -1836,6 +1836,8 @@ model JobCard {
   travelKilometers    Float                 @default(0)
   reasonForVisit      String                @default("")
   diagnosis           String                @default("")
+  futureWorkRequired  String                @default("")
+  futureWorkScheduledAt DateTime?
   otherComments       String                @default("")
   photos              String                @default("[]")
   status              String                @default("draft")

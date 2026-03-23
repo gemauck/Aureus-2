@@ -254,6 +254,7 @@ async function handler(req, res) {
             stockUsed: parseJson(jobCard.stockUsed || '[]'),
             materialsBought: parseJson(jobCard.materialsBought || '[]'),
             // Return full ISO strings for datetime fields
+            futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
             timeOfDeparture: formatDate(jobCard.timeOfDeparture),
             timeOfArrival: formatDate(jobCard.timeOfArrival),
             submittedAt: formatDate(jobCard.submittedAt),
@@ -362,6 +363,8 @@ async function handler(req, res) {
             travelKilometers,
             reasonForVisit: body.reasonForVisit || '',
             diagnosis: body.diagnosis || '',
+            futureWorkRequired: body.futureWorkRequired || '',
+            futureWorkScheduledAt: body.futureWorkScheduledAt ? new Date(body.futureWorkScheduledAt) : null,
             actionsTaken: body.actionsTaken || '',
             stockUsed,
             materialsBought,
@@ -407,6 +410,7 @@ async function handler(req, res) {
             stockUsed: parseJson(jobCard.stockUsed || '[]'),
             materialsBought: parseJson(jobCard.materialsBought || '[]'),
             // Return full ISO strings for datetime fields
+            futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
             timeOfDeparture: formatDate(jobCard.timeOfDeparture),
             timeOfArrival: formatDate(jobCard.timeOfArrival),
             submittedAt: formatDate(jobCard.submittedAt),
@@ -468,6 +472,10 @@ async function handler(req, res) {
         if (body.kmReadingAfter !== undefined) updateData.kmReadingAfter = parseFloat(body.kmReadingAfter) || 0
         if (body.reasonForVisit !== undefined) updateData.reasonForVisit = body.reasonForVisit
         if (body.diagnosis !== undefined) updateData.diagnosis = body.diagnosis
+        if (body.futureWorkRequired !== undefined) updateData.futureWorkRequired = body.futureWorkRequired
+        if (body.futureWorkScheduledAt !== undefined) {
+          updateData.futureWorkScheduledAt = body.futureWorkScheduledAt ? new Date(body.futureWorkScheduledAt) : null
+        }
         if (body.actionsTaken !== undefined) updateData.actionsTaken = body.actionsTaken
         if (body.stockUsed !== undefined) {
           updateData.stockUsed = Array.isArray(body.stockUsed) 
@@ -558,6 +566,7 @@ async function handler(req, res) {
             stockUsed: parseJson(jobCard.stockUsed || '[]'),
             materialsBought: parseJson(jobCard.materialsBought || '[]'),
             // Return full ISO strings for datetime fields
+            futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
             timeOfDeparture: formatDate(jobCard.timeOfDeparture),
             timeOfArrival: formatDate(jobCard.timeOfArrival),
             submittedAt: formatDate(jobCard.submittedAt),

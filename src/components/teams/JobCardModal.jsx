@@ -86,6 +86,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         kmReadingAfter: '',
         reasonForVisit: '',
         diagnosis: '',
+        futureWorkRequired: '',
+        futureWorkScheduledAt: '',
         actionsTaken: '',
         stockUsed: [],
         materialsBought: [],
@@ -177,6 +179,10 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 kmReadingAfter: jobCard.kmReadingAfter ?? '',
                 reasonForVisit: jobCard.reasonForVisit || '',
                 diagnosis: jobCard.diagnosis || '',
+                futureWorkRequired: jobCard.futureWorkRequired || '',
+                futureWorkScheduledAt: jobCard.futureWorkScheduledAt
+                    ? String(jobCard.futureWorkScheduledAt).substring(0, 16)
+                    : '',
                 actionsTaken: jobCard.actionsTaken || '',
                 stockUsed: parseJsonArrayField(jobCard.stockUsed),
                 materialsBought: parseJsonArrayField(jobCard.materialsBought),
@@ -217,6 +223,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 kmReadingAfter: '',
                 reasonForVisit: '',
                 diagnosis: '',
+                futureWorkRequired: '',
+                futureWorkScheduledAt: '',
                 actionsTaken: '',
                 stockUsed: [],
                 materialsBought: [],
@@ -1021,6 +1029,34 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                                     onVoiceSaved={addVoiceClip}
                                     onVoiceClipUpdate={updateVoiceClip}
                                     voiceClips={voiceAttachments.filter((c) => c.section === 'actionsTaken')}
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                                    Future work required
+                                </label>
+                                <VoiceNoteTextarea
+                                    sectionId="futureWorkRequired"
+                                    name="futureWorkRequired"
+                                    value={formData.futureWorkRequired}
+                                    onChange={handleChange}
+                                    rows={3}
+                                    placeholder="Any remaining work, parts to source, or follow-up tasks..."
+                                    onVoiceSaved={addVoiceClip}
+                                    onVoiceClipUpdate={updateVoiceClip}
+                                    voiceClips={voiceAttachments.filter((c) => c.section === 'futureWorkRequired')}
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                                    Scheduled follow-up date &amp; time
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    name="futureWorkScheduledAt"
+                                    value={formData.futureWorkScheduledAt}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                                 />
                             </div>
                         </div>

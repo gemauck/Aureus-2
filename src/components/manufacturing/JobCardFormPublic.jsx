@@ -576,6 +576,8 @@ const JobCardFormPublic = () => {
     kmReadingAfter: '',
     reasonForVisit: '',
     diagnosis: '',
+    futureWorkRequired: '',
+    futureWorkScheduledAt: '',
     actionsTaken: '',
     otherComments: '',
     stockUsed: [],
@@ -1919,6 +1921,8 @@ const JobCardFormPublic = () => {
         kmReadingAfter: '',
         reasonForVisit: '',
         diagnosis: '',
+        futureWorkRequired: '',
+        futureWorkScheduledAt: '',
         actionsTaken: '',
         otherComments: '',
         stockUsed: [],
@@ -2069,6 +2073,8 @@ const JobCardFormPublic = () => {
       kmReadingAfter: full.kmReadingAfter != null ? String(full.kmReadingAfter) : '',
       reasonForVisit: full.reasonForVisit || '',
       diagnosis: full.diagnosis || '',
+      futureWorkRequired: full.futureWorkRequired || '',
+      futureWorkScheduledAt: toDatetimeLocalInput(full.futureWorkScheduledAt),
       actionsTaken: full.actionsTaken || '',
       otherComments: full.otherComments || '',
       stockUsed: parseStoredJsonArray(full.stockUsed, []),
@@ -2720,6 +2726,46 @@ const JobCardFormPublic = () => {
               onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'actionsTaken')}
             />
+      </section>
+
+      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <header className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Future Work</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Capture additional work required and schedule the next visit date/time.
+          </p>
+        </header>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Future Work Required
+            </label>
+            <VoiceNoteTextarea
+              sectionId="futureWorkRequired"
+              name="futureWorkRequired"
+              value={formData.futureWorkRequired}
+              onChange={handleChange}
+              rows={3}
+              placeholder="Describe remaining tasks, parts to source, or follow-up work needed..."
+              onVoiceSaved={addVoiceClip}
+              onVoiceClipUpdate={updateVoiceClip}
+              voiceClips={voiceAttachments.filter(c => c.section === 'futureWorkRequired')}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Scheduled Follow-up Date & Time
+            </label>
+            <input
+              type="datetime-local"
+              name="futureWorkScheduledAt"
+              value={formData.futureWorkScheduledAt}
+              onChange={handleChange}
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              style={{ fontSize: '16px' }}
+            />
+          </div>
+        </div>
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -3380,6 +3426,8 @@ const JobCardFormPublic = () => {
           <SummaryRow label="Travel Distance" value={travelKm > 0 ? `${travelKm.toFixed(1)} km` : ''} />
           <SummaryRow label="Stock Lines" value={formData.stockUsed.length > 0 ? `${formData.stockUsed.length}` : ''} />
           <SummaryRow label="Materials Cost" value={totalMaterialCost > 0 ? `R ${totalMaterialCost.toFixed(2)}` : ''} />
+          <SummaryRow label="Future Work" value={formData.futureWorkRequired || ''} />
+          <SummaryRow label="Follow-up Schedule" value={formData.futureWorkScheduledAt ? new Date(formData.futureWorkScheduledAt).toLocaleString() : ''} />
           <SummaryRow label="Photos / video" value={selectedPhotos.length > 0 ? `${selectedPhotos.length}` : ''} />
           <SummaryRow label="Customer Signature" value={hasSignature ? 'Captured' : 'Pending'} />
         </div>

@@ -146,6 +146,8 @@ async function handler(req, res) {
         travelKilometers,
         reasonForVisit: body.reasonForVisit || '',
         diagnosis: body.diagnosis || '',
+        futureWorkRequired: body.futureWorkRequired || '',
+        futureWorkScheduledAt: body.futureWorkScheduledAt ? new Date(body.futureWorkScheduledAt) : null,
         actionsTaken: body.actionsTaken || '',
         stockUsed: JSON.stringify(stockUsed),
         materialsBought: JSON.stringify(materialsBought),

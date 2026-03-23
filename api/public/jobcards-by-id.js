@@ -43,6 +43,7 @@ async function handler(req, res) {
           photos: parseJson(jobCard.photos),
           stockUsed: parseJson(jobCard.stockUsed || '[]'),
           materialsBought: parseJson(jobCard.materialsBought || '[]'),
+          futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
           timeOfDeparture: formatDate(jobCard.timeOfDeparture),
           timeOfArrival: formatDate(jobCard.timeOfArrival),
           submittedAt: formatDate(jobCard.submittedAt),
@@ -180,6 +181,10 @@ async function handler(req, res) {
     data.travelKilometers = travelKilometers
     if (body.reasonForVisit !== undefined) data.reasonForVisit = body.reasonForVisit
     if (body.diagnosis !== undefined) data.diagnosis = body.diagnosis
+    if (body.futureWorkRequired !== undefined) data.futureWorkRequired = body.futureWorkRequired
+    if (body.futureWorkScheduledAt !== undefined) {
+      data.futureWorkScheduledAt = body.futureWorkScheduledAt ? new Date(body.futureWorkScheduledAt) : null
+    }
     if (body.actionsTaken !== undefined) data.actionsTaken = body.actionsTaken
     if (stockUsed !== undefined) data.stockUsed = stockUsed
     if (materialsBought !== undefined) data.materialsBought = materialsBought
@@ -206,8 +211,10 @@ async function handler(req, res) {
         agentName: updated.agentName,
         clientName: updated.clientName,
         status: updated.status,
-        createdAt: updated.createdAt,
-        updatedAt: updated.updatedAt
+        futureWorkRequired: updated.futureWorkRequired || '',
+        futureWorkScheduledAt: formatDate(updated.futureWorkScheduledAt),
+        createdAt: formatDate(updated.createdAt),
+        updatedAt: formatDate(updated.updatedAt)
       }
     })
   } catch (error) {
