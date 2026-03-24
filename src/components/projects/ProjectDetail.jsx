@@ -2408,12 +2408,27 @@ function initializeProjectDetail() {
      * Do NOT use `const OverviewSection = () => {}` inside ProjectDetail: a new function each render
      * remounts all children so link inputs lose focus and the UI flashes.
      */
+    const resolveProjectClientId = (projectLike) => {
+        if (!projectLike || typeof projectLike !== 'object') return '';
+        const direct = projectLike.clientId ?? projectLike.client_id;
+        if (direct != null && String(direct).trim()) return String(direct).trim();
+
+        const clientValue = projectLike.client;
+        if (clientValue && typeof clientValue === 'object') {
+            const nested = clientValue.id ?? clientValue.clientId ?? clientValue.client_id ?? clientValue.value;
+            if (nested != null && String(nested).trim()) return String(nested).trim();
+        }
+
+        return '';
+    };
+
     const ProjectOverviewSection = ({ project, tasks, users, onProjectUpdate, formatProjectDate }) => {
         const safeTasks = Array.isArray(tasks) ? tasks : [];
         const totalTasks = safeTasks.length;
         const completedTasks = safeTasks.filter((t) => t.status === 'Done').length;
         const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
         const activeUsers = users.filter((u) => u.status === 'Active');
+        const linkedClientId = resolveProjectClientId(project);
 
         const today = new Date();
         const dueDate = project.dueDate ? new Date(project.dueDate) : null;
@@ -2543,7 +2558,7 @@ function initializeProjectDetail() {
                 />
                 <ProjectContactsEditor
                     projectId={project?.id}
-                    clientId={project?.clientId}
+                    clientId={linkedClientId}
                     initialSerialized={project?.projectContacts}
                     onProjectUpdate={onProjectUpdate}
                 />
