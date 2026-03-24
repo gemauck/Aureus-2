@@ -1477,7 +1477,11 @@ async function handler(req, res) {
             }
           }
           
-          // Normalized ClientContact table is the source of truth - no JSON writes
+          // Keep JSON fields in sync so fallback reads don't bring back deleted contacts.
+          jsonFieldsToUpdate.contacts = JSON.stringify(contactsArray)
+          jsonFieldsToUpdate.contactsJsonb = contactsArray
+
+          // Normalized ClientContact table is the source of truth.
           // Phase 5: Sync to normalized ClientContact table
           try {
             // Delete existing contacts for this client
