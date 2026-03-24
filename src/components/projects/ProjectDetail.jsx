@@ -6587,27 +6587,13 @@ function initializeProjectDetail() {
 
     const handleSaveList = useCallback(async (listData) => {
         const projectId = project?.id;
-        if (!projectId || !window.DatabaseAPI?.makeRequest) {
-            // Fallback to local-only when API not available
-            if (editingList) {
-                setTaskLists(prev => {
-                    const next = prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l);
-                    syncViewingProjectTaskLists(next);
-                    return next;
-                });
-            } else {
-                const newList = {
-                    id: Math.max(0, ...taskLists.map(l => Number(l.id) || 0)) + 1,
-                    ...listData
-                };
-                setTaskLists(prev => {
-                    const next = [...prev, newList];
-                    syncViewingProjectTaskLists(next);
-                    return next;
-                });
-            }
-            setShowListModal(false);
-            setEditingList(null);
+        if (!projectId) {
+            alert('Cannot save list: missing project ID.');
+            return;
+        }
+        if (!window.DatabaseAPI?.makeRequest) {
+            // Prevent creating "ghost" lists that disappear on refresh.
+            alert('Task list service is still loading. Please wait a moment and try again.');
             return;
         }
         try {
