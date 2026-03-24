@@ -104,12 +104,12 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         }
     }, [note.id]);
 
-    const performSave = useCallback(() => {
+    const performSave = useCallback((options = { silent: true }) => {
         const currentNote = noteRef.current;
-        if (!currentNote) return;
+        if (!currentNote) return Promise.resolve();
         const html = editorRef.current ? editorRef.current.innerHTML : content;
         if (title.trim() || (html && html.trim() !== '' && html !== '<br>')) {
-            onSave({
+            const saveResult = onSave({
                 ...currentNote,
                 title: title.trim() || 'Untitled Note',
                 content: html || '',
@@ -119,14 +119,25 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                 clientId: clientId && String(clientId).trim() ? clientId : null,
                 projectId: projectId && String(projectId).trim() ? projectId : null
             });
+            if (saveResult && typeof saveResult.then === 'function') {
+                return saveResult.catch((err) => {
+                    console.warn('Note save failed:', err);
+                    if (!options?.silent) {
+                        alert(err?.message || 'Failed to save note.');
+                    }
+                });
+            }
         }
+        return Promise.resolve();
     }, [title, content, tags, clientId, projectId, isPublic, onSave]);
 
     useEffect(() => {
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
         }
-        saveTimeoutRef.current = setTimeout(performSave, 2000);
+        saveTimeoutRef.current = setTimeout(() => {
+            performSave({ silent: true });
+        }, 2000);
         return () => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
@@ -147,7 +158,14 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         const sel = window.getSelection();
         const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
         if (range && range.commonAncestorContainer && ed.contains(range.commonAncestorContainer)) {
-            const fragment = ed.ownerDocument.createContextualFragment(html);
+            let fragment;
+            if (typeof range.createContextualFragment === 'function') {
+                fragment = range.createContextualFragment(html);
+            } else {
+                const template = ed.ownerDocument.createElement('template');
+                template.innerHTML = html;
+                fragment = template.content.cloneNode(true);
+            }
             range.deleteContents();
             range.insertNode(fragment);
             range.collapse(false);
@@ -262,7 +280,13 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                 <div className="flex items-center gap-1 flex-wrap">
                     <button
                         type="button"
-                        onClick={() => { if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; } performSave(); }}
+                        onClick={async () => {
+                            if (saveTimeoutRef.current) {
+                                clearTimeout(saveTimeoutRef.current);
+                                saveTimeoutRef.current = null;
+                            }
+                            await performSave({ silent: false });
+                        }}
                         disabled={isSaving}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium ${isSaving ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 hover:bg-primary-700 text-white' : 'bg-primary-600 hover:bg-primary-700 text-white'}`}
                         aria-label="Save note now"
