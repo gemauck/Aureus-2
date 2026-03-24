@@ -2661,50 +2661,6 @@ const JobCardFormPublic = () => {
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <header className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Project Association</h2>
-          <p className="text-sm text-gray-500 mt-1">Link this visit to a project (optional).</p>
-        </header>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project
-            </label>
-            <SearchableSelect
-              id="jobcard-project"
-              name="projectId"
-              aria-label="Project"
-              value={formData.projectId}
-              onChange={v => handleChange({ target: { name: 'projectId', value: v } })}
-              options={projectSelectOptions}
-              placeholder={
-                projectSelectOptions.length === 0
-                  ? formData.clientId && formData.clientId !== NO_CLIENT_ID
-                    ? 'No projects linked to selected client'
-                    : 'No projects available'
-                  : 'Search projects…'
-              }
-              disabled={projectSelectOptions.length === 0}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project Name (manual)
-            </label>
-            <input
-              type="text"
-              name="projectName"
-              value={formData.projectName}
-              onChange={handleChange}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-              placeholder="Enter project name if not listed"
-              style={{ fontSize: '16px' }}
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-        <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Client & Site</h2>
           <p className="text-sm text-gray-500 mt-1">Link this visit to a client and optional customer site.</p>
         </header>
@@ -2776,6 +2732,50 @@ const JobCardFormPublic = () => {
               />
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <header className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Project Association</h2>
+          <p className="text-sm text-gray-500 mt-1">Link this visit to a project (optional).</p>
+        </header>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Project
+            </label>
+            <SearchableSelect
+              id="jobcard-project"
+              name="projectId"
+              aria-label="Project"
+              value={formData.projectId}
+              onChange={v => handleChange({ target: { name: 'projectId', value: v } })}
+              options={projectSelectOptions}
+              placeholder={
+                projectSelectOptions.length === 0
+                  ? formData.clientId && formData.clientId !== NO_CLIENT_ID
+                    ? 'No projects linked to selected client'
+                    : 'No projects available'
+                  : 'Search projects…'
+              }
+              disabled={projectSelectOptions.length === 0}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Project Name (manual)
+            </label>
+            <input
+              type="text"
+              name="projectName"
+              value={formData.projectName}
+              onChange={handleChange}
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+              placeholder="Enter project name if not listed"
+              style={{ fontSize: '16px' }}
+            />
+          </div>
         </div>
       </section>
       {renderNavigationButtons()}
