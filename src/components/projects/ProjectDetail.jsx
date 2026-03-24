@@ -3237,6 +3237,32 @@ function initializeProjectDetail() {
         setEditorActivityPanelOpen(false);
     }, [project?.id]);
 
+    // Always open project details from the top of the viewport/scroll container.
+    useEffect(() => {
+        if (!project?.id) return;
+
+        const scrollToTop = (el) => {
+            if (!el || typeof el.scrollTo !== 'function') return;
+            try {
+                el.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+            } catch (_) {
+                el.scrollTop = 0;
+                el.scrollLeft = 0;
+            }
+        };
+
+        scrollToTop(window);
+        if (document.scrollingElement) {
+            scrollToTop(document.scrollingElement);
+        }
+        if (document.documentElement) {
+            scrollToTop(document.documentElement);
+        }
+        if (document.body) {
+            scrollToTop(document.body);
+        }
+    }, [project?.id]);
+
     const loadActivityLog = useCallback(async () => {
         if (!project?.id || !window.DatabaseAPI?.makeRequest) return;
         try {
