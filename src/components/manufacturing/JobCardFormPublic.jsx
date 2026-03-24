@@ -11,6 +11,7 @@ const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 /** Ids of job cards created/updated via the public API on this browser — used for GET /api/public/jobcards?ids= */
 const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
 const MAX_PUBLIC_PRIOR_IDS = 200;
+const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
 
 function readPublicPriorJobCardIds() {
   try {
@@ -47,6 +48,26 @@ function jobCardFileLooksImageOrVideo(file) {
 function jobCardFileIsVideo(file) {
   if (file.type.startsWith('video/')) return true;
   return /\.(mp4|webm|mov|mkv)$/i.test(file.name || '');
+}
+
+function parseProjectAssociationFromComments(rawComments) {
+  if (!rawComments || typeof rawComments !== 'string') {
+    return { projectId: '', projectName: '' };
+  }
+  const lines = rawComments.split('\n');
+  const line = lines.find(
+    l => typeof l === 'string' && l.startsWith(PROJECT_ASSOCIATION_PREFIX)
+  );
+  if (!line) return { projectId: '', projectName: '' };
+  const raw = line.slice(PROJECT_ASSOCIATION_PREFIX.length).trim();
+  if (!raw) return { projectId: '', projectName: '' };
+  const idMatch = raw.match(/\(([^)]+)\)\s*$/);
+  if (idMatch && idMatch[1]) {
+    const projectId = String(idMatch[1]).trim();
+    const projectName = raw.slice(0, idMatch.index).trim();
+    return { projectId, projectName };
+  }
+  return { projectId: '', projectName: raw };
 }
 
 const JobCardWizardAttachmentPreview = ({ url, index, onRemove }) => {
@@ -562,6 +583,8 @@ const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
     agentName: '',
     otherTechnicians: [],
+    projectId: '',
+    projectName: '',
     clientId: '',
     clientName: '',
     siteId: '',
@@ -603,6 +626,7 @@ const JobCardFormPublic = () => {
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
   const [clients, setClients] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -732,6 +756,64 @@ const JobCardFormPublic = () => {
       label: String(site.name || site)
     }));
   }, [formData.clientId, availableSites]);
+
+  const projectSelectOptions = useMemo(() => {
+    const selectedClient = (clients || []).find(
+      c => String(c.id) === String(formData.clientId)
+    );
+    const selectedClientName = (
+      selectedClient?.name ||
+      selectedClient?.companyName ||
+      ''
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+    const hasClientFilter =
+      Boolean(formData.clientId) && formData.clientId !== NO_CLIENT_ID;
+
+    const filteredProjects = (projects || []).filter(project => {
+      if (!hasClientFilter) return true;
+
+      const projectClientId = project?.clientId != null ? String(project.clientId) : '';
+      if (projectClientId && projectClientId === String(formData.clientId)) {
+        return true;
+      }
+
+      const projectClientName = (
+        project?.clientName ||
+        project?.client ||
+        ''
+      )
+        .toString()
+        .trim()
+        .toLowerCase();
+
+      if (projectClientName && selectedClientName && projectClientName === selectedClientName) {
+        return true;
+      }
+
+      return false;
+    });
+
+    return filteredProjects.map(project => ({
+      value: project.id,
+      label: project.name || project.projectName || project.title || project.id
+    }));
+  }, [projects, clients, formData.clientId]);
+
+  useEffect(() => {
+    if (!formData.projectId) return;
+    const stillValid = projectSelectOptions.some(
+      p => String(p.value) === String(formData.projectId)
+    );
+    if (!stillValid) {
+      setFormData(prev => ({
+        ...prev,
+        projectId: ''
+      }));
+    }
+  }, [formData.projectId, projectSelectOptions]);
 
   const stockSkuOptions = useMemo(
     () =>
@@ -1352,6 +1434,60 @@ const JobCardFormPublic = () => {
   }, [isOnline]);
 
   useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const cached1 = JSON.parse(localStorage.getItem('manufacturing_projects') || '[]');
+        const cached2 = JSON.parse(localStorage.getItem('projects') || '[]');
+        const cached = Array.isArray(cached1) && cached1.length > 0 ? cached1 : cached2;
+        if (Array.isArray(cached) && cached.length > 0) {
+          setProjects(cached);
+        }
+
+        if (!isOnline) return;
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+
+        try {
+          const response = await fetch('/api/projects?limit=500', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const projectRows = data?.data?.projects || data?.projects || [];
+            if (Array.isArray(projectRows) && projectRows.length > 0) {
+              setProjects(projectRows);
+              localStorage.setItem('manufacturing_projects', JSON.stringify(projectRows));
+              localStorage.setItem('projects', JSON.stringify(projectRows));
+            }
+          } else if (window.DatabaseAPI?.getProjects) {
+            const dbResp = await window.DatabaseAPI.getProjects({
+              limit: 500,
+              page: 1,
+              includeTaskCount: false
+            });
+            const projectRows = dbResp?.data?.projects || dbResp?.projects || dbResp?.data || [];
+            if (Array.isArray(projectRows) && projectRows.length > 0) {
+              setProjects(projectRows);
+              localStorage.setItem('manufacturing_projects', JSON.stringify(projectRows));
+              localStorage.setItem('projects', JSON.stringify(projectRows));
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ JobCardFormPublic: Failed to load projects:', error.message);
+        }
+      } catch (error) {
+        console.warn('⚠️ JobCardFormPublic: Project cache load failed:', error.message);
+      }
+    };
+    loadProjects();
+  }, [isOnline]);
+
+  useEffect(() => {
     const loadStockData = async () => {
       try {
         
@@ -1595,6 +1731,21 @@ const JobCardFormPublic = () => {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+
+    if (name === 'projectId') {
+      const selectedProject = (projects || []).find(p => String(p.id) === String(value));
+      setFormData(prev => ({
+        ...prev,
+        projectId: value || '',
+        projectName:
+          selectedProject?.name ||
+          selectedProject?.projectName ||
+          selectedProject?.title ||
+          prev.projectName ||
+          ''
+      }));
+      return;
+    }
 
     // When the client selection changes, clear site selection and handle "No Client"
     if (name === 'clientId') {
@@ -1945,6 +2096,8 @@ const JobCardFormPublic = () => {
       setFormData({
         agentName: '',
         otherTechnicians: [],
+        projectId: '',
+        projectName: '',
         clientId: '',
         clientName: '',
         siteId: '',
@@ -2083,10 +2236,14 @@ const JobCardFormPublic = () => {
     );
     setSelectedPhotos(imageUrls.map((url, i) => ({ name: `Photo ${i + 1}`, url })));
 
+    const parsedProject = parseProjectAssociationFromComments(full.otherComments || '');
+
     setFormData(prev => ({
       ...prev,
       agentName: full.agentName || '',
       otherTechnicians: parseStoredJsonArray(full.otherTechnicians, []),
+      projectId: full.projectId || parsedProject.projectId || '',
+      projectName: full.projectName || parsedProject.projectName || '',
       clientId: full.clientId || '',
       clientName: full.clientName || '',
       siteId: full.siteId || '',
@@ -2163,6 +2320,30 @@ const JobCardFormPublic = () => {
         jobCardNumber: editingMeta?.jobCardNumber || '',
         serverJobCardId: editingMeta?.serverJobCardId || null
       };
+
+      if (!jobCardData.projectName && jobCardData.projectId) {
+        const selectedProject = (projects || []).find(
+          p => String(p.id) === String(jobCardData.projectId)
+        );
+        jobCardData.projectName =
+          selectedProject?.name || selectedProject?.projectName || selectedProject?.title || '';
+      }
+
+      {
+        const existingLines = String(jobCardData.otherComments || '')
+          .split('\n')
+          .filter(line => line && !line.startsWith(PROJECT_ASSOCIATION_PREFIX));
+        if (jobCardData.projectName) {
+          const projectAssociationLine = `${PROJECT_ASSOCIATION_PREFIX} ${jobCardData.projectName}${
+            jobCardData.projectId ? ` (${jobCardData.projectId})` : ''
+          }`;
+          jobCardData.otherComments = [projectAssociationLine, ...existingLines]
+            .filter(Boolean)
+            .join('\n');
+        } else {
+          jobCardData.otherComments = existingLines.join('\n');
+        }
+      }
 
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
@@ -2476,6 +2657,50 @@ const JobCardFormPublic = () => {
                 ))}
               </div>
             )}
+      </section>
+
+      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <header className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Project Association</h2>
+          <p className="text-sm text-gray-500 mt-1">Link this visit to a project (optional).</p>
+        </header>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Project
+            </label>
+            <SearchableSelect
+              id="jobcard-project"
+              name="projectId"
+              aria-label="Project"
+              value={formData.projectId}
+              onChange={v => handleChange({ target: { name: 'projectId', value: v } })}
+              options={projectSelectOptions}
+              placeholder={
+                projectSelectOptions.length === 0
+                  ? formData.clientId && formData.clientId !== NO_CLIENT_ID
+                    ? 'No projects linked to selected client'
+                    : 'No projects available'
+                  : 'Search projects…'
+              }
+              disabled={projectSelectOptions.length === 0}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Project Name (manual)
+            </label>
+            <input
+              type="text"
+              name="projectName"
+              value={formData.projectName}
+              onChange={handleChange}
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+              placeholder="Enter project name if not listed"
+              style={{ fontSize: '16px' }}
+            />
+          </div>
+        </div>
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -3459,6 +3684,13 @@ const JobCardFormPublic = () => {
         </header>
         <div className="space-y-3">
           <SummaryRow label="Technician" value={formData.agentName} />
+          <SummaryRow
+            label="Project"
+            value={
+              formData.projectName ||
+              projects.find(p => String(p.id) === String(formData.projectId))?.name
+            }
+          />
           <SummaryRow label="Client" value={formData.clientName || clients.find(c => c.id === formData.clientId)?.name} />
           <SummaryRow label="Site" value={formData.siteName} />
           <SummaryRow label="Travel Distance" value={travelKm > 0 ? `${travelKm.toFixed(1)} km` : ''} />
