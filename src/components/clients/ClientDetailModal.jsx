@@ -3270,22 +3270,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleDeleteClientNote = useCallback(async (payload) => {
         const clientId = formData?.id;
-        const noteId = payload?.id;
+        const noteId = typeof payload === 'string' ? payload : payload?.id;
         if (!clientId || !noteId || !window.storage?.getToken?.()) return;
         if (!confirm('Delete this note?')) return;
         setIsSavingClientNote(true);
         try {
             const token = window.storage.getToken();
-            await fetch(`/api/clients/${encodeURIComponent(clientId)}/notes/${encodeURIComponent(noteId)}`, {
+            const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}/notes/${encodeURIComponent(noteId)}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` }
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data?.error?.message || data?.error || `Failed to delete note (${res.status})`);
+            }
             setClientNotesList(prev => prev ? prev.filter(n => n.id !== noteId) : []);
             setEditingClientNoteFull(null);
             setClientNoteActivityForEditor([]);
             setExpandedClientNoteActivityId(null);
         } catch (e) {
             console.error('Delete client note failed:', e);
+            alert('Failed to delete note. Please refresh and try again.');
         } finally {
             setIsSavingClientNote(false);
         }
@@ -7353,6 +7358,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 <button type="button" onClick={(e) => handleToggleClientNoteActivity(e, note)} className="text-primary-600 text-xs hover:text-primary-700 hover:underline ml-auto">
                                                                     <i className="fas fa-history mr-1"></i>
                                                                     {expandedClientNoteActivityId === note.id ? 'Hide activity' : 'Activity'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteClientNote(note.id); }}
+                                                                    disabled={isSavingClientNote}
+                                                                    className={`text-xs ${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'} disabled:opacity-50`}
+                                                                    title="Delete note"
+                                                                    aria-label="Delete note"
+                                                                >
+                                                                    <i className="fas fa-trash mr-1"></i>
+                                                                    Delete
                                                                 </button>
                                                                 <span className="text-primary-600 text-xs">View & edit →</span>
                                                             </div>
