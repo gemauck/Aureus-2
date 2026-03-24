@@ -5829,8 +5829,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             const labelCls = `block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
                                             const inputCls = `w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100 placeholder-gray-400' : 'border-gray-300'}`;
                                             const hintCls = `text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
+                                            const disabledSelectCls = isDark ? 'bg-gray-700 text-gray-400 border-gray-600 cursor-not-allowed opacity-70' : 'bg-gray-100 text-gray-500 border-gray-300 cursor-not-allowed opacity-80';
                                             const sectionHeadingCls = `text-sm font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-800'}`;
                                             const sectionWrapCls = `rounded-lg p-3 mb-4 ${isDark ? 'bg-gray-600/50 border border-gray-600' : 'bg-white/60 border border-gray-200'}`;
+                                            const isClientSite = (newSite.siteType || 'lead') === 'client';
                                             return (
                                         <div className="space-y-1">
                                             {/* General */}
@@ -5852,26 +5854,26 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     {!isLead && (
                                                         <>
                                                             <div>
-                                                                <label className={labelCls}>AIDA Status</label>
-                                                                <select value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'} onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})} className={inputCls} title="AIDA stage – matches list AIDA Status column">
+                                                                <label className={`${labelCls} ${isClientSite ? 'opacity-60' : ''}`}>AIDA Status</label>
+                                                                <select value={['No Engagement','Awareness','Interest','Desire','Action'].find(s => s.toLowerCase() === (newSite.aidaStatus ?? 'awareness').toLowerCase()) || 'Awareness'} onChange={(e) => setNewSite({...newSite, aidaStatus: e.target.value})} className={`${inputCls} ${isClientSite ? disabledSelectCls : ''}`} title="AIDA stage – matches list AIDA Status column" disabled={isClientSite}>
                                                                     <option value="No Engagement">No Engagement</option>
                                                                     <option value="Awareness">Awareness</option>
                                                                     <option value="Interest">Interest</option>
                                                                     <option value="Desire">Desire</option>
                                                                     <option value="Action">Action</option>
                                                                 </select>
-                                                                <p className={hintCls}>AIDA stage – syncs with list.</p>
+                                                                <p className={hintCls}>{isClientSite ? 'Disabled for Client sites.' : 'AIDA stage – syncs with list.'}</p>
                                                             </div>
                                                             <div>
-                                                                <label className={labelCls}>Engagement Stage</label>
-                                                                <select value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'} onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})} className={inputCls} title="Lifecycle status – matches list Engagement Stage column">
+                                                                <label className={`${labelCls} ${isClientSite ? 'opacity-60' : ''}`}>Engagement Stage</label>
+                                                                <select value={['Disinterested','Potential','Active','Proposal','Tender'].find(s => s.toLowerCase() === (newSite.engagementStage ?? newSite.stage ?? 'potential').toLowerCase()) || 'Potential'} onChange={(e) => setNewSite({...newSite, engagementStage: e.target.value, stage: e.target.value})} className={`${inputCls} ${isClientSite ? disabledSelectCls : ''}`} title="Lifecycle status – matches list Engagement Stage column" disabled={isClientSite}>
                                                                     <option value="Disinterested">Disinterested</option>
                                                                     <option value="Potential">Potential</option>
                                                                     <option value="Active">Active</option>
                                                                     <option value="Proposal">Proposal</option>
                                                                     <option value="Tender">Tender</option>
                                                                 </select>
-                                                                <p className={hintCls}>Lifecycle status – syncs with list.</p>
+                                                                <p className={hintCls}>{isClientSite ? 'Disabled for Client sites.' : 'Lifecycle status – syncs with list.'}</p>
                                                             </div>
                                                         </>
                                                     )}
