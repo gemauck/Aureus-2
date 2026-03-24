@@ -4615,7 +4615,9 @@ const LeadDetailModal = ({
                                                             <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>
+                                                            {(att.url || att.dataUrl) && (
+                                                                <a href={att.url || att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>
+                                                            )}
                                                             <button type="button" className="text-red-600" onClick={() => handleRemoveNewAttachment(att.id)} title="Remove"><i className="fas fa-trash"></i></button>
                                                         </div>
                                                     </div>
@@ -4703,7 +4705,7 @@ const LeadDetailModal = ({
                                                                     <span className="text-gray-700">{att.name}</span>
                                                                     {att.size && <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>}
                                                                 </div>
-                                                                {att.dataUrl && <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>}
+                                                                {(att.url || att.dataUrl) && <a href={att.url || att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>}
                                                             </div>
                                                         ))}
                                                     </div>

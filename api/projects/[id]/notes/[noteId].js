@@ -12,6 +12,29 @@ import { withLogging } from '../../../_lib/logger.js'
 import { logProjectActivity, getActivityUserFromRequest } from '../../../_lib/projectActivityLog.js'
 import { syncMentionsFromEntityNote } from '../../../_lib/noteMentions.js'
 
+async function ensureProjectNotesTable() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ProjectNote" (
+        id TEXT PRIMARY KEY,
+        "projectId" TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        tags TEXT NOT NULL DEFAULT '[]',
+        "authorId" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProjectNote_projectId_idx" ON "ProjectNote" ("projectId")`)
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProjectNote_authorId_idx" ON "ProjectNote" ("authorId")`)
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProjectNote_createdAt_idx" ON "ProjectNote" ("createdAt")`)
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProjectNote_updatedAt_idx" ON "ProjectNote" ("updatedAt")`)
+  } catch (e) {
+    console.warn('⚠️ Could not ensure ProjectNote table exists:', e?.message)
+  }
+}
+
 function parseProjectNote(note) {
   const parsed = { ...note }
   if (typeof parsed.tags === 'string' && parsed.tags) {
@@ -41,6 +64,7 @@ async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
+      await ensureProjectNotesTable()
       const note = await prisma.projectNote.findFirst({
         where: { id: noteId, projectId },
         include: {
@@ -57,6 +81,7 @@ async function handler(req, res) {
 
   if (req.method === 'PUT') {
     try {
+      await ensureProjectNotesTable()
       const existing = await prisma.projectNote.findFirst({
         where: { id: noteId, projectId }
       })
@@ -127,6 +152,7 @@ async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     try {
+      await ensureProjectNotesTable()
       const existing = await prisma.projectNote.findFirst({
         where: { id: noteId, projectId }
       })

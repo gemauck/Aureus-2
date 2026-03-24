@@ -884,6 +884,20 @@ async function handler(req, res) {
           }
         }
       }
+      // Preserve comment metadata (tags/attachments) in JSON fields for CRM notes.
+      // Normalized ClientComment table stores core fields only.
+      const normalizedCommentsPayload = Array.isArray(commentsToSync)
+        ? commentsToSync.map((comment) => ({
+            id: comment?.id ?? null,
+            text: comment?.text || '',
+            author: comment?.author || comment?.createdBy || '',
+            authorId: comment?.authorId || comment?.createdById || null,
+            userName: comment?.userName || comment?.createdByEmail || null,
+            createdAt: comment?.createdAt || null,
+            tags: Array.isArray(comment?.tags) ? comment.tags : [],
+            attachments: Array.isArray(comment?.attachments) ? comment.attachments : []
+          }))
+        : []
       
       // Phase 6: Extract sites, contracts, proposals, followUps, services
       if (body.sites !== undefined) {
@@ -949,8 +963,8 @@ async function handler(req, res) {
       // Ensure normalized fields are NOT in leadData (they go to normalized tables only)
       delete leadData.contacts
       delete leadData.contactsJsonb
-      delete leadData.comments
-      delete leadData.commentsJsonb
+      leadData.comments = JSON.stringify(normalizedCommentsPayload)
+      leadData.commentsJsonb = normalizedCommentsPayload
       delete leadData.sites
       delete leadData.sitesJsonb
       delete leadData.contracts
@@ -1556,7 +1570,20 @@ async function handler(req, res) {
           }
         }
         
-        // Normalized ClientComment table is the source of truth - no JSON writes
+        // Keep full comment payload (tags/attachments) in JSON fields.
+        // Normalized table remains source of truth for core fields.
+        const normalizedCommentsPayload = commentsArray.map((comment) => ({
+          id: comment?.id ?? null,
+          text: comment?.text || '',
+          author: comment?.author || comment?.createdBy || '',
+          authorId: comment?.authorId || comment?.createdById || null,
+          userName: comment?.userName || comment?.createdByEmail || null,
+          createdAt: comment?.createdAt || null,
+          tags: Array.isArray(comment?.tags) ? comment.tags : [],
+          attachments: Array.isArray(comment?.attachments) ? comment.attachments : []
+        }))
+        jsonFieldsToUpdate.comments = JSON.stringify(normalizedCommentsPayload)
+        jsonFieldsToUpdate.commentsJsonb = normalizedCommentsPayload
         
         // Phase 5: Sync to normalized ClientComment table
         try {

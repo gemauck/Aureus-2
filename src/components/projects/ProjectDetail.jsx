@@ -3430,9 +3430,13 @@ function initializeProjectDetail() {
                     loadProjectNotesFromProject();
                     loadNoteActivity();
                 }
+            } else {
+                const err = await response.json().catch(() => ({}));
+                alert(err?.error?.message || err?.message || 'Failed to create project note.');
             }
         } catch (e) {
             console.warn('Failed to create project note:', e);
+            alert(e?.message || 'Failed to create project note.');
         } finally {
             setIsSavingNote(false);
         }
@@ -3460,6 +3464,9 @@ function initializeProjectDetail() {
                     loadProjectNotesFromProject();
                     loadNoteActivity();
                     loadActivityForNote(notePayload.id).then((logs) => setNoteActivityForEditor(Array.isArray(logs) ? logs : []));
+                } else {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err?.error?.message || err?.message || 'Failed to save project note');
                 }
             } else {
                 const response = await fetch(`/api/user-notes/${notePayload.id}`, {
@@ -3482,10 +3489,14 @@ function initializeProjectDetail() {
                     loadProjectNotes();
                     loadNoteActivity();
                     loadActivityForNote(notePayload.id).then((logs) => setNoteActivityForEditor(Array.isArray(logs) ? logs : []));
+                } else {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err?.error?.message || err?.message || 'Failed to save note');
                 }
             }
         } catch (e) {
             console.warn('Save note failed:', e);
+            alert(e?.message || 'Failed to save note.');
         } finally {
             setIsSavingNote(false);
         }

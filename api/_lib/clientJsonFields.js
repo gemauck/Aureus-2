@@ -86,34 +86,49 @@ export function parseClientJsonFields(client) {
       parsed.contacts = Array.isArray(value) ? value : []
     }
     
-    // Phase 3: Comments - Use normalized table first, fallback to JSON
-    if (client.clientComments && Array.isArray(client.clientComments) && client.clientComments.length > 0) {
-      // Convert normalized ClientComment records to array format
-      parsed.comments = client.clientComments.map(comment => ({
-        id: comment.id,
-        text: comment.text,
-        author: comment.author,
-        authorId: comment.authorId,
-        userName: comment.userName,
-        createdAt: comment.createdAt ? new Date(comment.createdAt).toISOString() : new Date().toISOString()
-      }))
-    } else {
-      // Fallback: Try JSONB field (Phase 2)
-      let value = client.commentsJsonb
-      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) {
-        // Fallback: Try String field (Phase 1)
-        const stringValue = client.comments
-        if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
-          try {
-            value = JSON.parse(stringValue)
-          } catch (e) {
-            value = []
-          }
-        } else {
-          value = []
+    // Parse JSON comment payload once; it may contain extras (tags, attachments) that
+    // are not represented in normalized ClientComment columns.
+    let commentsJsonValue = client.commentsJsonb
+    if (commentsJsonValue === null || commentsJsonValue === undefined || (Array.isArray(commentsJsonValue) && commentsJsonValue.length === 0)) {
+      const stringValue = client.comments
+      if (typeof stringValue === 'string' && stringValue && stringValue.trim()) {
+        try {
+          commentsJsonValue = JSON.parse(stringValue)
+        } catch (e) {
+          commentsJsonValue = []
         }
+      } else {
+        commentsJsonValue = []
       }
-      parsed.comments = Array.isArray(value) ? value : []
+    }
+    const commentExtrasById = new Map()
+    if (Array.isArray(commentsJsonValue)) {
+      for (const row of commentsJsonValue) {
+        if (!row || typeof row !== 'object' || row.id === undefined || row.id === null) continue
+        commentExtrasById.set(String(row.id), {
+          tags: Array.isArray(row.tags) ? row.tags : [],
+          attachments: Array.isArray(row.attachments) ? row.attachments : []
+        })
+      }
+    }
+
+    // Phase 3: Comments - Use normalized table first, then merge JSON extras by id
+    if (client.clientComments && Array.isArray(client.clientComments) && client.clientComments.length > 0) {
+      parsed.comments = client.clientComments.map(comment => {
+        const extras = commentExtrasById.get(String(comment.id)) || { tags: [], attachments: [] }
+        return {
+          id: comment.id,
+          text: comment.text,
+          author: comment.author,
+          authorId: comment.authorId,
+          userName: comment.userName,
+          createdAt: comment.createdAt ? new Date(comment.createdAt).toISOString() : new Date().toISOString(),
+          tags: extras.tags,
+          attachments: extras.attachments
+        }
+      })
+    } else {
+      parsed.comments = Array.isArray(commentsJsonValue) ? commentsJsonValue : []
     }
     
     // Phase 4: projectIds - Use projects relation instead of JSON field

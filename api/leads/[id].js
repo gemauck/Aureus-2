@@ -389,10 +389,29 @@ async function handler(req, res) {
       }
       // CRITICAL: Update comments JSON field in Client table
       if (body.comments !== undefined) {
-        updateData.comments = typeof body.comments === 'string' 
-          ? body.comments 
-          : JSON.stringify(Array.isArray(body.comments) ? body.comments : [])
-        console.log(`📝 [LEADS ID] Updating comments JSON field for lead ${id}, count: ${Array.isArray(body.comments) ? body.comments.length : 0}`)
+        let commentsArray = []
+        if (Array.isArray(body.comments)) {
+          commentsArray = body.comments
+        } else if (typeof body.comments === 'string' && body.comments.trim()) {
+          try {
+            commentsArray = JSON.parse(body.comments)
+          } catch (_) {
+            commentsArray = []
+          }
+        }
+        const normalizedCommentsPayload = commentsArray.map((comment) => ({
+          id: comment?.id ?? null,
+          text: comment?.text || '',
+          author: comment?.author || comment?.createdBy || '',
+          authorId: comment?.authorId || comment?.createdById || null,
+          userName: comment?.userName || comment?.createdByEmail || null,
+          createdAt: comment?.createdAt || null,
+          tags: Array.isArray(comment?.tags) ? comment.tags : [],
+          attachments: Array.isArray(comment?.attachments) ? comment.attachments : []
+        }))
+        updateData.comments = JSON.stringify(normalizedCommentsPayload)
+        updateData.commentsJsonb = normalizedCommentsPayload
+        console.log(`📝 [LEADS ID] Updating comments JSON field for lead ${id}, count: ${normalizedCommentsPayload.length}`)
       }
       // CRITICAL: Update followUps JSON field in Client table
       if (body.followUps !== undefined) {
