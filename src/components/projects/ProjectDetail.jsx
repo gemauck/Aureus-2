@@ -6513,6 +6513,31 @@ function initializeProjectDetail() {
     }, [ensureCommentsPopupLoaded]);
 
     // List Management
+    const syncViewingProjectTaskLists = useCallback((nextTaskLists) => {
+        if (!project?.id || !Array.isArray(nextTaskLists)) return;
+        if (typeof window.updateViewingProject === 'function') {
+            window.updateViewingProject({
+                ...project,
+                taskLists: nextTaskLists
+            });
+        }
+    }, [project]);
+
+    const invalidateProjectDetailCache = useCallback((projectId) => {
+        if (!projectId || !window.DatabaseAPI?._responseCache) return;
+        const cache = window.DatabaseAPI._responseCache;
+        const exactBase = `GET:/projects/${projectId}`;
+        const exactSummary = `GET:/projects/${projectId}?summary=1`;
+        cache.delete(exactBase);
+        cache.delete(exactSummary);
+        // Also clear any variant query keys (fields=..., force params, etc.)
+        for (const key of cache.keys()) {
+            if (typeof key === 'string' && key.startsWith(`${exactBase}?`)) {
+                cache.delete(key);
+            }
+        }
+    }, []);
+
     const handleAddList = useCallback(async () => {
         const ready = await ensureListModalLoaded();
         if (!ready) {
@@ -6536,13 +6561,21 @@ function initializeProjectDetail() {
         if (!projectId || !window.DatabaseAPI?.makeRequest) {
             // Fallback to local-only when API not available
             if (editingList) {
-                setTaskLists(prev => prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l));
+                setTaskLists(prev => {
+                    const next = prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l);
+                    syncViewingProjectTaskLists(next);
+                    return next;
+                });
             } else {
                 const newList = {
                     id: Math.max(0, ...taskLists.map(l => Number(l.id) || 0)) + 1,
                     ...listData
                 };
-                setTaskLists(prev => [...prev, newList]);
+                setTaskLists(prev => {
+                    const next = [...prev, newList];
+                    syncViewingProjectTaskLists(next);
+                    return next;
+                });
             }
             setShowListModal(false);
             setEditingList(null);
@@ -6561,9 +6594,17 @@ function initializeProjectDetail() {
                         })
                     });
                     const updated = data?.data?.taskList || data?.taskList || data;
-                    setTaskLists(prev => prev.map(l => l.id === editingList.id ? normalizeTaskList({ ...l, ...updated, ...listData }) : l));
+                    setTaskLists(prev => {
+                        const next = prev.map(l => l.id === editingList.id ? normalizeTaskList({ ...l, ...updated, ...listData }) : l);
+                        syncViewingProjectTaskLists(next);
+                        return next;
+                    });
                 } else {
-                    setTaskLists(prev => prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l));
+                    setTaskLists(prev => {
+                        const next = prev.map(l => l.id === editingList.id ? { ...l, ...listData } : l);
+                        syncViewingProjectTaskLists(next);
+                        return next;
+                    });
                 }
             } else {
                 const nextOrder = taskLists.length;
@@ -6583,22 +6624,20 @@ function initializeProjectDetail() {
                     name: listData.name || taskList.name,
                     color: listData.color ?? taskList.color
                 });
-                setTaskLists(prev => [...prev, newList]);
+                setTaskLists(prev => {
+                    const next = [...prev, newList];
+                    syncViewingProjectTaskLists(next);
+                    return next;
+                });
             }
-            if (window.DatabaseAPI?._responseCache) {
-                const pid = project?.id;
-                if (pid) {
-                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${pid}`);
-                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${pid}?summary=1`);
-                }
-            }
+            invalidateProjectDetailCache(project?.id);
             setShowListModal(false);
             setEditingList(null);
         } catch (err) {
             console.error('❌ Error saving list:', err);
             alert('Failed to save list: ' + (err.message || 'Please try again.'));
         }
-    }, [project?.id, editingList, taskLists]);
+    }, [project?.id, editingList, taskLists, syncViewingProjectTaskLists, invalidateProjectDetailCache]);
 
     const handleAddCustomField = (fieldData) => {
         setCustomFieldDefinitions([...customFieldDefinitions, fieldData]);
@@ -6652,13 +6691,14 @@ function initializeProjectDetail() {
                 if (listPk && typeof listPk === 'string' && window.DatabaseAPI?.makeRequest) {
                     await window.DatabaseAPI.makeRequest(`/project-task-lists?id=${encodeURIComponent(listPk)}`, { method: 'DELETE' });
                 }
-                if (window.DatabaseAPI?._responseCache && project?.id) {
-                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
-                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}?summary=1`);
-                }
+                invalidateProjectDetailCache(project?.id);
                 // Update local state after successful save — use functional update to avoid stale closure
                 setTasks(prev => (Array.isArray(prev) ? prev : []).map(t => t.listId === listId ? { ...t, listId: remainingList.id } : t));
-                setTaskLists(prev => prev.filter(l => l.id !== listId));
+                setTaskLists(prev => {
+                    const next = prev.filter(l => l.id !== listId);
+                    syncViewingProjectTaskLists(next);
+                    return next;
+                });
             } catch (error) {
                 console.error('❌ Error deleting list:', error);
                 alert('Failed to delete list: ' + error.message);
