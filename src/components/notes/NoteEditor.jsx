@@ -44,9 +44,13 @@ const RichTextToolbar = ({ editorRef, isDark }) => {
 
 // Upload a file for notes (screenshot or attachment) — uses /api/files with folder 'notes'
 function uploadNoteFile(file) {
+    const MAX_BYTES = 50 * 1024 * 1024; // Keep aligned with /api/files limit
     const storage = window.storage;
     const token = storage?.getToken?.();
     if (!token) return Promise.reject(new Error('Not authenticated'));
+    if (file?.size > MAX_BYTES) {
+        return Promise.reject(new Error(`"${file.name || 'File'}" is too large (max 50MB)`));
+    }
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -57,8 +61,11 @@ function uploadNoteFile(file) {
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ folder: 'notes', name, dataUrl })
             })
-                .then(r => r.json())
-                .then(data => {
+                .then(async (r) => {
+                    const data = await r.json().catch(() => ({}));
+                    if (!r.ok) {
+                        throw new Error(data?.error?.message || data?.message || `Upload failed (${r.status})`);
+                    }
                     const url = data?.data?.url || data?.url;
                     if (url) resolve({ url, name });
                     else reject(new Error(data?.error?.message || 'Upload failed'));
@@ -68,6 +75,21 @@ function uploadNoteFile(file) {
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsDataURL(file);
     });
+}
+
+function getFileIconClass(name = '', mimeType = '') {
+    const lowerName = String(name || '').toLowerCase();
+    const lowerType = String(mimeType || '').toLowerCase();
+    if (lowerType.includes('pdf') || lowerName.endsWith('.pdf')) return 'fa-file-pdf';
+    if (lowerType.includes('word') || lowerName.endsWith('.doc') || lowerName.endsWith('.docx')) return 'fa-file-word';
+    if (lowerType.includes('excel') || lowerType.includes('spreadsheet') || lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.csv')) return 'fa-file-excel';
+    if (lowerType.includes('powerpoint') || lowerName.endsWith('.ppt') || lowerName.endsWith('.pptx')) return 'fa-file-powerpoint';
+    if (lowerType.includes('zip') || lowerType.includes('compressed') || lowerName.endsWith('.zip') || lowerName.endsWith('.rar') || lowerName.endsWith('.7z')) return 'fa-file-archive';
+    if (lowerType.startsWith('text/') || lowerName.endsWith('.txt') || lowerName.endsWith('.md')) return 'fa-file-lines';
+    if (lowerType.startsWith('video/')) return 'fa-file-video';
+    if (lowerType.startsWith('audio/')) return 'fa-file-audio';
+    if (lowerType.includes('json') || lowerType.includes('xml') || lowerName.endsWith('.json') || lowerName.endsWith('.xml')) return 'fa-file-code';
+    return 'fa-file';
 }
 
 // Note Editor Component
@@ -190,7 +212,10 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                 .then(({ url }) => {
                     insertAtCursor(`<img src="${url.replace(/"/g, '&quot;')}" alt="Pasted image" style="max-width:100%;height:auto;" />`);
                 })
-                .catch(() => {})
+                .catch((err) => {
+                    console.warn('Image paste upload failed:', err);
+                    alert(err?.message || 'Failed to upload pasted image.');
+                })
                 .finally(() => setIsUploading(false));
             return;
         }
@@ -209,18 +234,31 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         const fileList = Array.from(files);
         const promises = fileList.map(file =>
             uploadNoteFile(file)
-                .then(({ url, name }) => ({ url, name, type: (file.type || '').slice(0, 6) }))
-                .catch(() => null)
+                .then(({ url, name }) => ({ ok: true, url, name, type: (file.type || '').slice(0, 6) }))
+                .catch((error) => ({ ok: false, name: file?.name || 'Attachment', error }))
         );
         Promise.all(promises).then((results) => {
-            results.filter(Boolean).forEach(({ url, name, type }) => {
+            const failed = results.filter((r) => !r?.ok);
+            results.filter((r) => r?.ok).forEach(({ url, name, type }) => {
                 const safeUrl = url.replace(/"/g, '&quot;');
                 if (type === 'image/') {
                     insertAtCursor(`<img src="${safeUrl}" alt="${(name || 'Image').replace(/"/g, '&quot;')}" style="max-width:100%;height:auto;" /><br>`);
                 } else {
-                    insertAtCursor(`<a href="${safeUrl}" target="_blank" rel="noopener">${(name || 'Attachment').replace(/</g, '&lt;')}</a><br>`);
+                    const safeName = (name || 'Attachment')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;');
+                    const iconClass = getFileIconClass(name, type);
+                    insertAtCursor(
+                        `<a href="${safeUrl}" target="_blank" rel="noopener" download="${safeName}" contenteditable="false" title="Download ${safeName}" style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;color:#111827;text-decoration:none;font-size:13px;line-height:1.2;max-width:100%;"><i class="fas ${iconClass}" style="color:#2563eb;"></i><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;">${safeName}</span></a><br>`
+                    );
                 }
             });
+            if (failed.length > 0) {
+                const firstError = failed[0]?.error?.message || 'Upload failed.';
+                alert(`${failed.length} attachment(s) failed to upload. ${firstError}`);
+            }
         }).finally(() => {
             setIsUploading(false);
             if (resetInput && fileInputRef.current) fileInputRef.current.value = '';
@@ -477,7 +515,6 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                             ref={fileInputRef}
                             type="file"
                             multiple
-                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
                             className="hidden"
                             onChange={handleFileSelect}
                             aria-hidden="true"
