@@ -6538,6 +6538,26 @@ function initializeProjectDetail() {
         }
     }, []);
 
+    const refreshProjectListsFromServer = useCallback(async (projectId) => {
+        if (!projectId || !window.DatabaseAPI?.makeRequest) return null;
+        try {
+            // Force a fresh read after list mutations so UI state reflects persisted DB data.
+            const resp = await window.DatabaseAPI.makeRequest(`/projects/${projectId}`, { forceRefresh: true });
+            const freshProject = resp?.data?.project || resp?.project || null;
+            const freshLists = Array.isArray(freshProject?.taskLists)
+                ? freshProject.taskLists.map(normalizeTaskList)
+                : null;
+            if (Array.isArray(freshLists)) {
+                setTaskLists(freshLists);
+                syncViewingProjectTaskLists(freshLists);
+            }
+            return freshProject;
+        } catch (err) {
+            console.warn('⚠️ Failed to refresh project lists after save:', err?.message || err);
+            return null;
+        }
+    }, [syncViewingProjectTaskLists]);
+
     const handleAddList = useCallback(async () => {
         const ready = await ensureListModalLoaded();
         if (!ready) {
@@ -6608,10 +6628,12 @@ function initializeProjectDetail() {
                 }
             } else {
                 const nextOrder = taskLists.length;
+                const nextListId = Math.max(0, ...taskLists.map(l => Number(l?.id) || 0)) + 1;
                 const data = await window.DatabaseAPI.makeRequest('/project-task-lists', {
                     method: 'POST',
                     body: JSON.stringify({
                         projectId,
+                        listId: nextListId,
                         name: listData.name || 'New list',
                         color: listData.color || 'blue',
                         order: nextOrder
@@ -6631,13 +6653,14 @@ function initializeProjectDetail() {
                 });
             }
             invalidateProjectDetailCache(project?.id);
+            await refreshProjectListsFromServer(project?.id);
             setShowListModal(false);
             setEditingList(null);
         } catch (err) {
             console.error('❌ Error saving list:', err);
             alert('Failed to save list: ' + (err.message || 'Please try again.'));
         }
-    }, [project?.id, editingList, taskLists, syncViewingProjectTaskLists, invalidateProjectDetailCache]);
+    }, [project?.id, editingList, taskLists, syncViewingProjectTaskLists, invalidateProjectDetailCache, refreshProjectListsFromServer]);
 
     const handleAddCustomField = (fieldData) => {
         setCustomFieldDefinitions([...customFieldDefinitions, fieldData]);
@@ -6699,6 +6722,7 @@ function initializeProjectDetail() {
                     syncViewingProjectTaskLists(next);
                     return next;
                 });
+                await refreshProjectListsFromServer(project?.id);
             } catch (error) {
                 console.error('❌ Error deleting list:', error);
                 alert('Failed to delete list: ' + error.message);
