@@ -53,6 +53,8 @@ const TaskDetailModal = ({
     });
     const [sendNotifications, setSendNotifications] = useState(true);
     const [newComment, setNewComment] = useState('');
+    const [commentAttachments, setCommentAttachments] = useState([]);
+    const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
     const [editingCommentId, setEditingCommentId] = useState(null);
     const [editingCommentText, setEditingCommentText] = useState('');
     // CRITICAL: Initialize comments from task, ensuring it's always an array
@@ -186,6 +188,7 @@ const TaskDetailModal = ({
     const descriptionTextareaRef = useRef(null);
     const descriptionEditOriginRef = useRef('external'); // 'external' | 'user' - avoid overwriting user input when syncing from task
     const mentionSuggestionsRef = useRef(null);
+    const commentAttachmentInputRef = useRef(null);
     const checklistInputRef = useRef(null);
     const lastFocusRequestRef = useRef(null);
     const lastInitialTabRef = useRef(null);
@@ -208,6 +211,20 @@ const TaskDetailModal = ({
             return 'checklist';
         }
         return null;
+    };
+
+    const parseCommentAttachments = (value) => {
+        if (Array.isArray(value)) return value;
+        if (!value) return [];
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+        return [];
     };
     
     // Helper function to preserve cursor position when updating text fields
@@ -345,7 +362,8 @@ const TaskDetailModal = ({
                     timestamp: c.createdAt,
                     date: new Date(c.createdAt).toLocaleString(),
                     createdAt: c.createdAt,
-                    updatedAt: c.updatedAt
+                    updatedAt: c.updatedAt,
+                    attachments: parseCommentAttachments(c.attachments)
                 }));
                 
                 // Merge with any JSON comments (for backward compatibility during migration)
@@ -1153,8 +1171,80 @@ const TaskDetailModal = ({
         }
     };
 
+    const uploadCommentFiles = async (files) => {
+        const uploadPromises = files.map(async (file) => {
+            try {
+                const reader = new FileReader();
+                const dataUrl = await new Promise((resolve, reject) => {
+                    reader.onload = (event) => resolve(event.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                const token = window.storage?.getToken?.();
+                const response = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        name: file.name,
+                        dataUrl,
+                        folder: 'task-comment-attachments'
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: 'Upload failed' }));
+                    throw new Error(errorData.message || `Upload failed: ${response.statusText}`);
+                }
+
+                const uploadData = await response.json();
+                return {
+                    id: Date.now() + Math.random(),
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    uploadDate: new Date().toISOString(),
+                    url: uploadData.url || uploadData.data?.url || '',
+                    dataUrl
+                };
+            } catch (error) {
+                console.error('❌ Failed to upload comment attachment:', file?.name, error);
+                alert(`Failed to upload ${file?.name || 'file'}: ${error?.message || 'Unknown error'}`);
+                return null;
+            }
+        });
+
+        const uploaded = await Promise.all(uploadPromises);
+        return uploaded.filter(Boolean);
+    };
+
+    const handleCommentAttachmentUpload = async (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        setUploadingCommentAttachments(true);
+        try {
+            const uploaded = await uploadCommentFiles(files);
+            if (uploaded.length > 0) {
+                setCommentAttachments(prev => [...prev, ...uploaded]);
+            }
+        } catch (error) {
+            console.error('❌ Error uploading comment attachments:', error);
+            alert(`Error uploading files: ${error?.message || 'Unknown error'}`);
+        } finally {
+            setUploadingCommentAttachments(false);
+            e.target.value = '';
+        }
+    };
+
+    const removePendingCommentAttachment = (attachmentId) => {
+        setCommentAttachments(prev => prev.filter(att => String(att.id) !== String(attachmentId)));
+    };
+
     const handleAddComment = async () => {
-        if (newComment.trim()) {
+        if (newComment.trim() || commentAttachments.length > 0) {
             // Get current user info
             const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
             
@@ -1200,7 +1290,8 @@ const TaskDetailModal = ({
                 authorId: currentUser.id,
                 timestamp: new Date().toISOString(),
                 date: new Date().toLocaleString(),
-                mentions: mentionedUsers // Store mentioned users
+                mentions: mentionedUsers, // Store mentioned users
+                attachments: commentAttachments
             };
             
             // Update subscribers: author, mentioned, all assignees, and everyone who has ever commented (involved)
@@ -1224,6 +1315,7 @@ const TaskDetailModal = ({
             const updatedComments = [...comments, comment];
             setComments(updatedComments);
             setNewComment('');
+            setCommentAttachments([]);
             
             // CRITICAL: Mark that we just added a comment to prevent refresh race condition
             lastCommentAddTimeRef.current = Date.now();
@@ -1276,7 +1368,8 @@ const TaskDetailModal = ({
                         text: comment.text,
                         author: comment.author || currentUser.name,
                         authorId: comment.authorId || currentUser.id,
-                        userName: comment.userName || comment.authorEmail || currentUser.email
+                        userName: comment.userName || comment.authorEmail || currentUser.email,
+                        attachments: Array.isArray(comment.attachments) ? comment.attachments : []
                     })
                 });
                 // API wraps response in { data: { comment } }
@@ -1288,7 +1381,8 @@ const TaskDetailModal = ({
                         id: savedCommentFromApi.id,
                         createdAt: savedCommentFromApi.createdAt,
                         timestamp: savedCommentFromApi.createdAt,
-                        date: new Date(savedCommentFromApi.createdAt).toLocaleString()
+                        date: new Date(savedCommentFromApi.createdAt).toLocaleString(),
+                        attachments: parseCommentAttachments(savedCommentFromApi.attachments)
                     };
                     
                     // Update comments state with the saved comment
@@ -2465,6 +2559,13 @@ const TaskDetailModal = ({
                                 </div>
                                 {/* Add Comment */}
                                 <div className="relative">
+                                    <input
+                                        ref={commentAttachmentInputRef}
+                                        type="file"
+                                        multiple
+                                        onChange={handleCommentAttachmentUpload}
+                                        className="hidden"
+                                    />
                                     <textarea
                                         ref={commentTextareaRef}
                                         value={newComment}
@@ -2504,6 +2605,30 @@ const TaskDetailModal = ({
                                         rows="3"
                                         placeholder="Add a comment... (use @ to mention someone)"
                                     ></textarea>
+
+                                    {commentAttachments.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {commentAttachments.map((attachment) => (
+                                                <span
+                                                    key={attachment.id}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 bg-gray-50 text-[10px] text-gray-700"
+                                                >
+                                                    <i className="fas fa-paperclip text-gray-400"></i>
+                                                    <span className="max-w-[180px] truncate" title={attachment.name}>
+                                                        {attachment.name}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removePendingCommentAttachment(attachment.id)}
+                                                        className="text-gray-400 hover:text-red-600"
+                                                        title="Remove attachment"
+                                                    >
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
                                     
                                     {/* Mention Suggestions Dropdown */}
                                     {showMentionSuggestions && (
@@ -2549,7 +2674,17 @@ const TaskDetailModal = ({
                                     )}
                                     
                                     <div className="mt-1.5 flex justify-between items-center">
-                                        <div className="text-[10px] text-gray-500 flex items-center gap-2">
+                                        <div className="text-[10px] text-gray-500 flex items-center gap-2 flex-wrap">
+                                            <button
+                                                type="button"
+                                                onClick={() => commentAttachmentInputRef.current?.click()}
+                                                className="text-primary-600 hover:text-primary-700 hover:underline"
+                                                title="Attach files to this comment"
+                                                disabled={uploadingCommentAttachments}
+                                            >
+                                                <i className={`fas ${uploadingCommentAttachments ? 'fa-spinner fa-spin' : 'fa-paperclip'} mr-1`}></i>
+                                                {uploadingCommentAttachments ? 'Uploading...' : 'Attach files'}
+                                            </button>
                                             {editedTask.subscribers && editedTask.subscribers.length > 0 && (
                                                 <span
                                                     title="People who receive notifications when someone comments (comment author, assignees, @mentioned users, and anyone who has commented)"
@@ -2662,6 +2797,25 @@ const TaskDetailModal = ({
                                                     <p className="text-gray-700 text-xs whitespace-pre-wrap">
                                                         {comment.text}
                                                     </p>
+                                                )}
+                                                {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
+                                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                                        {comment.attachments.map((attachment, index) => (
+                                                            <a
+                                                                key={`${comment.id}-att-${attachment.id || attachment.url || index}`}
+                                                                href={attachment.url || attachment.dataUrl || '#'}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 bg-white text-[10px] text-primary-700 hover:bg-primary-50"
+                                                                title={attachment.name || 'Attachment'}
+                                                            >
+                                                                <i className="fas fa-paperclip text-primary-500"></i>
+                                                                <span className="max-w-[180px] truncate">
+                                                                    {attachment.name || 'Attachment'}
+                                                                </span>
+                                                            </a>
+                                                        ))}
+                                                    </div>
                                                 )}
                                             </div>
                                         ))

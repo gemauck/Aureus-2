@@ -795,6 +795,7 @@ model TaskComment {
   taskId    String // Task ID - now a foreign key to Task table
   projectId String // Project ID for quick queries and relations
   text      String
+  attachments String @default("[]") // JSON array of attachment objects
   authorId  String? // User ID if available
   author    String // Author name (denormalized for quick display)
   userName  String? // Username/email (denormalized)

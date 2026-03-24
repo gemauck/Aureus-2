@@ -6,11 +6,46 @@ import { ok, serverError, badRequest, notFound } from './_lib/response.js';
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js';
 import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js';
 
+let taskCommentColumnsEnsured = false;
+async function ensureTaskCommentColumns() {
+  if (taskCommentColumnsEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "TaskComment" ADD COLUMN IF NOT EXISTS "attachments" TEXT DEFAULT \'[]\'');
+  } catch (e) {
+    console.warn('⚠️ TaskComment column ensure failed:', e.message);
+  } finally {
+    taskCommentColumnsEnsured = true;
+  }
+}
+
+function parseAttachments(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeComment(comment) {
+  if (!comment) return comment;
+  return {
+    ...comment,
+    attachments: parseAttachments(comment.attachments)
+  };
+}
+
 export default async function handler(req, res) {
   const { method } = req;
   const { id: commentId, taskId, projectId } = req.query;
 
   try {
+    await ensureTaskCommentColumns();
     if (method === 'GET') {
       // Get comments for a task or project
       if (commentId) {
@@ -32,7 +67,7 @@ export default async function handler(req, res) {
           return notFound(res, 'Comment not found');
         }
 
-        return ok(res, { comment });
+        return ok(res, { comment: normalizeComment(comment) });
       } else if (taskId) {
         // Get all comments for a specific task
         const comments = await prisma.taskComment.findMany({
@@ -49,7 +84,7 @@ export default async function handler(req, res) {
           }
         });
 
-        return ok(res, { comments });
+        return ok(res, { comments: comments.map(normalizeComment) });
       } else if (projectId) {
         // Get all comments for a project
         const comments = await prisma.taskComment.findMany({
@@ -66,7 +101,7 @@ export default async function handler(req, res) {
           }
         });
 
-        return ok(res, { comments });
+        return ok(res, { comments: comments.map(normalizeComment) });
       } else {
         return badRequest(res, 'Missing taskId or projectId parameter');
       }
@@ -99,10 +134,12 @@ export default async function handler(req, res) {
         }
       }
 
-      const { taskId, projectId, text, author, authorId, userName } = body;
+      const { taskId, projectId, text, author, authorId, userName, attachments } = body;
+      const normalizedAttachments = parseAttachments(attachments);
+      const normalizedText = String(text || '');
 
-      if (!taskId || !projectId || !text) {
-        return badRequest(res, 'Missing required fields: taskId, projectId, and text are required');
+      if (!taskId || !projectId || (!normalizedText.trim() && normalizedAttachments.length === 0)) {
+        return badRequest(res, 'Missing required fields: taskId, projectId, and either text or attachments are required');
       }
 
       // Get current user info if available
@@ -115,10 +152,11 @@ export default async function handler(req, res) {
         data: {
           taskId: String(taskId),
           projectId: String(projectId),
-          text: String(text),
+          text: normalizedText,
           author: String(finalAuthor),
           authorId: finalAuthorId,
-          userName: finalUserName || null
+          userName: finalUserName || null,
+          attachments: JSON.stringify(normalizedAttachments)
         },
         include: {
           authorUser: {
@@ -146,7 +184,7 @@ export default async function handler(req, res) {
             where: { taskId: String(taskId), id: { not: comment.id } },
             select: { authorId: true, text: true }
           }),
-          resolveMentionedUserIds(text)
+          resolveMentionedUserIds(normalizedText)
         ]);
         const priorAuthorIds = [...new Set((priorComments || []).map((c) => c.authorId).filter(Boolean))];
         const priorCommentTexts = (priorComments || []).map((c) => c.text).filter(Boolean);
@@ -161,14 +199,14 @@ export default async function handler(req, res) {
         const subscriberIds = [...new Set([String(finalAuthorId), ...(mentionedIdsResolved || []), ...priorAuthorIds, ...taskSubscribers])].filter(Boolean);
         await notifyCommentParticipants({
           commentAuthorId: finalAuthorId,
-          commentText: text,
+          commentText: normalizedText,
           entityAuthorId: task?.assigneeId || null,
           priorCommentAuthorIds: subscriberIds,
           priorCommentTexts,
           authorName: finalAuthor,
           contextTitle: `Task: ${task?.title || taskId}`,
           link: `#/projects/${projectId}?task=${taskId}&commentId=${comment.id}`,
-          metadata: { projectId, taskId, taskTitle: task?.title, commentId: comment.id, commentText: text }
+          metadata: { projectId, taskId, taskTitle: task?.title, commentId: comment.id, commentText: normalizedText }
         });
       } catch (notifyErr) {
         console.error('Notify comment participants failed (task comment):', notifyErr);
@@ -187,11 +225,11 @@ export default async function handler(req, res) {
           entityId: String(taskId),
           taskTitle: taskForLog?.title,
           commentId: comment.id,
-          snippet: String(text).slice(0, 100)
+          snippet: normalizedText.slice(0, 100)
         }
       });
 
-      return ok(res, { comment });
+      return ok(res, { comment: normalizeComment(comment) });
     }
 
     if (method === 'PUT' || method === 'PATCH') {
@@ -228,6 +266,7 @@ export default async function handler(req, res) {
       if (body.text !== undefined) updateData.text = String(body.text);
       if (body.author !== undefined) updateData.author = String(body.author);
       if (body.userName !== undefined) updateData.userName = body.userName || null;
+      if (body.attachments !== undefined) updateData.attachments = JSON.stringify(parseAttachments(body.attachments));
 
       if (Object.keys(updateData).length === 0) {
         return badRequest(res, 'No fields to update');
@@ -247,7 +286,7 @@ export default async function handler(req, res) {
         }
       });
 
-      return ok(res, { comment });
+      return ok(res, { comment: normalizeComment(comment) });
     }
 
     if (method === 'DELETE') {
