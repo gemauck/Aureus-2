@@ -206,7 +206,7 @@ async function hydrateProjectDriveLinks(project) {
   if (!project || !project.id) return project;
   try {
     const rows = await prisma.$queryRaw`
-      SELECT "googleDriveLink", "onlineDriveLinks"
+      SELECT "googleDriveLink", "onlineDriveLinks", "projectContacts"
       FROM "Project"
       WHERE id = ${project.id}
       LIMIT 1
@@ -219,10 +219,37 @@ async function hydrateProjectDriveLinks(project) {
     if (row.onlineDriveLinks !== undefined && row.onlineDriveLinks !== null) {
       project.onlineDriveLinks = String(row.onlineDriveLinks);
     }
+    if (row.projectContacts !== undefined && row.projectContacts !== null) {
+      project.projectContacts = String(row.projectContacts);
+    }
   } catch (e) {
     console.warn('⚠️ Could not hydrate project drive links:', e?.message || e);
   }
   return project;
+}
+
+function normalizeProjectContactsPayload(input) {
+  let parsed = input;
+  if (typeof parsed === 'string') {
+    const trimmed = parsed.trim();
+    if (!trimmed) return [];
+    parsed = JSON.parse(trimmed);
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((raw) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const id = String(raw.id || '').trim();
+      if (!id) return null;
+      return {
+        id,
+        name: String(raw.name || '').trim(),
+        email: String(raw.email || '').trim(),
+        phone: String(raw.phone || raw.mobile || '').trim(),
+        role: String(raw.role || raw.title || '').trim()
+      };
+    })
+    .filter(Boolean);
 }
 
 async function handler(req, res) {
@@ -1030,7 +1057,8 @@ async function handler(req, res) {
         ['complianceReviewChecklist', "TEXT DEFAULT '[]'"],
         ['complianceReviewSections', "TEXT DEFAULT '{}'"],
         ['googleDriveLink', "TEXT DEFAULT ''"],
-        ['onlineDriveLinks', "TEXT DEFAULT '{\"googleDrive\":[\"\"],\"oneDrive\":[\"\"]}'"]
+        ['onlineDriveLinks', "TEXT DEFAULT '{\"googleDrive\":[\"\"],\"oneDrive\":[\"\"]}'"],
+        ['projectContacts', "TEXT DEFAULT '[]'"]
       ];
       for (const [col, def] of optionalColumns) {
         try {
@@ -1137,6 +1165,15 @@ async function handler(req, res) {
         assignedTo: body.assignedTo,
         googleDriveLink: body.googleDriveLink !== undefined ? String(body.googleDriveLink || '').trim() : undefined,
         onlineDriveLinks: body.onlineDriveLinks !== undefined ? String(body.onlineDriveLinks || '{"googleDrive":[""],"oneDrive":[""]}') : undefined,
+        projectContacts: body.projectContacts !== undefined
+          ? (() => {
+              try {
+                return JSON.stringify(normalizeProjectContactsPayload(body.projectContacts));
+              } catch (_) {
+                return '[]';
+              }
+            })()
+          : undefined,
         // JSON fields completely removed - data now stored ONLY in separate tables:
         // - tasksList → Task table (via /api/tasks)
         // - taskLists → ProjectTaskList table (via /api/project-task-lists)
@@ -1439,6 +1476,13 @@ async function handler(req, res) {
       if (Object.prototype.hasOwnProperty.call(updateData, 'onlineDriveLinks')) {
         delete updateData.onlineDriveLinks;
       }
+      const projectContactsPayload =
+        Object.prototype.hasOwnProperty.call(updateData, 'projectContacts')
+          ? updateData.projectContacts
+          : null;
+      if (Object.prototype.hasOwnProperty.call(updateData, 'projectContacts')) {
+        delete updateData.projectContacts;
+      }
       
       // Check if project exists and load current values for activity log diff
       const existingProject = await prisma.project.findUnique({
@@ -1473,6 +1517,32 @@ async function handler(req, res) {
         console.error('❌ Project not found for update:', id)
         return notFound(res, 'Project not found')
       }
+
+      if (projectContactsPayload !== null) {
+        let normalizedContacts = [];
+        try {
+          normalizedContacts = normalizeProjectContactsPayload(projectContactsPayload);
+        } catch (parseError) {
+          return badRequest(res, 'Invalid projectContacts format. Must be a JSON array.')
+        }
+        const targetClientId = updateData.clientId !== undefined ? updateData.clientId : existingProject.clientId;
+        if (!targetClientId && normalizedContacts.length > 0) {
+          return badRequest(res, 'Cannot link project contacts without a client on the project.')
+        }
+        if (targetClientId && normalizedContacts.length > 0) {
+          const allowedContacts = await prisma.clientContact.findMany({
+            where: { clientId: targetClientId },
+            select: { id: true }
+          });
+          const allowedIdSet = new Set(allowedContacts.map((c) => String(c.id)));
+          const invalidIds = normalizedContacts
+            .map((c) => String(c.id))
+            .filter((contactId) => !allowedIdSet.has(contactId));
+          if (invalidIds.length > 0) {
+            return badRequest(res, 'One or more linked contacts do not belong to this client.')
+          }
+        }
+      }
       
       try {
         // Use a transaction to ensure atomicity - if table save fails, project update is rolled back
@@ -1487,6 +1557,13 @@ async function handler(req, res) {
             await tx.$executeRaw`
               UPDATE "Project"
               SET "onlineDriveLinks" = ${onlineDriveLinksPayload}
+              WHERE id = ${id}
+            `;
+          }
+          if (projectContactsPayload !== null) {
+            await tx.$executeRaw`
+              UPDATE "Project"
+              SET "projectContacts" = ${projectContactsPayload}
               WHERE id = ${id}
             `;
           }
@@ -1767,6 +1844,12 @@ async function handler(req, res) {
           }
         }
 
+        if (onlineDriveLinksPayload !== null) {
+          result.onlineDriveLinks = onlineDriveLinksPayload;
+        }
+        if (projectContactsPayload !== null) {
+          result.projectContacts = projectContactsPayload;
+        }
         return ok(res, { project: result })
       } catch (dbError) {
         console.error('❌ Database error updating project:', {

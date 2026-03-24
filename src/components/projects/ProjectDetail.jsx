@@ -1954,6 +1954,281 @@ function initializeProjectDetail() {
         );
     };
 
+    const ProjectContactsEditor = ({ projectId, clientId, initialSerialized, onProjectUpdate }) => {
+        const [availableContacts, setAvailableContacts] = useState([]);
+        const [selectedContactId, setSelectedContactId] = useState('');
+        const [linkedContacts, setLinkedContacts] = useState([]);
+        const [loadingContacts, setLoadingContacts] = useState(false);
+        const [saving, setSaving] = useState(false);
+        const [saveHint, setSaveHint] = useState(null);
+        const lastClientIdRef = useRef(null);
+        const lastProjectIdRef = useRef(null);
+        const dirtyRef = useRef(false);
+        const lastSavedPayloadRef = useRef('');
+        const autoSaveTimerRef = useRef(null);
+        const initialSerializedRef = useRef(initialSerialized);
+        initialSerializedRef.current = initialSerialized;
+
+        const normalizeContact = useCallback((raw) => {
+            if (!raw || typeof raw !== 'object') return null;
+            const id = String(raw.id || '').trim();
+            if (!id) return null;
+            return {
+                id,
+                name: String(raw.name || '').trim(),
+                email: String(raw.email || '').trim(),
+                phone: String(raw.phone || raw.mobile || '').trim(),
+                role: String(raw.role || raw.title || '').trim()
+            };
+        }, []);
+
+        const parseLinkedContacts = useCallback((rawValue) => {
+            if (!rawValue) return [];
+            try {
+                const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+                if (!Array.isArray(parsed)) return [];
+                return parsed.map(normalizeContact).filter(Boolean);
+            } catch (error) {
+                console.warn('Failed to parse projectContacts:', error);
+                return [];
+            }
+        }, [normalizeContact]);
+
+        const loadClientContacts = useCallback(async (targetClientId) => {
+            if (!targetClientId || !window.api?.getContacts) {
+                setAvailableContacts([]);
+                return;
+            }
+            setLoadingContacts(true);
+            try {
+                const response = await window.api.getContacts(targetClientId);
+                const list = response?.data?.contacts || response?.contacts || [];
+                const normalized = Array.isArray(list) ? list.map(normalizeContact).filter(Boolean) : [];
+                setAvailableContacts(normalized);
+            } catch (error) {
+                console.error('Failed to load client contacts:', error);
+                setAvailableContacts([]);
+            } finally {
+                setLoadingContacts(false);
+            }
+        }, [normalizeContact]);
+
+        useEffect(() => {
+            const nextProjectId = String(projectId || '');
+            const nextClientId = String(clientId || '');
+            const projectChanged = lastProjectIdRef.current !== nextProjectId;
+            const clientChanged = lastClientIdRef.current !== nextClientId;
+
+            if (projectChanged) {
+                lastProjectIdRef.current = nextProjectId;
+                dirtyRef.current = false;
+                setSaveHint(null);
+                const parsed = parseLinkedContacts(initialSerializedRef.current);
+                const payload = JSON.stringify(parsed);
+                lastSavedPayloadRef.current = payload;
+                setLinkedContacts(parsed);
+            } else if (!dirtyRef.current) {
+                setLinkedContacts(parseLinkedContacts(initialSerializedRef.current));
+            }
+
+            if (clientChanged || projectChanged) {
+                lastClientIdRef.current = nextClientId;
+                setSelectedContactId('');
+                loadClientContacts(nextClientId);
+            }
+        }, [projectId, clientId, initialSerialized, parseLinkedContacts, loadClientContacts]);
+
+        const serializeLinkedContacts = useCallback(
+            (rows) => JSON.stringify((Array.isArray(rows) ? rows : []).map(normalizeContact).filter(Boolean)),
+            [normalizeContact]
+        );
+
+        const handleSave = useCallback(async () => {
+            if (!projectId || !window.DatabaseAPI?.updateProject || saving) return;
+            const payload = serializeLinkedContacts(linkedContacts);
+            setSaving(true);
+            setSaveHint(null);
+            try {
+                const apiResponse = await window.DatabaseAPI.updateProject(projectId, {
+                    projectContacts: payload
+                });
+                const updatedProject =
+                    apiResponse?.data?.project ||
+                    apiResponse?.project ||
+                    { id: projectId, projectContacts: payload };
+                dirtyRef.current = false;
+                lastSavedPayloadRef.current = payload;
+                if (typeof onProjectUpdate === 'function') onProjectUpdate(updatedProject);
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject(updatedProject);
+                }
+                setSaveHint('saved');
+                window.setTimeout(() => setSaveHint(null), 2500);
+            } catch (error) {
+                console.error('Failed to save project contacts:', error);
+                setSaveHint('error');
+            } finally {
+                setSaving(false);
+            }
+        }, [projectId, linkedContacts, saving, serializeLinkedContacts, onProjectUpdate]);
+
+        useEffect(() => {
+            if (!projectId || !window.DatabaseAPI?.updateProject) return;
+            if (!dirtyRef.current || saving) return;
+            const payload = serializeLinkedContacts(linkedContacts);
+            if (payload === lastSavedPayloadRef.current) return;
+            if (autoSaveTimerRef.current) {
+                window.clearTimeout(autoSaveTimerRef.current);
+            }
+            autoSaveTimerRef.current = window.setTimeout(() => {
+                autoSaveTimerRef.current = null;
+                if (!dirtyRef.current || saving) return;
+                handleSave();
+            }, 900);
+            return () => {
+                if (autoSaveTimerRef.current) {
+                    window.clearTimeout(autoSaveTimerRef.current);
+                    autoSaveTimerRef.current = null;
+                }
+            };
+        }, [projectId, linkedContacts, saving, serializeLinkedContacts, handleSave]);
+
+        const linkedIds = new Set(linkedContacts.map((c) => c.id));
+        const availableToLink = availableContacts.filter((c) => !linkedIds.has(c.id));
+
+        const addSelectedContact = () => {
+            if (!selectedContactId) return;
+            const selected = availableContacts.find((c) => c.id === selectedContactId);
+            if (!selected || linkedIds.has(selected.id)) return;
+            dirtyRef.current = true;
+            setLinkedContacts((prev) => [...prev, selected]);
+            setSelectedContactId('');
+            setSaveHint(null);
+        };
+
+        const removeLinkedContact = (contactId) => {
+            dirtyRef.current = true;
+            setLinkedContacts((prev) => prev.filter((c) => c.id !== contactId));
+            setSaveHint(null);
+        };
+
+        if (!projectId) return null;
+
+        return (
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                    <div className="flex items-center gap-2">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700">
+                            <i className="fas fa-address-book" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-semibold text-gray-900">Project contacts</h2>
+                            <p className="text-xs text-gray-500">Link contacts from this client's CRM record</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {saveHint === 'saved' && (
+                            <span className="text-xs font-medium text-emerald-600">
+                                <i className="fas fa-check-circle mr-1" />
+                                Saved
+                            </span>
+                        )}
+                        {saveHint === 'error' && <span className="text-xs font-medium text-red-600">Save failed</span>}
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {saving ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-save" />}
+                            Save
+                        </button>
+                    </div>
+                </div>
+
+                {!clientId ? (
+                    <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5">
+                        Link a client to this project first, then you can select contacts from CRM.
+                    </p>
+                ) : (
+                    <div className="mt-3 space-y-3">
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <select
+                                value={selectedContactId}
+                                onChange={(e) => setSelectedContactId(e.target.value)}
+                                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                disabled={loadingContacts || availableToLink.length === 0}
+                            >
+                                <option value="">
+                                    {loadingContacts
+                                        ? 'Loading CRM contacts...'
+                                        : availableToLink.length > 0
+                                          ? 'Select a CRM contact to link'
+                                          : 'No additional CRM contacts available'}
+                                </option>
+                                {availableToLink.map((contact) => (
+                                    <option key={contact.id} value={contact.id}>
+                                        {contact.name || contact.email || contact.phone || contact.id}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                onClick={addSelectedContact}
+                                disabled={!selectedContactId}
+                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <i className="fas fa-link text-[10px]" />
+                                Link contact
+                            </button>
+                        </div>
+
+                        {linkedContacts.length === 0 ? (
+                            <p className="text-xs text-gray-500">No contacts linked to this project yet.</p>
+                        ) : (
+                            <ul className="space-y-2">
+                                {linkedContacts.map((contact) => (
+                                    <li
+                                        key={contact.id}
+                                        className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 truncate">
+                                                {contact.name || 'Unnamed contact'}
+                                            </p>
+                                            <p className="text-xs text-gray-600 truncate">
+                                                {[contact.role, contact.email || contact.phone].filter(Boolean).join(' - ') || 'No details'}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {contact.email ? (
+                                                <a
+                                                    href={`mailto:${contact.email}`}
+                                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                                                >
+                                                    <i className="fas fa-envelope mr-1.5 text-[10px]" />
+                                                    Email
+                                                </a>
+                                            ) : null}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeLinkedContact(contact.id)}
+                                                className="inline-flex items-center rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                                            >
+                                                <i className="fas fa-unlink mr-1.5 text-[10px]" />
+                                                Unlink
+                                            </button>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     /**
      * Overview tab — stable component (defined once next to OnlineDriveLinksEditor).
      * Do NOT use `const OverviewSection = () => {}` inside ProjectDetail: a new function each render
@@ -2090,6 +2365,12 @@ function initializeProjectDetail() {
                 <OnlineDriveLinksEditor
                     projectId={project?.id}
                     initialSerialized={project?.onlineDriveLinks}
+                    onProjectUpdate={onProjectUpdate}
+                />
+                <ProjectContactsEditor
+                    projectId={project?.id}
+                    clientId={project?.clientId}
+                    initialSerialized={project?.projectContacts}
                     onProjectUpdate={onProjectUpdate}
                 />
 
