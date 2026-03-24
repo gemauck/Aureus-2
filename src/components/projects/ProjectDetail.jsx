@@ -6132,12 +6132,20 @@ function initializeProjectDetail() {
         // Track which tasks have been assigned to a list
         const assignedTaskIds = new Set();
 
+        const claimedListIds = new Set();
         const result = taskLists
             .filter(list => taskFilters.list === 'all' || String(list.id) === taskFilters.list)
-            .map(list => {
+            .map((list, index) => {
+                const listIdKey = String(list.id);
+                const listIdAlreadyClaimed = claimedListIds.has(listIdKey);
+                if (!listIdAlreadyClaimed) {
+                    claimedListIds.add(listIdKey);
+                }
                 // CRITICAL: Use String() comparison to handle type mismatch (number vs string)
-                const tasksForList = safeTasks
-                    .filter(task => String(task.listId) === String(list.id))
+                // Defensive behavior for corrupted/duplicate list IDs:
+                // only the first list with a given id claims tasks to prevent duplicate rendering.
+                const tasksForList = (listIdAlreadyClaimed ? [] : safeTasks
+                    .filter(task => String(task.listId) === String(list.id)))
                     .map(task => {
                         const taskMatches = matchesTaskFilters(task, list.id);
                         const matchingSubtasks = (task.subtasks || []).filter(subtask => matchesTaskFilters(subtask, list.id));
@@ -6193,6 +6201,7 @@ function initializeProjectDetail() {
 
                 return {
                     ...list,
+                    _renderKey: list._pk || `${list.id}-${index}`,
                     tasks: tasksForList
                 };
             });
@@ -8951,7 +8960,7 @@ function initializeProjectDetail() {
                     {filteredTaskLists.map(list => {
                         const accentColor = list.color ? `var(--tw-${list.color}-500, #0ea5e9)` : '#0ea5e9';
                         return (
-                            <section key={list.id} className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+                            <section key={list._renderKey || list.id} className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
                                 <header className="border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-start justify-between gap-3">
                                     <div>
                                         <div className="flex items-center gap-2">
