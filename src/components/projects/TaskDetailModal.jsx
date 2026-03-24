@@ -53,6 +53,8 @@ const TaskDetailModal = ({
     });
     const [sendNotifications, setSendNotifications] = useState(true);
     const [newComment, setNewComment] = useState('');
+    const [editingCommentId, setEditingCommentId] = useState(null);
+    const [editingCommentText, setEditingCommentText] = useState('');
     // CRITICAL: Initialize comments from task, ensuring it's always an array
     const [comments, setComments] = useState(() => {
         const initialComments = Array.isArray(task?.comments) ? task.comments : [];
@@ -1505,6 +1507,56 @@ const TaskDetailModal = ({
         }
     };
 
+    const startEditingComment = (comment) => {
+        const commentId = comment?.id;
+        if (!commentId) return;
+        setEditingCommentId(String(commentId));
+        setEditingCommentText(comment?.text || '');
+    };
+
+    const cancelEditingComment = () => {
+        setEditingCommentId(null);
+        setEditingCommentText('');
+    };
+
+    const handleSaveEditedComment = async (commentId) => {
+        const commentIdStr = commentId ? String(commentId) : '';
+        const nextText = String(editingCommentText || '').trim();
+
+        if (!commentIdStr) {
+            alert('Cannot edit comment: missing comment ID');
+            return;
+        }
+        if (!nextText) {
+            alert('Comment text cannot be empty.');
+            return;
+        }
+
+        try {
+            const response = await window.DatabaseAPI.makeRequest(`/task-comments?id=${encodeURIComponent(commentIdStr)}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ text: nextText })
+            });
+            const savedComment = response?.data?.comment ?? response?.comment;
+
+            setComments(prev => prev.map(comment => {
+                if (String(comment.id) !== commentIdStr) return comment;
+                return {
+                    ...comment,
+                    text: nextText,
+                    ...(savedComment?.updatedAt ? { updatedAt: savedComment.updatedAt } : {})
+                };
+            }));
+            cancelEditingComment();
+        } catch (error) {
+            console.error('❌ TaskDetailModal: Failed to edit comment', {
+                commentId: commentIdStr,
+                error: error?.message
+            });
+            alert(`Failed to edit comment: ${error?.message || 'Unknown error'}`);
+        }
+    };
+
     const handleFileUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
@@ -2560,19 +2612,57 @@ const TaskDetailModal = ({
                                                             })}</div>
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteComment(comment.id)}
-                                                        className="text-gray-400 hover:text-red-600 p-0.5"
-                                                        title="Delete comment"
-                                                        aria-label="Delete comment"
-                                                    >
-                                                        <i className="fas fa-trash text-xs"></i>
-                                                    </button>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => startEditingComment(comment)}
+                                                            className="text-gray-400 hover:text-primary-600 p-0.5"
+                                                            title="Edit comment"
+                                                            aria-label="Edit comment"
+                                                        >
+                                                            <i className="fas fa-edit text-xs"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteComment(comment.id)}
+                                                            className="text-gray-400 hover:text-red-600 p-0.5"
+                                                            title="Delete comment"
+                                                            aria-label="Delete comment"
+                                                        >
+                                                            <i className="fas fa-trash text-xs"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <p className="text-gray-700 text-xs whitespace-pre-wrap">
-                                                    {comment.text}
-                                                </p>
+                                                {String(editingCommentId) === String(comment.id) ? (
+                                                    <div className="space-y-2">
+                                                        <textarea
+                                                            value={editingCommentText}
+                                                            onChange={(e) => setEditingCommentText(e.target.value)}
+                                                            rows="3"
+                                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                        />
+                                                        <div className="flex justify-end gap-1.5">
+                                                            <button
+                                                                type="button"
+                                                                onClick={cancelEditingComment}
+                                                                className="px-2 py-1 text-[10px] border border-gray-300 text-gray-600 rounded hover:bg-gray-100"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSaveEditedComment(comment.id)}
+                                                                className="px-2 py-1 text-[10px] bg-primary-600 text-white rounded hover:bg-primary-700"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-gray-700 text-xs whitespace-pre-wrap">
+                                                        {comment.text}
+                                                    </p>
+                                                )}
                                             </div>
                                         ))
                                     )}
