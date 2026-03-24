@@ -1954,7 +1954,7 @@ function initializeProjectDetail() {
         );
     };
 
-    const ProjectContactsEditor = ({ projectId, clientId, initialSerialized, onProjectUpdate }) => {
+    const ProjectContactsEditor = ({ projectId, clientId, clientName, initialSerialized, onProjectUpdate }) => {
         const [availableContacts, setAvailableContacts] = useState([]);
         const [sites, setSites] = useState([]);
         const [selectedContactId, setSelectedContactId] = useState('');
@@ -1963,6 +1963,7 @@ function initializeProjectDetail() {
         const [savingNewContact, setSavingNewContact] = useState(false);
         const [saving, setSaving] = useState(false);
         const [saveHint, setSaveHint] = useState(null);
+        const [resolvedClientId, setResolvedClientId] = useState(() => String(clientId || '').trim());
         const [newContact, setNewContact] = useState({
             name: '',
             email: '',
@@ -2038,9 +2039,57 @@ function initializeProjectDetail() {
             }
         }, []);
 
+        const getEffectiveClientId = useCallback(async () => {
+            const directClientId = String(clientId || '').trim();
+            if (directClientId) return directClientId;
+
+            const normalizedClientName = String(clientName || '').trim().toLowerCase();
+            if (!normalizedClientName) return '';
+
+            const scanClientRows = (rows) => {
+                if (!Array.isArray(rows)) return '';
+                const match = rows.find((row) => String(row?.name || '').trim().toLowerCase() === normalizedClientName);
+                return match?.id ? String(match.id).trim() : '';
+            };
+
+            const storageClients = window.storage?.getClients?.();
+            const storageMatch = scanClientRows(storageClients);
+            if (storageMatch) return storageMatch;
+
+            const cacheClients = window.ClientCache?.getClients?.();
+            const cacheMatch = scanClientRows(cacheClients);
+            if (cacheMatch) return cacheMatch;
+
+            if (window.DatabaseAPI?.getClients) {
+                try {
+                    const response = await window.DatabaseAPI.getClients();
+                    const rows = response?.data?.clients || response?.clients || response?.data || [];
+                    const apiMatch = scanClientRows(rows);
+                    if (apiMatch) return apiMatch;
+                } catch (error) {
+                    console.warn('Failed to resolve clientId from client name:', error);
+                }
+            }
+
+            return '';
+        }, [clientId, clientName]);
+
+        useEffect(() => {
+            let isActive = true;
+            const resolveClient = async () => {
+                const nextClientId = await getEffectiveClientId();
+                if (!isActive) return;
+                setResolvedClientId((prev) => (prev === nextClientId ? prev : nextClientId));
+            };
+            resolveClient();
+            return () => {
+                isActive = false;
+            };
+        }, [getEffectiveClientId]);
+
         useEffect(() => {
             const nextProjectId = String(projectId || '');
-            const nextClientId = String(clientId || '');
+            const nextClientId = String(resolvedClientId || '');
             const projectChanged = lastProjectIdRef.current !== nextProjectId;
             const clientChanged = lastClientIdRef.current !== nextClientId;
 
@@ -2062,7 +2111,7 @@ function initializeProjectDetail() {
                 loadClientContacts(nextClientId);
                 loadClientSites(nextClientId);
             }
-        }, [projectId, clientId, initialSerialized, parseLinkedContacts, loadClientContacts, loadClientSites]);
+        }, [projectId, resolvedClientId, initialSerialized, parseLinkedContacts, loadClientContacts, loadClientSites]);
 
         const serializeLinkedContacts = useCallback(
             (rows) => JSON.stringify((Array.isArray(rows) ? rows : []).map(normalizeContact).filter(Boolean)),
@@ -2140,7 +2189,7 @@ function initializeProjectDetail() {
         };
 
         const createAndLinkContact = async () => {
-            if (!clientId || !window.api?.createContact || savingNewContact) return;
+            if (!resolvedClientId || !window.api?.createContact || savingNewContact) return;
             const name = String(newContact.name || '').trim();
             if (!name) return;
             setSavingNewContact(true);
@@ -2152,7 +2201,7 @@ function initializeProjectDetail() {
                     role: String(newContact.role || '').trim(),
                     siteId: newContact.siteId ? String(newContact.siteId) : null
                 };
-                const response = await window.api.createContact(clientId, payload);
+                const response = await window.api.createContact(resolvedClientId, payload);
                 const createdRaw = response?.data?.contact || response?.contact || null;
                 const created = normalizeContact(createdRaw);
                 if (!created) throw new Error('Contact was created but response is invalid');
@@ -2183,7 +2232,7 @@ function initializeProjectDetail() {
         };
 
         const updateContactSite = async (contactId, siteIdValue) => {
-            if (!clientId || !contactId || !window.api?.updateContact) return;
+            if (!resolvedClientId || !contactId || !window.api?.updateContact) return;
             const normalizedSiteId = siteIdValue ? String(siteIdValue) : '';
             const previousLinked = linkedContacts;
             const previousAvailable = availableContacts;
@@ -2195,7 +2244,7 @@ function initializeProjectDetail() {
             setLinkedContacts((prev) => applySite(prev));
             setAvailableContacts((prev) => applySite(prev));
             try {
-                await window.api.updateContact(clientId, contactId, {
+                await window.api.updateContact(resolvedClientId, contactId, {
                     siteId: normalizedSiteId || null
                 });
                 dirtyRef.current = true;
@@ -2241,7 +2290,7 @@ function initializeProjectDetail() {
                     </div>
                 </div>
 
-                {!clientId ? (
+                {!resolvedClientId ? (
                     <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5">
                         Link a client to this project first, then you can select contacts from CRM.
                     </p>
@@ -2559,6 +2608,7 @@ function initializeProjectDetail() {
                 <ProjectContactsEditor
                     projectId={project?.id}
                     clientId={linkedClientId}
+                    clientName={project?.clientName || project?.client || ''}
                     initialSerialized={project?.projectContacts}
                     onProjectUpdate={onProjectUpdate}
                 />
