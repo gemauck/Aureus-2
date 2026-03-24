@@ -1956,11 +1956,20 @@ function initializeProjectDetail() {
 
     const ProjectContactsEditor = ({ projectId, clientId, initialSerialized, onProjectUpdate }) => {
         const [availableContacts, setAvailableContacts] = useState([]);
+        const [sites, setSites] = useState([]);
         const [selectedContactId, setSelectedContactId] = useState('');
         const [linkedContacts, setLinkedContacts] = useState([]);
         const [loadingContacts, setLoadingContacts] = useState(false);
+        const [savingNewContact, setSavingNewContact] = useState(false);
         const [saving, setSaving] = useState(false);
         const [saveHint, setSaveHint] = useState(null);
+        const [newContact, setNewContact] = useState({
+            name: '',
+            email: '',
+            phone: '',
+            role: '',
+            siteId: ''
+        });
         const lastClientIdRef = useRef(null);
         const lastProjectIdRef = useRef(null);
         const dirtyRef = useRef(false);
@@ -1978,7 +1987,8 @@ function initializeProjectDetail() {
                 name: String(raw.name || '').trim(),
                 email: String(raw.email || '').trim(),
                 phone: String(raw.phone || raw.mobile || '').trim(),
-                role: String(raw.role || raw.title || '').trim()
+                role: String(raw.role || raw.title || '').trim(),
+                siteId: raw.siteId != null ? String(raw.siteId).trim() : ''
             };
         }, []);
 
@@ -2013,6 +2023,21 @@ function initializeProjectDetail() {
             }
         }, [normalizeContact]);
 
+        const loadClientSites = useCallback(async (targetClientId) => {
+            if (!targetClientId || !window.api?.getSites) {
+                setSites([]);
+                return;
+            }
+            try {
+                const response = await window.api.getSites(targetClientId);
+                const siteRows = response?.data?.sites || response?.sites || [];
+                setSites(Array.isArray(siteRows) ? siteRows : []);
+            } catch (error) {
+                console.error('Failed to load client sites:', error);
+                setSites([]);
+            }
+        }, []);
+
         useEffect(() => {
             const nextProjectId = String(projectId || '');
             const nextClientId = String(clientId || '');
@@ -2035,8 +2060,9 @@ function initializeProjectDetail() {
                 lastClientIdRef.current = nextClientId;
                 setSelectedContactId('');
                 loadClientContacts(nextClientId);
+                loadClientSites(nextClientId);
             }
-        }, [projectId, clientId, initialSerialized, parseLinkedContacts, loadClientContacts]);
+        }, [projectId, clientId, initialSerialized, parseLinkedContacts, loadClientContacts, loadClientSites]);
 
         const serializeLinkedContacts = useCallback(
             (rows) => JSON.stringify((Array.isArray(rows) ? rows : []).map(normalizeContact).filter(Boolean)),
@@ -2095,6 +2121,7 @@ function initializeProjectDetail() {
 
         const linkedIds = new Set(linkedContacts.map((c) => c.id));
         const availableToLink = availableContacts.filter((c) => !linkedIds.has(c.id));
+        const siteNameById = new Map((Array.isArray(sites) ? sites : []).map((site) => [String(site.id), String(site.name || '')]));
 
         const addSelectedContact = () => {
             if (!selectedContactId) return;
@@ -2110,6 +2137,74 @@ function initializeProjectDetail() {
             dirtyRef.current = true;
             setLinkedContacts((prev) => prev.filter((c) => c.id !== contactId));
             setSaveHint(null);
+        };
+
+        const createAndLinkContact = async () => {
+            if (!clientId || !window.api?.createContact || savingNewContact) return;
+            const name = String(newContact.name || '').trim();
+            if (!name) return;
+            setSavingNewContact(true);
+            try {
+                const payload = {
+                    name,
+                    email: String(newContact.email || '').trim(),
+                    phone: String(newContact.phone || '').trim(),
+                    role: String(newContact.role || '').trim(),
+                    siteId: newContact.siteId ? String(newContact.siteId) : null
+                };
+                const response = await window.api.createContact(clientId, payload);
+                const createdRaw = response?.data?.contact || response?.contact || null;
+                const created = normalizeContact(createdRaw);
+                if (!created) throw new Error('Contact was created but response is invalid');
+
+                setAvailableContacts((prev) => {
+                    const existing = Array.isArray(prev) ? prev : [];
+                    if (existing.some((c) => c.id === created.id)) return existing;
+                    return [...existing, created];
+                });
+                dirtyRef.current = true;
+                setLinkedContacts((prev) => {
+                    if (prev.some((c) => c.id === created.id)) return prev;
+                    return [...prev, created];
+                });
+                setNewContact({
+                    name: '',
+                    email: '',
+                    phone: '',
+                    role: '',
+                    siteId: ''
+                });
+                setSaveHint(null);
+            } catch (error) {
+                console.error('Failed to create project contact:', error);
+            } finally {
+                setSavingNewContact(false);
+            }
+        };
+
+        const updateContactSite = async (contactId, siteIdValue) => {
+            if (!clientId || !contactId || !window.api?.updateContact) return;
+            const normalizedSiteId = siteIdValue ? String(siteIdValue) : '';
+            const previousLinked = linkedContacts;
+            const previousAvailable = availableContacts;
+            const applySite = (rows) =>
+                (Array.isArray(rows) ? rows : []).map((row) =>
+                    row.id === contactId ? { ...row, siteId: normalizedSiteId } : row
+                );
+
+            setLinkedContacts((prev) => applySite(prev));
+            setAvailableContacts((prev) => applySite(prev));
+            try {
+                await window.api.updateContact(clientId, contactId, {
+                    siteId: normalizedSiteId || null
+                });
+                dirtyRef.current = true;
+                setSaveHint(null);
+            } catch (error) {
+                console.error('Failed to update contact site link:', error);
+                setLinkedContacts(previousLinked);
+                setAvailableContacts(previousAvailable);
+            }
         };
 
         if (!projectId) return null;
@@ -2152,6 +2247,65 @@ function initializeProjectDetail() {
                     </p>
                 ) : (
                     <div className="mt-3 space-y-3">
+                        <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                            <h3 className="text-xs font-semibold text-gray-800 uppercase tracking-wide mb-2">
+                                Add new CRM contact
+                            </h3>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <input
+                                    type="text"
+                                    value={newContact.name}
+                                    onChange={(e) => setNewContact((prev) => ({ ...prev, name: e.target.value }))}
+                                    placeholder="Name *"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                />
+                                <input
+                                    type="email"
+                                    value={newContact.email}
+                                    onChange={(e) => setNewContact((prev) => ({ ...prev, email: e.target.value }))}
+                                    placeholder="Email"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                />
+                                <input
+                                    type="tel"
+                                    value={newContact.phone}
+                                    onChange={(e) => setNewContact((prev) => ({ ...prev, phone: e.target.value }))}
+                                    placeholder="Phone"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                />
+                                <input
+                                    type="text"
+                                    value={newContact.role}
+                                    onChange={(e) => setNewContact((prev) => ({ ...prev, role: e.target.value }))}
+                                    placeholder="Role"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                />
+                                <select
+                                    value={newContact.siteId}
+                                    onChange={(e) => setNewContact((prev) => ({ ...prev, siteId: e.target.value }))}
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 sm:col-span-2"
+                                >
+                                    <option value="">No specific site</option>
+                                    {(sites || []).map((site) => (
+                                        <option key={site.id} value={site.id}>
+                                            {site.name || site.id}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="mt-2 flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={createAndLinkContact}
+                                    disabled={savingNewContact || !String(newContact.name || '').trim()}
+                                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {savingNewContact ? <i className="fas fa-spinner fa-spin text-[10px]" /> : <i className="fas fa-plus text-[10px]" />}
+                                    Add to CRM and link
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="flex flex-col gap-2 sm:flex-row">
                             <select
                                 value={selectedContactId}
@@ -2196,11 +2350,31 @@ function initializeProjectDetail() {
                                             <p className="text-sm font-medium text-gray-900 truncate">
                                                 {contact.name || 'Unnamed contact'}
                                             </p>
+                                            <p className="text-xs text-gray-600 truncate">{contact.role || 'No role set'}</p>
                                             <p className="text-xs text-gray-600 truncate">
-                                                {[contact.role, contact.email || contact.phone].filter(Boolean).join(' - ') || 'No details'}
+                                                {[contact.email, contact.phone].filter(Boolean).join(' - ') || 'No contact details'}
                                             </p>
+                                            {contact.siteId ? (
+                                                <p className="text-xs text-primary-700 truncate">
+                                                    <i className="fas fa-map-marker-alt mr-1 text-[10px]" />
+                                                    {siteNameById.get(String(contact.siteId)) || `Site ${contact.siteId}`}
+                                                </p>
+                                            ) : null}
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            <select
+                                                value={contact.siteId || ''}
+                                                onChange={(e) => updateContactSite(contact.id, e.target.value)}
+                                                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                                title="Assign site"
+                                            >
+                                                <option value="">No site</option>
+                                                {(sites || []).map((site) => (
+                                                    <option key={site.id} value={site.id}>
+                                                        {site.name || site.id}
+                                                    </option>
+                                                ))}
+                                            </select>
                                             {contact.email ? (
                                                 <a
                                                     href={`mailto:${contact.email}`}

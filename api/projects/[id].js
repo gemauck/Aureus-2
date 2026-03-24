@@ -246,7 +246,8 @@ function normalizeProjectContactsPayload(input) {
         name: String(raw.name || '').trim(),
         email: String(raw.email || '').trim(),
         phone: String(raw.phone || raw.mobile || '').trim(),
-        role: String(raw.role || raw.title || '').trim()
+        role: String(raw.role || raw.title || '').trim(),
+        siteId: raw.siteId != null ? String(raw.siteId).trim() : ''
       };
     })
     .filter(Boolean);
