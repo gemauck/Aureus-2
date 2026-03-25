@@ -242,6 +242,23 @@ async function runSarsMonitoring() {
   const startTime = Date.now()
 
   try {
+    const bypass =
+      process.env.SARS_MONITORING_BYPASS_DAILY_LEASE === 'true' ||
+      process.env.SARS_MONITORING_BYPASS_DAILY_LEASE === '1'
+    if (!bypass) {
+      const { tryAcquireSarsDailyLease } = await import(
+        pathToFileURL(join(__dirname, '..', 'api', 'sars-monitoring', 'dailyLease.js')).href
+      )
+      const { acquired } = await tryAcquireSarsDailyLease()
+      if (!acquired) {
+        console.log(
+          'SARS monitoring: daily lease already taken — skipping (one automated run per day; use SARS_MONITORING_BYPASS_DAILY_LEASE=1 to force)'
+        )
+        await prisma.$disconnect()
+        process.exit(0)
+      }
+    }
+
     const results = await checkSarsWebsite()
 
     if (results.newChanges.length > 0) {

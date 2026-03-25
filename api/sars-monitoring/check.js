@@ -6,6 +6,7 @@ import { ok, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { sendSarsSummaryEmail } from './sendSummaryEmail.js'
+import { tryAcquireSarsDailyLease } from './dailyLease.js'
 
 // All key sections to monitor (public notices, legislation, news)
 const SARS_SECTIONS = [
@@ -150,11 +151,21 @@ function calculateHash(content) {
 }
 
 // Main function to check SARS website for changes (all key sections)
-async function checkSarsWebsite() {
+/** @param {{ dailyLease?: boolean }} [opts] — dailyLease: server cron only; skips if another host already ran today */
+async function checkSarsWebsite(opts = {}) {
   const results = {
     checked: [],
     newChanges: [],
     errors: []
+  }
+
+  if (opts.dailyLease) {
+    const { acquired } = await tryAcquireSarsDailyLease()
+    if (!acquired) {
+      console.log('SARS monitoring: daily lease already taken — skipping (one automated run per day at 7:00 AM)')
+      results.skippedDuplicateSchedule = true
+      return results
+    }
   }
 
   const today = new Date()
@@ -269,7 +280,7 @@ async function checkSarsWebsite() {
 
 /** Run full SARS check (for in-app cron). Exported so server.js can schedule it. */
 export async function runSarsMonitoringCheck() {
-  return checkSarsWebsite()
+  return checkSarsWebsite({ dailyLease: true })
 }
 
 // API Handler
@@ -280,7 +291,7 @@ async function handler(req, res) {
     if (action === 'check') {
       let results
       try {
-        results = await checkSarsWebsite()
+        results = await checkSarsWebsite({ dailyLease: false })
       } catch (err) {
         console.error('SARS monitoring check error:', err.message)
         return ok(res, {

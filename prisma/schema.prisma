@@ -1436,6 +1436,12 @@ model SarsMonitoringRun {
   @@index([ranAt])
 }
 
+// One row per calendar day (Africa/Johannesburg) — only the first automated SARS check claims it (dedupes Railway + VPS cron + multiple instances)
+model SarsDailyJobLease {
+  id        String   @id
+  createdAt DateTime @default(now())
+}
+
 model WorkflowExecution {
   id             String        @id @default(cuid())
   workflowId     String?       // Optional: may reference a TeamWorkflow or be standalone
