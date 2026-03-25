@@ -582,7 +582,6 @@ async function handler(req, res) {
         assignee, 
         assigneeId, 
         assigneeIds: bodyAssigneeIds, 
-        sendNotifications = false, 
         startDate, 
         dueDate, 
         reminderRecurrence, 
@@ -598,6 +597,9 @@ async function handler(req, res) {
         customFields = {}, 
         parentTaskId 
       } = body;
+
+      // Notify assignees unless explicitly disabled (omit field = notify, for API compatibility)
+      const sendNotifications = body.sendNotifications !== false;
 
       // Validation
       if (!projectId || !title || !title.trim()) {
@@ -675,8 +677,8 @@ async function handler(req, res) {
         metadata: { entityType: 'task', entityId: task.id, taskTitle: task.title }
       });
 
-      // Send email/in-app notifications to assignees whenever a task has assignees (create)
-      if (assigneeIdsFinal.length > 0) {
+      // Send email/in-app notifications to assignees when requested (avoid duplicate with client POST /notifications)
+      if (sendNotifications && assigneeIdsFinal.length > 0) {
         const currentUserId = req.user?.sub || req.user?.id;
         let assignerName = 'Someone';
         if (currentUserId) {
@@ -715,6 +717,7 @@ async function handler(req, res) {
       }
 
       const body = await parseJsonBody(req);
+      const sendNotifications = body.sendNotifications !== false;
       const updateData = {};
       
       // Build update data object with proper type conversions
@@ -961,9 +964,9 @@ async function handler(req, res) {
         orderBy: { createdAt: 'asc' }
       });
 
-      // Send email/in-app notifications when task assignment changed (always when assignees are updated)
+      // Send email/in-app notifications when task assignment changed and client did not disable notifications
       const assignmentWasUpdated = body.assigneeIds !== undefined || body.assigneeId !== undefined;
-      if (assignmentWasUpdated) {
+      if (sendNotifications && assignmentWasUpdated) {
         const newIds = body.assigneeIds !== undefined
           ? (Array.isArray(body.assigneeIds) ? body.assigneeIds : []).filter(Boolean).map((id) => String(id))
           : body.assigneeId ? [String(body.assigneeId)] : [];
