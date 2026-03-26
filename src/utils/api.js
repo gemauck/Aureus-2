@@ -715,12 +715,12 @@ const api = {
 
   // Clients
   async listClients() {
-    const res = await request('/clients')
+    const res = await request('/clients', { timeout: 90000 })
     return res
   },
 
   async getClients() {
-    const res = await request('/clients')
+    const res = await request('/clients', { timeout: 90000 })
     return res
   },
 
