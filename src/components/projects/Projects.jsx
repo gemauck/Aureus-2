@@ -203,12 +203,24 @@ const useThemeSafe = () => {
     return { isDark };
 };
 
+const getProjectPrefsUserKey = (user) => {
+    if (!user || typeof user !== 'object') return 'anonymous';
+    return String(
+        user.id ||
+        user.userId ||
+        user.email ||
+        user.username ||
+        user.name ||
+        'anonymous'
+    ).trim().toLowerCase() || 'anonymous';
+};
+
 const Projects = () => {
     // Removed verbose mount/render log to reduce console noise.
     // For detailed diagnostics, prefer using window.debug.log when needed.
     // CRITICAL: Always call useAuthSafe() unconditionally at the top level
     // This ensures hooks are always called in the same order on every render
-    const { logout } = useAuthSafe();
+    const { logout, user } = useAuthSafe();
     
     // Get theme
     const { isDark } = useThemeSafe();
@@ -235,13 +247,15 @@ const Projects = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
+    const [starredProjectIds, setStarredProjectIds] = useState([]);
+    const [showStarredOnly, setShowStarredOnly] = useState(false);
     // Load view mode from localStorage, defaulting to 'list' if not set
     const [viewMode, setViewMode] = useState(() => {
         try {
             const saved = localStorage.getItem('projectsViewMode');
-            return saved === 'grid' || saved === 'list' || saved === 'client' ? saved : 'grid';
+            return saved === 'list' || saved === 'client' ? saved : 'list';
         } catch (e) {
-            return 'grid';
+            return 'list';
         }
     });
     const [isLoading, setIsLoading] = useState(true);
@@ -269,6 +283,9 @@ const Projects = () => {
     const [allTasksAssigneeOpenTaskId, setAllTasksAssigneeOpenTaskId] = useState(null);
     const [allTasksAssigneeSearch, setAllTasksAssigneeSearch] = useState('');
     const allTasksAssigneeDropdownRef = React.useRef(null);
+    const projectPrefsUserKey = useMemo(() => getProjectPrefsUserKey(user), [user]);
+    const starredProjectsStorageKey = useMemo(() => `projects.starredProjectIds.${projectPrefsUserKey}`, [projectPrefsUserKey]);
+    const starredOnlyStorageKey = useMemo(() => `projects.showStarredOnly.${projectPrefsUserKey}`, [projectPrefsUserKey]);
     
     // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
     const normalizeProjectId = (id) => {
@@ -3444,6 +3461,59 @@ const Projects = () => {
         setDeleteConfirmation({ show: false, projectId: null });
     }, []);
 
+    useEffect(() => {
+        try {
+            const savedIds = localStorage.getItem(starredProjectsStorageKey);
+            const parsedIds = savedIds ? JSON.parse(savedIds) : [];
+            setStarredProjectIds(Array.isArray(parsedIds) ? parsedIds.map((id) => String(id)) : []);
+        } catch (error) {
+            setStarredProjectIds([]);
+        }
+
+        try {
+            const savedStarredOnly = localStorage.getItem(starredOnlyStorageKey);
+            setShowStarredOnly(savedStarredOnly === 'true');
+        } catch (error) {
+            setShowStarredOnly(false);
+        }
+    }, [starredProjectsStorageKey, starredOnlyStorageKey]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(starredProjectsStorageKey, JSON.stringify(starredProjectIds));
+        } catch (error) {
+            console.warn('⚠️ Projects: Failed to save starred projects:', error);
+        }
+    }, [starredProjectsStorageKey, starredProjectIds]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(starredOnlyStorageKey, String(showStarredOnly));
+        } catch (error) {
+            console.warn('⚠️ Projects: Failed to save starred-only preference:', error);
+        }
+    }, [starredOnlyStorageKey, showStarredOnly]);
+
+    const isProjectStarred = useCallback((project) => {
+        if (!project) return false;
+        if (project.isStarred === true) return true;
+        const projectId = project.id != null ? String(project.id) : '';
+        return projectId !== '' && starredProjectIds.includes(projectId);
+    }, [starredProjectIds]);
+
+    const handleToggleProjectStar = useCallback((e, project) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        const projectId = project?.id != null ? String(project.id) : '';
+        if (!projectId) return;
+        setStarredProjectIds((prev) => {
+            const hasStar = prev.includes(projectId);
+            if (hasStar) {
+                return prev.filter((id) => id !== projectId);
+            }
+            return [...prev, projectId];
+        });
+    }, []);
+
     // Get unique clients from projects - memoized
     const uniqueClients = useMemo(() => {
         return [...new Set(projects.map(p => p.client))].sort();
@@ -3486,13 +3556,17 @@ const Projects = () => {
                 (p.type || '').toLowerCase().includes(lowerSearchTerm) ||
                 (p.assignedTo || '').toLowerCase().includes(lowerSearchTerm);
             const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
-            return matchesClient && matchesSearch && matchesStatus;
+            const matchesStarred = !showStarredOnly || isProjectStarred(p);
+            return matchesClient && matchesSearch && matchesStatus && matchesStarred;
         }).sort((a, b) => {
+            const aStarred = isProjectStarred(a) ? 1 : 0;
+            const bStarred = isProjectStarred(b) ? 1 : 0;
+            if (aStarred !== bStarred) return bStarred - aStarred;
             const aName = (a.name || '').toLowerCase();
             const bName = (b.name || '').toLowerCase();
             return aName.localeCompare(bName);
         });
-    }, [projects, selectedClient, debouncedSearchTerm, filterStatus]);
+    }, [projects, selectedClient, debouncedSearchTerm, filterStatus, showStarredOnly, isProjectStarred]);
 
     const activeProjectCount = useMemo(
         () => projects.filter((p) => ['Active', 'In Progress'].includes(p.status)).length,
@@ -4703,26 +4777,6 @@ const Projects = () => {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    setViewMode('grid');
-                                    try {
-                                        localStorage.setItem('projectsViewMode', 'grid');
-                                    } catch (e) {
-                                        console.warn('Failed to save view mode preference:', e);
-                                    }
-                                }}
-                                className={`px-3 py-1.5 text-sm font-semibold transition-all rounded-full ${
-                                    viewMode === 'grid'
-                                        ? isDark ? 'bg-primary-600 text-white shadow-sm' : 'bg-primary-600 text-white shadow-sm'
-                                        : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
-                                }`}
-                                title="Cards view"
-                                aria-pressed={viewMode === 'grid'}
-                            >
-                                Cards
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
                                     setViewMode('list');
                                     try {
                                         localStorage.setItem('projectsViewMode', 'list');
@@ -4869,6 +4923,17 @@ const Projects = () => {
                         <option value="Cancelled">Cancelled</option>
                     </select>
                 </div>
+                <div className="mt-3 flex items-center">
+                    <label className={`inline-flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        <input
+                            type="checkbox"
+                            checked={showStarredOnly}
+                            onChange={(e) => setShowStarredOnly(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        Starred only
+                    </label>
+                </div>
                 {/* Results count and active filter chips */}
                 <div className="mt-4 pt-4 border-t flex flex-wrap items-center gap-2 border-gray-200 dark:border-gray-700">
                     <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -4876,7 +4941,7 @@ const Projects = () => {
                             ? `${projects.length} project${projects.length === 1 ? '' : 's'}`
                             : `Showing ${filteredProjects.length} of ${projects.length} projects`}
                     </span>
-                    {(searchTerm !== '' || selectedClient !== 'all' || filterStatus !== 'all') && (
+                    {(searchTerm !== '' || selectedClient !== 'all' || filterStatus !== 'all' || showStarredOnly) && (
                         <>
                             {searchTerm && (
                                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
@@ -4900,9 +4965,17 @@ const Projects = () => {
                                     <button type="button" onClick={() => setFilterStatus('all')} className="ml-0.5 hover:opacity-80" aria-label="Clear status filter">×</button>
                                 </span>
                             )}
+                            {showStarredOnly && (
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                                    isDark ? 'bg-amber-900/30 text-amber-300' : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                    Starred only
+                                    <button type="button" onClick={() => setShowStarredOnly(false)} className="ml-0.5 hover:opacity-80" aria-label="Clear starred filter">×</button>
+                                </span>
+                            )}
                             <button
                                 type="button"
-                                onClick={() => { setSearchTerm(''); setSelectedClient('all'); setFilterStatus('all'); }}
+                                onClick={() => { setSearchTerm(''); setSelectedClient('all'); setFilterStatus('all'); setShowStarredOnly(false); }}
                                 className={`text-xs font-medium ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
                             >
                                 Clear all
@@ -5051,6 +5124,7 @@ const Projects = () => {
                                             setSearchTerm('');
                                             setSelectedClient('all');
                                             setFilterStatus('all');
+                                            setShowStarredOnly(false);
                                         }}
                                         className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-all duration-200"
                                     >
@@ -5231,7 +5305,20 @@ const Projects = () => {
                                                 className={`cursor-pointer transition-colors group/row ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}
                                             >
                                                 <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
-                                                    <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>{project.name}</div>
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleToggleProjectStar(e, project)}
+                                                            className={`inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                                                                isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                                            }`}
+                                                            title={isProjectStarred(project) ? 'Unstar project' : 'Star project'}
+                                                            aria-label={isProjectStarred(project) ? 'Unstar project' : 'Star project'}
+                                                        >
+                                                            <i className={`${isProjectStarred(project) ? 'fas text-yellow-500' : `far ${isDark ? 'text-gray-500' : 'text-gray-300'}`} fa-star text-sm`}></i>
+                                                        </button>
+                                                        <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>{project.name}</div>
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.client || '—'}</div>
@@ -5307,7 +5394,20 @@ const Projects = () => {
                                                         className={`cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}`}
                                                     >
                                                         <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
-                                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>{project.name}</div>
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => handleToggleProjectStar(e, project)}
+                                                                    className={`inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+                                                                        isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                                                    }`}
+                                                                    title={isProjectStarred(project) ? 'Unstar project' : 'Star project'}
+                                                                    aria-label={isProjectStarred(project) ? 'Unstar project' : 'Star project'}
+                                                                >
+                                                                    <i className={`${isProjectStarred(project) ? 'fas text-yellow-500' : `far ${isDark ? 'text-gray-500' : 'text-gray-300'}`} fa-star text-sm`}></i>
+                                                                </button>
+                                                                <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>{project.name}</div>
+                                                            </div>
                                                         </td>
                                                         <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} truncate`}>{project.type}</div>
