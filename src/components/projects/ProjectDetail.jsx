@@ -5525,7 +5525,6 @@ function initializeProjectDetail() {
             throw error;
         }
     }, [
-        project,
         project.id,
         serializedDocumentSections,
         documentSectionsArray,
