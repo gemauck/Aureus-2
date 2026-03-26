@@ -1249,7 +1249,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, [project?.id]);
     
-    const MIN_YEAR = 2015;
+    const MIN_YEAR = 2008;
     const FUTURE_YEAR_BUFFER = 5;
     const yearOptions = [];
     for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {

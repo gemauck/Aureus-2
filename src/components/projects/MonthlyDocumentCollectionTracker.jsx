@@ -205,7 +205,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     // Year selection with persistence
     const YEAR_STORAGE_PREFIX = isMonthlyDataReview ? 'monthlyDataReviewSelectedYear_' : isComplianceReview ? 'complianceReviewSelectedYear_' : 'documentCollectionSelectedYear_';
-    const MIN_YEAR = 2015;
+    const MIN_YEAR = 2008;
     const FUTURE_YEAR_BUFFER = 5;
     const isValidYear = (value) => {
         const parsed = typeof value === 'string' ? parseInt(value, 10) : value;
