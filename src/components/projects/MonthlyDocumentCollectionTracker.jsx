@@ -871,9 +871,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     }
                 }
             } else {
-                const endpoint = isComplianceReview
-                    ? `/api/projects/${project.id}?fields=complianceReviewSections&_=${Date.now()}`
-                    : `/api/projects/${project.id}?_=${Date.now()}`;
+                const sectionsFieldName = isComplianceReview ? 'complianceReviewSections' : 'monthlyDataReviewSections';
+                const endpoint = `/api/projects/${project.id}?fields=${sectionsFieldName}&_=${Date.now()}`;
                 try {
                     const res = await fetch(base + endpoint, {
                         method: 'GET',

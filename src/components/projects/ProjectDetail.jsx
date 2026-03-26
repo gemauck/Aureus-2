@@ -5524,7 +5524,21 @@ function initializeProjectDetail() {
             alert('Failed to save project changes: ' + error.message);
             throw error;
         }
-    }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasTimeProcess, hasDocumentCollectionProcess, hasWeeklyFMSReviewProcess, hasMonthlyFMSReviewProcess]);
+    }, [
+        project,
+        project.id,
+        serializedDocumentSections,
+        documentSectionsArray,
+        taskLists,
+        customFieldDefinitions,
+        documents,
+        hasTimeProcess,
+        hasDocumentCollectionProcess,
+        hasWeeklyFMSReviewProcess,
+        hasMonthlyFMSReviewProcess,
+        hasMonthlyDataReviewProcess,
+        hasComplianceReviewProcess
+    ]);
     
     // When URL or switchProjectTab enabled Time but we couldn't call persist yet (TDZ), persist here.
     useEffect(() => {
