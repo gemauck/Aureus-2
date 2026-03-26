@@ -1975,7 +1975,8 @@ function initializeProjectDetail() {
         const lastProjectIdRef = useRef(null);
         const dirtyRef = useRef(false);
         const lastSavedPayloadRef = useRef('');
-        const autoSaveTimerRef = useRef(null);
+        const linkedContactsRef = useRef([]);
+        const persistChainRef = useRef(Promise.resolve());
         const initialSerializedRef = useRef(initialSerialized);
         initialSerializedRef.current = initialSerialized;
 
@@ -2088,21 +2089,56 @@ function initializeProjectDetail() {
         }, [getEffectiveClientId]);
 
         useEffect(() => {
+            let cancelled = false;
             const nextProjectId = String(projectId || '');
             const nextClientId = String(resolvedClientId || '');
             const projectChanged = lastProjectIdRef.current !== nextProjectId;
             const clientChanged = lastClientIdRef.current !== nextClientId;
 
             if (projectChanged) {
+                persistChainRef.current = Promise.resolve();
                 lastProjectIdRef.current = nextProjectId;
                 dirtyRef.current = false;
                 setSaveHint(null);
                 const parsed = parseLinkedContacts(initialSerializedRef.current);
                 const payload = JSON.stringify(parsed);
                 lastSavedPayloadRef.current = payload;
+                linkedContactsRef.current = parsed;
                 setLinkedContacts(parsed);
+
+                const missingFromParent = initialSerialized === undefined || initialSerialized === null;
+                if (missingFromParent && nextProjectId) {
+                    const token =
+                        window.storage?.getToken?.() ||
+                        localStorage.getItem('abcotronics_token') ||
+                        localStorage.getItem('authToken') ||
+                        '';
+                    const url = `${window.location.origin}/api/projects/${encodeURIComponent(nextProjectId)}?projectContactsOnly=1`;
+                    fetch(url, {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                        }
+                    })
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then((payloadJson) => {
+                            if (cancelled || dirtyRef.current) return;
+                            const proj = payloadJson?.project || payloadJson?.data?.project || {};
+                            const raw = proj.projectContacts;
+                            if (raw == null) return;
+                            const fromApi = parseLinkedContacts(raw);
+                            const ser = JSON.stringify(fromApi);
+                            initialSerializedRef.current = raw;
+                            lastSavedPayloadRef.current = ser;
+                            linkedContactsRef.current = fromApi;
+                            setLinkedContacts(fromApi);
+                        })
+                        .catch(() => {});
+                }
             } else if (!dirtyRef.current) {
-                setLinkedContacts(parseLinkedContacts(initialSerializedRef.current));
+                const parsed = parseLinkedContacts(initialSerializedRef.current);
+                linkedContactsRef.current = parsed;
+                setLinkedContacts(parsed);
             }
 
             if (clientChanged || projectChanged) {
@@ -2111,6 +2147,9 @@ function initializeProjectDetail() {
                 loadClientContacts(nextClientId);
                 loadClientSites(nextClientId);
             }
+            return () => {
+                cancelled = true;
+            };
         }, [projectId, resolvedClientId, initialSerialized, parseLinkedContacts, loadClientContacts, loadClientSites]);
 
         const serializeLinkedContacts = useCallback(
@@ -2118,55 +2157,92 @@ function initializeProjectDetail() {
             [normalizeContact]
         );
 
-        const handleSave = useCallback(async () => {
-            if (!projectId || !window.DatabaseAPI?.updateProject || saving) return;
-            const payload = serializeLinkedContacts(linkedContacts);
-            setSaving(true);
-            setSaveHint(null);
-            try {
-                const apiResponse = await window.DatabaseAPI.updateProject(projectId, {
-                    projectContacts: payload
-                });
-                const updatedProject =
-                    apiResponse?.data?.project ||
-                    apiResponse?.project ||
-                    { id: projectId, projectContacts: payload };
-                dirtyRef.current = false;
-                lastSavedPayloadRef.current = payload;
-                if (typeof onProjectUpdate === 'function') onProjectUpdate(updatedProject);
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    window.updateViewingProject(updatedProject);
+        useEffect(() => {
+            linkedContactsRef.current = linkedContacts;
+        }, [linkedContacts]);
+
+        const persistLinkedContactsRows = useCallback(
+            async (rows) => {
+                if (!projectId || !window.DatabaseAPI?.updateProject) {
+                    dirtyRef.current = true;
+                    return false;
                 }
-                setSaveHint('saved');
-                window.setTimeout(() => setSaveHint(null), 2500);
-            } catch (error) {
-                console.error('Failed to save project contacts:', error);
-                setSaveHint('error');
-            } finally {
-                setSaving(false);
-            }
-        }, [projectId, linkedContacts, saving, serializeLinkedContacts, onProjectUpdate]);
+                const payload = serializeLinkedContacts(rows);
+                setSaving(true);
+                setSaveHint(null);
+                try {
+                    const apiResponse = await window.DatabaseAPI.updateProject(projectId, {
+                        projectContacts: payload
+                    });
+                    const updatedProject =
+                        apiResponse?.data?.project ||
+                        apiResponse?.project ||
+                        { id: projectId, projectContacts: payload };
+                    dirtyRef.current = false;
+                    lastSavedPayloadRef.current = payload;
+                    if (typeof onProjectUpdate === 'function') onProjectUpdate(updatedProject);
+                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                        window.updateViewingProject(updatedProject);
+                    }
+                    setSaveHint('saved');
+                    window.setTimeout(() => setSaveHint(null), 2500);
+                    return true;
+                } catch (error) {
+                    console.error('Failed to save project contacts:', error);
+                    dirtyRef.current = true;
+                    setSaveHint('error');
+                    return false;
+                } finally {
+                    setSaving(false);
+                }
+            },
+            [projectId, serializeLinkedContacts, onProjectUpdate]
+        );
+
+        const enqueuePersistLinkedContacts = useCallback(
+            (rows) => {
+                const run = () => persistLinkedContactsRows(rows);
+                persistChainRef.current = persistChainRef.current.then(run, run);
+                return persistChainRef.current;
+            },
+            [persistLinkedContactsRows]
+        );
+
+        const handleSave = useCallback(() => enqueuePersistLinkedContacts(linkedContactsRef.current), [enqueuePersistLinkedContacts]);
 
         useEffect(() => {
-            if (!projectId || !window.DatabaseAPI?.updateProject) return;
-            if (!dirtyRef.current || saving) return;
-            const payload = serializeLinkedContacts(linkedContacts);
-            if (payload === lastSavedPayloadRef.current) return;
-            if (autoSaveTimerRef.current) {
-                window.clearTimeout(autoSaveTimerRef.current);
-            }
-            autoSaveTimerRef.current = window.setTimeout(() => {
-                autoSaveTimerRef.current = null;
-                if (!dirtyRef.current || saving) return;
-                handleSave();
-            }, 900);
-            return () => {
-                if (autoSaveTimerRef.current) {
-                    window.clearTimeout(autoSaveTimerRef.current);
-                    autoSaveTimerRef.current = null;
-                }
+            const flush = () => {
+                if (!projectId || !dirtyRef.current) return;
+                const payload = serializeLinkedContacts(linkedContactsRef.current);
+                if (payload === lastSavedPayloadRef.current) return;
+                const token =
+                    window.storage?.getToken?.() ||
+                    localStorage.getItem('abcotronics_token') ||
+                    localStorage.getItem('authToken') ||
+                    '';
+                const url = `${window.location.origin}/api/projects/${encodeURIComponent(projectId)}`;
+                try {
+                    fetch(url, {
+                        method: 'PUT',
+                        keepalive: true,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                        },
+                        body: JSON.stringify({ projectContacts: payload })
+                    }).catch(() => {});
+                } catch (_) {}
             };
-        }, [projectId, linkedContacts, saving, serializeLinkedContacts, handleSave]);
+            const onHide = () => {
+                if (document.visibilityState === 'hidden') flush();
+            };
+            window.addEventListener('pagehide', flush);
+            document.addEventListener('visibilitychange', onHide);
+            return () => {
+                window.removeEventListener('pagehide', flush);
+                document.removeEventListener('visibilitychange', onHide);
+            };
+        }, [projectId, serializeLinkedContacts]);
 
         const linkedIds = new Set(linkedContacts.map((c) => c.id));
         const availableToLink = availableContacts.filter((c) => !linkedIds.has(c.id));
@@ -2176,16 +2252,22 @@ function initializeProjectDetail() {
             if (!selectedContactId) return;
             const selected = availableContacts.find((c) => c.id === selectedContactId);
             if (!selected || linkedIds.has(selected.id)) return;
-            dirtyRef.current = true;
-            setLinkedContacts((prev) => [...prev, selected]);
+            const next = [...linkedContactsRef.current, selected];
+            setLinkedContacts(next);
+            linkedContactsRef.current = next;
             setSelectedContactId('');
             setSaveHint(null);
+            dirtyRef.current = true;
+            void enqueuePersistLinkedContacts(next);
         };
 
         const removeLinkedContact = (contactId) => {
-            dirtyRef.current = true;
-            setLinkedContacts((prev) => prev.filter((c) => c.id !== contactId));
+            const next = linkedContactsRef.current.filter((c) => c.id !== contactId);
+            setLinkedContacts(next);
+            linkedContactsRef.current = next;
             setSaveHint(null);
+            dirtyRef.current = true;
+            void enqueuePersistLinkedContacts(next);
         };
 
         const createAndLinkContact = async () => {
@@ -2211,11 +2293,10 @@ function initializeProjectDetail() {
                     if (existing.some((c) => c.id === created.id)) return existing;
                     return [...existing, created];
                 });
-                dirtyRef.current = true;
-                setLinkedContacts((prev) => {
-                    if (prev.some((c) => c.id === created.id)) return prev;
-                    return [...prev, created];
-                });
+                const prevLinked = linkedContactsRef.current;
+                const nextLinked = prevLinked.some((c) => c.id === created.id) ? prevLinked : [...prevLinked, created];
+                setLinkedContacts(nextLinked);
+                linkedContactsRef.current = nextLinked;
                 setNewContact({
                     name: '',
                     email: '',
@@ -2224,6 +2305,13 @@ function initializeProjectDetail() {
                     siteId: ''
                 });
                 setSaveHint(null);
+                dirtyRef.current = true;
+                const persisted = await enqueuePersistLinkedContacts(nextLinked);
+                if (!persisted) {
+                    alert(
+                        'Contact was saved on the client, but linking this project failed to save. Use Save or try again; check your connection.'
+                    );
+                }
             } catch (error) {
                 console.error('Failed to create project contact:', error);
             } finally {
@@ -2234,24 +2322,28 @@ function initializeProjectDetail() {
         const updateContactSite = async (contactId, siteIdValue) => {
             if (!resolvedClientId || !contactId || !window.api?.updateContact) return;
             const normalizedSiteId = siteIdValue ? String(siteIdValue) : '';
-            const previousLinked = linkedContacts;
+            const previousLinked = linkedContactsRef.current;
             const previousAvailable = availableContacts;
             const applySite = (rows) =>
                 (Array.isArray(rows) ? rows : []).map((row) =>
                     row.id === contactId ? { ...row, siteId: normalizedSiteId } : row
                 );
 
-            setLinkedContacts((prev) => applySite(prev));
+            const nextLinked = applySite(previousLinked);
+            setLinkedContacts(nextLinked);
+            linkedContactsRef.current = nextLinked;
             setAvailableContacts((prev) => applySite(prev));
             try {
                 await window.api.updateContact(resolvedClientId, contactId, {
                     siteId: normalizedSiteId || null
                 });
-                dirtyRef.current = true;
                 setSaveHint(null);
+                dirtyRef.current = true;
+                void enqueuePersistLinkedContacts(nextLinked);
             } catch (error) {
                 console.error('Failed to update contact site link:', error);
                 setLinkedContacts(previousLinked);
+                linkedContactsRef.current = previousLinked;
                 setAvailableContacts(previousAvailable);
             }
         };

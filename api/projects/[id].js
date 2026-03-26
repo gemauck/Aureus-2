@@ -373,6 +373,36 @@ async function handler(req, res) {
             return p.get('driveLinksOnly') === '1' || p.get('driveLinksOnly') === 'true';
           } catch (_) { return false; }
         })();
+        const projectContactsOnly = req.query?.projectContactsOnly === '1' || req.query?.projectContactsOnly === 'true' || (() => {
+          try {
+            const q = (req.url || '').split('?')[1] || '';
+            const p = new URLSearchParams(q);
+            return p.get('projectContactsOnly') === '1' || p.get('projectContactsOnly') === 'true';
+          } catch (_) { return false; }
+        })();
+
+        if (projectContactsOnly) {
+          try {
+            const rows = await prisma.$queryRaw`
+              SELECT id, "projectContacts"
+              FROM "Project"
+              WHERE id = ${id}
+              LIMIT 1
+            `;
+            const row = Array.isArray(rows) ? rows[0] : null;
+            if (!row) return notFound(res);
+            const rawPc = row.projectContacts;
+            return ok(res, {
+              project: {
+                id: row.id,
+                projectContacts: rawPc != null && rawPc !== '' ? String(rawPc) : '[]'
+              }
+            });
+          } catch (pcErr) {
+            console.error('❌ GET project projectContacts error:', pcErr?.message || pcErr, 'projectId:', id);
+            return serverError(res, pcErr?.message || 'Failed to load project contacts', pcErr?.message);
+          }
+        }
 
         if (driveLinksOnly) {
           try {
@@ -1487,32 +1517,7 @@ async function handler(req, res) {
       
       // Check if project exists and load current values for activity log diff
       const existingProject = await prisma.project.findUnique({
-        where: { id },
-        select: {
-          name: true,
-          status: true,
-          clientId: true,
-          clientName: true,
-          description: true,
-          notes: true,
-          budget: true,
-          priority: true,
-          type: true,
-          assignedTo: true,
-          startDate: true,
-          dueDate: true,
-          hasDocumentCollectionProcess: true,
-          hasTimeProcess: true,
-          hasWeeklyFMSReviewProcess: true,
-          hasMonthlyFMSReviewProcess: true,
-          hasMonthlyDataReviewProcess: true,
-          hasComplianceReviewProcess: true,
-          documentSections: true,
-          weeklyFMSReviewSections: true,
-          monthlyFMSReviewSections: true,
-          monthlyDataReviewSections: true,
-          complianceReviewSections: true
-        }
+        where: { id }
       })
       if (!existingProject) {
         console.error('❌ Project not found for update:', id)
@@ -1634,33 +1639,88 @@ async function handler(req, res) {
 
         // Activity log: project field changes and JSON section diffs (non-fatal)
         const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req);
-        const scalarProjectFields = ['name', 'status', 'clientId', 'clientName', 'description', 'notes', 'budget', 'priority', 'type', 'assignedTo', 'hasDocumentCollectionProcess', 'hasTimeProcess', 'hasWeeklyFMSReviewProcess', 'hasMonthlyFMSReviewProcess', 'hasMonthlyDataReviewProcess', 'hasComplianceReviewProcess'];
-        const norm = (v) => (v instanceof Date ? v.toISOString() : (v != null ? String(v) : ''));
-        for (const field of scalarProjectFields) {
-          if (updateData[field] === undefined) continue;
-          const oldVal = existingProject[field];
-          const newVal = updateData[field];
-          if (field === 'startDate' || field === 'dueDate') {
-            const o = oldVal instanceof Date ? oldVal.toISOString() : (oldVal != null ? String(oldVal) : '');
-            const n = newVal instanceof Date ? newVal.toISOString() : (newVal != null ? String(newVal) : '');
-            if (o !== n) {
-              await logProjectActivity(prisma, {
-                projectId: id,
-                userId: activityUserId,
-                userName: activityUserName,
-                type: 'project_updated',
-                description: `Project ${field} ${newVal ? 'updated' : 'cleared'}`,
-                metadata: { entityType: 'project', entityId: id, field, oldValue: o, newValue: n }
-              });
+        const fieldsWithDedicatedDiff = new Set([
+          'documentSections',
+          'weeklyFMSReviewSections',
+          'monthlyDataReviewSections',
+          'complianceReviewSections'
+        ]);
+        const normalizeForDiff = (value) => {
+          if (value instanceof Date) return value.toISOString();
+          if (value == null) return '';
+          if (typeof value === 'object') {
+            try {
+              return JSON.stringify(value);
+            } catch (_) {
+              return String(value);
             }
-          } else if (norm(oldVal) !== norm(newVal)) {
+          }
+          return String(value);
+        };
+        const summarizeValue = (value, maxLen = 180) => {
+          const normalized = normalizeForDiff(value);
+          return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}...` : normalized;
+        };
+
+        for (const field of Object.keys(updateData)) {
+          if (fieldsWithDedicatedDiff.has(field)) continue;
+          const oldVal = existingProject?.[field];
+          const newVal = updateData[field];
+          if (normalizeForDiff(oldVal) === normalizeForDiff(newVal)) continue;
+
+          await logProjectActivity(prisma, {
+            projectId: id,
+            userId: activityUserId,
+            userName: activityUserName,
+            type: 'project_updated',
+            description: `Project ${field} changed`,
+            metadata: {
+              entityType: 'project',
+              entityId: id,
+              field,
+              oldValue: summarizeValue(oldVal),
+              newValue: summarizeValue(newVal)
+            }
+          });
+        }
+
+        if (onlineDriveLinksPayload !== null) {
+          const oldVal = existingProject?.onlineDriveLinks;
+          const newVal = onlineDriveLinksPayload;
+          if (normalizeForDiff(oldVal) !== normalizeForDiff(newVal)) {
             await logProjectActivity(prisma, {
               projectId: id,
               userId: activityUserId,
               userName: activityUserName,
               type: 'project_updated',
-              description: `Project ${field} changed`,
-              metadata: { entityType: 'project', entityId: id, field, oldValue: oldVal, newValue: newVal }
+              description: 'Project onlineDriveLinks changed',
+              metadata: {
+                entityType: 'project',
+                entityId: id,
+                field: 'onlineDriveLinks',
+                oldValue: summarizeValue(oldVal),
+                newValue: summarizeValue(newVal)
+              }
+            });
+          }
+        }
+        if (projectContactsPayload !== null) {
+          const oldVal = existingProject?.projectContacts;
+          const newVal = projectContactsPayload;
+          if (normalizeForDiff(oldVal) !== normalizeForDiff(newVal)) {
+            await logProjectActivity(prisma, {
+              projectId: id,
+              userId: activityUserId,
+              userName: activityUserName,
+              type: 'project_updated',
+              description: 'Project projectContacts changed',
+              metadata: {
+                entityType: 'project',
+                entityId: id,
+                field: 'projectContacts',
+                oldValue: summarizeValue(oldVal),
+                newValue: summarizeValue(newVal)
+              }
             });
           }
         }

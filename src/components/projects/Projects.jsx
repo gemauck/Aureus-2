@@ -2943,11 +2943,12 @@ const Projects = () => {
                         if (updatedProject.weeklyFMSReviewSections != null) patch.weeklyFMSReviewSections = normalized.weeklyFMSReviewSections;
                         if (updatedProject.onlineDriveLinks != null) patch.onlineDriveLinks = normalized.onlineDriveLinks;
                         if (updatedProject.googleDriveLink != null) patch.googleDriveLink = normalized.googleDriveLink;
+                        if (updatedProject.projectContacts != null) patch.projectContacts = normalized.projectContacts;
                         if (Object.keys(patch).length > 0) {
                             effective = { ...prev, ...patch };
                         }
                     }
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections', 'onlineDriveLinks', 'googleDriveLink'];
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections', 'onlineDriveLinks', 'googleDriveLink', 'projectContacts'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
                         const newValue = effective[field];
@@ -3007,7 +3008,7 @@ const Projects = () => {
                     // If it's the same project ID, check if data actually changed
                     if (prev && prev.id === normalizedProject.id) {
                         // Compare important fields (include module flags so Time/Monthly tabs persist when re-opening)
-                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'weeklyFMSReviewSections', 'customFieldDefinitions', 'documents'];
+                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'weeklyFMSReviewSections', 'customFieldDefinitions', 'documents', 'projectContacts'];
                         const hasChanges = importantFields.some(field => {
                             const prevValue = prev[field];
                             const newValue = normalizedProject[field];
