@@ -189,6 +189,8 @@ const TaskDetailModal = ({
     const descriptionEditOriginRef = useRef('external'); // 'external' | 'user' - avoid overwriting user input when syncing from task
     const mentionSuggestionsRef = useRef(null);
     const commentAttachmentInputRef = useRef(null);
+    const commentSubmitInFlightRef = useRef(false);
+    const [isPostingComment, setIsPostingComment] = useState(false);
     const checklistInputRef = useRef(null);
     const lastFocusRequestRef = useRef(null);
     const lastInitialTabRef = useRef(null);
@@ -1245,6 +1247,10 @@ const TaskDetailModal = ({
 
     const handleAddComment = async () => {
         if (newComment.trim() || commentAttachments.length > 0) {
+            if (commentSubmitInFlightRef.current) return;
+            commentSubmitInFlightRef.current = true;
+            setIsPostingComment(true);
+            try {
             // Get current user info
             const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
             
@@ -1432,26 +1438,8 @@ const TaskDetailModal = ({
                 const taskTitle = editedTask.title || task?.title || 'Untitled Task';
                 const projectName = project?.name || 'Project';
                 
-                // 1) Notify @mentioned users (email + in-app via MentionHelper)
-                if (window.MentionHelper && mentionedUsers.length > 0) {
-                    const contextTitle = `Task: ${taskTitle}`;
-                    const contextLink = taskLink; // Use task-specific link with commentId
-                    // Pass project information for email notifications
-                    await window.MentionHelper.processMentions(
-                        newComment,
-                        contextTitle,
-                        contextLink,
-                        currentUser.name,
-                        users,
-                        {
-                            projectId: project?.id,
-                            projectName: projectName,
-                            taskId: taskId,
-                            taskTitle: taskTitle,
-                            commentId: commentId // Include commentId in metadata
-                        }
-                    );
-                }
+                // 1) @mentions are handled server-side in /api/task-comments to guarantee
+                // in-app + email delivery and avoid client-side duplicate sends.
                 
                 // 2) Notify all task assignees (in-app; skip if they are the author or already notified via @mention)
                 const assigneeIdsForCommentNotify = Array.isArray(editedTask.assigneeIds) ? editedTask.assigneeIds : (editedTask.assigneeId != null ? [editedTask.assigneeId] : []);
@@ -1537,6 +1525,10 @@ const TaskDetailModal = ({
                 }
             } catch (error) {
                 console.error('❌ Failed to send comment notifications:', error);
+            }
+            } finally {
+                commentSubmitInFlightRef.current = false;
+                setIsPostingComment(false);
             }
         }
     };
@@ -2706,11 +2698,13 @@ const TaskDetailModal = ({
                                             )}
                                         </div>
                                         <button
+                                            type="button"
                                             onClick={handleAddComment}
-                                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
+                                            disabled={isPostingComment || uploadingCommentAttachments}
+                                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50 disabled:pointer-events-none"
                                         >
-                                            <i className="fas fa-comment mr-1.5"></i>
-                                            Add Comment
+                                            <i className={`fas ${isPostingComment ? 'fa-spinner fa-spin' : 'fa-comment'} mr-1.5`}></i>
+                                            {isPostingComment ? 'Posting…' : 'Add Comment'}
                                         </button>
                                     </div>
                                 </div>

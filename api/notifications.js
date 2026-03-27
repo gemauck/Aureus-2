@@ -117,6 +117,35 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     }
     if (validLink && !validLink.startsWith('/') && !validLink.startsWith('#')) validLink = '/' + validLink;
 
+    // Avoid duplicate in-app rows + emails when the same mention/comment notify runs twice in quick succession
+    // (double submit, retry, or overlapping client/server paths). Team discussions can fire rapid legitimate replies.
+    const DEDUPE_WINDOW_MS = 120_000;
+    if ((type === 'mention' || type === 'comment') && !isTeamDiscussion) {
+        const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
+        const titleNorm = String(title || '').trim();
+        const messageNorm = String(message || '').trim();
+        const linkNorm = String(validLink || '').trim();
+        const existingDup = await prisma.notification.findFirst({
+            where: {
+                userId: id,
+                type,
+                title: titleNorm,
+                message: messageNorm,
+                link: linkNorm,
+                createdAt: { gte: since }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        if (existingDup) {
+            console.warn('📧 Skipping duplicate notification email/in-app (same fingerprint within 120s)', {
+                userId: id,
+                type,
+                titlePreview: titleNorm.slice(0, 48)
+            });
+            return { notification: existingDup, created: false };
+        }
+    }
+
     let notification = null;
     if (shouldCreateInApp) {
         try {
