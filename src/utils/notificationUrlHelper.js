@@ -188,6 +188,9 @@
         if (normalizedType === 'leavebalance' && !queryParams.has('tab')) {
             queryParams.set('tab', 'balances');
         }
+        if (normalizedType === 'leavebalance' && entityId && !queryParams.has('highlight')) {
+            queryParams.set('highlight', entityId);
+        }
 
         const queryString = queryParams.toString();
         if (queryString) {

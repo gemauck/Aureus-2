@@ -177,6 +177,8 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
     const [currentTab, setCurrentTab] = useState(initialTab);
     /** From /leave-platform/{applicationId} (RouteState segments) */
     const [routeApplicationId, setRouteApplicationId] = useState(null);
+    /** From ?highlight= (balance row); works with hash routes via RouteState merged search */
+    const [balancesHighlightId, setBalancesHighlightId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [leaveApplications, setLeaveApplications] = useState([]);
     const [leaveBalances, setLeaveBalances] = useState([]);
@@ -265,6 +267,41 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
             return () => {
                 window.removeEventListener('route:change', syncRouteApplicationId);
                 window.removeEventListener('popstate', syncRouteApplicationId);
+            };
+        }, []);
+
+        useEffect(() => {
+            const syncBalancesHighlightFromUrl = () => {
+                try {
+                    const r = window.RouteState?.getRoute?.();
+                    if (!r || r.page !== 'leave-platform') {
+                        setBalancesHighlightId(null);
+                        return;
+                    }
+                    let h = r.search?.get?.('highlight');
+                    if (!h) {
+                        const url = new URL(window.location.href);
+                        h = url.searchParams.get('highlight');
+                    }
+                    if (!h && window.location.hash && window.location.hash.includes('?')) {
+                        const qs = window.location.hash.split('?')[1];
+                        if (qs) h = new URLSearchParams(qs.split('#')[0]).get('highlight');
+                    }
+                    if (h && looksLikeEntityId(h)) {
+                        setBalancesHighlightId(h.trim());
+                    } else {
+                        setBalancesHighlightId(null);
+                    }
+                } catch (_) {
+                    setBalancesHighlightId(null);
+                }
+            };
+            syncBalancesHighlightFromUrl();
+            window.addEventListener('route:change', syncBalancesHighlightFromUrl);
+            window.addEventListener('popstate', syncBalancesHighlightFromUrl);
+            return () => {
+                window.removeEventListener('route:change', syncBalancesHighlightFromUrl);
+                window.removeEventListener('popstate', syncBalancesHighlightFromUrl);
             };
         }, []);
 
@@ -1222,6 +1259,7 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                             user={user}
                             isAdmin={isAdmin}
                             onRefresh={() => loadData()}
+                            highlightBalanceId={balancesHighlightId}
                         />
                     );
             case 'calendar':
@@ -2437,7 +2475,14 @@ const ApplyForLeaveView = ({
 };
 
 // Leave Balances View
-const LeaveBalancesView = ({ balances, leaveTypes, user, isAdmin, onRefresh }) => {
+const LeaveBalancesView = ({
+    balances,
+    leaveTypes,
+    user,
+    isAdmin,
+    onRefresh,
+    highlightBalanceId = null
+}) => {
     const normalizedBalances = useMemo(() => {
         if (!Array.isArray(balances) || balances.length === 0) return [];
         return balances.map(balance => ({
@@ -2467,6 +2512,15 @@ const LeaveBalancesView = ({ balances, leaveTypes, user, isAdmin, onRefresh }) =
             return acc;
         }, {});
     }, [filteredBalances]);
+
+    useEffect(() => {
+        if (!highlightBalanceId) return;
+        const t = window.setTimeout(() => {
+            const el = document.getElementById(`leave-balance-row-${highlightBalanceId}`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+        return () => window.clearTimeout(t);
+    }, [highlightBalanceId, filteredBalances.length]);
 
     return (
         <div className="space-y-4">
@@ -2519,8 +2573,14 @@ const LeaveBalancesView = ({ balances, leaveTypes, user, isAdmin, onRefresh }) =
                         <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredBalances.map(balance => {
                                     const leaveTypeInfo = leaveTypes.find(t => t.value === balance.leaveType) || { label: balance.leaveType };
+                                    const rowKey = balance.id || `${balance.employeeId || balance.employeeName}-${balance.leaveType}`;
+                                    const isHighlighted = highlightBalanceId && balance.id === highlightBalanceId;
                                     return (
-                                        <tr key={`${balance.employeeId || balance.employeeName}-${balance.leaveType}`}>
+                                        <tr
+                                            key={rowKey}
+                                            id={balance.id ? `leave-balance-row-${balance.id}` : undefined}
+                                            className={isHighlighted ? 'bg-primary-50 ring-2 ring-inset ring-primary-400' : ''}
+                                        >
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                                 {balance.employeeName || 'Unknown employee'}
                                     </td>

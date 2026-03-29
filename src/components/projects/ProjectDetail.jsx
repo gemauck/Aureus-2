@@ -981,7 +981,10 @@ function initializeProjectDetail() {
             const hasProcessEqual = prevProps.hasMonthlyDataReviewProcess === nextProps.hasMonthlyDataReviewProcess;
             const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
             const onBackEqual = prevProps.onBack === nextProps.onBack;
-            return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual;
+            const mdrEqual =
+                String(prevProps.project?.monthlyDataReviewSections ?? '') ===
+                String(nextProps.project?.monthlyDataReviewSections ?? '');
+            return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual && mdrEqual;
         });
     })();
 
@@ -1185,7 +1188,10 @@ function initializeProjectDetail() {
             const hasProcessEqual = prevProps.hasComplianceReviewProcess === nextProps.hasComplianceReviewProcess;
             const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
             const onBackEqual = prevProps.onBack === nextProps.onBack;
-            return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual;
+            const crEqual =
+                String(prevProps.project?.complianceReviewSections ?? '') ===
+                String(nextProps.project?.complianceReviewSections ?? '');
+            return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual && crEqual;
         });
     })();
     

@@ -196,6 +196,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
     const showedPropDataRef = useRef(false); // True when we showed prop data so background fetch failure doesn't clear it
     const userSelectedYearRef = useRef(false); // Track manual year selection to avoid auto-switching
+    const normalizationCacheRef = useRef(new Map()); // normalizeSectionsByYear memoization; cleared when project changes
     
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : isComplianceReview ? `complianceReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
@@ -250,6 +251,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     useEffect(() => {
         userSelectedYearRef.current = false;
+        normalizationCacheRef.current.clear();
     }, [project?.id]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
@@ -368,6 +370,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
     };
 
+    const yearMapHasSections = (byYear) => {
+        if (!byYear || typeof byYear !== 'object') return false;
+        return Object.keys(byYear).some((y) => Array.isArray(byYear[y]) && byYear[y].length > 0);
+    };
+
     const inferYearsFromSections = (sections) => {
         const years = new Set();
         (sections || []).forEach(section => {
@@ -390,9 +397,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return Array.from(years).sort();
     };
 
-    // PERFORMANCE: Memoize normalization results to avoid re-processing
-    const normalizationCache = useRef(new Map());
-    
     const normalizeSectionsByYear = (rawValue, fallbackYear) => {
         // Handle empty objects - if it's an empty object, return empty object (don't treat as no data)
         if (!rawValue) return {};
@@ -402,8 +406,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
         // PERFORMANCE: Use cache for identical inputs (common when re-rendering)
         const cacheKey = `${typeof rawValue === 'string' ? rawValue.substring(0, 100) : JSON.stringify(rawValue).substring(0, 100)}_${fallbackYear || 'default'}`;
-        if (normalizationCache.current.has(cacheKey)) {
-            return normalizationCache.current.get(cacheKey);
+        if (normalizationCacheRef.current.has(cacheKey)) {
+            return normalizationCacheRef.current.get(cacheKey);
         }
 
         let parsedValue = rawValue;
@@ -431,11 +435,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
             
             // Cache result
-            normalizationCache.current.set(cacheKey, result);
+            normalizationCacheRef.current.set(cacheKey, result);
             // Limit cache size to prevent memory issues
-            if (normalizationCache.current.size > 50) {
-                const firstKey = normalizationCache.current.keys().next().value;
-                normalizationCache.current.delete(firstKey);
+            if (normalizationCacheRef.current.size > 50) {
+                const firstKey = normalizationCacheRef.current.keys().next().value;
+                normalizationCacheRef.current.delete(firstKey);
             }
             
             return result;
@@ -456,10 +460,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         };
         
         // Cache result
-        normalizationCache.current.set(cacheKey, result);
-        if (normalizationCache.current.size > 50) {
-            const firstKey = normalizationCache.current.keys().next().value;
-            normalizationCache.current.delete(firstKey);
+        normalizationCacheRef.current.set(cacheKey, result);
+        if (normalizationCacheRef.current.size > 50) {
+            const firstKey = normalizationCacheRef.current.keys().next().value;
+            normalizationCacheRef.current.delete(firstKey);
         }
         
         return result;
@@ -942,6 +946,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         const cloned = cloneSectionsArray(normalized[sourceYear]);
                         normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
                     }
+                }
+                if (!yearMapHasSections(normalized) && yearMapHasSections(sectionsRef.current)) {
+                    console.warn('📥 Ignoring empty sections payload; keeping existing tracker data (avoid wipe from race or partial API response).');
+                    setIsLoading(false);
+                    return;
                 }
                 hasRetriedLoadRef.current = false; // Reset so future loads can retry if needed
                 setSectionsByYear(normalized);
@@ -7249,7 +7258,7 @@ Abcotronics`;
                                 <p className="text-lg font-bold text-gray-900 dark:text-gray-100">No sections yet</p>
                                 {hasDataInOtherYears ? (
                                     <>
-                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">No sections for <strong>{selectedYear}</strong>. Your document collection has data for {yearsWithSections.join(', ')}.</p>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">No sections for <strong>{selectedYear}</strong>. {isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document collection'} has data for {yearsWithSections.join(', ')}.</p>
                                         <p className="text-sm text-sky-600 dark:text-sky-400 mt-2">Change the <strong>Year</strong> dropdown above, or click below to view that year.</p>
                                     </>
                                 ) : (
