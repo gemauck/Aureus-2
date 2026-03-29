@@ -3009,14 +3009,26 @@ const Projects = () => {
                         console.log('⚠️ RouteState not available after waiting, using EntityUrl fallback');
                         window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
                     } else {
-                        console.warn('⚠️ Neither RouteState nor EntityUrl available for URL update');
+                        try {
+                            const u = new URL(window.location.href);
+                            u.pathname = `/projects/${normalizedProject.id}`;
+                            u.search = '';
+                            u.hash = '';
+                            window.history.replaceState({}, '', u);
+                        } catch (e) {
+                            console.warn('⚠️ Neither RouteState nor EntityUrl; direct URL update failed:', e?.message);
+                        }
                     }
                 }
             };
-            // Fire and forget - but catch errors to prevent unhandled promise rejections
-            updateUrl().catch(error => {
+            // Must complete before setViewingProject: if updateUrl awaits RouteState, a fire-and-forget
+            // schedule lets ProjectDetail mount while the pathname still shows the previous project,
+            // which triggers URL "fix" churn and confusing console noise.
+            try {
+                await updateUrl();
+            } catch (error) {
                 console.error('❌ Error in updateUrl (non-critical):', error);
-            });
+            }
             
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
@@ -3056,18 +3068,7 @@ const Projects = () => {
                     }
                     return normalizedProject;
                 });
-                
-                // Update URL even if ProjectDetail isn't loaded yet
-                if (window.RouteState && normalizedProject.id) {
-                    console.log('🔗 Updating URL for project (ProjectDetail not loaded yet):', normalizedProject.id);
-                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
-                        replace: false,
-                        preserveSearch: false,
-                        preserveHash: false
-                    });
-                    console.log('✅ URL updated to:', window.location.pathname);
-                }
-                // The render will show the loading state
+                // URL already updated via await updateUrl() above
             }
         } catch (error) {
             console.error('❌ Error in handleViewProject:', {

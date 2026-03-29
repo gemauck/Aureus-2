@@ -3963,13 +3963,8 @@ function initializeProjectDetail() {
         // This prevents false positives when one project ID is a substring of another
         const pathMatches = currentPathname === expectedPath || currentPathname.startsWith(expectedPath + '/');
         
-        // Only fix URL if pathname doesn't match expected path
+        // Only fix URL if pathname doesn't match expected path (e.g. stale path after switching projects)
         if (!pathMatches) {
-            console.log('🔧 ProjectDetail: URL missing project ID, fixing...', {
-                currentPathname,
-                expectedPath
-            });
-            
             // Preserve any existing search params (like task=) and hash (e.g. docSectionId for document collection deep link)
             const currentSearch = window.location.search;
             const currentHash = window.location.hash || '';
@@ -3986,7 +3981,6 @@ function initializeProjectDetail() {
             
             try {
                 window.history.replaceState({}, '', url);
-                console.log('✅ ProjectDetail: URL fixed to include project ID:', url.href);
             } catch (e) {
                 console.error('❌ Failed to fix URL:', e);
             }
