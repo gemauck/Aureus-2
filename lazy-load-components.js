@@ -62,9 +62,8 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
         './src/components/notes/NoteEditor.jsx', // Shared note editor for Project Notes tab and My Notes
-        // BULLETPROOF: ProjectDetail is loaded explicitly here AND via special handler
-        // This ensures it loads even if one method fails
-        './src/components/projects/ProjectDetail.jsx',
+        // ProjectDetail is deferred to end of this list (~445KB+): batches use Promise.all, so keeping it
+        // here blocked every earlier batch from completing. Projects.jsx + loadProjectDetail() fetch it when needed.
         './src/components/projects/Projects.jsx',
         './src/components/projects/ProjectsDatabaseFirst.jsx',
         './src/components/projects/ProjectsSimple.jsx',
@@ -179,7 +178,10 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/utils/whatsapp.js',
         './src/utils/dieselRefundEvidenceEvaluator.js',
         './src/services/GoogleCalendarService.js',
-        './src/components/calendar/GoogleCalendarSync.jsx'
+        './src/components/calendar/GoogleCalendarSync.jsx',
+
+        // Last: heaviest projects chunk; final batch also triggers loadBatch completion + explicit ProjectDetail retries
+        './src/components/projects/ProjectDetail.jsx'
     ].filter(path => {
         // FINAL CHECK: Filter out blocked components
         if (shouldBlockComponent(path)) {
@@ -359,8 +361,19 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
             ensureReactForProjectDetail().then(() => {
                 // First, fetch the file to validate it's JavaScript before loading as script
                 // This prevents HTML (404 pages) from being executed as JavaScript
-                // Use no-cache for DailyNotes, Manufacturing, ProjectProgressTracker, ProjectDetail, and ManagementMeetingNotes to ensure fresh version, default for others
-            const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('ProjectDetail') || scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('WeeklyFMSReviewTracker') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ? 'no-cache' : 'default';
+                // no-cache for fast-moving modules; ProjectDetail uses default in production (URL has v=BUILD_VERSION) so repeat visits can use HTTP cache
+                const isDevHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const cachePolicy =
+                    scriptSrc.includes('DailyNotes') ||
+                    scriptSrc.includes('Manufacturing') ||
+                    scriptSrc.includes('ProjectProgressTracker') ||
+                    scriptSrc.includes('ManagementMeetingNotes') ||
+                    scriptSrc.includes('WeeklyFMSReviewTracker') ||
+                    scriptSrc.includes('Teams.jsx') ||
+                    scriptSrc.includes('Teams.js') ||
+                    (isDevHost && scriptSrc.includes('ProjectDetail'))
+                        ? 'no-cache'
+                        : 'default';
                 
                 // Retry logic for server errors (502, 503, 504)
                 const attemptLoad = (attempt = 1, maxAttempts = 3) => {
