@@ -1018,6 +1018,8 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                             getLeaveTypeInfo={getLeaveTypeInfo}
                             getStatusLabel={getStatusLabel}
                             onRefresh={() => loadData()}
+                            highlightApplicationId={routeApplicationId}
+                            onViewInTeamLeave={isAdmin ? () => setCurrentTab('team') : undefined}
                         />
                     );
                 case 'employees':
@@ -1216,6 +1218,7 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                             onUpdate={handleUpdate}
                             onDelete={handleDelete}
                             loading={loading}
+                            highlightApplicationId={routeApplicationId}
                         />
                     ) : (
                         <AccessNotice />
@@ -1323,6 +1326,8 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                             getLeaveTypeInfo={getLeaveTypeInfo}
                             getStatusLabel={getStatusLabel}
                             onRefresh={() => loadData()}
+                            highlightApplicationId={routeApplicationId}
+                            onViewInTeamLeave={isAdmin ? () => setCurrentTab('team') : undefined}
                         />
                     );
         }
@@ -1399,7 +1404,9 @@ const OverviewView = ({
     isAdmin,
     getLeaveTypeInfo,
     getStatusLabel,
-    onRefresh
+    onRefresh,
+    highlightApplicationId = null,
+    onViewInTeamLeave
 }) => {
     const myApplications = useMemo(() => applications.filter(app => matchUserRecord(app, user)), [applications, user]);
     const myPending = useMemo(() => myApplications.filter(app => app.status === 'pending').length, [myApplications]);
@@ -1435,6 +1442,19 @@ const OverviewView = ({
 
     const upcomingBirthdays = useMemo(() => computeUpcomingBirthdays(birthdays, isAdmin ? 8 : 5), [birthdays, isAdmin]);
 
+    const linkedApp = useMemo(() => {
+        if (!highlightApplicationId) return null;
+        return (applications || []).find((a) => a.id === highlightApplicationId) || null;
+    }, [applications, highlightApplicationId]);
+
+    useEffect(() => {
+        if (!linkedApp) return;
+        const t = window.setTimeout(() => {
+            document.getElementById('leave-overview-linked-app')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+        return () => window.clearTimeout(t);
+    }, [linkedApp?.id]);
+
     return (
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1452,6 +1472,34 @@ const OverviewView = ({
                     Refresh
                 </button>
             </div>
+
+            {linkedApp && (
+                <div
+                    id="leave-overview-linked-app"
+                    className="rounded-lg border-2 border-primary-400 bg-primary-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                >
+                    <div>
+                        <p className="text-xs font-semibold text-primary-800 uppercase tracking-wide mb-1">Linked leave request</p>
+                        <p className="text-sm font-medium text-gray-900">
+                            {linkedApp.userName || linkedApp.employee || 'Employee'} ·{' '}
+                            {getLeaveTypeInfo(linkedApp.leaveType)?.label || linkedApp.leaveType}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">
+                            {formatDisplayDate(linkedApp.startDate)} – {formatDisplayDate(linkedApp.endDate)} ·{' '}
+                            {getStatusLabel(linkedApp.status)}
+                        </p>
+                    </div>
+                    {isAdmin && typeof onViewInTeamLeave === 'function' && (
+                        <button
+                            type="button"
+                            onClick={() => onViewInTeamLeave()}
+                            className="shrink-0 px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                        >
+                            Show in team table
+                        </button>
+                    )}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -1483,7 +1531,15 @@ const OverviewView = ({
                     {recentApplications.length > 0 ? (
                         <ul className="space-y-2">
                             {recentApplications.map(app => (
-                                <li key={app.id} className="flex items-center justify-between text-sm">
+                                <li
+                                    key={app.id}
+                                    id={`leave-overview-recent-${app.id}`}
+                                    className={`flex items-center justify-between text-sm rounded-md px-2 py-1 -mx-2 ${
+                                        highlightApplicationId && app.id === highlightApplicationId
+                                            ? 'bg-primary-50 ring-2 ring-inset ring-primary-400'
+                                            : ''
+                                    }`}
+                                >
                                     <div>
                                         <p className="font-medium text-gray-900">
                                             {getLeaveTypeInfo(app.leaveType)?.label || app.leaveType}
@@ -1564,7 +1620,8 @@ const TeamLeaveView = ({
     onEdit,
     onUpdate,
     onDelete,
-    loading
+    loading,
+    highlightApplicationId = null
 }) => {
     const [editingApplication, setEditingApplication] = useState(null);
     const [editFormData, setEditFormData] = useState({
@@ -1618,6 +1675,15 @@ const TeamLeaveView = ({
         approved: filteredApplications.filter(app => app.status === 'approved').length,
         rejected: filteredApplications.filter(app => app.status === 'rejected').length
     }), [filteredApplications]);
+
+    useEffect(() => {
+        if (!highlightApplicationId) return;
+        const t = window.setTimeout(() => {
+            const el = document.getElementById(`leave-team-row-${highlightApplicationId}`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+        return () => window.clearTimeout(t);
+    }, [highlightApplicationId, filteredApplications.length]);
 
     return (
         <div className="space-y-4">
@@ -1689,8 +1755,13 @@ const TeamLeaveView = ({
                             {filteredApplications.map(app => {
                                 const leaveTypeInfo = getLeaveTypeInfo(app.leaveType);
                                 const badgeClass = getLeaveTypeBadgeClass(leaveTypeInfo);
+                                const isHighlighted = highlightApplicationId && app.id === highlightApplicationId;
                                 return (
-                                    <tr key={app.id}>
+                                    <tr
+                                        key={app.id}
+                                        id={`leave-team-row-${app.id}`}
+                                        className={isHighlighted ? 'bg-primary-50 ring-2 ring-inset ring-primary-400' : ''}
+                                    >
                                         <td className="px-4 py-4 text-sm text-gray-900">
                                             <div className="font-medium">{app.userName || app.employee || 'Unknown'}</div>
                                             <div className="text-xs text-gray-500">
