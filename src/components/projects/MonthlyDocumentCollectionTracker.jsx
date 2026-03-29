@@ -162,6 +162,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const isMonthlyDataReview = dataSource === 'monthlyDataReview';
     const isComplianceReview = dataSource === 'complianceReview';
     const isJsonOnlyTracker = isMonthlyDataReview || isComplianceReview;
+    // Month grid column widths (Data Review, Compliance Review, Document Collection)
+    const jsonTrackerStatusColPx = 240;
+    const jsonTrackerNotesColPx = 280;
+    const documentCollectionMonthColMinPx = 240;
     const getProjectSectionsField = (proj) => {
         if (dataSource === 'monthlyDataReview') return proj?.monthlyDataReviewSections;
         if (dataSource === 'complianceReview') return proj?.complianceReviewSections;
@@ -4040,9 +4044,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
         const outerClassName = isList
             ? `px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-600 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-gray-900' : ''}`
             : `px-3 py-1.5 text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`;
-        const innerWidthClass = isList
-            ? 'w-full min-w-0'
-            : (isJsonOnlyTracker ? 'min-w-[180px] w-[180px]' : 'min-w-[180px]');
+        const innerWidthClass = isList ? 'w-full min-w-0' : 'relative w-full min-w-0';
         const OuterTag = isList ? 'div' : 'td';
         const outerProps = isList
             ? {
@@ -4058,6 +4060,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 'data-cell-key': cellKey,
                 tabIndex: 0,
                 className: outerClassName,
+                style: isJsonOnlyTracker
+                    ? { minWidth: jsonTrackerStatusColPx, width: jsonTrackerStatusColPx }
+                    : { minWidth: documentCollectionMonthColMinPx },
                 onClick: handleCellClick,
                 onMouseEnter: () => setHoveredStatusCell(cellKey),
                 onMouseLeave: () => setHoveredStatusCell(null),
@@ -4071,7 +4076,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
             };
         return (
             <OuterTag {...outerProps}>
-                <div className={`relative ${innerWidthClass}`}>
+                <div className={innerWidthClass}>
                     <select
                         value={isMonthlyDataReview ? (status ? resolveMonthlyDataReviewStatusKey(status) : '') : (status || '')}
                         onChange={(e) => {
@@ -4349,7 +4354,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
             <td
                 className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
-                style={{ minWidth: '180px', width: '180px' }}
+                style={{ minWidth: jsonTrackerNotesColPx, width: jsonTrackerNotesColPx }}
             >
                 {textarea}
             </td>
@@ -7439,7 +7444,7 @@ Abcotronics`;
                                                                         ? 'bg-sky-50 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500'
                                                                         : 'text-gray-600 dark:text-gray-400'
                                                                 }`}
-                                                                style={{ minWidth: '180px', width: '180px' }}
+                                                                style={{ minWidth: jsonTrackerStatusColPx, width: jsonTrackerStatusColPx }}
                                                             >
                                                                 Status
                                                             </th>
@@ -7449,7 +7454,7 @@ Abcotronics`;
                                                                         ? 'bg-sky-50 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-200 dark:border-sky-600'
                                                                         : 'text-gray-600 dark:text-gray-400'
                                                                 }`}
-                                                                style={{ minWidth: '180px', width: '180px' }}
+                                                                style={{ minWidth: jsonTrackerNotesColPx, width: jsonTrackerNotesColPx }}
                                                             >
                                                                 Notes
                                                             </th>
@@ -7473,7 +7478,7 @@ Abcotronics`;
                                                             ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-300 dark:border-sky-600'
                                                             : 'text-gray-700 dark:text-gray-300'
                                                     }`}
-                                                    style={{ minWidth: '180px' }}
+                                                    style={{ minWidth: documentCollectionMonthColMinPx }}
                                                 >
                                                     <div className="flex flex-col items-center gap-0.5">
                                                         <span>{month.slice(0, 3)}</span>
@@ -7716,8 +7721,16 @@ Abcotronics`;
                                                         isJsonOnlyTracker ? (
                                                             months.map((month) => (
                                                                 <React.Fragment key={`${doc.id}-${month}`}>
-                                                                    <td className="px-3 py-1.5 text-xs border-l-4 border-gray-400 bg-gray-200" role="gridcell" />
-                                                                    <td className="px-2 py-1.5 text-xs border-l-2 border-gray-300 bg-gray-200" role="gridcell" />
+                                                                    <td
+                                                                        className="px-3 py-1.5 text-xs border-l-4 border-gray-400 bg-gray-200"
+                                                                        role="gridcell"
+                                                                        style={{ minWidth: jsonTrackerStatusColPx, width: jsonTrackerStatusColPx }}
+                                                                    />
+                                                                    <td
+                                                                        className="px-2 py-1.5 text-xs border-l-2 border-gray-300 bg-gray-200"
+                                                                        role="gridcell"
+                                                                        style={{ minWidth: jsonTrackerNotesColPx, width: jsonTrackerNotesColPx }}
+                                                                    />
                                                                 </React.Fragment>
                                                             ))
                                                         ) : (
@@ -7726,6 +7739,7 @@ Abcotronics`;
                                                                     key={`${doc.id}-${month}`}
                                                                     className="px-3 py-1.5 text-xs border-l-2 border-gray-200 bg-gray-200"
                                                                     role="gridcell"
+                                                                    style={{ minWidth: documentCollectionMonthColMinPx }}
                                                                 />
                                                             ))
                                                         )
