@@ -105,47 +105,78 @@ const LEAVE_PLATFORM_ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'sup
 const isLeavePlatformAdminRole = (role) =>
     !!role && typeof role === 'string' && LEAVE_PLATFORM_ADMIN_ROLES.includes(role.toLowerCase());
 
-const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
-    // Get auth hook safely - only call it if it's available and we're in a React component context
+/** Deep-link: /leave-platform?tab=policies or #/leave-platform?tab=my-hr */
+const LEAVE_HR_TAB_IDS = new Set([
+    'home',
+    'my-hr',
+    'policies',
+    'documents',
+    'hr-admin',
+    'overview',
+    'employees',
+    'my-leave',
+    'team',
+    'apply',
+    'balances',
+    'calendar',
+    'birthdays',
+    'approvals',
+    'approvers',
+    'import'
+]);
+
+/** Path segment looks like a Prisma cuid (not a tab slug) */
+const looksLikeEntityId = (segment) => {
+    if (!segment || typeof segment !== 'string') return false;
+    const s = segment.trim();
+    if (LEAVE_HR_TAB_IDS.has(s)) return false;
+    return /^[a-z0-9]{20,32}$/i.test(s);
+};
+
+const LeavePlatform = ({ initialTab = 'home' } = {}) => {
     let user = null;
-    let isAdmin = false;
-    
+
     try {
-        // Only use useAuth if we're in a proper React component context
-        // Check if React is available and if we can safely use hooks
         if (typeof window !== 'undefined' && window.useAuth && typeof window.useAuth === 'function') {
             try {
                 const authResult = window.useAuth();
                 user = authResult?.user || authResult || null;
-                isAdmin = isLeavePlatformAdminRole(user?.role);
             } catch (e) {
                 console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
-                // Fallback: try to get user from storage
                 if (window.storage?.getUser) {
                     try {
                         user = window.storage.getUser();
-                        isAdmin = isLeavePlatformAdminRole(user?.role);
                     } catch (storageError) {
                         console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
                     }
                 }
             }
-        } else {
-            // Fallback: try to get user from storage
-            if (window.storage?.getUser) {
-                try {
-                    user = window.storage.getUser();
-                    isAdmin = isLeavePlatformAdminRole(user?.role);
-                } catch (storageError) {
-                    console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
-                }
+        } else if (window.storage?.getUser) {
+            try {
+                user = window.storage.getUser();
+            } catch (storageError) {
+                console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
             }
         }
     } catch (e) {
         console.warn('⚠️ LeavePlatform: Error initializing auth:', e);
     }
-    
+
+    const isAdmin = useMemo(() => {
+        if (!user) return false;
+        if (typeof window !== 'undefined' && window.isHrAdministratorUser && typeof window.isHrAdministratorUser === 'function') {
+            try {
+                return window.isHrAdministratorUser(user);
+            } catch (e) {
+                console.warn('⚠️ LeavePlatform: isHrAdministratorUser error:', e);
+            }
+        }
+        return isLeavePlatformAdminRole(user?.role);
+    }, [user]);
+
     const [currentTab, setCurrentTab] = useState(initialTab);
+    /** From /leave-platform/{applicationId} (RouteState segments) */
+    const [routeApplicationId, setRouteApplicationId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [leaveApplications, setLeaveApplications] = useState([]);
     const [leaveBalances, setLeaveBalances] = useState([]);
@@ -175,6 +206,82 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             window.addEventListener('leavePlatform:setTab', handleTabEvent);
             return () => window.removeEventListener('leavePlatform:setTab', handleTabEvent);
         }, []);
+
+        useEffect(() => {
+            const adminOnlyTabs = new Set(['employees', 'team', 'approvals', 'approvers', 'import', 'hr-admin']);
+            const readTabFromUrl = () => {
+                try {
+                    const r = window.RouteState?.getRoute?.();
+                    const seg = r?.segments?.[0];
+                    if (seg && looksLikeEntityId(seg)) {
+                        return;
+                    }
+                    const url = new URL(window.location.href);
+                    let tab = url.searchParams.get('tab');
+                    if (!tab && window.location.hash && window.location.hash.includes('?')) {
+                        const qs = window.location.hash.split('?')[1];
+                        if (qs) tab = new URLSearchParams(qs.split('#')[0]).get('tab');
+                    }
+                    if (!tab && r?.search) {
+                        tab = r.search.get('tab');
+                    }
+                    if (!tab || !LEAVE_HR_TAB_IDS.has(tab)) return;
+                    if (adminOnlyTabs.has(tab) && !isAdmin) return;
+                    setCurrentTab(tab);
+                } catch (_) {
+                    /* ignore */
+                }
+            };
+            readTabFromUrl();
+            window.addEventListener('popstate', readTabFromUrl);
+            window.addEventListener('route:change', readTabFromUrl);
+            return () => {
+                window.removeEventListener('popstate', readTabFromUrl);
+                window.removeEventListener('route:change', readTabFromUrl);
+            };
+        }, [isAdmin]);
+
+        useEffect(() => {
+            const syncRouteApplicationId = () => {
+                try {
+                    const r = window.RouteState?.getRoute?.();
+                    if (!r || r.page !== 'leave-platform') {
+                        setRouteApplicationId(null);
+                        return;
+                    }
+                    const seg = r.segments?.[0];
+                    if (seg && looksLikeEntityId(seg)) {
+                        setRouteApplicationId(seg);
+                    } else {
+                        setRouteApplicationId(null);
+                    }
+                } catch (_) {
+                    setRouteApplicationId(null);
+                }
+            };
+            syncRouteApplicationId();
+            window.addEventListener('route:change', syncRouteApplicationId);
+            window.addEventListener('popstate', syncRouteApplicationId);
+            return () => {
+                window.removeEventListener('route:change', syncRouteApplicationId);
+                window.removeEventListener('popstate', syncRouteApplicationId);
+            };
+        }, []);
+
+        useEffect(() => {
+            if (!routeApplicationId || !leaveApplications.length) return;
+            const app = leaveApplications.find((a) => a.id === routeApplicationId);
+            if (!app) return;
+            const mine = matchUserRecord(app, user);
+            const st = (app.status || '').toString().toLowerCase();
+            if (mine) {
+                setCurrentTab('my-leave');
+            } else if (isAdmin) {
+                setCurrentTab(st === 'pending' ? 'approvals' : 'overview');
+            } else {
+                setCurrentTab('my-leave');
+            }
+        }, [routeApplicationId, leaveApplications, user, isAdmin]);
 
         // State for dynamically loaded components - these update when components load
         const [EmployeeDetailComponent, setEmployeeDetailComponent] = useState(() => window.EmployeeDetail);
@@ -248,10 +355,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }, []);
 
         const leaveUtils = window.leaveUtils || {};
-        // Update isAdmin if user role is available
-        if (user?.role) {
-            isAdmin = isLeavePlatformAdminRole(user.role);
-        }
 
         // South African BCEA leave types (centralised in leaveUtils)
         const leaveTypes = leaveUtils.BCEA_LEAVE_TYPES || [
@@ -336,7 +439,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         try {
             const headers = getAuthHeaders();
             if (!headers.Authorization) {
-                console.warn('⚠️ Leave Platform: No auth token available');
+                console.warn('⚠️ Leave & HR: No auth token available');
                 return;
             }
             
@@ -362,7 +465,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     console.warn('Error parsing applications:', e);
                 }
             } else if (appsResponse.value?.status === 401) {
-                console.warn('⚠️ Leave Platform: Authentication failed for applications');
+                console.warn('⚠️ Leave & HR: Authentication failed for applications');
             }
 
             if (balancesResponse.status === 'fulfilled' && balancesResponse.value.ok) {
@@ -373,7 +476,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     console.warn('Error parsing balances:', e);
                 }
             } else if (balancesResponse.value?.status === 401) {
-                console.warn('⚠️ Leave Platform: Authentication failed for balances');
+                console.warn('⚠️ Leave & HR: Authentication failed for balances');
             }
 
             const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
@@ -392,7 +495,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         try {
             const headers = getAuthHeaders();
             if (!headers.Authorization) {
-                console.warn('⚠️ Leave Platform: No auth token for remaining data');
+                console.warn('⚠️ Leave & HR: No auth token for remaining data');
                 return;
             }
             
@@ -411,7 +514,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     const employeesData = users.users || users.data?.users || [];
                     setEmployees(employeesData);
                     if (employeesData.length === 0) {
-                        console.warn('⚠️ Leave Platform: No employees found in API response. Response structure:', users);
+                        console.warn('⚠️ Leave & HR: No employees found in API response. Response structure:', users);
                     }
                 } catch (e) {
                     console.error('❌ Error parsing employees response:', e);
@@ -523,7 +626,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 if (users.length || employeesResponse.status === 'fulfilled') {
                     setEmployees(users);
                     if (users.length === 0 && employeesResponse.status === 'fulfilled' && employeesResponse.value?.ok) {
-                        console.warn('⚠️ Leave Platform: No employees found after reload');
+                        console.warn('⚠️ Leave & HR: No employees found after reload');
                     }
                 }
 
@@ -703,27 +806,38 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             }
         }, [loadData]);
 
-        const tabs = useMemo(() => {
-            const sharedTabs = [
+        const tabGroups = useMemo(() => {
+            const start = [
+                { id: 'home', label: 'Home', icon: 'fa-home' },
+                { id: 'my-hr', label: 'My HR', icon: 'fa-id-card' },
+                { id: 'policies', label: 'Policies', icon: 'fa-book' },
+                { id: 'documents', label: 'Documents', icon: 'fa-file-alt' }
+            ];
+            if (isAdmin) {
+                start.push({ id: 'hr-admin', label: 'HR admin', icon: 'fa-user-cog' });
+            }
+            const leave = [
                 { id: 'overview', label: 'Overview', icon: 'fa-clipboard-list' },
-        { id: 'my-leave', label: 'My Leave', icon: 'fa-calendar-check' },
-        { id: 'apply', label: 'Apply for Leave', icon: 'fa-plus-circle' },
-        { id: 'balances', label: 'Leave Balances', icon: 'fa-chart-pie' },
-        { id: 'calendar', label: 'Leave Calendar', icon: 'fa-calendar' },
+                { id: 'my-leave', label: 'My Leave', icon: 'fa-calendar-check' },
+                { id: 'apply', label: 'Apply for Leave', icon: 'fa-plus-circle' },
+                { id: 'balances', label: 'Leave Balances', icon: 'fa-chart-pie' },
+                { id: 'calendar', label: 'Leave Calendar', icon: 'fa-calendar' },
                 { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' }
             ];
-
-            if (isAdmin) {
-                sharedTabs.splice(1, 0, { id: 'employees', label: 'Employees', icon: 'fa-users' });
-                sharedTabs.splice(3, 0, { id: 'team', label: 'Team Leave', icon: 'fa-people-arrows' });
-                sharedTabs.push(
-        { id: 'approvals', label: 'Approvals', icon: 'fa-check-circle' },
-                    { id: 'approvers', label: 'Approvers', icon: 'fa-user-shield' },
-        { id: 'import', label: 'Import Balances', icon: 'fa-upload' }
-                );
+            const adminOps = isAdmin
+                ? [
+                      { id: 'employees', label: 'Employees', icon: 'fa-users' },
+                      { id: 'team', label: 'Team Leave', icon: 'fa-people-arrows' },
+                      { id: 'approvals', label: 'Approvals', icon: 'fa-check-circle' },
+                      { id: 'approvers', label: 'Approvers', icon: 'fa-user-shield' },
+                      { id: 'import', label: 'Import Balances', icon: 'fa-upload' }
+                  ]
+                : [];
+            const groups = [{ key: 'start', label: 'Leave & HR', tabs: start }, { key: 'leave', label: 'Leave', tabs: leave }];
+            if (adminOps.length) {
+                groups.push({ key: 'admin', label: 'HR operations', tabs: adminOps });
             }
-
-            return sharedTabs;
+            return groups;
         }, [isAdmin]);
 
         // Employee filtering and sorting - moved to top level (hooks must be at component level)
@@ -814,6 +928,46 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
 
     const renderContent = () => {
         switch (currentTab) {
+                case 'home': {
+                    const Hub = window.LeaveHrHub;
+                    if (!Hub) {
+                        return <div className="text-center py-12 text-gray-500">Loading hub…</div>;
+                    }
+                    return <Hub setCurrentTab={setCurrentTab} isAdmin={isAdmin} />;
+                }
+                case 'my-hr': {
+                    if (!user?.id) {
+                        return <div className="text-center py-12 text-gray-600">Sign in to view your HR profile.</div>;
+                    }
+                    const Comp = window.EmployeeDetail;
+                    if (!Comp) {
+                        return <div className="text-center py-12 text-gray-500">Loading profile…</div>;
+                    }
+                    return (
+                        <Comp
+                            employeeId={user.id}
+                            onBack={() => setCurrentTab('home')}
+                            user={user}
+                            isAdmin={false}
+                        />
+                    );
+                }
+                case 'policies': {
+                    const P = window.HrPoliciesPanel;
+                    if (!P) return <div className="text-center py-12 text-gray-500">Loading…</div>;
+                    return <P isAdmin={isAdmin} />;
+                }
+                case 'documents': {
+                    const D = window.HrDocumentsPanel;
+                    if (!D) return <div className="text-center py-12 text-gray-500">Loading…</div>;
+                    return <D isAdmin={isAdmin} employees={employees} />;
+                }
+                case 'hr-admin': {
+                    if (!isAdmin) return <AccessNotice />;
+                    const A = window.HrAdminShell;
+                    if (!A) return <div className="text-center py-12 text-gray-500">Loading…</div>;
+                    return <A onNavigate={setCurrentTab} />;
+                }
                 case 'overview':
                     return (
                         <OverviewView
@@ -1045,6 +1199,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             onDelete={handleDelete}
                             onRequestApply={() => setCurrentTab('apply')}
                             onRefresh={() => loadData()}
+                            highlightApplicationId={routeApplicationId}
                         />
                     );
             case 'apply':
@@ -1086,6 +1241,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             onApprove={handleApprove}
                             onReject={handleReject}
                             loading={loading}
+                            highlightApplicationId={routeApplicationId}
                         />
                     ) : (
                         <AccessNotice />
@@ -1139,37 +1295,48 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             {/* Header */}
             <div className="flex flex-col gap-2 min-w-0 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Leave Platform</h2>
-                    <p className="text-sm text-gray-500 mt-0.5">Manage your leave applications and balances - BCEA Compliant</p>
+                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Leave &amp; HR</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">Leave, your HR profile, policies and documents — BCEA-aligned leave tools</p>
                 </div>
             </div>
 
             {/* Tabs */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="border-b border-gray-200 overflow-x-auto">
-                    <nav className="flex flex-nowrap min-w-0 -mb-px">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setCurrentTab(tab.id)}
-                                className={`
-                                    shrink-0 whitespace-nowrap px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors
-                                    ${currentTab === tab.id
-                                        ? 'border-primary-500 text-primary-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                    }
-                                `}
-                            >
-                                <i className={`fas ${tab.icon} mr-2`}></i>
-                                {tab.label}
-                            </button>
-                        ))}
-                    </nav>
+                    {tabGroups.map((group) => (
+                        <div key={group.key} className="border-b border-gray-100 last:border-b-0">
+                            <div className="px-3 pt-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                                {group.label}
+                            </div>
+                            <nav className="flex flex-wrap min-w-0 -mb-px">
+                                {group.tabs.map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        onClick={() => setCurrentTab(tab.id)}
+                                        className={`
+                                            shrink-0 whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                                            ${currentTab === tab.id
+                                                ? 'border-primary-500 text-primary-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                            }
+                                        `}
+                                    >
+                                        <i className={`fas ${tab.icon} mr-2`}></i>
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </nav>
+                        </div>
+                    ))}
                 </div>
 
                 {/* Tab Content */}
                 <div className="p-4 sm:p-6">
-                    {loading && leaveApplications.length === 0 && leaveBalances.length === 0 ? (
+                    {loading &&
+                    !['home', 'policies', 'documents', 'hr-admin', 'my-hr'].includes(currentTab) &&
+                    leaveApplications.length === 0 &&
+                    leaveBalances.length === 0 ? (
                         <div className="text-center py-12">
                             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
                             <p className="mt-4 text-gray-600">Loading leave data...</p>
@@ -1738,7 +1905,8 @@ const MyLeaveView = ({
     onUpdate,
     onDelete,
     onRequestApply,
-    onRefresh
+    onRefresh,
+    highlightApplicationId = null
 }) => {
     const [editingApplication, setEditingApplication] = useState(null);
     const [editFormData, setEditFormData] = useState({
@@ -1772,6 +1940,15 @@ const MyLeaveView = ({
             .reduce((sum, app) => sum + getApplicationDays(app, calculateWorkingDays), 0),
         [sortedApplications, calculateWorkingDays]
     );
+
+    useEffect(() => {
+        if (!highlightApplicationId) return;
+        const t = window.setTimeout(() => {
+            const el = document.getElementById(`leave-application-row-${highlightApplicationId}`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+        return () => window.clearTimeout(t);
+    }, [highlightApplicationId, sortedApplications.length]);
 
     return (
         <div className="space-y-4">
@@ -1816,8 +1993,13 @@ const MyLeaveView = ({
                         <tbody className="bg-white divide-y divide-gray-200">
                             {sortedApplications.map(app => {
                                 const leaveTypeInfo = getLeaveTypeInfo(app.leaveType);
+                                const isHighlighted = highlightApplicationId && app.id === highlightApplicationId;
                                 return (
-                                <tr key={app.id}>
+                                <tr
+                                    key={app.id}
+                                    id={`leave-application-row-${app.id}`}
+                                    className={isHighlighted ? 'bg-primary-50 ring-2 ring-inset ring-primary-400' : ''}
+                                >
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                             {leaveTypeInfo?.label || app.leaveType}
                                     </td>
@@ -2480,11 +2662,20 @@ const getAuthHeaders = () => {
 };
 
 // Approvals View
-const ApprovalsView = ({ applications, onApprove, onReject, loading }) => {
+const ApprovalsView = ({ applications, onApprove, onReject, loading, highlightApplicationId = null }) => {
     const pendingApplications = useMemo(
         () => applications.filter(app => app.status === 'pending'),
         [applications]
     );
+
+    useEffect(() => {
+        if (!highlightApplicationId) return;
+        const t = window.setTimeout(() => {
+            const el = document.getElementById(`leave-approval-card-${highlightApplicationId}`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+        return () => window.clearTimeout(t);
+    }, [highlightApplicationId, pendingApplications.length]);
 
     return (
         <div className="space-y-4">
@@ -2492,7 +2683,15 @@ const ApprovalsView = ({ applications, onApprove, onReject, loading }) => {
             {pendingApplications.length > 0 ? (
                 <div className="space-y-3">
                     {pendingApplications.map(app => (
-                        <div key={app.id} className="p-4 border border-gray-200 rounded-lg">
+                        <div
+                            key={app.id}
+                            id={`leave-approval-card-${app.id}`}
+                            className={`p-4 rounded-lg border ${
+                                highlightApplicationId && app.id === highlightApplicationId
+                                    ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-300'
+                                    : 'border-gray-200'
+                            }`}
+                        >
                             <div className="flex justify-between items-start">
                                 <div>
                                     <h4 className="font-medium">{app.userName}</h4>

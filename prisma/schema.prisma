@@ -96,6 +96,9 @@ model User {
   clientActivityLogs      ClientActivityLog[]            @relation("ClientActivityLogUser")
   erpGoogleCalendarConnection ErpGoogleCalendarConnection?
   erpCalendarEvents           ErpCalendarEvent[]
+  hrPoliciesUpdated           HrPolicy[]                    @relation("HrPolicyUpdatedBy")
+  hrLibraryDocumentsForUser   HrLibraryDocument[]           @relation("HrLibraryDocumentEmployee")
+  hrLibraryDocumentsUploaded  HrLibraryDocument[]           @relation("HrLibraryDocumentUploader")
 
   @@index([createdAt])
   @@index([role])
@@ -2132,6 +2135,43 @@ model Birthday {
 
   @@index([userId])
   @@index([date])
+}
+
+model HrPolicy {
+  id            String    @id @default(cuid())
+  title         String
+  slug          String    @unique
+  category      String    @default("general")
+  body          String    @default("")
+  status        String    @default("draft")
+  version       Int       @default(1)
+  effectiveFrom DateTime?
+  updatedById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  updatedBy     User?     @relation("HrPolicyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([category])
+}
+
+model HrLibraryDocument {
+  id           String   @id @default(cuid())
+  title        String
+  category     String   @default("other")
+  fileUrl      String
+  mimeType     String?
+  visibility   String   @default("company")
+  userId       String?
+  uploadedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User?    @relation("HrLibraryDocumentEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  uploadedBy   User     @relation("HrLibraryDocumentUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([visibility])
+  @@index([userId])
+  @@index([uploadedById])
 }
 
 model MonthlyMeetingNotes {

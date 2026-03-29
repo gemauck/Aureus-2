@@ -7,6 +7,10 @@
  * Usage:
  *   Cron: 0 7 * * * cd /path/to/repo && node scripts/sars-website-monitor.js
  *   Manual: node scripts/sars-website-monitor.js
+ *   Optional env:
+ *     SARS_MONITORING_CRAWL_ALL=true|false (default true for this script)
+ *     SARS_MONITORING_CRAWL_MAX_PAGES=600
+ *     SARS_MONITORING_CRAWL_DELAY_MS=120
  */
 
 import 'dotenv/config'
@@ -14,21 +18,13 @@ import { createRequire } from 'module'
 import { pathToFileURL } from 'url'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { getSarsSections } from '../api/sars-monitoring/sarsSections.js'
+import { extractAnnouncements } from '../api/sars-monitoring/parseSarsHtml.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
-
-const SARS_SECTIONS = [
-  { url: 'https://www.sars.gov.za/news-and-media/announcements/', label: 'Announcements' },
-  { url: 'https://www.sars.gov.za/news-and-media/', label: 'News & Media' },
-  { url: 'https://www.sars.gov.za/latest-news/', label: 'Latest News' },
-  { url: 'https://www.sars.gov.za/whats-new-at-sars/', label: "What's New" },
-  { url: 'https://www.sars.gov.za/legal-counsel/secondary-legislation/public-notices/', label: 'Public Notices' },
-  { url: 'https://www.sars.gov.za/legal-counsel/secondary-legislation/', label: 'Secondary Legislation' },
-  { url: 'https://www.sars.gov.za/media/media-releases/', label: 'Media Releases' }
-]
 
 // Function to fetch and parse SARS website content
 async function fetchSarsPage(url) {
@@ -60,102 +56,22 @@ async function fetchSarsPage(url) {
   }
 }
 
-// Function to extract announcements/news from HTML
-function extractAnnouncements(html, url) {
-  const announcements = []
-  
-  try {
-    // Extract page title
-    const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i)
-    const pageTitle = titleMatch ? titleMatch[1].trim().replace(/<[^>]*>/g, '') : 'SARS Website'
-
-    // Look for common announcement patterns
-    // Pattern 1: Article/announcement links
-    const articlePattern = /<article[^>]*>([\s\S]*?)<\/article>/gi
-    const articleMatches = [...html.matchAll(articlePattern)]
-    
-    for (const match of articleMatches) {
-      const articleHtml = match[1]
-      
-      // Extract title
-      const titleMatch = articleHtml.match(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/i) ||
-                        articleHtml.match(/<a[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)<\/a>/i)
-      const title = titleMatch ? titleMatch[1].trim().replace(/<[^>]*>/g, '') : 'Untitled'
-
-      // Extract description
-      const descMatch = articleHtml.match(/<p[^>]*>(.*?)<\/p>/i)
-      const description = descMatch ? descMatch[1].trim().replace(/<[^>]*>/g, '').substring(0, 500) : ''
-
-      // Extract link
-      const linkMatch = articleHtml.match(/<a[^>]*href="([^"]*)"[^>]*>/i)
-      let link = linkMatch ? linkMatch[1] : ''
-      if (link && !link.startsWith('http')) {
-        link = new URL(link, url).href
-      }
-
-      // Extract date
-      const dateMatch = articleHtml.match(/(\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})/i) ||
-                       articleHtml.match(/(\d{4}-\d{2}-\d{2})/)
-      let publishedAt = null
-      if (dateMatch) {
-        try {
-          publishedAt = new Date(dateMatch[1])
-        } catch (e) {
-          // Invalid date, use current date
-        }
-      }
-
-      if (title && title !== 'Untitled') {
-        announcements.push({
-          title,
-          description,
-          url: link || url,
-          pageTitle,
-          publishedAt: publishedAt || new Date()
-        })
-      }
-    }
-
-    // Pattern 2: List items with links (common in news/announcement pages)
-    if (announcements.length === 0) {
-      const listItemPattern = /<li[^>]*>[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>[\s\S]*?<\/li>/gi
-      const listMatches = [...html.matchAll(listItemPattern)]
-      
-      for (const match of listMatches.slice(0, 20)) { // Limit to 20 items
-        const link = match[1]
-        const title = match[2].trim().replace(/<[^>]*>/g, '')
-        
-        if (title && link) {
-          let fullLink = link
-          if (!link.startsWith('http')) {
-            fullLink = new URL(link, url).href
-          }
-
-          announcements.push({
-            title,
-            description: '',
-            url: fullLink,
-            pageTitle,
-            publishedAt: new Date()
-          })
-        }
-      }
-    }
-
-  } catch (error) {
-    console.error('Error extracting announcements:', error)
-  }
-
-  return announcements
-}
-
 async function checkSarsWebsite() {
   const results = { checked: [], newChanges: [], errors: [] }
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const delayMs = 1500
+  const crawlAll =
+    process.env.SARS_MONITORING_CRAWL_ALL === undefined ||
+    process.env.SARS_MONITORING_CRAWL_ALL === 'true' ||
+    process.env.SARS_MONITORING_CRAWL_ALL === '1'
+  const maxPages = Math.min(Math.max(parseInt(process.env.SARS_MONITORING_CRAWL_MAX_PAGES, 10) || 600, 50), 5000)
+  const delayMs = Math.min(
+    Math.max(parseInt(process.env.SARS_MONITORING_CRAWL_DELAY_MS, 10) || (crawlAll ? 120 : 1500), 20),
+    5000
+  )
+  const sections = await getSarsSections({ crawlAll, maxPages })
 
-  for (const section of SARS_SECTIONS) {
+  for (const section of sections) {
     try {
       await new Promise((r) => setTimeout(r, delayMs))
       console.log('🔍 Checking', section.label, '...')
@@ -179,7 +95,12 @@ async function checkSarsWebsite() {
             if (titleLower.includes('vat') || descLower.includes('vat')) category = 'VAT'
             else if (titleLower.includes('tax') || descLower.includes('tax')) category = 'Tax'
             else if (titleLower.includes('compliance') || descLower.includes('compliance')) category = 'Compliance'
-            else if (section.label === 'Public Notices' || section.label === 'Secondary Legislation') category = 'Compliance'
+            else if (
+              section.label === 'Public Notices' ||
+              section.label === 'Secondary Legislation' ||
+              section.label.startsWith('Tariff Amendments')
+            )
+              category = 'Compliance'
             const publishedDate = new Date(announcement.publishedAt)
             const isNew = publishedDate >= today
             const change = await prisma.sarsWebsiteChange.create({

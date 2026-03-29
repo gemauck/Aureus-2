@@ -120,22 +120,43 @@ export async function notifyCommentParticipants(opts) {
     const priorAuthorIdsFromNames = priorAuthorNames.length > 0
         ? await resolveAuthorNamesToUserIds(priorAuthorNames)
         : [];
-    // Recipients: entity author, prior commenters, prior @mentioned. Exclude users @mentioned in this comment
-    // so they get only the mention email (from frontend), not a duplicate "comment" email.
+    const preview = (commentText && commentText.length > 100) ? commentText.slice(0, 100) + '...' : (commentText || '');
+    const authorIdStr = commentAuthorId ? String(commentAuthorId) : null;
+    const mentionedSet = new Set((mentionedIds || []).map(String));
+
+    // Always notify users mentioned in this comment from backend so delivery
+    // does not depend on a frontend helper being loaded.
+    const mentionMeta = { ...metadata, commentText: commentText || '', fullComment: commentText || '' };
+    const mentionTitle = `${authorName} mentioned you`;
+    const mentionMessage = `${authorName} mentioned you in ${contextTitle}: "${preview}"`;
+    const mentionedToNotify = [...mentionedSet].filter((id) => authorIdStr !== String(id));
+    if (mentionedToNotify.length > 0) {
+        const mentionResults = await Promise.allSettled(
+            mentionedToNotify.map((userId) =>
+                createNotificationForUser(userId, 'mention', mentionTitle, mentionMessage, link || '#/dashboard', mentionMeta)
+            )
+        );
+        mentionResults.forEach((r, i) => {
+            if (r.status === 'rejected') {
+                console.error('Mention notification failed for user', mentionedToNotify[i], r.reason);
+            }
+        });
+    }
+
+    // Recipients: entity author, prior commenters, prior @mentioned.
+    // Exclude users @mentioned in this comment so they do not receive both
+    // a mention and a generic comment notification.
     const recipientIds = new Set([
         entityAuthorId,
         ...priorCommentAuthorIds,
         ...priorAuthorIdsFromNames,
         ...priorMentionedIds
     ].filter(Boolean));
-    const authorIdStr = commentAuthorId ? String(commentAuthorId) : null;
-    const mentionedSet = new Set((mentionedIds || []).map(String));
     const toNotify = [...recipientIds].filter(
         (id) => authorIdStr !== String(id) && !mentionedSet.has(String(id))
     );
     if (toNotify.length === 0) return;
 
-    const preview = (commentText && commentText.length > 100) ? commentText.slice(0, 100) + '...' : (commentText || '');
     const title = `${authorName} commented on ${contextTitle}`;
     const message = `${authorName} commented: "${preview}"`;
     const meta = { ...metadata, commentText: commentText || '', fullComment: commentText || '' };

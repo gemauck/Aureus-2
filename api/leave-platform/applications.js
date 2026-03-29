@@ -4,51 +4,25 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { isLeavePlatformAdminRole } from '../_lib/leavePlatformRoles.js'
+import { isHrAdministrator, requireLeaveModuleAccess } from '../_lib/hrAccess.js'
 
 async function handler(req, res) {
   try {
-    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
     const currentUserId = req.user?.sub || req.user?.id
-    if (currentUserId) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: currentUserId },
-        select: { id: true, email: true, role: true }
-      })
-      
-      if (currentUser) {
-        const userEmail = currentUser.email?.toLowerCase()
-        if (userEmail !== 'garethm@abcotronics.co.za') {
-          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
-        }
-      }
-    }
+    const actor = await requireLeaveModuleAccess(prisma, req, res)
+    if (!actor) return
 
     // List all leave applications (GET /api/leave-platform/applications)
     if (req.method === 'GET') {
       try {
-        // Get current user ID and role
-        const userRole = req.user?.role?.toLowerCase()
-
-        // If no user ID, return unauthorized
         if (!currentUserId) {
           return badRequest(res, 'User not authenticated')
         }
 
-        // Get user from database to verify role
-        const currentUser = await prisma.user.findUnique({
-          where: { id: currentUserId },
-          select: { id: true, role: true, email: true }
-        })
+        const isElevated = isHrAdministrator(actor)
 
-        if (!currentUser) {
-          return badRequest(res, 'User not found')
-        }
-
-        const isAdmin = isLeavePlatformAdminRole(currentUser.role)
-
-        // Build where clause: admins see all, regular users see only their own
-        const whereClause = isAdmin ? {} : { userId: currentUserId }
+        // Build where clause: HR admins see all, regular users see only their own
+        const whereClause = isElevated ? {} : { userId: currentUserId }
 
         const applications = await prisma.leaveApplication.findMany({
           where: whereClause,
@@ -117,6 +91,10 @@ async function handler(req, res) {
 
         if (!userId || !leaveType || !startDate || !endDate || !reason) {
           return badRequest(res, 'Missing required fields: userId, leaveType, startDate, endDate, reason')
+        }
+
+        if (!isHrAdministrator(actor) && String(userId) !== String(currentUserId)) {
+          return badRequest(res, 'You can only submit leave applications for yourself')
         }
 
         // Validate dates

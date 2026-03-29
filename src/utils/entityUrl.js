@@ -138,6 +138,11 @@
             path = `/${page}/${entityId}`;
         }
 
+        // Leave balance records are not leave-application ids — open Leave & HR on Balances tab
+        if (normalizedType === 'leavebalance') {
+            path = '/leave-platform';
+        }
+
         // Add query parameters if provided
         const queryParams = new URLSearchParams();
         if (options.tab) {
@@ -155,6 +160,9 @@
         if (options.siteId) {
             queryParams.set('siteId', options.siteId);
             if (!queryParams.has('tab')) queryParams.set('tab', 'sites');
+        }
+        if (normalizedType === 'leavebalance' && !queryParams.has('tab')) {
+            queryParams.set('tab', 'balances');
         }
 
         const queryString = queryParams.toString();

@@ -3,24 +3,12 @@ import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { requireLeaveModuleAccess } from '../_lib/hrAccess.js'
 
 async function handler(req, res) {
   try {
-    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
-    const currentUserId = req.user?.sub || req.user?.id
-    if (currentUserId) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: currentUserId },
-        select: { id: true, email: true, role: true }
-      })
-      
-      if (currentUser) {
-        const userEmail = currentUser.email?.toLowerCase()
-        if (userEmail !== 'garethm@abcotronics.co.za') {
-          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
-        }
-      }
-    }
+    const actor = await requireLeaveModuleAccess(prisma, req, res)
+    if (!actor) return
 
     if (req.method === 'GET') {
       try {

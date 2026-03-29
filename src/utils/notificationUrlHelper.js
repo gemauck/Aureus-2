@@ -157,6 +157,9 @@
 
         const page = pageMap[normalizedType] || 'dashboard';
         let url = `/${page}/${entityId}`;
+        if (normalizedType === 'leavebalance') {
+            url = '/leave-platform';
+        }
 
         // Handle nested entities (e.g., tasks within projects)
         if (options.parentId && options.parentType) {
@@ -181,6 +184,9 @@
         }
         if (options.commentId) {
             queryParams.set('commentId', options.commentId);
+        }
+        if (normalizedType === 'leavebalance' && !queryParams.has('tab')) {
+            queryParams.set('tab', 'balances');
         }
 
         const queryString = queryParams.toString();

@@ -1,27 +1,15 @@
 import { authRequired } from '../_lib/authRequired.js'
 import { prisma } from '../_lib/prisma.js'
-import { badRequest, ok, serverError } from '../_lib/response.js'
+import { badRequest, forbidden, ok, serverError } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { isHrAdministrator, requireLeaveModuleAccess } from '../_lib/hrAccess.js'
 
 async function handler(req, res) {
   try {
-    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
-    const currentUserId = req.user?.sub || req.user?.id
-    if (currentUserId) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: currentUserId },
-        select: { id: true, email: true, role: true }
-      })
-      
-      if (currentUser) {
-        const userEmail = currentUser.email?.toLowerCase()
-        if (userEmail !== 'garethm@abcotronics.co.za') {
-          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
-        }
-      }
-    }
+    const actor = await requireLeaveModuleAccess(prisma, req, res)
+    if (!actor) return
 
     if (req.method === 'GET') {
       try {
@@ -61,6 +49,9 @@ async function handler(req, res) {
 
     if (req.method === 'POST') {
       try {
+        if (!isHrAdministrator(actor)) {
+          return forbidden(res, 'Only HR administrators can manage leave approvers')
+        }
         const body = await parseJsonBody(req)
         const { department, approverId } = body
 
@@ -103,6 +94,9 @@ async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       try {
+        if (!isHrAdministrator(actor)) {
+          return forbidden(res, 'Only HR administrators can manage leave approvers')
+        }
         const body = await parseJsonBody(req)
         const { id } = body
 

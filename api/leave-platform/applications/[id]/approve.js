@@ -4,25 +4,13 @@ import { badRequest, ok, serverError, notFound } from '../../../_lib/response.js
 import { parseJsonBody } from '../../../_lib/body.js'
 import { withHttp } from '../../../_lib/withHttp.js'
 import { withLogging } from '../../../_lib/logger.js'
-import { isLeavePlatformAdminRole } from '../../../_lib/leavePlatformRoles.js'
+import { isHrAdministrator, requireLeaveModuleAccess } from '../../../_lib/hrAccess.js'
 
 async function handler(req, res) {
   try {
-    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
     const currentUserId = req.user?.sub || req.user?.id
-    if (currentUserId) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: currentUserId },
-        select: { id: true, email: true, role: true }
-      })
-      
-      if (currentUser) {
-        const userEmail = currentUser.email?.toLowerCase()
-        if (userEmail !== 'garethm@abcotronics.co.za') {
-          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
-        }
-      }
-    }
+    const actor = await requireLeaveModuleAccess(prisma, req, res)
+    if (!actor) return
 
     if (req.method !== 'POST') {
       return badRequest(res, 'Method not allowed')
@@ -38,21 +26,8 @@ async function handler(req, res) {
       return badRequest(res, 'User not authenticated')
     }
 
-    // Get user from database to verify role
-    const currentUser = await prisma.user.findUnique({
-      where: { id: currentUserId },
-      select: { id: true, role: true, email: true }
-    })
-
-    if (!currentUser) {
-      return badRequest(res, 'User not found')
-    }
-
-    const isAdmin = isLeavePlatformAdminRole(currentUser.role)
-
-    // Only admins can approve leave applications
-    if (!isAdmin) {
-      return badRequest(res, 'Only administrators can approve leave applications')
+    if (!isHrAdministrator(actor)) {
+      return badRequest(res, 'Only HR administrators can approve leave applications')
     }
 
     const body = await parseJsonBody(req)

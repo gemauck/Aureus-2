@@ -26,7 +26,9 @@ export const PERMISSIONS = {
     ACCESS_TOOL: 'access_tool',
     ACCESS_REPORTS: 'access_reports',
     ACCESS_LEAVE_PLATFORM: 'access_leave_platform',
-    
+    /** Designated HR staff: employee records, leave approvers, policies, HR documents (without full system admin) */
+    MANAGE_HR_ADMIN: 'manage_hr_admin',
+
     // Legacy permissions (kept for backward compatibility, mapped to new structure)
     VIEW_ALL: 'view_all',
     VIEW_ASSIGNED: 'view_assigned',
@@ -165,9 +167,16 @@ export const PERMISSION_CATEGORIES = {
     },
     LEAVE_PLATFORM: {
         id: 'leave_platform',
-        label: 'Leave Platform',
+        label: 'Leave & HR',
         permission: PERMISSIONS.ACCESS_LEAVE_PLATFORM,
-        description: 'Employee leave management workspace',
+        description: 'Leave, profile, policies and HR workspace',
+        adminOnly: false
+    },
+    HR_ADMIN: {
+        id: 'hr_admin',
+        label: 'HR administration',
+        permission: PERMISSIONS.MANAGE_HR_ADMIN,
+        description: 'Manage employees, leave approvers, balances import, policies and HR documents',
         adminOnly: false
     },
     TOOL: {
@@ -248,12 +257,34 @@ export class PermissionChecker {
         const isAdminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(role);
         const userEmail = this.user?.email?.toLowerCase();
 
-        // LEAVE PLATFORM: admins/superadmins always; else beta allowlist
+        // LEAVE & HR: admins always; explicit access_leave_platform; legacy email; manage_hr_admin also opens module (see canAccessLeaveAndHr)
         if (permission === PERMISSIONS.ACCESS_LEAVE_PLATFORM) {
             if (isAdminOrSuperAdmin) {
                 return true;
             }
             if (userEmail === 'garethm@abcotronics.co.za') {
+                return true;
+            }
+            if (this.customPermissions && this.customPermissions.includes('all')) {
+                return true;
+            }
+            if (this.customPermissions && this.customPermissions.includes(PERMISSIONS.ACCESS_LEAVE_PLATFORM)) {
+                return true;
+            }
+            if (this.customPermissions && this.customPermissions.includes(PERMISSIONS.MANAGE_HR_ADMIN)) {
+                return true;
+            }
+            return false;
+        }
+
+        if (permission === PERMISSIONS.MANAGE_HR_ADMIN) {
+            if (isAdminOrSuperAdmin) {
+                return true;
+            }
+            if (this.customPermissions && this.customPermissions.includes('all')) {
+                return true;
+            }
+            if (this.customPermissions && this.customPermissions.includes(PERMISSIONS.MANAGE_HR_ADMIN)) {
                 return true;
             }
             return false;
@@ -422,6 +453,10 @@ export class PermissionChecker {
         return this.hasPermission(PERMISSIONS.ACCESS_LEAVE_PLATFORM);
     }
 
+    canManageHrAdmin() {
+        return this.hasPermission(PERMISSIONS.MANAGE_HR_ADMIN);
+    }
+
     canManageProjects() {
         return this.hasPermission(PERMISSIONS.EDIT_PROJECTS) || this.hasPermission(PERMISSIONS.ACCESS_PROJECTS);
     }
@@ -538,6 +573,7 @@ export function usePermissions(user) {
         canAccessTool: () => checker.canAccessTool(),
         canAccessReports: () => checker.canAccessReports(),
         canAccessLeavePlatform: () => checker.canAccessLeavePlatform(),
+        canManageHrAdmin: () => checker.canManageHrAdmin(),
         canManageProjects: () => checker.canManageProjects(),
         canManageClients: () => checker.canManageClients(),
         canManageManufacturing: () => checker.canManageManufacturing(),

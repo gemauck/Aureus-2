@@ -99,9 +99,18 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
             if (!categories.LEAVE_PLATFORM) {
                 categories.LEAVE_PLATFORM = {
                     id: 'leave_platform',
-                    label: 'Leave Platform',
+                    label: 'Leave & HR',
                     permission: ensurePermissionValue('ACCESS_LEAVE_PLATFORM', 'access_leave_platform'),
-                    description: 'Employee leave management workspace',
+                    description: 'Leave, profile, policies and HR workspace',
+                    adminOnly: false
+                };
+            }
+            if (!categories.HR_ADMIN) {
+                categories.HR_ADMIN = {
+                    id: 'hr_admin',
+                    label: 'HR administration',
+                    permission: ensurePermissionValue('MANAGE_HR_ADMIN', 'manage_hr_admin'),
+                    description: 'Employees, approvers, balances import, policies and HR documents',
                     adminOnly: false
                 };
             }

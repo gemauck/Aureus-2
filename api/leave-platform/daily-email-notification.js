@@ -89,7 +89,7 @@ async function sendDailyLeaveNotifications() {
     emailContent += `
       <p>Total employees on leave: ${leaveApplications.length}</p>
       <br/>
-      <p>You can view the full leave calendar in the <a href="${process.env.APP_URL || 'https://erp.abcotronics.co.za'}/leave-platform">Leave Platform</a>.</p>
+      <p>You can view the full leave calendar in <a href="${process.env.APP_URL || 'https://erp.abcotronics.co.za'}/leave-platform">Leave &amp; HR</a>.</p>
       <br/>
       <p>Have a great day!</p>
     `

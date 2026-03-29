@@ -207,7 +207,10 @@ export async function handler(req, res) {
   try {
     const rawBody = typeof req.body === 'string' ? req.body : (req.body ? JSON.stringify(req.body) : '{}')
     const secret = process.env.FEEDBACK_REPLY_WEBHOOK_SECRET || process.env.RESEND_WEBHOOK_SECRET
-    if (secret && !verifyWebhookSignature(rawBody, req.headers || {}, secret)) {
+    if (!secret) {
+      return serverError(res, 'Webhook is not configured', 'Set FEEDBACK_REPLY_WEBHOOK_SECRET or RESEND_WEBHOOK_SECRET.')
+    }
+    if (!verifyWebhookSignature(rawBody, req.headers || {}, secret)) {
       console.warn('feedback-reply: invalid webhook signature')
       return res.status(401).json({ error: 'Invalid webhook signature' })
     }

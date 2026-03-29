@@ -5,6 +5,15 @@ import { badRequest, ok, serverError, unauthorized, notFound } from '../_lib/res
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { isLeavePlatformAdminRole } from '../_lib/leavePlatformRoles.js'
+import {
+    parseDbUserPermissions,
+    userHasPermission,
+    PERMISSION_MANAGE_HR_ADMIN
+} from '../_lib/hrAccess.js'
+
+/** Payroll / identity — hidden from peers; visible to self, system admins, and HR administrators */
+const SENSITIVE_USER_FIELDS = ['salary', 'bankName', 'accountNumber', 'branchCode', 'taxNumber', 'idNumber']
 
 /** Fields allowed on PUT /api/users/:id (must match Prisma User model). */
 const ALLOWED_USER_UPDATE_KEYS = new Set([
@@ -73,6 +82,31 @@ function sanitizeUserUpdatePayload(data) {
     return out
 }
 
+function canViewSensitiveEmployeeFields(requester, targetUserId) {
+    if (!requester?.id || !targetUserId) return false
+    if (String(requester.id) === String(targetUserId)) return true
+    if (isLeavePlatformAdminRole(requester.role)) return true
+    const perms = parseDbUserPermissions(requester.permissions)
+    return userHasPermission(perms, PERMISSION_MANAGE_HR_ADMIN)
+}
+
+function canEditSensitiveHrFields(requester) {
+    if (!requester) return false
+    if (isLeavePlatformAdminRole(requester.role)) return true
+    const perms = parseDbUserPermissions(requester.permissions)
+    return userHasPermission(perms, PERMISSION_MANAGE_HR_ADMIN)
+}
+
+function redactUserForViewer(userRow, requester, targetUserId) {
+    if (!userRow || !requester) return userRow
+    if (canViewSensitiveEmployeeFields(requester, targetUserId)) return userRow
+    const out = { ...userRow }
+    for (const k of SENSITIVE_USER_FIELDS) {
+        if (k in out) delete out[k]
+    }
+    return out
+}
+
 async function handler(req, res) {
     // Extract user ID from URL (strip query parameters)
     // Prefer req.params.id if available (from explicit route mapping), otherwise extract from URL
@@ -84,6 +118,15 @@ async function handler(req, res) {
     if (req.method === 'GET') {
         try {
             if (!req.user) {
+                return unauthorized(res, 'Authentication required')
+            }
+
+            const requesterId = req.user.sub || req.user.id
+            const requester = await prisma.user.findUnique({
+                where: { id: requesterId },
+                select: { id: true, role: true, permissions: true }
+            })
+            if (!requester) {
                 return unauthorized(res, 'Authentication required')
             }
 
@@ -137,12 +180,14 @@ async function handler(req, res) {
                 } catch (_) {}
             }
 
+            const fullUser = {
+                ...user,
+                permissions: parsedPermissions,
+                accessibleProjectIds: parsedAccessibleProjectIds
+            }
+
             return ok(res, {
-                user: {
-                    ...user,
-                    permissions: parsedPermissions,
-                    accessibleProjectIds: parsedAccessibleProjectIds
-                }
+                user: redactUserForViewer(fullUser, requester, userId)
             })
 
         } catch (error) {
@@ -157,30 +202,33 @@ async function handler(req, res) {
                 return unauthorized(res, 'Authentication required')
             }
 
-            // Allow users to update their own profile or admins to update anyone
             const currentUserId = req.user.sub || req.user.id
-            const reqUserRole = (req.user?.role || '').toString().trim().toLowerCase()
-            const reqIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(reqUserRole)
-            if (currentUserId !== userId && !reqIsAdmin) {
+            const requester = await prisma.user.findUnique({
+                where: { id: currentUserId },
+                select: { id: true, role: true, permissions: true }
+            })
+            if (!requester) {
+                return unauthorized(res, 'Authentication required')
+            }
+
+            const canEditOthers =
+                isLeavePlatformAdminRole(requester.role) ||
+                userHasPermission(parseDbUserPermissions(requester.permissions), PERMISSION_MANAGE_HR_ADMIN)
+            if (currentUserId !== userId && !canEditOthers) {
                 return unauthorized(res, 'Unauthorized to update this user')
             }
+
+            const dbIsSystemAdmin = isLeavePlatformAdminRole(requester.role)
 
             const rawBody = await parseJsonBody(req)
             const updateData = rawBody && typeof rawBody === 'object' ? rawBody : {}
 
-            // Only admins can change roles
+            // Only system admins (admin/superadmin tier) can change roles
             if (updateData.role !== undefined && updateData.role !== null) {
-                // Get current user from database to check role
-                const currentUserRecord = await prisma.user.findUnique({
-                    where: { id: currentUserId },
-                    select: { role: true }
-                })
-                const dbRole = (currentUserRecord?.role || '').toString().trim().toLowerCase()
-                const dbIsAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(dbRole)
-                if (!currentUserRecord || !dbIsAdmin) {
+                if (!dbIsSystemAdmin) {
                     return unauthorized(res, 'Only administrators can change user roles')
                 }
-                // Only a superadmin can assign the superadmin role
+                const dbRole = (requester.role || '').toString().trim().toLowerCase()
                 const newRole = (updateData.role || '').toString().trim().toLowerCase()
                 const isAssigningSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(newRole)
                 const dbIsSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(dbRole)
@@ -201,6 +249,20 @@ async function handler(req, res) {
             } = updateData
 
             const allowedUpdates = sanitizeUserUpdatePayload(pickAllowedUserFields(rest))
+
+            if (!dbIsSystemAdmin) {
+                delete allowedUpdates.role
+                delete allowedUpdates.permissions
+                delete allowedUpdates.accessibleProjectIds
+                delete allowedUpdates.email
+                delete allowedUpdates.status
+            }
+
+            if (!canEditSensitiveHrFields(requester)) {
+                for (const k of SENSITIVE_USER_FIELDS) {
+                    delete allowedUpdates[k]
+                }
+            }
 
             if (Object.keys(allowedUpdates).length === 0) {
                 return badRequest(res, 'No valid fields to update')
@@ -237,11 +299,30 @@ async function handler(req, res) {
                 }
             })
 
+            let parsedPermissions = []
+            if (user.permissions) {
+                try {
+                    const p = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions
+                    parsedPermissions = Array.isArray(p) ? p : []
+                } catch (_) {}
+            }
+            let parsedAccessibleProjectIds = []
+            if (user.accessibleProjectIds) {
+                try {
+                    const a = typeof user.accessibleProjectIds === 'string' ? JSON.parse(user.accessibleProjectIds) : user.accessibleProjectIds
+                    parsedAccessibleProjectIds = Array.isArray(a) ? a : []
+                } catch (_) {}
+            }
+            const fullUser = {
+                ...user,
+                permissions: parsedPermissions,
+                accessibleProjectIds: parsedAccessibleProjectIds
+            }
 
             return ok(res, {
                 success: true,
                 message: 'User updated successfully',
-                user
+                user: redactUserForViewer(fullUser, requester, userId)
             })
 
         } catch (error) {

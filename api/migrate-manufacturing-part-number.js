@@ -1,10 +1,15 @@
 // Migration endpoint to add Manufacturing Part Number field to InventoryItem
 import { prisma } from './_lib/prisma.js'
-import { ok, serverError } from './_lib/response.js'
+import { ok, serverError, unauthorized, badRequest } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { authRequired } from './_lib/authRequired.js'
+import { isAdminRole } from './_lib/authRoles.js'
 
 async function handler(req, res) {
+  if (req.method !== 'POST') return badRequest(res, 'Only POST method allowed')
+  if (!isAdminRole(req.user?.role)) return unauthorized(res, 'Admin access required')
+
   try {
     
     // Add manufacturingPartNumber column to InventoryItem table
@@ -52,5 +57,5 @@ async function handler(req, res) {
   }
 }
 
-export default withHttp(withLogging(handler))
+export default withHttp(withLogging(authRequired(handler)))
 

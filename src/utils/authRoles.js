@@ -36,7 +36,28 @@ export function isSuperAdminRole(role) {
   return SUPER_ADMIN_TIER_SET.has(normalizeRole(role))
 }
 
+/** Matches api/_lib/hrAccess.js isHrAdministrator — admins or manage_hr_admin permission */
+export function isHrAdministratorUser(user) {
+  if (!user) return false
+  if (isAdminRole(user.role)) return true
+  let perms = []
+  try {
+    if (typeof user.permissions === 'string') {
+      perms = JSON.parse(user.permissions || '[]')
+    } else if (Array.isArray(user.permissions)) {
+      perms = user.permissions
+    }
+  } catch (_) {
+    perms = []
+  }
+  if (!Array.isArray(perms)) perms = []
+  const lower = perms.map((p) => String(p).trim().toLowerCase())
+  if (lower.includes('all')) return true
+  return lower.includes('manage_hr_admin')
+}
+
 if (typeof window !== 'undefined') {
   window.isAdminRole = isAdminRole
   window.isSuperAdminRole = isSuperAdminRole
+  window.isHrAdministratorUser = isHrAdministratorUser
 }

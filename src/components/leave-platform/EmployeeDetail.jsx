@@ -27,6 +27,9 @@ const { useState, useEffect, useCallback } = ReactHooks;
 const EmployeeDetail = (props) => {
     // Safely destructure props with defaults
     const { employeeId, onBack, user, isAdmin } = props || {};
+    const isSelfProfile = !!(user?.id && employeeId && String(user.id) === String(employeeId));
+    /** Employment / payroll fields — only HR admins edit; self can edit contact fields in Personal only */
+    const hrMayEditEmployment = isAdmin;
     
     // Early return if required props are missing
     if (!employeeId) {
@@ -112,15 +115,21 @@ const EmployeeDetail = (props) => {
     }, [employeeId, loadEmployeeData]);
 
     const handleSave = async () => {
-        if (!employee || !isAdmin) return;
-        
+        if (!employee || (!isAdmin && !isSelfProfile)) return;
+
         try {
             const headers = getAuthHeaders();
-            
-            // Prepare update data - only include valid fields that exist in the formData
-            // and match the database schema
+
             const updateData = {};
-            
+
+            if (isSelfProfile && !isAdmin) {
+                if (formData.name !== undefined) updateData.name = formData.name;
+                if (formData.phone !== undefined) updateData.phone = formData.phone;
+                if (formData.address !== undefined) updateData.address = formData.address ?? '';
+                if (formData.emergencyContact !== undefined) {
+                    updateData.emergencyContact = formData.emergencyContact ?? '';
+                }
+            } else {
             // Basic info
             if (formData.name !== undefined) updateData.name = formData.name;
             if (formData.phone !== undefined) updateData.phone = formData.phone;
@@ -167,8 +176,8 @@ const EmployeeDetail = (props) => {
             if (formData.idNumber !== undefined) updateData.idNumber = formData.idNumber ?? '';
             if (formData.address !== undefined) updateData.address = formData.address ?? '';
             if (formData.emergencyContact !== undefined) updateData.emergencyContact = formData.emergencyContact ?? '';
-            
-            
+            }
+
             const response = await fetch(`/api/users/${employeeId}`, {
                 method: 'PUT',
                 headers,
@@ -282,8 +291,9 @@ const EmployeeDetail = (props) => {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {isAdmin && (
+                        {(isAdmin || isSelfProfile) && (
                             <button
+                                type="button"
                                 onClick={() => setEditing(!editing)}
                                 className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                             >
@@ -394,7 +404,7 @@ const EmployeeDetail = (props) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Employee Number
                     </label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.employeeNumber || ''}
@@ -409,7 +419,7 @@ const EmployeeDetail = (props) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Position
                     </label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.position || formData.jobTitle || ''}
@@ -424,7 +434,7 @@ const EmployeeDetail = (props) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Department
                     </label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.department || ''}
@@ -439,7 +449,7 @@ const EmployeeDetail = (props) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Employment Date
                     </label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="date"
                             value={formData.employmentDate ? new Date(formData.employmentDate).toISOString().split('T')[0] : ''}
@@ -454,7 +464,7 @@ const EmployeeDetail = (props) => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Employment Status
                     </label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <select
                             value={formData.employmentStatus || 'Active'}
                             onChange={(e) => setFormData({...formData, employmentStatus: e.target.value})}
@@ -476,9 +486,10 @@ const EmployeeDetail = (props) => {
                     <p className="text-sm text-gray-900">{calculateTenure(employee.employmentDate)}</p>
                 </div>
             </div>
-            {editing && (
+            {editing && hrMayEditEmployment && (
                 <div className="mt-6 flex justify-end">
                     <button
+                        type="button"
                         onClick={handleSave}
                         className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     >
@@ -573,7 +584,7 @@ const EmployeeDetail = (props) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Salary</label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="number"
                             value={formData.salary || 0}
@@ -586,7 +597,7 @@ const EmployeeDetail = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Tax Number</label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.taxNumber || ''}
@@ -599,7 +610,7 @@ const EmployeeDetail = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.bankName || ''}
@@ -612,7 +623,7 @@ const EmployeeDetail = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.accountNumber || ''}
@@ -625,7 +636,7 @@ const EmployeeDetail = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Branch Code</label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.branchCode || ''}
@@ -637,9 +648,10 @@ const EmployeeDetail = (props) => {
                     )}
                 </div>
             </div>
-            {editing && (
+            {editing && hrMayEditEmployment && (
                 <div className="mt-6 flex justify-end">
                     <button
+                        type="button"
                         onClick={handleSave}
                         className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     >
@@ -687,7 +699,7 @@ const EmployeeDetail = (props) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">ID Number</label>
-                    {editing ? (
+                    {editing && hrMayEditEmployment ? (
                         <input
                             type="text"
                             value={formData.idNumber || ''}
@@ -725,9 +737,10 @@ const EmployeeDetail = (props) => {
                     )}
                 </div>
             </div>
-            {editing && (
+            {editing && (hrMayEditEmployment || isSelfProfile) && (
                 <div className="mt-6 flex justify-end">
                     <button
+                        type="button"
                         onClick={handleSave}
                         className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     >

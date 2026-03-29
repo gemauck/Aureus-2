@@ -1,6 +1,5 @@
-// Admin-only migration endpoint (no auth required for one-time setup)
+// Admin-only migration endpoint
 // Access: POST /api/admin-run-migration?key=YOUR_SECRET_KEY
-// This bypasses auth for initial setup
 
 import { prisma } from './_lib/prisma.js'
 import { ok, badRequest, serverError } from './_lib/response.js'
@@ -12,12 +11,15 @@ async function handler(req, res) {
     return badRequest(res, 'Only POST method allowed')
   }
 
-  // Simple security key check (you can change this)
+  // Require explicit secret key in env (no insecure fallback)
   const secretKey = req.query?.key || req.body?.key;
-  const expectedKey = process.env.MIGRATION_SECRET_KEY || 'run-migration-2024';
+  const expectedKey = process.env.MIGRATION_SECRET_KEY;
+  if (!expectedKey) {
+    return serverError(res, 'Server configuration error', 'MIGRATION_SECRET_KEY is not configured')
+  }
   
   if (secretKey !== expectedKey) {
-    return badRequest(res, 'Invalid migration key. Use ?key=run-migration-2024')
+    return badRequest(res, 'Invalid migration key')
   }
 
   try {

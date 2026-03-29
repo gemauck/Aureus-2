@@ -4,25 +4,13 @@ import { badRequest, ok, serverError, notFound } from '../../_lib/response.js'
 import { parseJsonBody } from '../../_lib/body.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
-import { isLeavePlatformAdminRole } from '../../_lib/leavePlatformRoles.js'
+import { isHrAdministrator, requireLeaveModuleAccess } from '../../_lib/hrAccess.js'
 
 async function handler(req, res) {
   try {
-    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
     const currentUserId = req.user?.sub || req.user?.id
-    if (currentUserId) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: currentUserId },
-        select: { id: true, email: true, role: true }
-      })
-      
-      if (currentUser) {
-        const userEmail = currentUser.email?.toLowerCase()
-        if (userEmail !== 'garethm@abcotronics.co.za') {
-          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
-        }
-      }
-    }
+    const actor = await requireLeaveModuleAccess(prisma, req, res)
+    if (!actor) return
 
     const id = req.params?.id || req.url?.split('/').pop()?.split('?')[0]
     if (!id) {
@@ -34,17 +22,7 @@ async function handler(req, res) {
       return badRequest(res, 'User not authenticated')
     }
 
-    // Get user from database to verify role
-    const currentUser = await prisma.user.findUnique({
-      where: { id: currentUserId },
-      select: { id: true, role: true, email: true }
-    })
-
-    if (!currentUser) {
-      return badRequest(res, 'User not found')
-    }
-
-    const isAdmin = isLeavePlatformAdminRole(currentUser.role)
+    const isElevated = isHrAdministrator(actor)
 
     // Get the application
     const application = await prisma.leaveApplication.findUnique({
@@ -64,8 +42,7 @@ async function handler(req, res) {
       return notFound(res, 'Leave application not found')
     }
 
-    // Check permissions: users can only access their own applications unless admin
-    if (!isAdmin && application.userId !== currentUserId) {
+    if (!isElevated && application.userId !== currentUserId) {
       return badRequest(res, 'You can only access your own leave applications')
     }
 
@@ -80,8 +57,7 @@ async function handler(req, res) {
           return badRequest(res, 'Only pending leave applications can be edited')
         }
 
-        // Check permissions: users can only edit their own applications unless admin
-        if (!isAdmin && application.userId !== currentUserId) {
+        if (!isElevated && application.userId !== currentUserId) {
           return badRequest(res, 'You can only edit your own leave applications')
         }
 
@@ -178,8 +154,7 @@ async function handler(req, res) {
           return badRequest(res, 'Only pending leave applications can be deleted')
         }
 
-        // Check permissions: users can only delete their own applications unless admin
-        if (!isAdmin && application.userId !== currentUserId) {
+        if (!isElevated && application.userId !== currentUserId) {
           return badRequest(res, 'You can only delete your own leave applications')
         }
 

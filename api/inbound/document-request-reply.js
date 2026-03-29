@@ -905,12 +905,14 @@ async function handler(req, res) {
       rawBodyPreview: rawBody.slice(0, 4000)
     }
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET || process.env.WEBHOOK_SIGNING_SECRET
-    if (webhookSecret) {
-      if (!verifyWebhookSignature(rawBody, req.headers || {}, webhookSecret)) {
-        writeWebhookDebugLog(__dirname, { ...debugBase, error: 'invalid_signature' })
-        console.warn('document-request-reply: invalid webhook signature (401)')
-        return res.status(401).json({ error: 'Invalid webhook signature' })
-      }
+    if (!webhookSecret) {
+      writeWebhookDebugLog(__dirname, { ...debugBase, error: 'missing_webhook_secret' })
+      return serverError(res, 'Webhook is not configured', 'Set RESEND_WEBHOOK_SECRET or WEBHOOK_SIGNING_SECRET.')
+    }
+    if (!verifyWebhookSignature(rawBody, req.headers || {}, webhookSecret)) {
+      writeWebhookDebugLog(__dirname, { ...debugBase, error: 'invalid_signature' })
+      console.warn('document-request-reply: invalid webhook signature (401)')
+      return res.status(401).json({ error: 'Invalid webhook signature' })
     }
     let body
     try {

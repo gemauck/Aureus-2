@@ -1,4 +1,4 @@
-// Shared leave-management helpers for the Leave Platform module
+// Shared leave-management helpers for the Leave & HR module
 // Ensures South African Basic Conditions of Employment Act (BCEA) compliance
 
 const BCEA_LEAVE_TYPES = [

@@ -1925,12 +1925,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         { value: 'available-on-request', label: 'Available on Request', color: 'bg-blue-200 text-blue-800 font-semibold dark:bg-blue-900/60 dark:text-blue-200', cellColor: 'bg-blue-200 border-l-4 border-blue-400 shadow-sm dark:bg-blue-900/60 dark:border-blue-500', optionStyle: { backgroundColor: '#dbeafe', color: '#1e40af' } },
         { value: 'not-required', label: 'Not Required', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-700 dark:text-gray-200', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-700 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } }
     ];
-    // Monthly Data Review: Not Started, Started, Complete (Complete = stored as 'done' for backward compatibility)
+    // Monthly Data Review only — stored value `done` kept for "Complete – No Issues" (backward compatible)
     const monthlyDataReviewStatusOptions = [
-        { value: 'not-done', label: 'Not Started', color: 'bg-rose-200 text-rose-800 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500', optionStyle: { backgroundColor: '#fecdd3', color: '#9f1239' } },
-        { value: 'in-progress', label: 'Started', color: 'bg-amber-200 text-amber-800 font-semibold dark:bg-amber-900/60 dark:text-amber-200', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm dark:bg-amber-900/60 dark:border-amber-500', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } },
-        { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } }
+        { value: 'not-done', label: 'Not Started', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-600 dark:text-gray-100', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-600 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } },
+        { value: 'started-minor-info', label: 'Started – Minor Notes / Info', color: 'bg-yellow-200 text-yellow-900 font-semibold dark:bg-yellow-900/50 dark:text-yellow-100', cellColor: 'bg-yellow-200 border-l-4 border-yellow-400 shadow-sm dark:bg-yellow-900/50 dark:border-yellow-500', optionStyle: { backgroundColor: '#fef08a', color: '#713f12' } },
+        { value: 'started-incomplete-some', label: 'Started – Incomplete (Some Gaps)', color: 'bg-orange-200 text-orange-900 font-semibold dark:bg-orange-900/50 dark:text-orange-100', cellColor: 'bg-orange-200 border-l-4 border-orange-400 shadow-sm dark:bg-orange-900/50 dark:border-orange-500', optionStyle: { backgroundColor: '#fed7aa', color: '#9a3412' } },
+        { value: 'started-incomplete-major', label: 'Started – Incomplete (Major Gaps)', color: 'bg-red-200 text-red-800 font-semibold dark:bg-red-900/60 dark:text-red-200', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm dark:bg-red-900/60 dark:border-red-500', optionStyle: { backgroundColor: '#fecaca', color: '#991b1b' } },
+        { value: 'complete-issues-outstanding', label: 'Complete – Issues Outstanding', color: 'bg-red-200 text-red-800 font-semibold dark:bg-red-900/60 dark:text-red-200', cellColor: 'bg-red-200 border-l-4 border-red-500 shadow-sm dark:bg-red-900/60 dark:border-red-400', optionStyle: { backgroundColor: '#fecaca', color: '#991b1b' } },
+        { value: 'done', label: 'Complete – No Issues', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } }
     ];
+    const resolveMonthlyDataReviewStatusKey = (status) => {
+        if (!status) return status;
+        const s = String(status).toLowerCase();
+        if (s === 'in-progress') return 'started-minor-info';
+        return status;
+    };
     // Compliance Review statuses only
     const complianceReviewStatusOptions = [
         { value: 'no-reviewed', label: 'Not Reviewed', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-700 dark:text-gray-200', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-700 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } },
@@ -1955,7 +1964,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (!status || status === '' || status === 'Select Status') {
             return null; // Return null for empty/select status to show white background
         }
-        return statusOptions.find(opt => opt.value === status) || null;
+        const lookupKey = isMonthlyDataReview ? resolveMonthlyDataReviewStatusKey(status) : status;
+        return statusOptions.find(opt => opt.value === lookupKey) || null;
     };
     
     // ============================================================
@@ -3140,8 +3150,11 @@ const getAssigneeColor = (identifier, users) => {
                     const row = [`${indent}${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
                     
                     months.forEach(month => {
-                        const status = getStatusForYear(doc.collectionStatus, month, selectedYear);
-                        const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
+                        const rawStatus = getStatusForYear(doc.collectionStatus, month, selectedYear);
+                        const exportKey = isMonthlyDataReview && rawStatus
+                            ? resolveMonthlyDataReviewStatusKey(rawStatus)
+                            : rawStatus;
+                        const statusLabel = exportKey ? statusOptions.find(s => s.value === exportKey)?.label : '';
                         row.push(statusLabel || '');
                         
                         const comments = getCommentsForYear(doc.comments, month, selectedYear);
@@ -4060,7 +4073,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
             <OuterTag {...outerProps}>
                 <div className={`relative ${innerWidthClass}`}>
                     <select
-                        value={status || ''}
+                        value={isMonthlyDataReview ? (status ? resolveMonthlyDataReviewStatusKey(status) : '') : (status || '')}
                         onChange={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -4072,9 +4085,11 @@ const baseTextColorClass = statusConfig && statusConfig.color
                             handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
-                            // Ensure state is saved on blur
                             const newStatus = e.target.value;
-                            if (newStatus !== status) {
+                            const prevComparable = isMonthlyDataReview
+                                ? (status ? resolveMonthlyDataReviewStatusKey(status) : '')
+                                : (status || '');
+                            if (newStatus !== prevComparable) {
                                 const currentSelectedCells = selectedCellsRef.current;
                                 const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
                                 handleUpdateStatus(section.id, doc.id, month, newStatus, applyToSelected);
@@ -4632,7 +4647,10 @@ Abcotronics`;
             setSendPlainTextOnly(plainTextValue);
             setScheduleFrequency(initialTemplate.schedule.frequency);
             const loadedStop = initialTemplate.schedule.stopWhenStatus;
-            setScheduleStopStatus(loadedStop && statusOptions.some(o => o.value === loadedStop) ? loadedStop : defaultStopWhenStatus);
+            const loadedStopResolved = loadedStop && isMonthlyDataReview
+                ? resolveMonthlyDataReviewStatusKey(loadedStop)
+                : loadedStop;
+            setScheduleStopStatus(loadedStopResolved && statusOptions.some(o => o.value === loadedStopResolved) ? loadedStopResolved : defaultStopWhenStatus);
             setNewContact('');
             setNewContactCc('');
             setResult(null);
@@ -5131,7 +5149,10 @@ Abcotronics`;
                 setSendPlainTextOnly(!!normalized.sendPlainTextOnly);
                 setScheduleFrequency(normalized.schedule.frequency);
                 const savedStop = normalized.schedule.stopWhenStatus;
-                setScheduleStopStatus(savedStop && statusOptions.some(o => o.value === savedStop) ? savedStop : defaultStopWhenStatus);
+                const savedStopResolved = savedStop && isMonthlyDataReview
+                    ? resolveMonthlyDataReviewStatusKey(savedStop)
+                    : savedStop;
+                setScheduleStopStatus(savedStopResolved && statusOptions.some(o => o.value === savedStopResolved) ? savedStopResolved : defaultStopWhenStatus);
                 setLastSavedTemplate(normalized);
                 setResult({ saved: true, message: 'Saved changes', source: 'save' });
                 showSaveNotice({ type: 'success', message: 'Saved changes' });

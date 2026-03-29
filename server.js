@@ -2325,6 +2325,52 @@ app.all('/api/leave-platform/import-balances', async (req, res, next) => {
   }
 })
 
+app.all('/api/hr/policies/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'hr', 'policies', '[id].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    req.params = req.params || {}
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ HR policies [id] API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/hr/policies', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'hr', 'policies.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ HR policies API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/hr/documents/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'hr', 'documents', '[id].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    req.params = req.params || {}
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ HR documents [id] API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/hr/documents', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'hr', 'documents.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ HR documents API error:', e)
+    return next(e)
+  }
+})
+
 // Public API endpoints for job card form (no authentication required)
 app.all('/api/public/clients', async (req, res, next) => {
   try {
