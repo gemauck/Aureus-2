@@ -2388,7 +2388,7 @@ model DocumentCollectionTemplate {
   description String   @default("")
   sections    String   @default("[]")
   isDefault   Boolean  @default(false)
-  type        String   @default("document-collection") // "document-collection" or "weekly-fms-review"
+  type        String   @default("document-collection") // document-collection | weekly-fms-review | monthly-data-review | compliance-review
   ownerId     String?
   createdBy   String   @default("")
   updatedBy   String   @default("")

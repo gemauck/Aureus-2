@@ -161,6 +161,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // dataSource: 'documentCollection' | 'monthlyDataReview' | 'complianceReview' - same UI, different storage
     const isMonthlyDataReview = dataSource === 'monthlyDataReview';
     const isComplianceReview = dataSource === 'complianceReview';
+    /** API `DocumentCollectionTemplate.type` for list/create in this tracker context */
+    const templateApiType = isMonthlyDataReview ? 'monthly-data-review' : 'document-collection';
     const isJsonOnlyTracker = isMonthlyDataReview || isComplianceReview;
     // Month grid column widths (Data Review, Compliance Review, Document Collection)
     const jsonTrackerStatusColPx = isComplianceReview ? 280 : 360;
@@ -822,14 +824,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (hasPropData) {
             showedPropDataRef.current = true;
             let normalized = normalizeSectionsByYear(propSectionsFirst, urlYearForNormalize);
-            if (urlYearForNormalize != null && (normalized[String(urlYearForNormalize)] == null || (Array.isArray(normalized[String(urlYearForNormalize)]) && normalized[String(urlYearForNormalize)].length === 0))) {
-                const otherYears = Object.keys(normalized).filter(y => Array.isArray(normalized[y]) && normalized[y].length > 0);
-                if (otherYears.length > 0) {
-                    const sourceYear = otherYears[0];
-                    const cloned = cloneSectionsArray(normalized[sourceYear]);
-                    normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
-                }
-            }
+            normalized = seedUrlYearFromOtherYearsIfMissing(normalized, urlYearForNormalize);
             setSectionsByYear(normalized);
             sectionsRef.current = normalized;
             lastSavedDataRef.current = JSON.stringify(normalized);
@@ -940,15 +935,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             
             if (sectionsField != null && typeof sectionsField === 'object') {
                 let normalized = normalizeSectionsByYear(sectionsField, urlYearForNormalize);
-                // If URL has docYear but API returned year-keyed data without that year, copy from another year so popup has sections
-                if (urlYearForNormalize != null && (normalized[String(urlYearForNormalize)] == null || (Array.isArray(normalized[String(urlYearForNormalize)]) && normalized[String(urlYearForNormalize)].length === 0))) {
-                    const otherYears = Object.keys(normalized).filter(y => Array.isArray(normalized[y]) && normalized[y].length > 0);
-                    if (otherYears.length > 0) {
-                        const sourceYear = otherYears[0];
-                        const cloned = cloneSectionsArray(normalized[sourceYear]);
-                        normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
-                    }
-                }
+                // If URL has docYear but that year is missing from API data, seed from another year (not when year is explicit [])
+                normalized = seedUrlYearFromOtherYearsIfMissing(normalized, urlYearForNormalize);
                 if (!yearMapHasSections(normalized) && yearMapHasSections(sectionsRef.current)) {
                     console.warn('📥 Ignoring empty sections payload; keeping existing tracker data (avoid wipe from race or partial API response).');
                     setIsLoading(false);
@@ -966,14 +954,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const propSections = getProjectSectionsField(project);
             if (propSections) {
                 let normalized = normalizeSectionsByYear(propSections, urlYearForNormalize);
-                if (urlYearForNormalize != null && (normalized[String(urlYearForNormalize)] == null || (Array.isArray(normalized[String(urlYearForNormalize)]) && normalized[String(urlYearForNormalize)].length === 0))) {
-                    const otherYears = Object.keys(normalized).filter(y => Array.isArray(normalized[y]) && normalized[y].length > 0);
-                    if (otherYears.length > 0) {
-                        const sourceYear = otherYears[0];
-                        const cloned = cloneSectionsArray(normalized[sourceYear]);
-                        normalized = { ...normalized, [String(urlYearForNormalize)]: cloned };
-                    }
-                }
+                normalized = seedUrlYearFromOtherYearsIfMissing(normalized, urlYearForNormalize);
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -1425,12 +1406,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 return;
             }
             
-            const response = await fetch('/api/document-collection-templates', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+            const response = await fetch(
+                `/api/document-collection-templates?type=${encodeURIComponent(templateApiType)}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
                 }
-            });
+            );
             
             if (!response.ok) {
                 throw new Error(`Failed to load templates: ${response.status} ${response.statusText}`);
@@ -6294,12 +6278,15 @@ Abcotronics`;
                     const docs = [...(sec.documents || [])];
                     if (docIdx <= 0) return sec;
                     const prevDoc = docs[docIdx - 1];
+                    if (!prevDoc?.templateDocId) return sec;
                     const prevIsRoot =
                         !prevDoc.parentTemplateDocId ||
                         String(prevDoc.parentTemplateDocId).trim() === '';
-                    if (!prevIsRoot || !prevDoc.templateDocId) return sec;
                     const cur = { ...docs[docIdx] };
-                    cur.parentTemplateDocId = String(prevDoc.templateDocId);
+                    // Under row above if it is top-level; otherwise same parent as row above (sibling sub-docs).
+                    cur.parentTemplateDocId = prevIsRoot
+                        ? String(prevDoc.templateDocId)
+                        : String(prevDoc.parentTemplateDocId);
                     docs[docIdx] = cur;
                     return { ...sec, documents: sanitizeTemplateDocuments(docs) };
                 });
@@ -6362,6 +6349,7 @@ Abcotronics`;
             }
             const payload = {
                 ...formData,
+                type: editingTemplate ? (editingTemplate.type || templateApiType) : templateApiType,
                 sections: (formData.sections || []).map(sec => ({
                     ...sec,
                     documents: sanitizeTemplateDocuments(
@@ -6391,7 +6379,11 @@ Abcotronics`;
                         
                         <div className="flex-1 overflow-y-auto p-4">
                             <div className="flex justify-between items-center mb-4">
-                                <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                <p className="text-xs text-gray-600">
+                                    {isMonthlyDataReview
+                                        ? 'Manage your monthly data review templates'
+                                        : 'Manage your document collection templates'}
+                                </p>
                                 <button
                                     onClick={() => {
                                         setEditingTemplate(null);
@@ -6603,7 +6595,14 @@ Abcotronics`;
                                                     prevDoc &&
                                                     (prevDoc.parentTemplateDocId == null ||
                                                         String(prevDoc.parentTemplateDocId).trim() === '');
-                                                const canIndent = docIdx > 0 && prevIsRoot && !!prevDoc?.templateDocId;
+                                                const prevHasParent =
+                                                    prevDoc &&
+                                                    prevDoc.parentTemplateDocId != null &&
+                                                    String(prevDoc.parentTemplateDocId).trim() !== '';
+                                                const canIndent =
+                                                    docIdx > 0 &&
+                                                    !!prevDoc?.templateDocId &&
+                                                    (prevIsRoot || prevHasParent);
                                                 return (
                                                 <div
                                                     key={doc.templateDocId || docIdx}
@@ -6633,7 +6632,7 @@ Abcotronics`;
                                                             type="button"
                                                             onClick={() => indentTemplateDocument(idx, docIdx)}
                                                             disabled={!canIndent}
-                                                            title="Sub-document of row above"
+                                                            title="Sub-document: under row above, or same parent as row above if it is already indented"
                                                             className="text-gray-500 hover:text-gray-800 disabled:opacity-25 disabled:pointer-events-none p-0.5 rounded hover:bg-gray-100"
                                                             aria-label="Make sub-document of row above"
                                                         >

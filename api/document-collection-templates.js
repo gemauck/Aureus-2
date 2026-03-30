@@ -5,6 +5,18 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
+const TEMPLATE_TYPES = [
+  'document-collection',
+  'weekly-fms-review',
+  'monthly-data-review',
+  'compliance-review'
+]
+
+function normalizeTemplateType(raw) {
+  const s = typeof raw === 'string' ? raw.trim() : ''
+  return TEMPLATE_TYPES.includes(s) ? s : 'document-collection'
+}
+
 async function handler(req, res) {
   try {
     await authRequired(req, res)
@@ -12,12 +24,14 @@ async function handler(req, res) {
     // Get all templates - SHARED ACROSS ALL USERS (no ownerId filtering)
     if (req.method === 'GET') {
       try {
+        const url = new URL(req.url, `http://${req.headers.host}`)
+        const typeFilter = normalizeTemplateType(url.searchParams.get('type') || 'document-collection')
         // IMPORTANT: Templates are shared across all users, so we return ALL templates
         // regardless of ownerId. The ownerId field is only for tracking who created the template.
-        // Filter by type to only return document-collection templates
+        // Optional ?type= filters by template kind (default: document-collection).
         const templates = await prisma.documentCollectionTemplate.findMany({
           where: {
-            type: 'document-collection'
+            type: typeFilter
           },
           orderBy: [
             { isDefault: 'desc' }, // Default templates first
@@ -95,7 +109,7 @@ async function handler(req, res) {
             ? body.sections 
             : JSON.stringify(body.sections || []),
           isDefault: body.isDefault === true,
-          type: 'document-collection', // Always set type for document collection templates
+          type: normalizeTemplateType(body.type),
           ownerId: req.user?.sub || null, // For tracking only - templates are shared across all users
           createdBy: req.user?.name || req.user?.email || '',
           updatedBy: req.user?.name || req.user?.email || ''

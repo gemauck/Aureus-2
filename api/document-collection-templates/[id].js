@@ -32,10 +32,7 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       try {
         const template = await prisma.documentCollectionTemplate.findFirst({
-          where: { 
-            id,
-            type: 'document-collection'
-          }
+          where: { id }
         })
         
         if (!template) {
@@ -85,12 +82,8 @@ async function handler(req, res) {
       body = body || {}
       
       try {
-        // Check if template exists and is a document-collection template
         const existing = await prisma.documentCollectionTemplate.findFirst({
-          where: { 
-            id,
-            type: 'document-collection'
-          }
+          where: { id }
         })
         
         if (!existing) {
@@ -114,6 +107,11 @@ async function handler(req, res) {
           updateData.sections = typeof body.sections === 'string'
             ? body.sections
             : JSON.stringify(body.sections || [])
+        }
+        if (body.type !== undefined) {
+          const allowed = ['document-collection', 'weekly-fms-review', 'monthly-data-review', 'compliance-review']
+          const t = typeof body.type === 'string' ? body.type.trim() : ''
+          if (allowed.includes(t)) updateData.type = t
         }
         if (body.isDefault !== undefined && isAdminRole(req.user?.role)) {
           updateData.isDefault = body.isDefault === true
@@ -152,10 +150,7 @@ async function handler(req, res) {
       try {
         
         const template = await prisma.documentCollectionTemplate.findFirst({
-          where: { 
-            id,
-            type: 'document-collection'
-          }
+          where: { id }
         })
         
         if (!template) {
