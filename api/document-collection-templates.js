@@ -17,6 +17,31 @@ function normalizeTemplateType(raw) {
   return TEMPLATE_TYPES.includes(s) ? s : 'document-collection'
 }
 
+/** Valid type only; used for `types=` multi-filter (invalid entries ignored). */
+function templateTypeOrNull(raw) {
+  const s = typeof raw === 'string' ? raw.trim() : ''
+  return TEMPLATE_TYPES.includes(s) ? s : null
+}
+
+function templateWhereFromQuery(url) {
+  const typesParam = url.searchParams.get('types')
+  if (typesParam && typesParam.trim()) {
+    const inList = [
+      ...new Set(
+        typesParam
+          .split(',')
+          .map((t) => templateTypeOrNull(t))
+          .filter(Boolean)
+      )
+    ]
+    if (inList.length > 0) {
+      return { type: { in: inList } }
+    }
+  }
+  const single = normalizeTemplateType(url.searchParams.get('type') || 'document-collection')
+  return { type: single }
+}
+
 async function handler(req, res) {
   try {
     await authRequired(req, res)
@@ -25,14 +50,12 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       try {
         const url = new URL(req.url, `http://${req.headers.host}`)
-        const typeFilter = normalizeTemplateType(url.searchParams.get('type') || 'document-collection')
+        const typeWhere = templateWhereFromQuery(url)
         // IMPORTANT: Templates are shared across all users, so we return ALL templates
         // regardless of ownerId. The ownerId field is only for tracking who created the template.
-        // Optional ?type= filters by template kind (default: document-collection).
+        // ?type= single filter (default document-collection), or ?types=a,b for multiple.
         const templates = await prisma.documentCollectionTemplate.findMany({
-          where: {
-            type: typeFilter
-          },
+          where: typeWhere,
           orderBy: [
             { isDefault: 'desc' }, // Default templates first
             { createdAt: 'desc' }

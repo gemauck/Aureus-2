@@ -1417,15 +1417,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 return;
             }
             
-            const response = await fetch(
-                `/api/document-collection-templates?type=${encodeURIComponent(templateApiType)}`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
+            // Monthly Data Review & Compliance historically saved templates as document-collection.
+            // List merges the dedicated type with legacy document-collection so existing templates stay visible.
+            const templateListQuery = isMonthlyDataReview
+                ? `types=${encodeURIComponent('monthly-data-review,document-collection')}`
+                : isComplianceReview
+                    ? `types=${encodeURIComponent('compliance-review,document-collection')}`
+                    : `type=${encodeURIComponent('document-collection')}`;
+            const response = await fetch(`/api/document-collection-templates?${templateListQuery}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
-            );
+            });
             
             if (!response.ok) {
                 throw new Error(`Failed to load templates: ${response.status} ${response.statusText}`);
