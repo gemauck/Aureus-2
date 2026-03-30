@@ -163,8 +163,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const isComplianceReview = dataSource === 'complianceReview';
     const isJsonOnlyTracker = isMonthlyDataReview || isComplianceReview;
     // Month grid column widths (Data Review, Compliance Review, Document Collection)
-    const jsonTrackerStatusColPx = isComplianceReview ? 300 : 360;
-    const jsonTrackerNotesColPx = isComplianceReview ? 280 : 340;
+    const jsonTrackerStatusColPx = isComplianceReview ? 280 : 360;
+    const jsonTrackerNotesColPx = isComplianceReview ? 260 : 340;
+    /** Two-row sticky header: offset for Status/Notes row (approx. JAN + year row with py-2). */
+    const jsonTrackerHeaderRow2TopClass = 'top-[3.5rem]';
     const documentCollectionMonthColMinPx = 240;
     const getProjectSectionsField = (proj) => {
         if (dataSource === 'monthlyDataReview') return proj?.monthlyDataReviewSections;
@@ -7416,7 +7418,7 @@ Abcotronics`;
                                                 <tr>
                                                     <th
                                                         rowSpan={2}
-                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 z-20 border-r-2 border-gray-300 dark:border-gray-600"
+                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider sticky left-0 top-0 z-[45] bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 border-r-2 border-gray-300 dark:border-gray-600 shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.06)]"
                                                         style={stickyFirstColStyle}
                                                     >
                                                         Document / Data
@@ -7425,10 +7427,10 @@ Abcotronics`;
                                                         <th
                                                             key={month}
                                                             colSpan={2}
-                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 dark:border-gray-600 ${
+                                                            className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 dark:border-gray-600 sticky top-0 z-[35] shadow-[0_1px_0_0_rgba(0,0,0,0.08)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.06)] ${
                                                                 isOneMonthArrears(selectedYear, idx)
                                                                     ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500'
-                                                                    : 'text-gray-700 dark:text-gray-300'
+                                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
                                                             }`}
                                                         >
                                                             <div className="flex flex-col items-center gap-0.5">
@@ -7439,7 +7441,7 @@ Abcotronics`;
                                                     ))}
                                                     <th
                                                         rowSpan={2}
-                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider border-l-4 border-gray-400 dark:border-gray-600 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800"
+                                                        className="px-4 py-2 text-left text-xs font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider border-l-4 border-gray-400 dark:border-gray-600 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 sticky top-0 z-[35] shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.06)]"
                                                     >
                                                         Actions
                                                     </th>
@@ -7448,20 +7450,20 @@ Abcotronics`;
                                                     {months.map((month, idx) => (
                                                         <React.Fragment key={month}>
                                                             <th
-                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-4 border-t border-gray-400 dark:border-gray-600 ${
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-4 border-t border-gray-400 dark:border-gray-600 sticky z-[34] shadow-[0_1px_0_0_rgba(0,0,0,0.06)] ${jsonTrackerHeaderRow2TopClass} ${
                                                                     isOneMonthArrears(selectedYear, idx)
                                                                         ? 'bg-sky-50 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500'
-                                                                        : 'text-gray-600 dark:text-gray-400'
+                                                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                                                                 }`}
                                                                 style={{ minWidth: jsonTrackerStatusColPx, width: jsonTrackerStatusColPx }}
                                                             >
                                                                 Status
                                                             </th>
                                                             <th
-                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 dark:border-gray-600 ${
+                                                                className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t border-gray-300 dark:border-gray-600 sticky z-[34] shadow-[0_1px_0_0_rgba(0,0,0,0.06)] ${jsonTrackerHeaderRow2TopClass} ${
                                                                     isOneMonthArrears(selectedYear, idx)
                                                                         ? 'bg-sky-50 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-200 dark:border-sky-600'
-                                                                        : 'text-gray-600 dark:text-gray-400'
+                                                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                                                                 }`}
                                                                 style={{ minWidth: jsonTrackerNotesColPx, width: jsonTrackerNotesColPx }}
                                                             >
