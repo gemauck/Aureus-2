@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 
 /**
- * Restore Mondi (or any project) Document Collection sections from a backup database.
- * Use this after restoring a Digital Ocean backup to a separate cluster, to copy only
- * that project's DocumentSection / DocumentItem data into the current production DB.
+ * Restore a project's Document Collection from a backup database into production.
+ *
+ * Copies, for the matched project:
+ * - DocumentSection, DocumentItem, DocumentItemStatus, DocumentItemComment (grid)
+ * - DocumentRequestEmailSent, DocumentRequestEmailReceived (request/reply routing)
+ * - DocumentCollectionEmailLog (email activity UI)
+ * - DocumentCollectionNotificationRead (read state for notifications)
+ * - Project.documentSections (legacy JSON blob / emailRequestByMonth merge source)
  *
  * Prerequisites:
- * 1. In Digital Ocean: Databases → your cluster → Backups → pick a backup from BEFORE
- *    the failed save (when File 6 still existed) → "Restore" / "Create database from backup".
- * 2. Wait for the new cluster, then get its connection string (Users & Databases).
- * 3. Set RESTORE_DATABASE_URL to that connection string (current DATABASE_URL stays as production).
+ * 1. Restore DO backup to a separate DB instance; set RESTORE_DATABASE_URL to it.
+ * 2. DATABASE_URL = production.
  *
  * Usage:
  *   RESTORE_DATABASE_URL="postgresql://..." node scripts/restore-mondi-document-sections.js
- *   RESTORE_DATABASE_URL="postgresql://..." node scripts/restore-mondi-document-sections.js "Mondi"
+ *   RESTORE_DATABASE_URL="postgresql://..." node scripts/restore-mondi-document-sections.js "Mafube"
  *
  * Optional: pass a project name search string (default "Mondi") to match the project.
  */
@@ -49,8 +52,8 @@ const currentDb = new PrismaClient({
 });
 
 async function run() {
-  console.log('🔍 Restore Mondi Document Collection from backup DB');
-  console.log('====================================================\n');
+  console.log('🔍 Restore Document Collection (full) from backup DB');
+  console.log('==================================================\n');
 
   try {
     // 1) Find project in restore DB by name
@@ -123,6 +126,17 @@ async function run() {
     if (existingInCurrent.length > 0) {
       console.log(`⚠️  Current DB already has ${existingInCurrent.length} section(s) for this project.`);
       console.log('   We will DELETE existing document sections for this project and then insert from backup.\n');
+    }
+
+    // 3b) Remove document-collection satellite rows in production (not cascaded from DocumentSection)
+    const delNotif = await currentDb.documentCollectionNotificationRead.deleteMany({ where: { projectId } })
+    const delLog = await currentDb.documentCollectionEmailLog.deleteMany({ where: { projectId } })
+    const delRecv = await currentDb.documentRequestEmailReceived.deleteMany({ where: { projectId } })
+    const delSent = await currentDb.documentRequestEmailSent.deleteMany({ where: { projectId } })
+    if (delNotif.count + delLog.count + delRecv.count + delSent.count > 0) {
+      console.log(
+        `🗑️  Cleared doc-collection extras: notificationRead=${delNotif.count}, emailLog=${delLog.count}, emailReceived=${delRecv.count}, emailSent=${delSent.count}\n`
+      )
     }
 
     // 4) Delete existing document sections for this project in current DB (cascade will remove items, statuses, comments)
@@ -205,7 +219,110 @@ async function run() {
     }
     console.log(`   ✅ ${comments.length} comments`);
 
-    console.log('\n✅ Restore complete. Mondi document collection (including File 6) is back in production.');
+    // 6) Email / notification satellite tables from backup
+    const emailSentRows = await restoreDb.documentRequestEmailSent.findMany({ where: { projectId } })
+    const emailRecvRows = await restoreDb.documentRequestEmailReceived.findMany({ where: { projectId } })
+    const emailLogRows = await restoreDb.documentCollectionEmailLog.findMany({ where: { projectId } })
+    const notifReadRows = await restoreDb.documentCollectionNotificationRead.findMany({ where: { projectId } })
+
+    console.log(
+      `📧 From backup (extras): sent=${emailSentRows.length}, received=${emailRecvRows.length}, emailLog=${emailLogRows.length}, notificationRead=${notifReadRows.length}`
+    )
+
+    for (const row of emailSentRows) {
+      await currentDb.documentRequestEmailSent.create({
+        data: {
+          id: row.id,
+          messageId: row.messageId,
+          projectId: row.projectId,
+          sectionId: row.sectionId,
+          documentId: row.documentId,
+          year: row.year,
+          month: row.month,
+          requesterEmail: row.requesterEmail,
+          createdAt: row.createdAt,
+        },
+      })
+    }
+    console.log(`   ✅ ${emailSentRows.length} DocumentRequestEmailSent`)
+
+    for (const row of emailRecvRows) {
+      await currentDb.documentRequestEmailReceived.create({
+        data: {
+          id: row.id,
+          emailId: row.emailId,
+          projectId: row.projectId,
+          documentId: row.documentId,
+          year: row.year,
+          month: row.month,
+          createdAt: row.createdAt,
+        },
+      })
+    }
+    console.log(`   ✅ ${emailRecvRows.length} DocumentRequestEmailReceived`)
+
+    for (const row of emailLogRows) {
+      await currentDb.documentCollectionEmailLog.create({
+        data: {
+          id: row.id,
+          projectId: row.projectId,
+          sectionId: row.sectionId,
+          documentId: row.documentId,
+          year: row.year,
+          month: row.month,
+          kind: row.kind ?? 'sent',
+          createdAt: row.createdAt,
+          subject: row.subject,
+          bodyText: row.bodyText,
+          messageId: row.messageId,
+          trackingId: row.trackingId,
+          deliveryStatus: row.deliveryStatus ?? 'sent',
+          deliveredAt: row.deliveredAt,
+          bouncedAt: row.bouncedAt,
+          bounceReason: row.bounceReason,
+          lastEventAt: row.lastEventAt,
+          openedAt: row.openedAt,
+          lastOpenedAt: row.lastOpenedAt,
+          openCount: row.openCount ?? 0,
+        },
+      })
+    }
+    console.log(`   ✅ ${emailLogRows.length} DocumentCollectionEmailLog`)
+
+    for (const row of notifReadRows) {
+      await currentDb.documentCollectionNotificationRead.create({
+        data: {
+          id: row.id,
+          userId: row.userId,
+          projectId: row.projectId,
+          documentId: row.documentId,
+          year: row.year,
+          month: row.month,
+          type: row.type,
+          openedAt: row.openedAt,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        },
+      })
+    }
+    console.log(`   ✅ ${notifReadRows.length} DocumentCollectionNotificationRead`)
+
+    // 7) Legacy Project.documentSections JSON (merge source for emailRequestByMonth etc.)
+    const projBackup = await restoreDb.project.findUnique({
+      where: { id: projectId },
+      select: { documentSections: true },
+    })
+    if (projBackup && projBackup.documentSections != null && String(projBackup.documentSections).trim()) {
+      await currentDb.project.update({
+        where: { id: projectId },
+        data: { documentSections: projBackup.documentSections },
+      })
+      console.log(`   ✅ Project.documentSections updated from backup (${String(projBackup.documentSections).length} chars)`)
+    } else {
+      console.log('   ⏭️  No documentSections blob in backup (skipped)')
+    }
+
+    console.log('\n✅ Restore complete. Document collection grid + email/notification extras + blob are in production.')
   } catch (err) {
     console.error('\n❌ Error:', err.message);
     if (err.code) console.error('   Code:', err.code);
