@@ -1464,14 +1464,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     }, [showTemplateModal, showApplyTemplateModal]);
     
     const buildTemplateSectionsFromCurrent = () => {
-        return (sections || []).map(section => ({
-            name: section.name,
-            description: section.description || '',
-            documents: (section.documents || []).map(doc => ({
-                name: doc.name,
-                description: doc.description || ''
-            }))
-        }));
+        return (sections || []).map(section => {
+            const ordered = getOrderedDocumentRows(section);
+            return {
+                name: section.name,
+                description: section.description || '',
+                documents: ordered.map(({ doc }) => ({
+                    name: doc.name,
+                    description: doc.description || '',
+                    templateDocId: String(doc.id),
+                    parentTemplateDocId:
+                        doc.parentId != null && doc.parentId !== ''
+                            ? String(doc.parentId)
+                            : null
+                }))
+            };
+        });
     };
     
     const saveTemplate = async (templateData) => {
@@ -1585,24 +1593,57 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             alert('Template is empty or invalid');
             return;
         }
-        
-        
-        // Create new sections from template
-        const newSections = template.sections.map(section => ({
-            id: Date.now() + Math.random(),
-            name: section.name,
-            description: section.description || '',
-            documents: Array.isArray(section.documents) ? section.documents.map(doc => ({
-                id: Date.now() + Math.random(),
-                name: doc.name,
-                description: doc.description || '',
-                collectionStatus: {},
-                comments: {},
-                notesByMonth: {},
-                emailRequestByMonth: {}
-            })) : []
-        }));
-        
+
+        const base = Date.now();
+        let idCounter = 0;
+        const nextId = () => base + idCounter++;
+
+        // Create new sections from template; remap templateDocId → new id so parentId links survive apply
+        const newSections = template.sections.map(section => {
+            const docs = Array.isArray(section.documents) ? section.documents : [];
+            const idMap = new Map();
+
+            docs.forEach((doc, idx) => {
+                const tid =
+                    doc.templateDocId != null && String(doc.templateDocId).trim() !== ''
+                        ? String(doc.templateDocId)
+                        : `__legacy_${idx}`;
+                if (!idMap.has(tid)) idMap.set(tid, nextId());
+            });
+
+            const newDocuments = docs.map((doc, idx) => {
+                const tid =
+                    doc.templateDocId != null && String(doc.templateDocId).trim() !== ''
+                        ? String(doc.templateDocId)
+                        : `__legacy_${idx}`;
+                const newId = idMap.get(tid);
+                const rawParent = doc.parentTemplateDocId;
+                const hasParent =
+                    rawParent != null &&
+                    String(rawParent).trim() !== '' &&
+                    idMap.has(String(rawParent));
+
+                const out = {
+                    id: newId,
+                    name: doc.name,
+                    description: doc.description || '',
+                    collectionStatus: {},
+                    comments: {},
+                    notesByMonth: {},
+                    emailRequestByMonth: {}
+                };
+                if (hasParent) out.parentId = idMap.get(String(rawParent));
+                return out;
+            });
+
+            return {
+                id: nextId(),
+                name: section.name,
+                description: section.description || '',
+                documents: newDocuments
+            };
+        });
+
         // Merge with existing sections
         setSections(prev => [...prev, ...newSections]);
         
@@ -6123,19 +6164,62 @@ Abcotronics`;
     };
     
     const TemplateModal = () => {
+        const genTemplateDocId = () =>
+            `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+
+        /** Single-level sub-docs only: strip invalid parents (self-ref, parent after child, nested sub as parent). */
+        const sanitizeTemplateDocuments = (docs) => {
+            const list = (docs || []).map(d => ({ ...d }));
+            const idToIndex = new Map(list.map((d, i) => [String(d.templateDocId), i]));
+            return list.map(d => {
+                const p = d.parentTemplateDocId;
+                if (p == null || String(p).trim() === '') {
+                    return { ...d, parentTemplateDocId: null };
+                }
+                const pi = idToIndex.get(String(p));
+                const ci = idToIndex.get(String(d.templateDocId));
+                if (pi === undefined || ci === undefined || pi >= ci) {
+                    return { ...d, parentTemplateDocId: null };
+                }
+                const parent = list[pi];
+                if (parent.parentTemplateDocId != null && String(parent.parentTemplateDocId).trim() !== '') {
+                    return { ...d, parentTemplateDocId: null };
+                }
+                return { ...d, parentTemplateDocId: String(p) };
+            });
+        };
+
+        const ensureTemplateDocIds = (sectionsIn) =>
+            (sectionsIn || []).map(sec => ({
+                ...sec,
+                documents: sanitizeTemplateDocuments(
+                    (sec.documents || []).map(d => ({
+                        ...d,
+                        templateDocId:
+                            d.templateDocId != null && String(d.templateDocId).trim() !== ''
+                                ? String(d.templateDocId)
+                                : genTemplateDocId(),
+                        parentTemplateDocId:
+                            d.parentTemplateDocId != null && String(d.parentTemplateDocId).trim() !== ''
+                                ? String(d.parentTemplateDocId)
+                                : null
+                    }))
+                )
+            }));
+
         const [formData, setFormData] = useState(() => {
             if (editingTemplate) {
                 return {
                     name: editingTemplate.name || '',
                     description: editingTemplate.description || '',
-                    sections: parseSections(editingTemplate.sections)
+                    sections: ensureTemplateDocIds(parseSections(editingTemplate.sections))
                 };
             }
             if (prefilledTemplate) {
                 return {
                     name: prefilledTemplate.name || '',
                     description: prefilledTemplate.description || '',
-                    sections: parseSections(prefilledTemplate.sections)
+                    sections: ensureTemplateDocIds(parseSections(prefilledTemplate.sections))
                 };
             }
             return { name: '', description: '', sections: [] };
@@ -6173,9 +6257,10 @@ Abcotronics`;
             setFormData(prev => {
                 const newSections = prev.sections.map((sec, i) => {
                     if (i !== sectionIdx) return sec;
-                    const docs = [...(sec.documents || [])];
+                    let docs = [...(sec.documents || [])];
                     const [removed] = docs.splice(drag.docIdx, 1);
                     docs.splice(dropDocIdx, 0, removed);
+                    docs = sanitizeTemplateDocuments(docs);
                     return { ...sec, documents: docs };
                 });
                 return { ...prev, sections: newSections };
@@ -6189,18 +6274,81 @@ Abcotronics`;
                 setFormData({
                     name: editingTemplate.name || '',
                     description: editingTemplate.description || '',
-                    sections: parseSections(editingTemplate.sections)
+                    sections: ensureTemplateDocIds(parseSections(editingTemplate.sections))
                 });
             } else if (prefilledTemplate) {
                 setFormData({
                     name: prefilledTemplate.name || '',
                     description: prefilledTemplate.description || '',
-                    sections: parseSections(prefilledTemplate.sections)
+                    sections: ensureTemplateDocIds(parseSections(prefilledTemplate.sections))
                 });
             } else {
                 setFormData({ name: '', description: '', sections: [] });
             }
         }, [editingTemplate, prefilledTemplate]);
+
+        const indentTemplateDocument = (sectionIdx, docIdx) => {
+            setFormData(prev => {
+                const newSections = prev.sections.map((sec, i) => {
+                    if (i !== sectionIdx) return sec;
+                    const docs = [...(sec.documents || [])];
+                    if (docIdx <= 0) return sec;
+                    const prevDoc = docs[docIdx - 1];
+                    const prevIsRoot =
+                        !prevDoc.parentTemplateDocId ||
+                        String(prevDoc.parentTemplateDocId).trim() === '';
+                    if (!prevIsRoot || !prevDoc.templateDocId) return sec;
+                    const cur = { ...docs[docIdx] };
+                    cur.parentTemplateDocId = String(prevDoc.templateDocId);
+                    docs[docIdx] = cur;
+                    return { ...sec, documents: sanitizeTemplateDocuments(docs) };
+                });
+                return { ...prev, sections: newSections };
+            });
+        };
+
+        const outdentTemplateDocument = (sectionIdx, docIdx) => {
+            setFormData(prev => {
+                const newSections = prev.sections.map((sec, i) => {
+                    if (i !== sectionIdx) return sec;
+                    const docs = [...(sec.documents || [])];
+                    const cur = docs[docIdx];
+                    if (
+                        !cur ||
+                        cur.parentTemplateDocId == null ||
+                        String(cur.parentTemplateDocId).trim() === ''
+                    ) {
+                        return sec;
+                    }
+                    docs[docIdx] = { ...cur, parentTemplateDocId: null };
+                    return { ...sec, documents: sanitizeTemplateDocuments(docs) };
+                });
+                return { ...prev, sections: newSections };
+            });
+        };
+
+        const removeTemplateDocument = (sectionIdx, docIdx) => {
+            setFormData(prev => {
+                const newSections = prev.sections.map((sec, i) => {
+                    if (i !== sectionIdx) return sec;
+                    let docs = [...(sec.documents || [])];
+                    const removed = docs[docIdx];
+                    const removedId = removed?.templateDocId;
+                    docs = docs.filter((_, j) => j !== docIdx);
+                    if (removedId) {
+                        const rid = String(removedId);
+                        docs = docs.map(d =>
+                            String(d.parentTemplateDocId) === rid
+                                ? { ...d, parentTemplateDocId: null }
+                                : d
+                        );
+                    }
+                    docs = sanitizeTemplateDocuments(docs);
+                    return { ...sec, documents: docs };
+                });
+                return { ...prev, sections: newSections };
+            });
+        };
         
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -6212,7 +6360,22 @@ Abcotronics`;
                 alert('Please add at least one section');
                 return;
             }
-            saveTemplate(formData);
+            const payload = {
+                ...formData,
+                sections: (formData.sections || []).map(sec => ({
+                    ...sec,
+                    documents: sanitizeTemplateDocuments(
+                        (sec.documents || []).map(d => ({
+                            ...d,
+                            templateDocId:
+                                d.templateDocId != null && String(d.templateDocId).trim() !== ''
+                                    ? String(d.templateDocId)
+                                    : genTemplateDocId()
+                        }))
+                    )
+                }))
+            };
+            saveTemplate(payload);
         };
         
         if (showTemplateList) {
@@ -6414,7 +6577,12 @@ Abcotronics`;
                                                 onClick={() => {
                                                     const newSections = [...formData.sections];
                                                     if (!newSections[idx].documents) newSections[idx].documents = [];
-                                                    newSections[idx].documents.push({ name: '', description: '' });
+                                                    newSections[idx].documents.push({
+                                                        name: '',
+                                                        description: '',
+                                                        templateDocId: genTemplateDocId(),
+                                                        parentTemplateDocId: null
+                                                    });
                                                     setFormData({...formData, sections: newSections});
                                                 }}
                                                 className="px-1.5 py-0.5 bg-gray-600 text-white rounded text-[9px] font-medium"
@@ -6425,20 +6593,53 @@ Abcotronics`;
                                         </div>
                                         
                                         <div className="space-y-1 mt-1">
-                                            {(section.documents || []).map((doc, docIdx) => (
+                                            {(section.documents || []).map((doc, docIdx) => {
+                                                const isSub =
+                                                    doc.parentTemplateDocId != null &&
+                                                    String(doc.parentTemplateDocId).trim() !== '';
+                                                const prevDoc =
+                                                    docIdx > 0 ? (section.documents || [])[docIdx - 1] : null;
+                                                const prevIsRoot =
+                                                    prevDoc &&
+                                                    (prevDoc.parentTemplateDocId == null ||
+                                                        String(prevDoc.parentTemplateDocId).trim() === '');
+                                                const canIndent = docIdx > 0 && prevIsRoot && !!prevDoc?.templateDocId;
+                                                return (
                                                 <div
-                                                    key={docIdx}
+                                                    key={doc.templateDocId || docIdx}
                                                     draggable
                                                     onDragStart={(e) => handleTemplateDocDragStart(idx, docIdx, e)}
                                                     onDragEnd={handleTemplateDocDragEnd}
                                                     onDragOver={(e) => handleTemplateDocDragOver(e, idx, docIdx)}
                                                     onDragLeave={handleTemplateDocDragLeave}
                                                     onDrop={(e) => handleTemplateDocDrop(e, idx, docIdx)}
-                                                    className={`flex items-center gap-1 bg-white p-1.5 rounded border transition-colors cursor-grab active:cursor-grabbing ${dragOverTemplateDoc.sectionIdx === idx && dragOverTemplateDoc.docIdx === docIdx ? 'border-sky-300 ring-1 ring-sky-200 bg-sky-50' : 'border-gray-200'}`}
+                                                    className={`flex items-center gap-1 bg-white p-1.5 rounded border transition-colors cursor-grab active:cursor-grabbing ${isSub ? 'ml-4 border-l-2 border-sky-200' : ''} ${dragOverTemplateDoc.sectionIdx === idx && dragOverTemplateDoc.docIdx === docIdx ? 'border-sky-300 ring-1 ring-sky-200 bg-sky-50' : 'border-gray-200'}`}
                                                 >
                                                     <span className="inline-flex cursor-grab active:cursor-grabbing text-gray-400 flex-shrink-0" title="Drag to reorder">
                                                         <i className="fas fa-grip-vertical text-[9px]"></i>
                                                     </span>
+                                                    <div className="inline-flex items-center gap-0.5 flex-shrink-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => outdentTemplateDocument(idx, docIdx)}
+                                                            disabled={!isSub}
+                                                            title="Top-level document"
+                                                            className="text-gray-500 hover:text-gray-800 disabled:opacity-25 disabled:pointer-events-none p-0.5 rounded hover:bg-gray-100"
+                                                            aria-label="Make top-level document"
+                                                        >
+                                                            <i className="fas fa-outdent text-[9px]" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => indentTemplateDocument(idx, docIdx)}
+                                                            disabled={!canIndent}
+                                                            title="Sub-document of row above"
+                                                            className="text-gray-500 hover:text-gray-800 disabled:opacity-25 disabled:pointer-events-none p-0.5 rounded hover:bg-gray-100"
+                                                            aria-label="Make sub-document of row above"
+                                                        >
+                                                            <i className="fas fa-indent text-[9px]" />
+                                                        </button>
+                                                    </div>
                                                     <input
                                                         type="text"
                                                         value={doc.name}
@@ -6447,23 +6648,21 @@ Abcotronics`;
                                                             newSections[idx].documents[docIdx].name = e.target.value;
                                                             setFormData({...formData, sections: newSections});
                                                         }}
-                                                        className="flex-1 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded"
+                                                        className="flex-1 min-w-0 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded"
                                                         placeholder="Document name *"
                                                         required
                                                     />
                                                     <button
                                                         type="button"
-                                                        onClick={() => {
-                                                            const newSections = [...formData.sections];
-                                                            newSections[idx].documents = newSections[idx].documents.filter((_, i) => i !== docIdx);
-                                                            setFormData({...formData, sections: newSections});
-                                                        }}
-                                                        className="text-red-600 hover:text-red-800 p-0.5"
+                                                        onClick={() => removeTemplateDocument(idx, docIdx)}
+                                                        className="text-red-600 hover:text-red-800 p-0.5 flex-shrink-0"
+                                                        aria-label="Remove document"
                                                     >
                                                         <i className="fas fa-times text-[9px]"></i>
                                                     </button>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ))}

@@ -1362,11 +1362,22 @@ const Projects = () => {
                     });
                     
                     // Check if there's a project to open immediately after loading
-                    // Only open from sessionStorage if the current route has segments (i.e., we're navigating to a specific project)
+                    // Only open from sessionStorage if we're on a project URL (RouteState can lag pathname after hard refresh / parallel effects)
                     const currentRoute = window.RouteState?.getRoute();
-                    const shouldOpenFromStorage = currentRoute?.page === 'projects' && 
-                                                 currentRoute.segments && 
-                                                 currentRoute.segments.length > 0;
+                    let shouldOpenFromStorage = currentRoute?.page === 'projects' &&
+                        currentRoute.segments &&
+                        currentRoute.segments.length > 0;
+                    if (!shouldOpenFromStorage) {
+                        const urlPath = window.location.pathname || '';
+                        const urlHash = window.location.hash || '';
+                        let urlProjectId = null;
+                        if (urlPath.includes('/projects/')) {
+                            urlProjectId = normalizeProjectId(urlPath.split('/projects/')[1].split('/')[0]);
+                        } else if (urlHash.includes('/projects/')) {
+                            urlProjectId = normalizeProjectId(urlHash.split('/projects/')[1].split('/')[0]);
+                        }
+                        if (urlProjectId) shouldOpenFromStorage = true;
+                    }
                     
                     const projectIdToOpen = sessionStorage.getItem('openProjectId');
                     const taskIdToOpen = sessionStorage.getItem('openTaskId');
