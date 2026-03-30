@@ -935,7 +935,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 }
             }
             
-            if (sectionsField != null && typeof sectionsField === 'object') {
+            if (
+                sectionsField != null &&
+                (typeof sectionsField === 'object' || typeof sectionsField === 'string')
+            ) {
                 let normalized = normalizeSectionsByYear(sectionsField, urlYearForNormalize);
                 // If URL has docYear but that year is missing from API data, seed from another year (not when year is explicit [])
                 normalized = seedUrlYearFromOtherYearsIfMissing(normalized, urlYearForNormalize);
@@ -2116,72 +2119,57 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         // Capture the current snapshot before deletion for rollback if needed
         const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
-        
-        // Defer state update to next frame so click handler returns immediately
-        // UI will update within 16ms (next animation frame)
+
+        // Compute next year map synchronously (do not rely on setState/ref timing for the save payload)
+        const stateForSave = sectionsRef.current || {};
+        const yearSections = stateForSave[selectedYear] || [];
+        const filteredYearSections = yearSections.filter(s => String(s.id) !== normalizedSectionId);
+        const updatedSectionsByYear = {
+            ...stateForSave,
+            [selectedYear]: filteredYearSections
+        };
+        const serializedDeletedState = JSON.stringify(updatedSectionsByYear);
+
+        sectionsRef.current = updatedSectionsByYear;
+        lastSavedDataRef.current = serializedDeletedState;
+
+        const snapshotKeyImmediate = getSnapshotKey(project.id);
+        if (snapshotKeyImmediate && window.localStorage) {
+            try {
+                window.localStorage.setItem(snapshotKeyImmediate, serializedDeletedState);
+                console.log('💾 Deletion snapshot saved to localStorage (sync)');
+            } catch (storageError) {
+                console.warn('⚠️ Failed to save snapshot to localStorage:', storageError);
+            }
+        }
+
         requestAnimationFrame(() => {
-            // Update state and ref atomically - OPTIMISTIC UPDATE (UI updates in next frame)
-            setSectionsByYear(prev => {
-                const yearSections = prev[selectedYear] || [];
-                const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
-                
-                const updatedSectionsByYear = {
-                    ...prev,
-                    [selectedYear]: filtered
-                };
-                
-                // Immediately update the ref synchronously
-                sectionsRef.current = updatedSectionsByYear;
-                
-                // CRITICAL: Update saved data ref IMMEDIATELY after state update
-                const deletedSectionSnapshot = JSON.stringify(updatedSectionsByYear);
-                lastSavedDataRef.current = deletedSectionSnapshot;
-                
-                // Persist snapshot to localStorage immediately (before database save)
-                const snapshotKey = getSnapshotKey(project.id);
-                if (snapshotKey && window.localStorage) {
-                    try {
-                        window.localStorage.setItem(snapshotKey, deletedSectionSnapshot);
-                        console.log('💾 Deletion snapshot saved to localStorage immediately');
-                    } catch (storageError) {
-                        console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
-                    }
-                }
-                
-                return updatedSectionsByYear;
-            });
-            
-            // Save in background (non-blocking) - UI already updated optimistically
-            const deletedSectionSnapshot = serializeSections(sectionsRef.current);
+            setSectionsByYear(updatedSectionsByYear);
+
             isSavingRef.current = true;
-            
-            // Perform save asynchronously without blocking
+
             (async () => {
             try {
-                const payload = sectionsRef.current || {};
-                
                 if (isJsonOnlyTracker) {
                     const payloadKey = isComplianceReview ? 'complianceReviewSections' : 'monthlyDataReviewSections';
                     if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                         await window.DatabaseAPI.updateProject(project.id, {
-                            [payloadKey]: serializeSections(payload)
+                            [payloadKey]: serializedDeletedState
                         });
                     } else {
                         throw new Error('DatabaseAPI.updateProject not available');
                     }
                 } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                    await apiRef.current.saveDocumentSections(project.id, payload, false);
+                    await apiRef.current.saveDocumentSections(project.id, updatedSectionsByYear, false);
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                     await window.DatabaseAPI.updateProject(project.id, {
-                        documentSections: serializeSections(payload)
+                        documentSections: serializedDeletedState
                     });
                 } else {
                     throw new Error('No available API for saving document sections');
                 }
-                
-                // Update saved data ref to match deleted state
-                const currentStateSnapshot = JSON.stringify(sectionsRef.current);
-                lastSavedDataRef.current = currentStateSnapshot;
+
+                lastSavedDataRef.current = serializedDeletedState;
                 
                 console.log('✅ Section deletion saved successfully');
                 
@@ -2189,10 +2177,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 const snapshotKey = getSnapshotKey(project.id);
                 if (snapshotKey && window.localStorage) {
                     try {
-                        window.localStorage.setItem(snapshotKey, currentStateSnapshot);
+                        window.localStorage.setItem(snapshotKey, serializedDeletedState);
                         console.log('💾 Deletion snapshot updated in localStorage after successful save');
                     } catch (storageError) {
                         console.warn('⚠️ Failed to update document collection snapshot in localStorage:', storageError);
+                    }
+                }
+
+                if (isJsonOnlyTracker && typeof window !== 'undefined') {
+                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                        const payloadKey = isComplianceReview ? 'complianceReviewSections' : 'monthlyDataReviewSections';
+                        window.updateViewingProject({ ...project, [payloadKey]: serializedDeletedState });
+                    }
+                    if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
+                        const keysToDelete = [];
+                        window.DatabaseAPI._responseCache.forEach((_, key) => {
+                            if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
+                                keysToDelete.push(key);
+                            }
+                        });
+                        keysToDelete.forEach(k => window.DatabaseAPI._responseCache.delete(k));
                     }
                 }
                 

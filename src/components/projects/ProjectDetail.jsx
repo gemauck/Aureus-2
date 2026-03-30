@@ -981,9 +981,18 @@ function initializeProjectDetail() {
             const hasProcessEqual = prevProps.hasMonthlyDataReviewProcess === nextProps.hasMonthlyDataReviewProcess;
             const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
             const onBackEqual = prevProps.onBack === nextProps.onBack;
+            const jsonSectionsSig = (v) => {
+                if (v == null) return '';
+                if (typeof v === 'string') return v;
+                try {
+                    return JSON.stringify(v);
+                } catch {
+                    return String(v);
+                }
+            };
             const mdrEqual =
-                String(prevProps.project?.monthlyDataReviewSections ?? '') ===
-                String(nextProps.project?.monthlyDataReviewSections ?? '');
+                jsonSectionsSig(prevProps.project?.monthlyDataReviewSections) ===
+                jsonSectionsSig(nextProps.project?.monthlyDataReviewSections);
             return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual && mdrEqual;
         });
     })();
@@ -1188,9 +1197,18 @@ function initializeProjectDetail() {
             const hasProcessEqual = prevProps.hasComplianceReviewProcess === nextProps.hasComplianceReviewProcess;
             const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
             const onBackEqual = prevProps.onBack === nextProps.onBack;
+            const complianceSig = (v) => {
+                if (v == null) return '';
+                if (typeof v === 'string') return v;
+                try {
+                    return JSON.stringify(v);
+                } catch {
+                    return String(v);
+                }
+            };
             const crEqual =
-                String(prevProps.project?.complianceReviewSections ?? '') ===
-                String(nextProps.project?.complianceReviewSections ?? '');
+                complianceSig(prevProps.project?.complianceReviewSections) ===
+                complianceSig(nextProps.project?.complianceReviewSections);
             return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual && crEqual;
         });
     })();
