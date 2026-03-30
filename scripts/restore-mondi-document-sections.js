@@ -6,9 +6,15 @@
  * Copies, for the matched project:
  * - DocumentSection, DocumentItem, DocumentItemStatus, DocumentItemComment (grid)
  * - DocumentRequestEmailSent, DocumentRequestEmailReceived (request/reply routing)
- * - DocumentCollectionEmailLog (email activity UI)
- * - DocumentCollectionNotificationRead (read state for notifications)
- * - Project.documentSections (legacy JSON blob / emailRequestByMonth merge source)
+ * - DocumentCollectionEmailLog (email activity UI, tracking, delivery)
+ * - DocumentCollectionNotificationRead (read state for notification badges)
+ * - Project.documentSections + Project.hasDocumentCollectionProcess (blob / tab flag)
+ * - ProjectActivityLog rows whose type starts with document_section (status/notes history)
+ *
+ * Not copied (by design):
+ * - DocumentCollectionTemplate — global org templates, not per project
+ * - “Received counts” API — derived live from DocumentItemComment (already restored)
+ * - Browser localStorage (year selection, snapshots)
  *
  * Prerequisites:
  * 1. Restore DO backup to a separate DB instance; set RESTORE_DATABASE_URL to it.
@@ -133,9 +139,14 @@ async function run() {
     const delLog = await currentDb.documentCollectionEmailLog.deleteMany({ where: { projectId } })
     const delRecv = await currentDb.documentRequestEmailReceived.deleteMany({ where: { projectId } })
     const delSent = await currentDb.documentRequestEmailSent.deleteMany({ where: { projectId } })
-    if (delNotif.count + delLog.count + delRecv.count + delSent.count > 0) {
+    const delAct = await currentDb.projectActivityLog.deleteMany({
+      where: { projectId, type: { startsWith: 'document_section' } },
+    })
+    const extraDel =
+      delNotif.count + delLog.count + delRecv.count + delSent.count + delAct.count
+    if (extraDel > 0) {
       console.log(
-        `🗑️  Cleared doc-collection extras: notificationRead=${delNotif.count}, emailLog=${delLog.count}, emailReceived=${delRecv.count}, emailSent=${delSent.count}\n`
+        `🗑️  Cleared doc-collection extras: notificationRead=${delNotif.count}, emailLog=${delLog.count}, emailReceived=${delRecv.count}, emailSent=${delSent.count}, activityLog=${delAct.count}\n`
       )
     }
 
@@ -224,9 +235,13 @@ async function run() {
     const emailRecvRows = await restoreDb.documentRequestEmailReceived.findMany({ where: { projectId } })
     const emailLogRows = await restoreDb.documentCollectionEmailLog.findMany({ where: { projectId } })
     const notifReadRows = await restoreDb.documentCollectionNotificationRead.findMany({ where: { projectId } })
+    const activityRows = await restoreDb.projectActivityLog.findMany({
+      where: { projectId, type: { startsWith: 'document_section' } },
+      orderBy: { createdAt: 'asc' },
+    })
 
     console.log(
-      `📧 From backup (extras): sent=${emailSentRows.length}, received=${emailRecvRows.length}, emailLog=${emailLogRows.length}, notificationRead=${notifReadRows.length}`
+      `📧 From backup (extras): sent=${emailSentRows.length}, received=${emailRecvRows.length}, emailLog=${emailLogRows.length}, notificationRead=${notifReadRows.length}, activityLog=${activityRows.length}`
     )
 
     for (const row of emailSentRows) {
@@ -307,22 +322,52 @@ async function run() {
     }
     console.log(`   ✅ ${notifReadRows.length} DocumentCollectionNotificationRead`)
 
-    // 7) Legacy Project.documentSections JSON (merge source for emailRequestByMonth etc.)
+    for (const row of activityRows) {
+      await currentDb.projectActivityLog.create({
+        data: {
+          id: row.id,
+          projectId: row.projectId,
+          userId: row.userId,
+          userName: row.userName ?? '',
+          type: row.type,
+          description: row.description ?? '',
+          metadata: row.metadata ?? '{}',
+          ipAddress: row.ipAddress ?? '',
+          userAgent: row.userAgent ?? '',
+          action: row.action ?? '',
+          details: row.details ?? '',
+          createdAt: row.createdAt,
+        },
+      })
+    }
+    console.log(`   ✅ ${activityRows.length} ProjectActivityLog (document_section*)`)
+
+    // 7) Project flags + legacy JSON blob (cron schedule / emailRequestByMonth merge source)
     const projBackup = await restoreDb.project.findUnique({
       where: { id: projectId },
-      select: { documentSections: true },
+      select: { documentSections: true, hasDocumentCollectionProcess: true },
     })
-    if (projBackup && projBackup.documentSections != null && String(projBackup.documentSections).trim()) {
+    if (projBackup) {
+      const updateData = {
+        hasDocumentCollectionProcess: !!projBackup.hasDocumentCollectionProcess,
+      }
+      if (projBackup.documentSections != null && String(projBackup.documentSections).trim()) {
+        updateData.documentSections = projBackup.documentSections
+      }
       await currentDb.project.update({
         where: { id: projectId },
-        data: { documentSections: projBackup.documentSections },
+        data: updateData,
       })
-      console.log(`   ✅ Project.documentSections updated from backup (${String(projBackup.documentSections).length} chars)`)
-    } else {
-      console.log('   ⏭️  No documentSections blob in backup (skipped)')
+      const parts = [`hasDocumentCollectionProcess=${updateData.hasDocumentCollectionProcess}`]
+      if (updateData.documentSections != null) {
+        parts.push(`documentSections (${String(updateData.documentSections).length} chars)`)
+      }
+      console.log(`   ✅ Project updated: ${parts.join(', ')}`)
     }
 
-    console.log('\n✅ Restore complete. Document collection grid + email/notification extras + blob are in production.')
+    console.log(
+      '\n✅ Restore complete. All DB-backed document collection data for this project is copied from backup.'
+    )
   } catch (err) {
     console.error('\n❌ Error:', err.message);
     if (err.code) console.error('   Code:', err.code);
