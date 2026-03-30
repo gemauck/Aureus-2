@@ -1654,6 +1654,8 @@ async function handler(req, res) {
               hasWeeklyFMSReviewProcess: true, // Include to show Weekly FMS Review tab in list
               hasTimeProcess: true, // Include so Time tab persists after refresh when opening from list
               hasMonthlyFMSReviewProcess: true, // Include so Monthly FMS tab persists after refresh when opening from list
+              hasMonthlyDataReviewProcess: true, // Include so Monthly Data Review tab persists after refresh when opening from list
+              hasComplianceReviewProcess: true, // Include so Compliance Review tab persists after refresh when opening from list
               ...(includeTaskCount ? {
                 _count: {
                   select: {
@@ -1698,6 +1700,8 @@ async function handler(req, res) {
                 hasWeeklyFMSReviewProcess: true,
                 hasTimeProcess: true,
                 hasMonthlyFMSReviewProcess: true,
+                hasMonthlyDataReviewProcess: true,
+                hasComplianceReviewProcess: true,
                 ...(includeTaskCount ? {
                   _count: {
                     select: {
@@ -2228,6 +2232,72 @@ async function handler(req, res) {
           updateData.hasMonthlyFMSReviewProcess = typeof body.hasMonthlyFMSReviewProcess === 'boolean'
             ? body.hasMonthlyFMSReviewProcess
             : Boolean(body.hasMonthlyFMSReviewProcess === true || body.hasMonthlyFMSReviewProcess === 'true' || body.hasMonthlyFMSReviewProcess === 1);
+        }
+
+        // Handle hasMonthlyDataReviewProcess separately if provided
+        if (body.hasMonthlyDataReviewProcess !== undefined && body.hasMonthlyDataReviewProcess !== null) {
+          updateData.hasMonthlyDataReviewProcess = typeof body.hasMonthlyDataReviewProcess === 'boolean'
+            ? body.hasMonthlyDataReviewProcess
+            : Boolean(body.hasMonthlyDataReviewProcess === true || body.hasMonthlyDataReviewProcess === 'true' || body.hasMonthlyDataReviewProcess === 1);
+        }
+
+        // Handle hasComplianceReviewProcess separately if provided
+        if (body.hasComplianceReviewProcess !== undefined && body.hasComplianceReviewProcess !== null) {
+          updateData.hasComplianceReviewProcess = typeof body.hasComplianceReviewProcess === 'boolean'
+            ? body.hasComplianceReviewProcess
+            : Boolean(body.hasComplianceReviewProcess === true || body.hasComplianceReviewProcess === 'true' || body.hasComplianceReviewProcess === 1);
+        }
+
+        // Handle monthlyDataReviewSections separately if provided - ensure it's properly saved
+        if (body.monthlyDataReviewSections !== undefined && body.monthlyDataReviewSections !== null) {
+          try {
+            if (typeof body.monthlyDataReviewSections === 'string') {
+              const trimmed = body.monthlyDataReviewSections.trim();
+              if (trimmed === '') {
+                updateData.monthlyDataReviewSections = JSON.stringify({});
+              } else {
+                try {
+                  JSON.parse(trimmed);
+                  updateData.monthlyDataReviewSections = trimmed;
+                } catch (parseError) {
+                  console.error('❌ Invalid monthlyDataReviewSections JSON string:', parseError);
+                  updateData.monthlyDataReviewSections = JSON.stringify(body.monthlyDataReviewSections);
+                }
+              }
+            } else if (typeof body.monthlyDataReviewSections === 'object' || Array.isArray(body.monthlyDataReviewSections)) {
+              updateData.monthlyDataReviewSections = JSON.stringify(body.monthlyDataReviewSections);
+            } else {
+              updateData.monthlyDataReviewSections = JSON.stringify(body.monthlyDataReviewSections);
+            }
+          } catch (error) {
+            console.error('❌ Error processing monthlyDataReviewSections:', error);
+          }
+        }
+
+        // Handle complianceReviewSections separately if provided - ensure it's properly saved
+        if (body.complianceReviewSections !== undefined && body.complianceReviewSections !== null) {
+          try {
+            if (typeof body.complianceReviewSections === 'string') {
+              const trimmed = body.complianceReviewSections.trim();
+              if (trimmed === '') {
+                updateData.complianceReviewSections = JSON.stringify({});
+              } else {
+                try {
+                  JSON.parse(trimmed);
+                  updateData.complianceReviewSections = trimmed;
+                } catch (parseError) {
+                  console.error('❌ Invalid complianceReviewSections JSON string:', parseError);
+                  updateData.complianceReviewSections = JSON.stringify(body.complianceReviewSections);
+                }
+              }
+            } else if (typeof body.complianceReviewSections === 'object' || Array.isArray(body.complianceReviewSections)) {
+              updateData.complianceReviewSections = JSON.stringify(body.complianceReviewSections);
+            } else {
+              updateData.complianceReviewSections = JSON.stringify(body.complianceReviewSections);
+            }
+          } catch (error) {
+            console.error('❌ Error processing complianceReviewSections:', error);
+          }
         }
 
         // Handle monthlyProgress separately if provided - with validation for safety
