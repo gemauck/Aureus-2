@@ -50,8 +50,15 @@ async function handler(req, res) {
       console.warn('⚠️ document-sections-v2: failed to parse blob:', blobErr.message)
     }
 
-    // When table returns null/empty, use blob as primary source (preserves emailRequestByMonth)
-    if ((documentSections == null || (typeof documentSections === 'object' && Object.keys(documentSections).length === 0)) && blob && typeof blob === 'object' && !Array.isArray(blob)) {
+    // When table returns null/empty, use blob as primary source (preserves emailRequestByMonth).
+    // Include legacy top-level arrays — old saves stored sections as [] on Project.documentSections;
+    // excluding arrays made the API return {} and the tracker showed "No sections yet".
+    const tableEmpty =
+      documentSections == null ||
+      (typeof documentSections === 'object' &&
+        !Array.isArray(documentSections) &&
+        Object.keys(documentSections).length === 0)
+    if (tableEmpty && blob != null && typeof blob === 'object') {
       documentSections = blob
     } else {
       documentSections = documentSections != null ? documentSections : {}
