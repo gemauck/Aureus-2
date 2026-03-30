@@ -4050,9 +4050,10 @@ const baseTextColorClass = statusConfig && statusConfig.color
         
         const monthSeparatorClass = isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200';
         const isList = variant === 'list';
+        const isCompactComplianceTable = isComplianceReview && !isList;
         const outerClassName = isList
             ? `px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-600 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-gray-900' : ''}`
-            : `px-3 py-1.5 text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`;
+            : `px-3 ${isCompactComplianceTable ? 'py-1' : 'py-1.5'} text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`;
         const innerWidthClass = isList ? 'w-full min-w-0' : 'relative w-full min-w-0';
         const OuterTag = isList ? 'div' : 'td';
         const outerProps = isList
@@ -4141,7 +4142,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
+                        className={`w-full pl-2 pr-20 ${isCompactComplianceTable ? 'py-1' : 'py-1.5'} text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
                     >
                         <option value="">—</option>
                         {statusOptions.map(option => (
@@ -4323,6 +4324,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
 
     const renderNotesCell = (section, doc, month, options = {}) => {
         const { variant = 'table' } = options;
+        const isCompactComplianceTable = isComplianceReview && variant !== 'list';
         const notes = getDocumentNotes(doc, month);
         const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
@@ -4344,8 +4346,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
                     saveToDatabase();
                 }}
                 placeholder="Notes..."
-                rows={variant === 'list' ? 2 : 3}
-                className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent dark:bg-gray-800/50"
+                rows={variant === 'list' ? 2 : (isComplianceReview ? 2 : 3)}
+                className={`w-full min-w-0 px-2 ${isCompactComplianceTable ? 'py-1' : 'py-1.5'} text-xs border border-gray-200 dark:border-gray-600 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent dark:bg-gray-800/50`}
                 aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
             />
         );
@@ -4361,7 +4363,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
         }
         return (
             <td
-                className={`px-2 py-1.5 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
+                className={`px-2 ${isCompactComplianceTable ? 'py-1' : 'py-1.5'} text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
                 style={{ minWidth: jsonTrackerNotesColPx, width: jsonTrackerNotesColPx }}
             >
