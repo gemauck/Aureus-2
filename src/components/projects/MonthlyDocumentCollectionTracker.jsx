@@ -204,7 +204,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
     const showedPropDataRef = useRef(false); // True when we showed prop data so background fetch failure doesn't clear it
     const userSelectedYearRef = useRef(false); // Track manual year selection to avoid auto-switching
-    const normalizationCacheRef = useRef(new Map()); // normalizeSectionsByYear memoization; cleared when project changes
     
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : isComplianceReview ? `complianceReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
@@ -259,7 +258,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     useEffect(() => {
         userSelectedYearRef.current = false;
-        normalizationCacheRef.current.clear();
     }, [project?.id]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
@@ -432,11 +430,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return {}; // Empty object is valid - means no sections for any year
         }
 
-        // PERFORMANCE: Use cache for identical inputs (common when re-rendering)
-        const cacheKey = `${typeof rawValue === 'string' ? rawValue.substring(0, 100) : JSON.stringify(rawValue).substring(0, 100)}_${fallbackYear || 'default'}`;
-        if (normalizationCacheRef.current.has(cacheKey)) {
-            return normalizationCacheRef.current.get(cacheKey);
-        }
+        // Do NOT cache by a short prefix of JSON: deleting a later section (e.g. "File 7") leaves the
+        // prefix unchanged, so a cache hit would resurrect removed rows after reload/refetch.
 
         let parsedValue = rawValue;
 
@@ -444,32 +439,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const trimmed = rawValue.trim();
             if (!trimmed) return {};
             try {
-                // OPTIMIZATION: Use faster JSON.parse for most cases
                 parsedValue = JSON.parse(trimmed);
             } catch {
-                // Only use slow parseSections if JSON.parse fails
                 parsedValue = parseSections(rawValue);
             }
         }
 
         if (parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)) {
             const result = {};
-            // OPTIMIZATION: Process in batches to avoid blocking
             const yearKeys = Object.keys(parsedValue);
             for (let i = 0; i < yearKeys.length; i++) {
                 const yearKey = yearKeys[i];
                 const value = parsedValue[yearKey];
                 result[yearKey] = Array.isArray(value) ? value : parseSections(value);
             }
-            
-            // Cache result
-            normalizationCacheRef.current.set(cacheKey, result);
-            // Limit cache size to prevent memory issues
-            if (normalizationCacheRef.current.size > 50) {
-                const firstKey = normalizationCacheRef.current.keys().next().value;
-                normalizationCacheRef.current.delete(firstKey);
-            }
-            
             return result;
         }
 
@@ -483,18 +466,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return {};
         }
 
-        const result = {
+        return {
             [targetYear]: cloneSectionsArray(baseSections)
         };
-        
-        // Cache result
-        normalizationCacheRef.current.set(cacheKey, result);
-        if (normalizationCacheRef.current.size > 50) {
-            const firstKey = normalizationCacheRef.current.keys().next().value;
-            normalizationCacheRef.current.delete(firstKey);
-        }
-        
-        return result;
     };
     
     // ============================================================
