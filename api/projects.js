@@ -554,6 +554,36 @@ function buildDocumentNotesMap(sectionsByYear) {
 }
 
 /**
+ * Parse raw `documentSections` from an API body (string or object).
+ * @returns {any|null|undefined} Parsed value, null for empty string, undefined on JSON error
+ */
+function parseDocumentSectionsBody(raw) {
+  if (raw == null) return null
+  if (typeof raw === 'string') {
+    const t = raw.trim()
+    if (!t) return null
+    try {
+      return JSON.parse(t)
+    } catch {
+      return undefined
+    }
+  }
+  if (typeof raw === 'object') return raw
+  return undefined
+}
+
+/**
+ * True if payload has at least one section row to persist (non-empty year bucket or legacy array).
+ * Refuse "{}" / "[]" / all-empty years so we never delete-all then insert-nothing (accidental wipe).
+ */
+function documentSectionsPayloadHasRows(value) {
+  if (value == null) return false
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value !== 'object') return false
+  return Object.values(value).some((v) => Array.isArray(v) && v.length > 0)
+}
+
+/**
  * Save documentSections JSON to table structure
  * @param {string} projectId
  * @param {object|string} jsonData
@@ -583,6 +613,14 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
         console.error('❌ Error parsing documentSections JSON string:', parseError);
         throw new Error(`Invalid JSON in documentSections: ${parseError.message}`);
       }
+    }
+
+    if (!documentSectionsPayloadHasRows(sections)) {
+      console.warn(
+        '⚠️ saveDocumentSectionsToTable: Refusing empty documentSections payload (prevents delete-all + insert-nothing wipe). projectId=' +
+          projectId
+      )
+      return
     }
 
     // Preserve comments that exist on the server but are missing from the payload (e.g. another tab or status-only save)
@@ -641,11 +679,6 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
       where: { projectId }
     });
     console.log(`🗑️ Deleted ${deletedCount.count} existing document sections for project ${projectId}`);
-
-    if (!sections || (typeof sections === 'object' && Object.keys(sections).length === 0)) {
-      console.log('⚠️ saveDocumentSectionsToTable: Empty sections data, nothing to save');
-      return;
-    }
 
     // Handle year-based structure: { "2024": [...], "2025": [...] }
     if (typeof sections === 'object' && !Array.isArray(sections)) {
@@ -2103,40 +2136,37 @@ async function handler(req, res) {
         
         // Handle documentSections separately if provided - ensure it's properly saved
         if (body.documentSections !== undefined && body.documentSections !== null) {
-          try {
-            if (typeof body.documentSections === 'string') {
-              // Already a string, validate it's valid JSON
-              const trimmed = body.documentSections.trim();
-              if (trimmed === '') {
-                // Empty string means empty array
-                updateData.documentSections = JSON.stringify([]);
-              } else {
-                try {
-                  // Validate it's valid JSON
-                  const parsed = JSON.parse(trimmed);
-                  // If it parsed successfully, use it as-is (it's already a stringified JSON)
-                  updateData.documentSections = trimmed;
-                } catch (parseError) {
-                  console.error('❌ Invalid documentSections JSON string:', parseError);
-                  // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
-                  updateData.documentSections = JSON.stringify(body.documentSections);
+          const parsedDocSecProbe = parseDocumentSectionsBody(body.documentSections)
+          if (parsedDocSecProbe === undefined) {
+            console.error('❌ Invalid documentSections JSON in projects.js PUT')
+          } else if (!documentSectionsPayloadHasRows(parsedDocSecProbe)) {
+            console.warn('⚠️ projects.js PUT: Ignoring empty documentSections (wipe protection)')
+          } else {
+            try {
+              if (typeof body.documentSections === 'string') {
+                const trimmed = body.documentSections.trim();
+                if (trimmed === '') {
+                  updateData.documentSections = JSON.stringify([]);
+                } else {
+                  try {
+                    JSON.parse(trimmed);
+                    updateData.documentSections = trimmed;
+                  } catch (parseError) {
+                    console.error('❌ Invalid documentSections JSON string:', parseError);
+                    updateData.documentSections = JSON.stringify(body.documentSections);
+                  }
                 }
+              } else if (Array.isArray(body.documentSections)) {
+                updateData.documentSections = JSON.stringify(body.documentSections);
+              } else if (typeof body.documentSections === 'object') {
+                updateData.documentSections = JSON.stringify(body.documentSections);
+              } else {
+                updateData.documentSections = JSON.stringify(body.documentSections);
               }
-            } else if (Array.isArray(body.documentSections)) {
-              // It's an array, stringify it
-              updateData.documentSections = JSON.stringify(body.documentSections);
-            } else if (typeof body.documentSections === 'object') {
-              // It's an object, stringify it
-              updateData.documentSections = JSON.stringify(body.documentSections);
-            } else {
-              // It's something else (number, boolean, etc.), stringify it
-              updateData.documentSections = JSON.stringify(body.documentSections);
+            } catch (error) {
+              console.error('❌ Error processing documentSections:', error);
             }
-          } catch (error) {
-            console.error('❌ Error processing documentSections:', error);
-            // Don't fail the entire update, but log the error
           }
-        } else {
         }
 
         // Handle weeklyFMSReviewSections separately if provided - ensure it's properly saved
@@ -2367,8 +2397,12 @@ async function handler(req, res) {
             console.warn('⚠️ hasDocumentCollectionProcess NOT in updateData - will not be updated');
           }
           
-          // Save to tables if documentSections or weeklyFMSReviewSections are being updated
-          if (body.documentSections !== undefined && body.documentSections !== null) {
+          // Save to tables if documentSections has real rows (empty payload refused — wipe protection)
+          if (
+            body.documentSections !== undefined &&
+            body.documentSections !== null &&
+            documentSectionsPayloadHasRows(parseDocumentSectionsBody(body.documentSections))
+          ) {
             await saveDocumentSectionsToTable(id, body.documentSections, getActivityUserFromRequest(req))
           }
           // Weekly FMS: source of truth is Project.weeklyFMSReviewSections JSON only. Skip table save
@@ -2511,5 +2545,5 @@ async function handler(req, res) {
   }
 }
 
-export { buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson }
+export { buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, parseDocumentSectionsBody, documentSectionsPayloadHasRows, saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson }
 export default withHttp(withLogging(authRequired(handler)))

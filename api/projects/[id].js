@@ -4,7 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap } from '../projects.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, parseDocumentSectionsBody, documentSectionsPayloadHasRows } from '../projects.js'
 import { logProjectActivity, getActivityUserFromRequest } from '../_lib/projectActivityLog.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
@@ -1220,41 +1220,37 @@ async function handler(req, res) {
       
       // Handle documentSections separately if provided - ensure it's properly saved
       if (body.documentSections !== undefined && body.documentSections !== null) {
-        try {
-          
-          if (typeof body.documentSections === 'string') {
-            // Already a string, validate it's valid JSON
-            const trimmed = body.documentSections.trim();
-            if (trimmed === '') {
-              // Empty string means empty array
-              updateData.documentSections = JSON.stringify([]);
-            } else {
-              try {
-                // Validate it's valid JSON
-                const parsed = JSON.parse(trimmed);
-                // If it parsed successfully, use it as-is (it's already a stringified JSON)
-                updateData.documentSections = trimmed;
-              } catch (parseError) {
-                console.error('❌ Invalid documentSections JSON string:', parseError);
-                // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
-                updateData.documentSections = JSON.stringify(body.documentSections);
+        const parsedDocSecProbe = parseDocumentSectionsBody(body.documentSections)
+        if (parsedDocSecProbe === undefined) {
+          console.error('❌ Invalid documentSections JSON in PUT /api/projects/[id]')
+        } else if (!documentSectionsPayloadHasRows(parsedDocSecProbe)) {
+          console.warn('⚠️ PUT /api/projects/[id]: Ignoring empty documentSections (wipe protection)')
+        } else {
+          try {
+            if (typeof body.documentSections === 'string') {
+              const trimmed = body.documentSections.trim();
+              if (trimmed === '') {
+                updateData.documentSections = JSON.stringify([]);
+              } else {
+                try {
+                  JSON.parse(trimmed);
+                  updateData.documentSections = trimmed;
+                } catch (parseError) {
+                  console.error('❌ Invalid documentSections JSON string:', parseError);
+                  updateData.documentSections = JSON.stringify(body.documentSections);
+                }
               }
+            } else if (Array.isArray(body.documentSections)) {
+              updateData.documentSections = JSON.stringify(body.documentSections);
+            } else if (typeof body.documentSections === 'object') {
+              updateData.documentSections = JSON.stringify(body.documentSections);
+            } else {
+              updateData.documentSections = JSON.stringify(body.documentSections);
             }
-          } else if (Array.isArray(body.documentSections)) {
-            // It's an array, stringify it
-            updateData.documentSections = JSON.stringify(body.documentSections);
-          } else if (typeof body.documentSections === 'object') {
-            // It's an object, stringify it
-            updateData.documentSections = JSON.stringify(body.documentSections);
-          } else {
-            // It's something else (number, boolean, etc.), stringify it
-            updateData.documentSections = JSON.stringify(body.documentSections);
+          } catch (error) {
+            console.error('❌ Error processing documentSections:', error);
           }
-        } catch (error) {
-          console.error('❌ Error processing documentSections:', error);
-          // Don't fail the entire update, but log the error
         }
-      } else {
       }
       
       // Handle weeklyFMSReviewSections separately if provided - ensure it's properly saved
@@ -1577,7 +1573,11 @@ async function handler(req, res) {
           // CRITICAL: Save documentSections and weeklyFMSReviewSections to tables
           // The GET endpoint reads from tables, so we must save to tables for persistence
           // Pass the original body value (could be string or object) - save functions handle both
-          if (body.documentSections !== undefined && body.documentSections !== null) {
+          if (
+            body.documentSections !== undefined &&
+            body.documentSections !== null &&
+            documentSectionsPayloadHasRows(parseDocumentSectionsBody(body.documentSections))
+          ) {
             try {
               if (process.env.NODE_ENV === 'development') {
                 console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', { projectId: id });
