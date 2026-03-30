@@ -163,8 +163,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const isComplianceReview = dataSource === 'complianceReview';
     const isJsonOnlyTracker = isMonthlyDataReview || isComplianceReview;
     // Month grid column widths (Data Review, Compliance Review, Document Collection)
-    const jsonTrackerStatusColPx = 360;
-    const jsonTrackerNotesColPx = 340;
+    const jsonTrackerStatusColPx = isComplianceReview ? 300 : 360;
+    const jsonTrackerNotesColPx = isComplianceReview ? 280 : 340;
     const documentCollectionMonthColMinPx = 240;
     const getProjectSectionsField = (proj) => {
         if (dataSource === 'monthlyDataReview') return proj?.monthlyDataReviewSections;
