@@ -1053,7 +1053,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         } finally {
             setIsLoading(false);
         }
-    }, [project?.id, project?.documentSections, project?.monthlyDataReviewSections, project?.complianceReviewSections, selectedYear, isJsonOnlyTracker, dataSource]);
+    // Note: do not depend on selectedYear — API returns all years; reloading on year change was redundant
+    // and could race with saves. Year is only for normalizeSectionsByYear when provided via URL.
+    }, [project?.id, project?.documentSections, project?.monthlyDataReviewSections, project?.complianceReviewSections, isJsonOnlyTracker, dataSource]);
     
     // Load data on mount and when project/year changes
     useEffect(() => {
@@ -7486,7 +7488,12 @@ Abcotronics`;
                                         <p className="text-sm text-sky-600 dark:text-sky-400 mt-2">Change the <strong>Year</strong> dropdown above, or click below to view that year.</p>
                                     </>
                                 ) : (
-                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Create your first section to start organizing documents</p>
+                                    <>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Create your first section to start organizing documents, or apply a <strong>Template</strong> from the menu above.</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-2 max-w-md mx-auto">
+                                            If this project used to have a full grid, the server may have no rows saved yet (new project, or data not migrated from an old export). In DevTools → Network, open <code className="bg-gray-100 dark:bg-gray-800 px-0.5 rounded">document-sections-v2</code>: a <strong>200</strong> body of <code className="bg-gray-100 dark:bg-gray-800 px-0.5 rounded">{'{}'}</code> or empty years means there is nothing in the database to show—not a display bug.
+                                        </p>
+                                    </>
                                 )}
                                 {!hasDataInOtherYears && (
                                 <p className="text-xs text-amber-700 dark:text-amber-300 mt-3 p-2 bg-amber-50 dark:bg-amber-900/30 rounded border border-amber-200 dark:border-amber-700">
