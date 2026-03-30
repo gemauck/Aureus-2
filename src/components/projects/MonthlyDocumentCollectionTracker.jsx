@@ -162,7 +162,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const isMonthlyDataReview = dataSource === 'monthlyDataReview';
     const isComplianceReview = dataSource === 'complianceReview';
     /** API `DocumentCollectionTemplate.type` for list/create in this tracker context */
-    const templateApiType = isMonthlyDataReview ? 'monthly-data-review' : 'document-collection';
+    const templateApiType = isMonthlyDataReview
+        ? 'monthly-data-review'
+        : isComplianceReview
+            ? 'compliance-review'
+            : 'document-collection';
     const isJsonOnlyTracker = isMonthlyDataReview || isComplianceReview;
     // Month grid column widths (Data Review, Compliance Review, Document Collection)
     const jsonTrackerStatusColPx = isComplianceReview ? 280 : 360;
@@ -372,6 +376,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         } catch {
             return Array.isArray(sections) ? [...sections] : [];
         }
+    };
+
+    /**
+     * Deep-link / URL year: copy another year's sections only when the target year is absent from storage.
+     * If the year exists as [] (explicit empty after deletes), do not resurrect rows from another year.
+     */
+    const seedUrlYearFromOtherYearsIfMissing = (normalized, urlYearForNormalize) => {
+        if (urlYearForNormalize == null || !normalized || typeof normalized !== 'object') return normalized;
+        const yKey = String(urlYearForNormalize);
+        if (Object.prototype.hasOwnProperty.call(normalized, yKey)) {
+            const yearEntry = normalized[yKey];
+            if (Array.isArray(yearEntry) && yearEntry.length === 0) return normalized;
+            if (Array.isArray(yearEntry) && yearEntry.length > 0) return normalized;
+            if (yearEntry != null && !Array.isArray(yearEntry)) return normalized;
+        }
+        const otherYears = Object.keys(normalized).filter(y => Array.isArray(normalized[y]) && normalized[y].length > 0);
+        if (otherYears.length === 0) return normalized;
+        const sourceYear = otherYears[0];
+        const cloned = cloneSectionsArray(normalized[sourceYear]);
+        return { ...normalized, [yKey]: cloned };
     };
 
     const yearMapHasSections = (byYear) => {
@@ -793,6 +817,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         // Don't reload if we're currently saving - wait for save to complete
         if (isSavingRef.current) {
             console.log('⏸️ Load skipped: save in progress');
+            return;
+        }
+        if (isDeletingRef.current) {
+            console.log('⏸️ Load skipped: section deletion in progress');
             return;
         }
 
@@ -1487,6 +1515,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     },
                     body: JSON.stringify({
                         ...templateData,
+                        type: editingTemplate?.type || templateApiType,
                         updatedBy: currentUser.name || currentUser.email
                     })
                 });
@@ -1505,6 +1534,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     },
                     body: JSON.stringify({
                         ...templateData,
+                        type: templateApiType,
                         createdBy: currentUser.name || currentUser.email,
                         updatedBy: currentUser.name || currentUser.email
                     })
