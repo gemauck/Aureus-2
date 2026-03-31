@@ -7633,8 +7633,8 @@ Abcotronics`;
                                 </div>
                             ) : (
                                 <>
-                            {/* Scrollable month/document grid for this section only (no overflow-hidden on section card — it breaks sticky thead) */}
-                                <div data-scroll-sync className="overflow-x-auto overflow-y-visible rounded-b-xl">
+                            {/* Horizontal scroll only: overflow-x:auto with overflow-y:visible computes to y=auto and breaks sticky thead in Chromium; clip keeps vertical stickiness to the viewport. */}
+                                <div data-scroll-sync className="overflow-x-auto overflow-y-clip rounded-b-xl">
                                     <table className="min-w-full border-separate border-spacing-0 divide-y divide-gray-200 dark:divide-gray-600">
                                         <thead className="bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 relative">
                                         {isJsonOnlyTracker ? (
