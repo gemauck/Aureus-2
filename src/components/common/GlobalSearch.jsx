@@ -7,14 +7,15 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(-1);
-    const searchRef = useRef(null);
+    const containerRef = useRef(null);
+    const inputRef = useRef(null);
     const resultsRef = useRef(null);
     
     useEffect(() => {
         const handleKeyDown = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
-                searchRef.current?.focus();
+                inputRef.current?.focus();
             }
             if (e.key === 'Escape') {
                 setIsOpen(false);
@@ -28,7 +29,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
     
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (searchRef.current && !searchRef.current.contains(event.target)) {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
                 setIsOpen(false);
             }
         };
@@ -127,11 +128,11 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
     };
     
     return (
-        <div className={`relative ${isMobile ? 'w-full' : 'flex-1 min-w-0 max-w-xl'}`}>
+        <div ref={containerRef} className={`relative ${isMobile ? 'w-full' : 'flex-1 min-w-0 max-w-xl'}`}>
             {/* Search Input */}
             <div className={`relative ${isMobile ? 'block w-full' : 'hidden lg:block w-full'}`}>
                 <input
-                    ref={searchRef}
+                    ref={inputRef}
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
