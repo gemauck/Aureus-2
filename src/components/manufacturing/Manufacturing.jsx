@@ -9521,12 +9521,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     // Sync editFormData and selectedDetailLocationId when item changes
     useEffect(() => {
       setEditFormData({ ...item });
-      const locs = Array.isArray(item.locations) ? item.locations : [];
       const defaultLocationId = getDefaultDetailLocationId(item);
-      setSelectedDetailLocationId((prev) => {
-        if (locs.some((l) => l.locationId === prev)) return prev;
-        return defaultLocationId;
-      });
+      setSelectedDetailLocationId(defaultLocationId);
     }, [item]);
 
     // Best practice: sync location with URL so selected location is shareable and survives refresh
