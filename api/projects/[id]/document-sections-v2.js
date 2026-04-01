@@ -71,20 +71,26 @@ async function handler(req, res) {
           const blobSections = blob[year]
           const outSections = documentSections[year]
           if (!Array.isArray(blobSections) || !Array.isArray(outSections)) continue
-          for (let si = 0; si < blobSections.length && si < outSections.length; si++) {
-            const blobDocs = blobSections[si].documents || []
-            const outDocs = outSections[si].documents || []
-            for (let di = 0; di < blobDocs.length && di < outDocs.length; di++) {
-              if (blobDocs[di].emailRequestByMonth && typeof blobDocs[di].emailRequestByMonth === 'object') {
-                outDocs[di].emailRequestByMonth = blobDocs[di].emailRequestByMonth
-              }
-            }
-            // Fallback: match by document id/name when index might misalign
+          for (let si = 0; si < outSections.length; si++) {
+            const outSection = outSections[si] || {}
+            const outSectionId = outSection.id
+            const outSectionName = outSection.name
+            const blobSectionByIdentity = blobSections.find((s) =>
+              String(s?.id) === String(outSectionId) ||
+              (s?.name && outSectionName && String(s.name) === String(outSectionName))
+            )
+            const blobSection = blobSectionByIdentity || blobSections[si] || {}
+            const blobDocs = Array.isArray(blobSection.documents) ? blobSection.documents : []
+            const outDocs = Array.isArray(outSection.documents) ? outSection.documents : []
+
             for (let di = 0; di < outDocs.length; di++) {
-              if (outDocs[di].emailRequestByMonth) continue
-              const outDocId = outDocs[di].id
-              const outDocName = outDocs[di].name
-              const blobDoc = blobDocs.find((d) => String(d.id) === String(outDocId) || (d.name && String(d.name) === String(outDocName)))
+              if (outDocs[di]?.emailRequestByMonth) continue
+              const outDocId = outDocs[di]?.id
+              const outDocName = outDocs[di]?.name
+              const blobDoc = blobDocs.find((d) =>
+                String(d?.id) === String(outDocId) ||
+                (d?.name && outDocName && String(d.name) === String(outDocName))
+              )
               if (blobDoc?.emailRequestByMonth && typeof blobDoc.emailRequestByMonth === 'object') {
                 outDocs[di].emailRequestByMonth = blobDoc.emailRequestByMonth
               }
