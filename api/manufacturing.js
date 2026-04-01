@@ -34,6 +34,47 @@ const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {
   return 'out_of_stock'
 }
 
+/** Prefer same ordering as buildAllLocationsInventoryResponse templateBySku (stable when duplicate SKUs exist). */
+async function findCanonicalInventoryItemBySkuTx(tx, sku) {
+  if (!sku) return null
+  const rows = await tx.inventoryItem.findMany({
+    where: { sku },
+    orderBy: [{ locationId: 'asc' }, { updatedAt: 'desc' }]
+  })
+  return rows[0] || null
+}
+
+/**
+ * Inventory list totals are derived from LocationInventory. Adjustments must apply there or on-hand will stay 0
+ * even though StockMovement / InventoryItem.quantity were updated.
+ */
+async function resolveAdjustmentLocationIdTx(tx, { fromLocationId, toLocationId, itemLocationId, fromStr, toStr }) {
+  let locationId = fromLocationId || toLocationId || itemLocationId || null
+  if (locationId) return locationId
+
+  async function resolveStr(str) {
+    const s = (str || '').trim()
+    if (!s) return null
+    const loc = await tx.stockLocation.findFirst({
+      where: {
+        OR: [{ id: s }, { code: s }, { name: { equals: s, mode: 'insensitive' } }]
+      }
+    })
+    return loc?.id || null
+  }
+
+  locationId = await resolveStr(fromStr)
+  if (locationId) return locationId
+  locationId = await resolveStr(toStr)
+  if (locationId) return locationId
+
+  const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
+  if (mainWarehouse) return mainWarehouse.id
+
+  const anyLoc = await tx.stockLocation.findFirst({ orderBy: { code: 'asc' } })
+  return anyLoc?.id || null
+}
+
 const buildInventoryClone = (baseItem, location, overrides = {}) => ({
   sku: baseItem.sku,
   name: baseItem.name,
@@ -360,14 +401,15 @@ async function buildAllLocationsInventoryResponse() {
   // Add rows for SKUs that have a template but no LocationInventory (0 stock everywhere)
   for (const [sku, template] of templateBySku) {
     if (!bySku.has(sku)) {
+      const tmplQty = template.quantity ?? 0
       bySku.set(sku, {
         ...template,
         id: template.id || null,
         inventoryItemId: template.id || null,
         sku,
         name: template.name || sku,
-        quantity: 0,
-        totalValue: 0,
+        quantity: tmplQty,
+        totalValue: (template.unitCost ?? 0) * tmplQty,
         allocatedQuantity: template.allocatedQuantity || 0, // template-level only
         inProductionQuantity: template.inProductionQuantity || 0,
         completedQuantity: template.completedQuantity || 0,
@@ -735,7 +777,7 @@ async function handler(req, res) {
           }
 
           // Ensure InventoryItem exists
-          let master = await tx.inventoryItem.findFirst({ where: { sku: body.sku } })
+          let master = await findCanonicalInventoryItemBySkuTx(tx, body.sku)
           if (!master && type !== 'sale' && type !== 'adjustment') {
             // Create with required fields first
             const createData = {
@@ -831,21 +873,17 @@ async function handler(req, res) {
           }
 
           if (type === 'sale' || type === 'adjustment') {
-            // For adjustments, default to item's location or main warehouse if not specified
             let locationId = body.fromLocationId || body.locationId
-            if (!locationId && type === 'adjustment' && master) {
-              locationId = master.locationId
-            }
-            if (!locationId && type === 'adjustment') {
-              // Default to main warehouse for adjustments if no location specified
-              const mainWarehouse = await tx.stockLocation.findFirst({ 
-                where: { code: 'LOC001' } 
+            if (type === 'adjustment') {
+              locationId = await resolveAdjustmentLocationIdTx(tx, {
+                fromLocationId: body.fromLocationId || body.locationId,
+                toLocationId: body.toLocationId,
+                itemLocationId: master?.locationId,
+                fromStr: body.fromLocation,
+                toStr: body.toLocation
               })
-              if (mainWarehouse) {
-                locationId = mainWarehouse.id
-              }
             }
-            if (!locationId) return badRequest(res, 'locationId required for sale/adjustment')
+            if (!locationId) return badRequest(res, 'locationId required for sale/adjustment (create a stock location if none exist)')
             const fromLi = await upsertLocationSku(locationId)
             // For adjustments, use quantity directly (can be positive or negative)
             // For sales, always make it negative
@@ -3372,6 +3410,19 @@ async function handler(req, res) {
             const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
             if (mainWarehouse) toLocationId = mainWarehouse.id
           }
+          if (type === 'adjustment') {
+            const adjustmentLocationId = await resolveAdjustmentLocationIdTx(tx, {
+              fromLocationId,
+              toLocationId,
+              itemLocationId: null,
+              fromStr,
+              toStr
+            })
+            if (!adjustmentLocationId) {
+              throw new Error('No stock location configured. Create at least one location, then record the adjustment again.')
+            }
+            if (!fromLocationId && !toLocationId) fromLocationId = adjustmentLocationId
+          }
 
           // Helper to get or create LocationInventory record
           async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
@@ -3430,7 +3481,7 @@ async function handler(req, res) {
           })
 
           // Fetch existing inventory item by SKU
-          let item = await tx.inventoryItem.findFirst({ where: { sku: body.sku } })
+          let item = await findCanonicalInventoryItemBySkuTx(tx, body.sku)
 
           let newQuantity = item?.quantity || 0
 
@@ -3769,65 +3820,43 @@ async function handler(req, res) {
               })
             }
             
-            // Update LocationInventory for adjustment
-            // Default to item's location or main warehouse if no location specified
-            let locationId = fromLocationId || toLocationId || item?.locationId
+            // LocationInventory drives Manufacturing → Inventory totals; never master-only for adjustments.
+            const locationId = await resolveAdjustmentLocationIdTx(tx, {
+              fromLocationId,
+              toLocationId,
+              itemLocationId: item?.locationId,
+              fromStr,
+              toStr
+            })
+
             if (!locationId) {
-              // Default to main warehouse for adjustments if no location specified
-              const mainWarehouse = await tx.stockLocation.findFirst({ 
-                where: { code: 'LOC001' } 
-              })
-              if (mainWarehouse) {
-                locationId = mainWarehouse.id
-              }
+              throw new Error('No stock location configured. Create at least one location, then record the adjustment again.')
             }
-            
-            // Always update LocationInventory for adjustments (required for proper aggregation)
-            if (locationId) {
-              await upsertLocationInventory(
-                locationId,
-                body.sku,
-                body.itemName,
-                quantity,
-                parseFloat(body.unitCost) || undefined,
-                parseFloat(body.reorderPoint) || undefined
-              )
-              
-              // Recalculate master aggregate from all locations
-              const totalAtLocations = await tx.locationInventory.aggregate({ 
-                _sum: { quantity: true }, 
-                where: { sku: body.sku } 
+
+            await upsertLocationInventory(
+              locationId,
+              body.sku,
+              body.itemName,
+              quantity,
+              parseFloat(body.unitCost) || undefined,
+              parseFloat(body.reorderPoint) || undefined
+            )
+
+            const totalAtLocations = await tx.locationInventory.aggregate({
+              _sum: { quantity: true },
+              where: { sku: body.sku }
+            })
+            const aggQty = totalAtLocations._sum.quantity || 0
+
+            if (item) {
+              item = await tx.inventoryItem.update({
+                where: { id: item.id },
+                data: {
+                  quantity: aggQty,
+                  totalValue: aggQty * (item.unitCost || 0),
+                  status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
+                }
               })
-              const aggQty = totalAtLocations._sum.quantity || 0
-              
-              if (item) {
-                item = await tx.inventoryItem.update({
-                  where: { id: item.id },
-                  data: {
-                    quantity: aggQty,
-                    totalValue: aggQty * (item.unitCost || 0),
-                    status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
-                  }
-                })
-              }
-            } else {
-              // If no location exists at all, update master inventory directly (fallback)
-              // This should rarely happen, but ensures adjustments still work
-              console.warn('⚠️ No location found for adjustment, updating master inventory directly')
-              if (item) {
-                newQuantity = (item.quantity || 0) + quantity
-                const totalValue = newQuantity * (item.unitCost || 0)
-                const reorderPoint = item.reorderPoint || 0
-                const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
-                item = await tx.inventoryItem.update({
-                  where: { id: item.id },
-                  data: {
-                    quantity: newQuantity,
-                    totalValue,
-                    status
-                  }
-                })
-              }
             }
           }
 

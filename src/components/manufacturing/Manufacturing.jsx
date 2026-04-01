@@ -5040,7 +5040,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         }
       }
 
-      // Require location selection for transfer/consumption/receipt/production
+      // Require location selection for transfer/consumption/receipt/production/adjustment
       const type = formData.type || 'receipt';
       if (type === 'transfer') {
         if (!formData.fromLocationId || !formData.toLocationId) {
@@ -5059,6 +5059,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       } else if (type === 'receipt' || type === 'production') {
         if (!formData.toLocationId) {
           alert('Please select To Location for ' + (type === 'receipt' ? 'receipt' : 'production') + '.');
+          return;
+        }
+      } else if (type === 'adjustment') {
+        if (!formData.fromLocationId && !formData.toLocationId) {
+          alert('Please select a location for the adjustment.');
           return;
         }
       }
@@ -9386,11 +9391,24 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (!viewingInventoryItemDetail) return null;
 
     const item = viewingInventoryItemDetail;
+    const getDefaultDetailLocationId = (inventoryItem) => {
+      const locations = Array.isArray(inventoryItem?.locations) ? inventoryItem.locations : [];
+      if (!locations.length) return inventoryItem?.locationId || '';
+
+      const pmbLocation = locations.find((loc) => {
+        const code = String(loc?.locationCode || '').trim().toLowerCase();
+        const name = String(loc?.locationName || '').trim().toLowerCase();
+        return code === 'pmb' || name === 'pmb' || name.includes('pmb');
+      });
+
+      return pmbLocation?.locationId || inventoryItem?.locationId || locations[0]?.locationId || '';
+    };
+
     const [editFormData, setEditFormData] = useState({ ...item });
     const [localShowCategoryInput, setLocalShowCategoryInput] = useState(false);
     const [localNewCategoryName, setLocalNewCategoryName] = useState('');
     const [selectedMovementTemplateId, setSelectedMovementTemplateId] = useState('');
-    const [selectedDetailLocationId, setSelectedDetailLocationId] = useState(item.locationId || (item.locations && item.locations[0]?.locationId) || '');
+    const [selectedDetailLocationId, setSelectedDetailLocationId] = useState(() => getDefaultDetailLocationId(item));
 
     const detailLocations = Array.isArray(item.locations) ? item.locations : (item.locationId && item.location ? [{ locationId: item.locationId, locationName: item.location, locationCode: '', quantity: item.quantity || 0, status: item.status }] : []);
 
@@ -9504,8 +9522,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     useEffect(() => {
       setEditFormData({ ...item });
       const locs = Array.isArray(item.locations) ? item.locations : [];
-      const firstId = item.locationId || (locs[0]?.locationId) || '';
-      setSelectedDetailLocationId(prev => (locs.some(l => l.locationId === prev) || !prev ? prev : firstId));
+      const defaultLocationId = getDefaultDetailLocationId(item);
+      setSelectedDetailLocationId((prev) => {
+        if (locs.some((l) => l.locationId === prev)) return prev;
+        return defaultLocationId;
+      });
     }, [item]);
 
     // Best practice: sync location with URL so selected location is shareable and survives refresh
