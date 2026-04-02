@@ -1740,7 +1740,8 @@ const MainLayout = () => {
                     className={`
                         ${isDark ? 'bg-gray-900/95 backdrop-blur-md border-b border-gray-800 shadow-lg shadow-black/10' : 'bg-white/90 backdrop-blur-md border-b border-gray-200/90 shadow-sm shadow-gray-900/5'} 
                         h-16 flex items-center justify-between px-4 sm:px-6 flex-shrink-0
-                        ${effectiveIsMobile ? 'sticky top-0 z-30' : ''}
+                        relative z-40
+                        ${effectiveIsMobile ? 'sticky top-0' : ''}
                     `}
                 >
                     <div className="flex items-center space-x-4 flex-1 min-w-0 gap-3">
