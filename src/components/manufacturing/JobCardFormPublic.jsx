@@ -4106,8 +4106,41 @@ const JobCardFormPublic = () => {
             </div>
             <div className="relative px-1.5 pb-1 pt-1 sm:px-3 sm:pb-1.5 sm:pt-1.5">
               <div className="max-w-4xl mx-auto space-y-1 sm:space-y-1.5">
+                <div className="flex justify-end">
+                  <div className="job-card-header-toolbar relative z-10 inline-flex flex-nowrap items-center gap-0.5">
+                    <span
+                      className={`job-card-online-badge inline-flex items-center gap-0.5 rounded-full px-1 py-px text-[8px] font-semibold leading-none whitespace-nowrap ${
+                        isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
+                      }`}
+                    >
+                      <span
+                        className={`h-1 w-1 flex-shrink-0 rounded-full ${
+                          isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
+                        }`}
+                      />
+                      {isOnline ? 'On' : 'Off'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMobileHeaderCollapsed(true)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/15 text-white hover:bg-black/25 touch-manipulation"
+                      aria-expanded={true}
+                      aria-label="Hide header"
+                    >
+                      <i className="fa-solid fa-chevron-up text-[11px]" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exitToMenu}
+                      className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
+                      aria-label="Back to menu"
+                    >
+                      <i className="fa-solid fa-house text-[11px]" aria-hidden />
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-start justify-between gap-1.5">
-                  <div className="min-w-0 flex-1 pr-[6.75rem] sm:pr-[7.5rem]">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-white/65 font-semibold leading-none">
                       Mobile Job Card
                     </p>
@@ -4123,37 +4156,6 @@ const JobCardFormPublic = () => {
                     <p className="text-xs sm:text-sm text-white/80 mt-1 hidden sm:block">
                       Capture job cards in minutes with a guided, offline-friendly flow.
                     </p>
-                  </div>
-                  <div className="job-card-header-toolbar absolute right-1 top-0.5 z-10 flex flex-row items-center gap-0.5 sm:right-1.5 sm:top-1">
-                    <button
-                      type="button"
-                      onClick={() => setMobileHeaderCollapsed(true)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/15 text-white hover:bg-black/25 touch-manipulation"
-                      aria-expanded={true}
-                      aria-label="Hide header"
-                    >
-                      <i className="fa-solid fa-chevron-up text-[11px]" aria-hidden />
-                    </button>
-                    <span
-                      className={`job-card-online-badge inline-flex items-center gap-0.5 rounded-full px-1 py-px text-[8px] font-semibold leading-none whitespace-nowrap ${
-                        isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
-                      }`}
-                    >
-                      <span
-                        className={`h-1 w-1 flex-shrink-0 rounded-full ${
-                          isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
-                        }`}
-                      />
-                      {isOnline ? 'On' : 'Off'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={exitToMenu}
-                      className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
-                      aria-label="Back to menu"
-                    >
-                      <i className="fa-solid fa-house text-[11px]" aria-hidden />
-                    </button>
                   </div>
                 </div>
                 <div className="mt-0.5 sm:mt-1">
