@@ -887,7 +887,9 @@ async function handler(req, res) {
             const fromLi = await upsertLocationSku(locationId)
             // For adjustments, use quantity directly (can be positive or negative)
             // For sales, always make it negative
-            const delta = type === 'sale' ? -qty : (parseFloat(body.delta) !== undefined ? parseFloat(body.delta) : qty)
+            const parsedDelta = parseFloat(body.delta)
+            const hasValidDelta = body.delta !== undefined && body.delta !== null && body.delta !== '' && !Number.isNaN(parsedDelta)
+            const delta = type === 'sale' ? -qty : (hasValidDelta ? parsedDelta : qty)
             const newQty = (fromLi.quantity || 0) + delta
             if (newQty < 0 && type === 'sale') throw new Error('Resulting quantity cannot be negative')
             // Allow negative for adjustments (user corrections)
