@@ -8,7 +8,10 @@ const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-pa
 
 /** Greenfield ERP Calendar: sidebar + route only for this account (must match api/_lib/erpCalendarAccess.js). */
 const ERP_CALENDAR_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
+/** Set true when Calendar & Mail is ready to show again. */
+const ERP_CALENDAR_AND_MAIL_UI_ENABLED = false;
 function canAccessErpCalendar(user) {
+    if (!ERP_CALENDAR_AND_MAIL_UI_ENABLED) return false;
     const email = (user?.email || '').toLowerCase().trim();
     return email === ERP_CALENDAR_ALLOWED_EMAIL.toLowerCase();
 }
