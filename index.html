@@ -1845,23 +1845,12 @@
         })();
     </script>
     <script>
-        /* Tear down legacy job-card offline SW: it intercepted same-origin assets and broke loads. */
         (function() {
             if (!('serviceWorker' in navigator)) return;
             window.addEventListener('load', function() {
-                navigator.serviceWorker.getRegistrations().then(function(regs) {
-                    return Promise.all(regs.map(function(r) { return r.unregister(); }));
-                }).then(function() {
-                    if (typeof caches === 'undefined' || !caches.keys) return;
-                    return caches.keys().then(function(keys) {
-                        return Promise.all(keys.map(function(k) {
-                            if (typeof k === 'string' && k.indexOf('jobcard-offline') !== -1) {
-                                return caches.delete(k);
-                            }
-                            return Promise.resolve();
-                        }));
-                    });
-                }).catch(function() {});
+                navigator.serviceWorker.register('/sw.js').catch(function(error) {
+                    console.warn('Service worker registration failed:', error);
+                });
             });
         })();
     </script>
