@@ -3980,7 +3980,10 @@ const JobCardFormPublic = () => {
           <p className="text-[10px] uppercase tracking-wide text-white/70 font-semibold mb-1">
             Mobile Job Card
           </p>
-          <h1 className="text-lg font-bold leading-tight text-white !text-white">
+          <h1
+            className="text-lg font-bold leading-tight text-white !text-white"
+            style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
+          >
             JobCard App
           </h1>
           {editingMeta && (
@@ -4144,7 +4147,10 @@ const JobCardFormPublic = () => {
                     <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-white/65 font-semibold leading-none">
                       Mobile Job Card
                     </p>
-                    <h1 className="text-sm sm:text-xl font-bold leading-tight text-white !text-white">
+                    <h1
+                      className="text-sm sm:text-xl font-bold leading-tight text-white !text-white"
+                      style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
+                    >
                       JobCard App
                     </h1>
                     {editingMeta && (
