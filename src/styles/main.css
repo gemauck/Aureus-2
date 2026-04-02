@@ -399,6 +399,12 @@ h1.abcotronics-logo.dark {
     color: #ffffff !important;
 }
 
+/* Force public JobCard app title to stay white across all engines. */
+.jobcard-app-title {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
 /* Login page logo - always white (on blue background) */
 .login-brand.abcotronics-logo {
     color: #ffffff !important;

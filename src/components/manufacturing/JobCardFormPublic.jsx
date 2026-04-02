@@ -3981,7 +3981,7 @@ const JobCardFormPublic = () => {
             Mobile Job Card
           </p>
           <h1
-            className="text-lg font-bold leading-tight text-white !text-white"
+            className="jobcard-app-title text-lg font-bold leading-tight text-white !text-white"
             style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
           >
             JobCard App
@@ -4148,7 +4148,7 @@ const JobCardFormPublic = () => {
                       Mobile Job Card
                     </p>
                     <h1
-                      className="text-sm sm:text-xl font-bold leading-tight text-white !text-white"
+                      className="jobcard-app-title text-sm sm:text-xl font-bold leading-tight text-white !text-white"
                       style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
                     >
                       JobCard App
