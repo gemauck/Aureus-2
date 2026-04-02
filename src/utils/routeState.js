@@ -313,6 +313,10 @@
         notifySubscribers();
     });
 
+    window.addEventListener('hashchange', () => {
+        notifySubscribers();
+    });
+
     if (!window.RouteState) {
         window.RouteState = {
             getRoute,

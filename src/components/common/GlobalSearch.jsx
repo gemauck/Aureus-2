@@ -119,15 +119,65 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
         return () => clearTimeout(debounceTimer);
     }, [searchTerm]);
     
+    const stripResultEntityId = (prefixedId) => {
+        if (!prefixedId || typeof prefixedId !== 'string') return null;
+        const i = prefixedId.indexOf('-');
+        return i >= 0 ? prefixedId.slice(i + 1) : prefixedId;
+    };
+
+    const navigateToSearchResult = (result) => {
+        const entityId = stripResultEntityId(result.id);
+
+        if (window.RouteState?.navigate) {
+            const go = (opts) =>
+                window.RouteState.navigate({
+                    replace: false,
+                    preserveSearch: false,
+                    preserveHash: false,
+                    ...opts
+                });
+
+            switch (result.type) {
+                case 'client':
+                case 'lead':
+                    if (entityId) go({ page: 'clients', segments: [entityId], search: '' });
+                    return;
+                case 'project':
+                    if (entityId) go({ page: 'projects', segments: [entityId], search: '' });
+                    return;
+                case 'user':
+                    if (entityId) go({ page: 'users', segments: [entityId], search: '' });
+                    return;
+                case 'opportunity':
+                    if (result.clientId && entityId) {
+                        go({
+                            page: 'clients',
+                            segments: [String(result.clientId)],
+                            search: new URLSearchParams({ opportunityId: String(entityId) }).toString()
+                        });
+                    }
+                    return;
+                case 'invoice':
+                    if (result.clientId) {
+                        go({ page: 'clients', segments: [String(result.clientId)], search: '' });
+                    }
+                    return;
+                default:
+                    break;
+            }
+        }
+
+        if (result.link) {
+            const h = result.link.startsWith('#') ? result.link : `#${result.link}`;
+            window.location.hash = h;
+        }
+    };
+
     const handleResultClick = (result) => {
         setSearchTerm('');
         setIsOpen(false);
         setResults([]);
-        
-        // Navigate to the result
-        if (result.link) {
-            window.location.hash = result.link;
-        }
+        navigateToSearchResult(result);
     };
     
     const getResultIcon = (type) => {

@@ -2098,6 +2098,19 @@ const Clients = React.memo(() => {
                         }
                     }, 200);
                 }
+
+                const opportunityIdFromUrl = route.search?.get('opportunityId');
+                if (opportunityIdFromUrl && entityType === 'client' && entity?.id) {
+                    setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('openOpportunityFromUrl', {
+                            detail: {
+                                opportunityId: opportunityIdFromUrl,
+                                clientId: entity.id,
+                                clientName: entity.name
+                            }
+                        }));
+                    }, 150);
+                }
             }
         };
         
@@ -6454,6 +6467,20 @@ const Clients = React.memo(() => {
         setSelectedOpportunityClient(fallbackClient);
         setViewMode('opportunity-detail');
     }, [stopSync]);
+
+    useEffect(() => {
+        const onOpenFromUrl = (event) => {
+            const d = event?.detail;
+            if (!d?.opportunityId) return;
+            openOpportunityFromPipeline({
+                opportunityId: d.opportunityId,
+                clientId: d.clientId,
+                clientName: d.clientName
+            });
+        };
+        window.addEventListener('openOpportunityFromUrl', onOpenFromUrl);
+        return () => window.removeEventListener('openOpportunityFromUrl', onOpenFromUrl);
+    }, [openOpportunityFromPipeline]);
 
     // Handle star toggle for clients/leads
     const handleToggleStar = async (e, clientOrLead, isLead = false) => {

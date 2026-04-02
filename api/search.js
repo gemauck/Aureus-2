@@ -48,7 +48,8 @@ async function handler(req, res) {
           type: client.type === 'lead' ? 'lead' : 'client',
           title: client.name,
           subtitle: client.industry || client.website || '',
-          link: `#/${client.type === 'lead' ? 'clients' : 'clients'}?view=${client.type === 'lead' ? 'leads' : 'clients'}&highlight=${client.id}`
+          // Path must include id so RouteState gets segments (query-only ?highlight= was parsed as no segment → list view).
+          link: `#/clients/${client.id}`
         })
       }
     } catch (error) {
@@ -88,7 +89,7 @@ async function handler(req, res) {
           type: 'project',
           title: project.name,
           subtitle: project.client?.name || project.description,
-          link: `#/projects?highlight=${project.id}`
+          link: `#/projects/${project.id}`
         })
       }
     } catch (error) {
@@ -120,7 +121,7 @@ async function handler(req, res) {
           type: 'user',
           title: user.name,
           subtitle: user.email,
-          link: `#/users?highlight=${user.id}`
+          link: `#/users/${user.id}`
         })
       }
     } catch (error) {
@@ -154,9 +155,12 @@ async function handler(req, res) {
         results.push({
           id: `opportunity-${opportunity.id}`,
           type: 'opportunity',
+          clientId: opportunity.clientId,
           title: opportunity.title,
           subtitle: opportunity.client?.name || '',
-          link: `#/clients?view=opportunities&highlight=${opportunity.id}`
+          link: opportunity.clientId
+            ? `#/clients/${opportunity.clientId}?opportunityId=${encodeURIComponent(opportunity.id)}`
+            : `#/clients`
         })
       }
     } catch (error) {
@@ -191,9 +195,10 @@ async function handler(req, res) {
         results.push({
           id: `invoice-${invoice.id}`,
           type: 'invoice',
+          clientId: invoice.clientId,
           title: invoice.invoiceNumber || 'Invoice',
           subtitle: invoice.client?.name || '',
-          link: `#/invoicing?highlight=${invoice.id}`
+          link: invoice.clientId ? `#/clients/${invoice.clientId}` : `#/clients`
         })
       }
     } catch (error) {
