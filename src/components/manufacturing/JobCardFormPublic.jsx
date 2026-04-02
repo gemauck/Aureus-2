@@ -2418,7 +2418,10 @@ const JobCardFormPublic = () => {
       };
 
       const attemptPostCreate = async () => {
-        const createPayload = { ...jobCardData, id: Date.now().toString() };
+        const createPayload = { ...jobCardData };
+        // Let the backend allocate canonical ids (cuid/uuid) so subsequent
+        // "edit prior job card" lookups and id heuristics remain consistent.
+        delete createPayload.id;
         delete createPayload.serverJobCardId;
         try {
           const response = await fetch('/api/public/jobcards', {

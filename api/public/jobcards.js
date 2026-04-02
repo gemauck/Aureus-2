@@ -18,7 +18,7 @@ async function handleGetList(req, res) {
       idsParam
         .split(',')
         .map(s => s.trim())
-        .filter(id => typeof id === 'string' && id.length >= 15 && id.length <= 36)
+        .filter(id => typeof id === 'string' && id.length > 0 && id.length <= 64)
     )].slice(0, 100)
 
     if (ids.length === 0) {
