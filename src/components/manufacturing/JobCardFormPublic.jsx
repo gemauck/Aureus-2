@@ -3789,7 +3789,7 @@ const JobCardFormPublic = () => {
               Mobile Job Card
             </p>
             <h1 className="text-2xl sm:text-3xl font-bold leading-tight text-blue-950">
-              Job Card App
+              JobCard App
             </h1>
             <p className="text-sm text-slate-600">
               Open job cards from the server or drafts stored on this device, or start a new card.
@@ -3981,7 +3981,7 @@ const JobCardFormPublic = () => {
             Mobile Job Card
           </p>
           <h1 className="text-lg font-bold leading-tight text-white">
-            Job Card App Wizard
+            JobCard App
           </h1>
           {editingMeta && (
             <p className="text-xs text-amber-100 mt-1.5 font-medium">
@@ -4144,8 +4144,11 @@ const JobCardFormPublic = () => {
                     <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-white/65 font-semibold leading-none">
                       Mobile Job Card
                     </p>
-                    <h1 className="text-sm sm:text-xl font-bold leading-tight text-white">
-                      Job Card App Wizard
+                    <h1
+                      className="text-sm sm:text-xl font-bold leading-tight text-white"
+                      style={{ color: '#ffffff' }}
+                    >
+                      JobCard App
                     </h1>
                     {editingMeta && (
                       <p className="text-[9px] sm:text-xs text-amber-100 font-medium mt-px leading-snug line-clamp-1">
