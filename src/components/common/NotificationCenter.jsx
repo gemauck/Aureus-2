@@ -130,7 +130,10 @@ const NotificationCenter = () => {
             
             try {
                 const response = await window.DatabaseAPI.makeRequest('/notifications', {
-                    method: 'GET'
+                    method: 'GET',
+                    // Background polling should not spam retries/logs on transient gateway timeouts.
+                    maxRetries: silent ? 0 : 1,
+                    suppressRetryWarnings: silent
                 });
                 
                 // DatabaseAPI.makeRequest returns { data: {...} } structure

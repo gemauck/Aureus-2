@@ -342,6 +342,7 @@ const DatabaseAPI = {
         const isLightEndpoint = pathOnly === '/notifications' || pathOnly === '/users/heartbeat';
         const isTimeoutRequest = options.isTimeout || false;
         const maxRetries = options.maxRetries !== undefined ? options.maxRetries : (isTimeoutRequest || isLightEndpoint ? 1 : 2);
+        const suppressRetryWarnings = options.suppressRetryWarnings === true || options.silent === true;
         const baseDelay = 3000; // Start with 3 seconds - longer delay to give server time to recover
 
         // Check RateLimitManager before acquiring slot (if available)
@@ -780,7 +781,7 @@ const DatabaseAPI = {
                         
                         // Suppress all retry warnings for 502/503 errors - they're already aggregated
                         // Only log warnings for 500/504 errors (and only on first attempt)
-                        if (attempt === 0 && response.status !== 500 && response.status !== 502 && response.status !== 503) {
+                        if (!suppressRetryWarnings && attempt === 0 && response.status !== 500 && response.status !== 502 && response.status !== 503) {
                             console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${effectiveMaxRetries + 1}). Retrying in ${delay}ms...`);
                         }
                         
@@ -1032,7 +1033,7 @@ const DatabaseAPI = {
                         // Suppress retry warnings for 502 errors (already aggregated)
                         // Only log first few attempts for other errors to reduce console noise
                         const is502Error = error?.message?.includes('502') || error?.message?.includes('Bad Gateway');
-                        if (attempt < 2 && !is502Error) {
+                        if (!suppressRetryWarnings && attempt < 2 && !is502Error) {
                             console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
                         }
                         await this._sleep(delay);
