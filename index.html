@@ -684,13 +684,13 @@
     <link rel="dns-prefetch" href="https://cdn.sheetjs.com">
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
     
-    <!-- Preload critical React libraries for faster loading -->
-    <link rel="preload" href="https://unpkg.com/react@18/umd/react.production.min.js" as="script" crossorigin>
-    <link rel="preload" href="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" as="script" crossorigin>
+    <!-- Preload critical React libraries for faster loading (local-first for offline support) -->
+    <link rel="preload" href="/node_modules/react/umd/react.production.min.js" as="script">
+    <link rel="preload" href="/node_modules/react-dom/umd/react-dom.production.min.js" as="script">
     
     <!-- React - Must load before dependent scripts, but preload helps -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded'); }" onerror="console.error('❌ Failed to load React from CDN');"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded'); }" onerror="console.error('❌ Failed to load ReactDOM from CDN');"></script>
+    <script src="/node_modules/react/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded (local)'); }" onerror="this.onerror=null; this.src='https://unpkg.com/react@18/umd/react.production.min.js';"></script>
+    <script src="/node_modules/react-dom/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded (local)'); }" onerror="this.onerror=null; this.src='https://unpkg.com/react-dom@18/umd/react-dom.production.min.js';"></script>
     <!-- XLSX library for Excel export - Load without defer to ensure proper initialization -->
     <script crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" 
             onload="(function() { 
