@@ -1,0 +1,16 @@
+sku,movement_derived_qty,location_inventory_sum_qty,difference,notes
+SKU0394,101,0,101,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0393,69,0,69,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0399,100,50,50,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0403,50,0,50,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0404,50,0,50,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0407,49,0,49,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0408,24,0,24,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0402,12,0,12,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0405,18,9,9,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit); MOV0339 fixed separately first
+SKU0401,5,0,5,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0406,5,0,5,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0395,2,0,2,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0396,2,0,2,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0397,2,0,2,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
+SKU0398,1,0,1,Mismatch snapshot before bulk PMB reconciliation (2026-04-01 audit)
