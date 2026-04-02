@@ -4106,8 +4106,8 @@ const JobCardFormPublic = () => {
             </div>
             <div className="relative px-1.5 pb-1 pt-1 sm:px-3 sm:pb-1.5 sm:pt-1.5">
               <div className="max-w-4xl mx-auto space-y-1 sm:space-y-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-1.5">
+                  <div className="min-w-0 flex-1 pr-[6.75rem] sm:pr-[7.5rem]">
                     <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-white/65 font-semibold leading-none">
                       Mobile Job Card
                     </p>
@@ -4124,7 +4124,7 @@ const JobCardFormPublic = () => {
                       Capture job cards in minutes with a guided, offline-friendly flow.
                     </p>
                   </div>
-                  <div className="job-card-header-toolbar relative z-10 flex flex-shrink-0 items-center gap-0.5">
+                  <div className="job-card-header-toolbar absolute right-1 top-0.5 z-10 flex flex-row items-center gap-0.5 sm:right-1.5 sm:top-1">
                     <button
                       type="button"
                       onClick={() => setMobileHeaderCollapsed(true)}
@@ -4146,14 +4146,6 @@ const JobCardFormPublic = () => {
                       />
                       {isOnline ? 'On' : 'Off'}
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleShareLink}
-                      className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
-                      aria-label="Share job card link"
-                    >
-                      <i className="fa-regular fa-share-from-square text-[11px]" aria-hidden />
-                    </button>
                     <button
                       type="button"
                       onClick={exitToMenu}
