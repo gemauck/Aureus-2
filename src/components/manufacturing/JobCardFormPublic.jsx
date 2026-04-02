@@ -129,6 +129,22 @@ const STEP_META = {
   }
 };
 
+/** Full-width title above step body so steps 4–5 match wizard labels (Stock & Costs, Customer Sign-off). */
+const WizardStepPageHeader = ({ stepIndex, stepId }) => {
+  const meta = STEP_META[stepId] || {};
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm px-4 py-4 sm:px-6 sm:py-5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 mb-1">
+        Step {stepIndex + 1}
+      </p>
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{meta.title || stepId}</h2>
+      {meta.subtitle ? (
+        <p className="text-sm text-gray-600 mt-1">{meta.subtitle}</p>
+      ) : null}
+    </div>
+  );
+};
+
 const StepBadge = ({
   index,
   stepId,
@@ -3312,6 +3328,7 @@ const JobCardFormPublic = () => {
 
   const renderStockStep = () => (
     <div className="space-y-4 sm:space-y-6">
+      <WizardStepPageHeader stepIndex={STEP_IDS.indexOf('stock')} stepId="stock" />
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <header className="mb-4 flex items-center justify-between">
           <div>
@@ -3494,6 +3511,7 @@ const JobCardFormPublic = () => {
 
   const renderSignoffStep = () => (
     <div className="space-y-4 sm:space-y-6">
+      <WizardStepPageHeader stepIndex={STEP_IDS.indexOf('signoff')} stepId="signoff" />
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <header className="mb-4 flex items-center justify-between">
           <div>
