@@ -2946,6 +2946,7 @@ const JobCardFormPublic = () => {
           <h2 className="text-lg font-semibold text-gray-900">Diagnosis</h2>
           <p className="text-sm text-gray-500 mt-1">Summarise the fault, findings or observations.</p>
         </header>
+        <label className="mb-2 block text-sm font-medium text-gray-700">Diagnosis Notes</label>
             <VoiceNoteTextarea
               sectionId="diagnosis"
               name="diagnosis"
@@ -2981,6 +2982,7 @@ const JobCardFormPublic = () => {
             </p>
           </div>
         </header>
+        <label className="mb-2 block text-sm font-medium text-gray-700">Actions Completed</label>
             <VoiceNoteTextarea
               sectionId="actionsTaken"
               name="actionsTaken"
@@ -3039,6 +3041,7 @@ const JobCardFormPublic = () => {
           <h2 className="text-lg font-semibold text-gray-900">Additional Notes</h2>
           <p className="text-sm text-gray-500 mt-1">Capture handover notes, risks or recommended next actions.</p>
         </header>
+        <label className="mb-2 block text-sm font-medium text-gray-700">General Notes</label>
         <VoiceNoteTextarea
           sectionId="otherComments"
           name="otherComments"
@@ -4103,8 +4106,8 @@ const JobCardFormPublic = () => {
             </div>
             <div className="relative px-1.5 pb-1 pt-1 sm:px-3 sm:pb-1.5 sm:pt-1.5">
               <div className="max-w-4xl mx-auto space-y-1 sm:space-y-1.5">
-                <div className="flex items-start justify-between gap-1.5">
-                  <div className="min-w-0 flex-1 pr-[8.75rem] sm:pr-[9.5rem]">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-white/65 font-semibold leading-none">
                       Mobile Job Card
                     </p>
@@ -4121,7 +4124,7 @@ const JobCardFormPublic = () => {
                       Capture job cards in minutes with a guided, offline-friendly flow.
                     </p>
                   </div>
-                  <div className="job-card-header-toolbar absolute right-1 top-0.5 flex items-center gap-0.5 sm:right-1.5 sm:top-1">
+                  <div className="job-card-header-toolbar relative z-10 flex flex-shrink-0 items-center gap-0.5">
                     <button
                       type="button"
                       onClick={() => setMobileHeaderCollapsed(true)}
