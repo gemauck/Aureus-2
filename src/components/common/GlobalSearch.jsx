@@ -128,7 +128,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
     };
     
     return (
-        <div ref={containerRef} className={`relative ${isMobile ? 'w-full' : 'flex-1 min-w-0 max-w-xl'}`}>
+        <div ref={containerRef} className={`relative isolate ${isMobile ? 'w-full' : 'flex-1 min-w-0 max-w-xl'}`}>
             {/* Search Input */}
             <div className={`relative ${isMobile ? 'block w-full' : 'hidden lg:block w-full'}`}>
                 <input
@@ -158,7 +158,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
             {isOpen && (results.length > 0 || loading || (searchTerm.length > 0 && !loading)) && (
                 <div 
                     ref={resultsRef}
-                    className={`absolute left-0 top-full mt-2 w-96 ${isDark ? 'bg-gray-800/98 backdrop-blur-md border-gray-700' : 'bg-white/98 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50 max-h-96 overflow-hidden`}
+                    className={`absolute left-0 top-full mt-2 w-96 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/15 ring-1 ring-black/5 z-[200] max-h-96 overflow-hidden`}
                 >
                     {/* Loading State */}
                     {loading && (
