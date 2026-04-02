@@ -1,5 +1,8 @@
 // Global Search Component - Search across all modules
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useLayoutEffect, useCallback } = React;
+
+/** Fixed layer: above page chrome (sticky headers, scroll layers) but below full-screen modals (z-[9999]+). */
+const DROPDOWN_Z_INDEX = 500;
 
 const GlobalSearch = ({ isMobile = false, isDark = false }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -7,9 +10,39 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(-1);
+    const [dropdownRect, setDropdownRect] = useState(null);
     const containerRef = useRef(null);
     const inputRef = useRef(null);
     const resultsRef = useRef(null);
+
+    const showDropdownPanel =
+        isOpen && (results.length > 0 || loading || (searchTerm.length > 0 && !loading));
+
+    const repositionDropdown = useCallback(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const width = Math.min(384, Math.max(260, window.innerWidth - 16));
+        let left = r.left;
+        if (left + width > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - width - 8);
+        }
+        setDropdownRect({ top: r.bottom + 8, left, width });
+    }, []);
+
+    useLayoutEffect(() => {
+        if (!showDropdownPanel) {
+            setDropdownRect(null);
+            return undefined;
+        }
+        repositionDropdown();
+        window.addEventListener('resize', repositionDropdown);
+        document.addEventListener('scroll', repositionDropdown, true);
+        return () => {
+            window.removeEventListener('resize', repositionDropdown);
+            document.removeEventListener('scroll', repositionDropdown, true);
+        };
+    }, [showDropdownPanel, repositionDropdown]);
     
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -154,11 +187,17 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
                 )}
             </div>
             
-            {/* Search Results Dropdown */}
-            {isOpen && (results.length > 0 || loading || (searchTerm.length > 0 && !loading)) && (
+            {/* Search Results Dropdown — fixed to viewport so scroll/compositor layers in <main> cannot paint over it */}
+            {showDropdownPanel && dropdownRect && (
                 <div 
                     ref={resultsRef}
-                    className={`absolute left-0 top-full mt-2 w-96 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/15 ring-1 ring-black/5 z-[200] max-h-96 overflow-hidden`}
+                    className={`fixed max-h-96 overflow-hidden ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/15 ring-1 ring-black/5 max-w-[calc(100vw-1rem)]`}
+                    style={{
+                        top: dropdownRect.top,
+                        left: dropdownRect.left,
+                        width: dropdownRect.width,
+                        zIndex: DROPDOWN_Z_INDEX,
+                    }}
                 >
                     {/* Loading State */}
                     {loading && (
