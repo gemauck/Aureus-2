@@ -105,9 +105,8 @@ const LEAVE_PLATFORM_ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'sup
 const isLeavePlatformAdminRole = (role) =>
     !!role && typeof role === 'string' && LEAVE_PLATFORM_ADMIN_ROLES.includes(role.toLowerCase());
 
-/** Deep-link: /leave-platform?tab=policies or #/leave-platform?tab=my-hr */
+/** Deep-link: /leave-platform?tab=policies or #/leave-platform?tab=my-hr. Legacy ?tab=home maps to overview. */
 const LEAVE_HR_TAB_IDS = new Set([
-    'home',
     'my-hr',
     'policies',
     'documents',
@@ -133,7 +132,7 @@ const looksLikeEntityId = (segment) => {
     return /^[a-z0-9]{20,32}$/i.test(s);
 };
 
-const LeavePlatform = ({ initialTab = 'home' } = {}) => {
+const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     let user = null;
 
     try {
@@ -202,7 +201,7 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
         useEffect(() => {
             const handleTabEvent = (event) => {
                 if (event.detail?.tab) {
-                    setCurrentTab(event.detail.tab);
+                    setCurrentTab(event.detail.tab === 'home' ? 'overview' : event.detail.tab);
                 }
             };
             window.addEventListener('leavePlatform:setTab', handleTabEvent);
@@ -227,6 +226,7 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                     if (!tab && r?.search) {
                         tab = r.search.get('tab');
                     }
+                    if (tab === 'home') tab = 'overview';
                     if (!tab || !LEAVE_HR_TAB_IDS.has(tab)) return;
                     if (adminOnlyTabs.has(tab) && !isAdmin) return;
                     setCurrentTab(tab);
@@ -843,16 +843,8 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
             }
         }, [loadData]);
 
-        const tabGroups = useMemo(() => {
-            const start = [
-                { id: 'home', label: 'Home', icon: 'fa-home' },
-                { id: 'my-hr', label: 'My HR', icon: 'fa-id-card' },
-                { id: 'policies', label: 'Policies', icon: 'fa-book' },
-                { id: 'documents', label: 'Documents', icon: 'fa-file-alt' }
-            ];
-            if (isAdmin) {
-                start.push({ id: 'hr-admin', label: 'HR admin', icon: 'fa-user-cog' });
-            }
+        /** One horizontal nav row; sections separated by a divider (no duplicate labelled sub-menus). */
+        const navSections = useMemo(() => {
             const leave = [
                 { id: 'overview', label: 'Overview', icon: 'fa-clipboard-list' },
                 { id: 'my-leave', label: 'My Leave', icon: 'fa-calendar-check' },
@@ -861,6 +853,14 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                 { id: 'calendar', label: 'Leave Calendar', icon: 'fa-calendar' },
                 { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' }
             ];
+            const hr = [
+                { id: 'my-hr', label: 'My HR', icon: 'fa-id-card' },
+                { id: 'policies', label: 'Policies', icon: 'fa-book' },
+                { id: 'documents', label: 'Documents', icon: 'fa-file-alt' }
+            ];
+            if (isAdmin) {
+                hr.push({ id: 'hr-admin', label: 'HR admin', icon: 'fa-user-cog' });
+            }
             const adminOps = isAdmin
                 ? [
                       { id: 'employees', label: 'Employees', icon: 'fa-users' },
@@ -870,11 +870,9 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                       { id: 'import', label: 'Import Balances', icon: 'fa-upload' }
                   ]
                 : [];
-            const groups = [{ key: 'start', label: 'Leave & HR', tabs: start }, { key: 'leave', label: 'Leave', tabs: leave }];
-            if (adminOps.length) {
-                groups.push({ key: 'admin', label: 'HR operations', tabs: adminOps });
-            }
-            return groups;
+            const sections = [leave, hr];
+            if (adminOps.length) sections.push(adminOps);
+            return sections;
         }, [isAdmin]);
 
         // Employee filtering and sorting - moved to top level (hooks must be at component level)
@@ -965,13 +963,6 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
 
     const renderContent = () => {
         switch (currentTab) {
-                case 'home': {
-                    const Hub = window.LeaveHrHub;
-                    if (!Hub) {
-                        return <div className="text-center py-12 text-gray-500">Loading hub…</div>;
-                    }
-                    return <Hub setCurrentTab={setCurrentTab} isAdmin={isAdmin} />;
-                }
                 case 'my-hr': {
                     if (!user?.id) {
                         return <div className="text-center py-12 text-gray-600">Sign in to view your HR profile.</div>;
@@ -983,7 +974,7 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                     return (
                         <Comp
                             employeeId={user.id}
-                            onBack={() => setCurrentTab('home')}
+                            onBack={() => setCurrentTab('overview')}
                             user={user}
                             isAdmin={false}
                         />
@@ -1343,16 +1334,22 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                 </div>
             </div>
 
-            {/* Tabs */}
+            {/* Single sub-nav row (sections separated by dividers) */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="border-b border-gray-200 overflow-x-auto">
-                    {tabGroups.map((group) => (
-                        <div key={group.key} className="border-b border-gray-100 last:border-b-0">
-                            <div className="px-3 pt-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                                {group.label}
-                            </div>
-                            <nav className="flex flex-wrap min-w-0 -mb-px">
-                                {group.tabs.map((tab) => (
+                    <nav
+                        className="flex flex-wrap items-end min-w-0 gap-x-0 gap-y-0 px-1 sm:px-2 -mb-px"
+                        aria-label="Leave and HR sections"
+                    >
+                        {navSections.map((section, si) => (
+                            <div key={si} className="contents">
+                                {si > 0 && (
+                                    <span
+                                        className="hidden sm:block w-px shrink-0 self-stretch min-h-[2.25rem] bg-gray-200 mx-1 my-2"
+                                        aria-hidden
+                                    />
+                                )}
+                                {section.map((tab) => (
                                     <button
                                         key={tab.id}
                                         type="button"
@@ -1369,15 +1366,15 @@ const LeavePlatform = ({ initialTab = 'home' } = {}) => {
                                         {tab.label}
                                     </button>
                                 ))}
-                            </nav>
-                        </div>
-                    ))}
+                            </div>
+                        ))}
+                    </nav>
                 </div>
 
                 {/* Tab Content */}
                 <div className="p-4 sm:p-6">
                     {loading &&
-                    !['home', 'policies', 'documents', 'hr-admin', 'my-hr'].includes(currentTab) &&
+                    !['policies', 'documents', 'hr-admin', 'my-hr'].includes(currentTab) &&
                     leaveApplications.length === 0 &&
                     leaveBalances.length === 0 ? (
                         <div className="text-center py-12">

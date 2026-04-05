@@ -67,7 +67,6 @@ import './components/clients/PipelineIntegration.js';
 import './components/settings/NotificationSettings.jsx';
 import './utils/leaveUtils.js';
 import './components/leave-platform/EmployeeDetail.jsx';
-import './components/leave-platform/LeaveHrHub.jsx';
 import './components/leave-platform/HrPoliciesPanel.jsx';
 import './components/leave-platform/HrDocumentsPanel.jsx';
 import './components/leave-platform/HrAdminShell.jsx';
