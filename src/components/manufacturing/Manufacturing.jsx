@@ -10598,6 +10598,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       return new Date(date).toISOString().split('T')[0];
     };
 
+    const openPurchaseOrderDetail = (order) => {
+      resetPurchaseOrderEditUi();
+      setSelectedItem(order);
+      setModalType('view_purchase');
+      setShowModal(true);
+    };
+
     return (
       <div className="space-y-3">
         {/* Controls */}
@@ -10633,7 +10640,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             purchaseOrders.map(order => {
               const orderItems = typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || []);
               return (
-                <div key={order.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                <div
+                  key={order.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openPurchaseOrderDetail(order)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      openPurchaseOrderDetail(order);
+                    }
+                  }}
+                  className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-gray-300"
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start gap-2 mb-2">
@@ -10684,14 +10703,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </div>
                   
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={() => { resetPurchaseOrderEditUi(); setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
+                      type="button"
+                      onClick={() => openPurchaseOrderDetail(order)}
                       className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
                     >
                       <i className="fas fa-eye mr-1"></i> View
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDeletePurchaseOrder(order.id)}
                       className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
                     >
@@ -10739,7 +10760,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </tr>
                 ) : (
                   purchaseOrders.map(order => (
-                    <tr key={order.id} className="hover:bg-gray-50">
+                    <tr
+                      key={order.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => openPurchaseOrderDetail(order)}
+                    >
                       <td className="px-3 py-2 text-sm font-medium text-gray-900">{order.orderNumber}</td>
                       <td className="px-3 py-2 text-sm text-gray-900">{order.supplierName || '-'}</td>
                       <td className="px-3 py-2">
@@ -10750,16 +10775,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <td className="px-3 py-2 text-sm text-gray-900">{formatDate(order.orderDate)}</td>
                       <td className="px-3 py-2 text-sm text-gray-900">{formatDate(order.expectedDate)}</td>
                       <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">{formatCurrency(order.total || 0)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => { resetPurchaseOrderEditUi(); setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
+                            type="button"
+                            onClick={() => openPurchaseOrderDetail(order)}
                             className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                             title="View"
                           >
                             <i className="fas fa-eye"></i>
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeletePurchaseOrder(order.id)}
                             className="text-red-600 hover:text-red-800 text-sm font-medium"
                             title="Delete"
