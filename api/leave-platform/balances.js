@@ -21,9 +21,30 @@ async function handler(req, res) {
         const isElevated = isHrAdministrator(actor)
         const currentYear = new Date().getFullYear()
 
+        /** If there are no rows for the calendar year (e.g. data still keyed to last year), use the latest year that has data. */
+        let effectiveYear = currentYear
+        if (isElevated) {
+          const countThisYear = await prisma.leaveBalance.count({ where: { year: currentYear } })
+          if (countThisYear === 0) {
+            const agg = await prisma.leaveBalance.aggregate({ _max: { year: true } })
+            if (agg._max.year != null) effectiveYear = agg._max.year
+          }
+        } else {
+          const countThisYear = await prisma.leaveBalance.count({
+            where: { userId: currentUserId, year: currentYear }
+          })
+          if (countThisYear === 0) {
+            const agg = await prisma.leaveBalance.aggregate({
+              where: { userId: currentUserId },
+              _max: { year: true }
+            })
+            if (agg._max.year != null) effectiveYear = agg._max.year
+          }
+        }
+
         const whereClause = isElevated
-          ? { year: currentYear }
-          : { userId: currentUserId, year: currentYear }
+          ? { year: effectiveYear }
+          : { userId: currentUserId, year: effectiveYear }
 
         const balances = await prisma.leaveBalance.findMany({
           where: whereClause,
@@ -57,7 +78,7 @@ async function handler(req, res) {
           notes: balance.notes
         }))
 
-        return ok(res, { balances: formattedBalances })
+        return ok(res, { balances: formattedBalances, balanceYear: effectiveYear })
       } catch (dbError) {
         console.error('❌ Database error fetching leave balances:', dbError)
         return serverError(res, 'Failed to fetch leave balances', dbError.message)

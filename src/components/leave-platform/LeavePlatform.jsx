@@ -46,6 +46,11 @@ const matchUserRecord = (record, user) => {
         return true;
     }
 
+    const userSub = user.sub != null ? String(user.sub) : null;
+    if (userSub && candidateIds.includes(userSub)) {
+        return true;
+    }
+
     const candidateEmails = [
         record.userEmail,
         record.user_email,
@@ -655,30 +660,30 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 }
 
                 const balances = await parseArray(balancesResponse, ['balances', 'data.balances']);
-                if (balances.length || balancesResponse.status === 'fulfilled') {
+                if (balancesResponse.status === 'fulfilled' && balancesResponse.value?.ok) {
                     setLeaveBalances(balances);
                 }
 
                 const users = await parseArray(employeesResponse, ['users', 'data.users']);
-                if (users.length || employeesResponse.status === 'fulfilled') {
+                if (employeesResponse.status === 'fulfilled' && employeesResponse.value?.ok) {
                     setEmployees(users);
-                    if (users.length === 0 && employeesResponse.status === 'fulfilled' && employeesResponse.value?.ok) {
+                    if (users.length === 0) {
                         console.warn('⚠️ Leave & HR: No employees found after reload');
                     }
                 }
 
                 const depts = await parseArray(deptsResponse, ['departments', 'data.departments']);
-                if (depts.length || deptsResponse.status === 'fulfilled') {
+                if (deptsResponse.status === 'fulfilled' && deptsResponse.value?.ok) {
                     setDepartments(depts);
                 }
 
                 const approvers = await parseArray(approversResponse, ['approvers', 'data.approvers']);
-                if (approvers.length || approversResponse.status === 'fulfilled') {
+                if (approversResponse.status === 'fulfilled' && approversResponse.value?.ok) {
                     setLeaveApprovers(approvers);
                 }
 
                 const bdays = await parseArray(birthdaysResponse, ['birthdays', 'data.birthdays']);
-                if (bdays.length || birthdaysResponse.status === 'fulfilled') {
+                if (birthdaysResponse.status === 'fulfilled' && birthdaysResponse.value?.ok) {
                     setBirthdays(bdays);
             }
 
@@ -2553,15 +2558,26 @@ const LeaveBalancesView = ({
 }) => {
     const normalizedBalances = useMemo(() => {
         if (!Array.isArray(balances) || balances.length === 0) return [];
-        return balances.map(balance => ({
-            ...balance,
-            employeeId: balance.employeeId || balance.userId || balance.user_id,
-            employeeName: balance.employeeName || balance.userName || balance.employee,
-            leaveType: balance.leaveType || balance.type,
-            available: balance.available ?? balance.balance ?? 0,
-            used: balance.used ?? 0,
-            entitlement: balance.entitlement ?? balance.total ?? 0
-        }));
+        return balances.map(balance => {
+            const avail = Number(balance.available ?? balance.balance ?? 0);
+            const used = Number(balance.used ?? 0);
+            const hasExplicitEntitlement =
+                balance.entitlement != null && balance.entitlement !== '' && !Number.isNaN(Number(balance.entitlement));
+            const entitlement = hasExplicitEntitlement
+                ? Number(balance.entitlement)
+                : balance.total != null && balance.total !== ''
+                  ? Number(balance.total)
+                  : avail + used;
+            return {
+                ...balance,
+                employeeId: balance.employeeId || balance.userId || balance.user_id,
+                employeeName: balance.employeeName || balance.userName || balance.employee,
+                leaveType: balance.leaveType || balance.type,
+                available: avail,
+                used,
+                entitlement: Number.isFinite(entitlement) ? entitlement : 0
+            };
+        });
     }, [balances]);
 
     const filteredBalances = useMemo(() => {
@@ -2581,6 +2597,12 @@ const LeaveBalancesView = ({
         }, {});
     }, [filteredBalances]);
 
+    const balanceDisplayYear = useMemo(() => {
+        const years = [...new Set(filteredBalances.map((b) => b.year).filter((y) => y != null))];
+        if (years.length === 1) return years[0];
+        return null;
+    }, [filteredBalances]);
+
     useEffect(() => {
         if (!highlightBalanceId) return;
         const t = window.setTimeout(() => {
@@ -2597,6 +2619,9 @@ const LeaveBalancesView = ({
                     <h3 className="text-lg font-semibold text-gray-900">Leave Balances</h3>
                     <p className="text-sm text-gray-500">
                         {isAdmin ? 'Company-wide view of remaining leave entitlements.' : 'Personal leave balance summary.'}
+                        {balanceDisplayYear != null && (
+                            <span className="block mt-1 text-xs text-gray-400">Calendar year {balanceDisplayYear}.</span>
+                        )}
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2865,37 +2890,204 @@ const ApprovalsView = ({ applications, onApprove, onReject, loading, highlightAp
 
 // Approvers View
 const ApproversView = ({ approvers, departments, employees, onUpdate }) => {
+    const [showAdd, setShowAdd] = useState(false);
+    const [department, setDepartment] = useState('');
+    const [customDepartment, setCustomDepartment] = useState('');
+    const [approverId, setApproverId] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [removingId, setRemovingId] = useState(null);
+
+    const sortedEmployees = useMemo(() => {
+        return [...(employees || [])]
+            .filter((e) => e && e.id)
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+    }, [employees]);
+
+    const deptOptions = useMemo(() => [...new Set(departments || [])].filter(Boolean).sort(), [departments]);
+
+    const handleAdd = async () => {
+        const dept =
+            department && department !== '__custom__'
+                ? String(department).trim()
+                : customDepartment.trim();
+        if (!dept || !approverId) {
+            window.alert('Choose a department or team name and an approver.');
+            return;
+        }
+        setSaving(true);
+        try {
+            const response = await fetch('/api/leave-platform/approvers', {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ department: dept, approverId })
+            });
+            const json = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setShowAdd(false);
+                setDepartment('');
+                setCustomDepartment('');
+                setApproverId('');
+                onUpdate?.();
+            } else {
+                const msg = json?.error?.message || json?.message || 'Failed to add approver';
+                window.alert(msg);
+            }
+        } catch (e) {
+            console.error('Add approver failed:', e);
+            window.alert('Failed to add approver');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleRemove = async (id) => {
+        if (!window.confirm('Remove this approver mapping for this department?')) return;
+        setRemovingId(id);
+        try {
+            const response = await fetch('/api/leave-platform/approvers', {
+                method: 'DELETE',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ id })
+            });
+            const json = await response.json().catch(() => ({}));
+            if (response.ok) {
+                onUpdate?.();
+            } else {
+                const msg = json?.error?.message || json?.message || 'Failed to remove approver';
+                window.alert(msg);
+            }
+        } catch (e) {
+            console.error('Remove approver failed:', e);
+            window.alert('Failed to remove approver');
+        } finally {
+            setRemovingId(null);
+        }
+    };
+
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Leave Approvers</h3>
-                <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                    <i className="fas fa-plus mr-2"></i>Add Approver
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Leave approvers</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                        Map each department or team name to a user who can approve leave for that group.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setShowAdd(true)}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 shrink-0"
+                >
+                    <i className="fas fa-plus mr-2"></i>
+                    Add approver
                 </button>
             </div>
 
+            {showAdd && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
+                    <h4 className="text-sm font-semibold text-gray-900">New mapping</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Department / team</label>
+                            {deptOptions.length > 0 ? (
+                                <select
+                                    value={department}
+                                    onChange={(e) => setDepartment(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                >
+                                    <option value="">Select…</option>
+                                    {deptOptions.map((d) => (
+                                        <option key={d} value={d}>
+                                            {d}
+                                        </option>
+                                    ))}
+                                    <option value="__custom__">Other (type below)…</option>
+                                </select>
+                            ) : null}
+                            {(department === '__custom__' || deptOptions.length === 0) && (
+                                <input
+                                    type="text"
+                                    value={customDepartment}
+                                    onChange={(e) => setCustomDepartment(e.target.value)}
+                                    placeholder="e.g. Engineering"
+                                    className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                />
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Approver</label>
+                            <select
+                                value={approverId}
+                                onChange={(e) => setApproverId(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                            >
+                                <option value="">
+                                    {sortedEmployees.length === 0 ? 'Loading users…' : 'Select user…'}
+                                </option>
+                                {sortedEmployees.map((emp) => (
+                                    <option key={emp.id} value={emp.id}>
+                                        {emp.name || emp.email || emp.id}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            disabled={saving}
+                            onClick={handleAdd}
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm"
+                        >
+                            {saving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => {
+                                setShowAdd(false);
+                                setDepartment('');
+                                setCustomDepartment('');
+                                setApproverId('');
+                            }}
+                            className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-white"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {approvers.length > 0 ? (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department/Team</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Department/team
+                                </th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Approver</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {approvers.map(approver => (
+                            {approvers.map((approver) => (
                                 <tr key={approver.id}>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                         {approver.department}
                                     </td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {approver.approverName}
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                                        {approver.approverName || approver.approverEmail || '—'}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                        <button className="text-red-600 hover:text-red-700">
-                                            <i className="fas fa-trash"></i>
+                                        <button
+                                            type="button"
+                                            disabled={removingId === approver.id}
+                                            onClick={() => handleRemove(approver.id)}
+                                            className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                                            title="Remove mapping"
+                                        >
+                                            <i className="fas fa-trash" />
                                         </button>
                                     </td>
                                 </tr>
@@ -2904,9 +3096,10 @@ const ApproversView = ({ approvers, departments, employees, onUpdate }) => {
                     </table>
                 </div>
             ) : (
-                <div className="text-center py-12 text-gray-500">
-                    <i className="fas fa-user-shield text-4xl mb-4"></i>
-                    <p>No approvers configured</p>
+                <div className="text-center py-12 text-gray-500 border border-dashed border-gray-200 rounded-lg">
+                    <i className="fas fa-user-shield text-4xl mb-4" />
+                    <p>No approvers configured yet.</p>
+                    <p className="text-sm mt-2">Use &quot;Add approver&quot; to create a department → approver mapping.</p>
                 </div>
             )}
         </div>
