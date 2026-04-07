@@ -1,5 +1,10 @@
+import { readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const prisma = new PrismaClient()
 
@@ -10,6 +15,31 @@ async function main() {
     update: {},
     create: { email: 'admin@example.com', name: 'Admin', role: 'admin', passwordHash }
   })
+
+  // Default HR policies (Leave & HR → Policies). Create only if slug missing — never overwrites edits.
+  try {
+    const bodiesPath = join(__dirname, 'hr-policy-seed-bodies.json')
+    const seedPolicies = JSON.parse(readFileSync(bodiesPath, 'utf8'))
+    for (const p of seedPolicies) {
+      const existing = await prisma.hrPolicy.findUnique({ where: { slug: p.slug } })
+      if (!existing) {
+        await prisma.hrPolicy.create({
+          data: {
+            title: p.title,
+            slug: p.slug,
+            category: p.category,
+            body: p.body,
+            status: 'published',
+            version: 1,
+            updatedById: user.id
+          }
+        })
+        console.log(`📋 HR policy seeded: ${p.title}`)
+      }
+    }
+  } catch (e) {
+    console.warn('HR policy seed skipped:', e.message)
+  }
 
   // Seed teams from hardcoded Teams.jsx data
   const teamsData = [
