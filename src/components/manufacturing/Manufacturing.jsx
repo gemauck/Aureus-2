@@ -452,6 +452,21 @@ try {
   const [manufacturingActivityError, setManufacturingActivityError] = useState(null);
   const [manufacturingActivityExpandedId, setManufacturingActivityExpandedId] = useState(null);
   const manufacturingActivityPollRef = useRef(null);
+  const manufacturingActivityTabPrevRef = useRef(null);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityPageSize, setActivityPageSize] = useState(50);
+  const [activityDateStart, setActivityDateStart] = useState('');
+  const [activityDateEnd, setActivityDateEnd] = useState('');
+  const [activityDateStartDraft, setActivityDateStartDraft] = useState('');
+  const [activityDateEndDraft, setActivityDateEndDraft] = useState('');
+
+  useEffect(() => {
+    if (activeTab === 'activity' && manufacturingActivityTabPrevRef.current !== 'activity' && isAdmin) {
+      setActivityDateStartDraft(activityDateStart);
+      setActivityDateEndDraft(activityDateEnd);
+    }
+    manufacturingActivityTabPrevRef.current = activeTab;
+  }, [activeTab, isAdmin, activityDateStart, activityDateEnd]);
 
   const loadManufacturingActivity = useCallback(async (options = {}) => {
     const silent = options.silent === true;
@@ -460,8 +475,16 @@ try {
       setManufacturingActivityLoading(true);
     }
     setManufacturingActivityError(null);
+    const limit = activityPageSize;
+    const offset = (activityPage - 1) * activityPageSize;
     try {
-      const raw = await safeCallAPI('getManufacturingActivity', { limit: 200, offset: 0, forceRefresh: true });
+      const raw = await safeCallAPI('getManufacturingActivity', {
+        limit,
+        offset,
+        startDate: activityDateStart || undefined,
+        endDate: activityDateEnd || undefined,
+        forceRefresh: true
+      });
       const logs = Array.isArray(raw?.logs)
         ? raw.logs
         : (Array.isArray(raw?.data?.logs) ? raw.data.logs : []);
@@ -470,8 +493,8 @@ try {
         : (typeof raw?.data?.total === 'number' ? raw.data.total : logs.length);
 
       setManufacturingActivityLogs((prev) => {
-        if (silent && prev.length > 0 && logs.length > 0) {
-          if (prev.length === logs.length && prev[0]?.id === logs[0]?.id) {
+        if (silent && prev.length > 0 && logs.length > 0 && prev.length === logs.length) {
+          if (prev[0]?.id === logs[0]?.id) {
             let same = true;
             for (let i = 0; i < prev.length; i++) {
               if (prev[i]?.id !== logs[i]?.id) {
@@ -494,7 +517,10 @@ try {
         setManufacturingActivityLoading(false);
       }
     }
-  }, [isAdmin, safeCallAPI]);
+  }, [isAdmin, safeCallAPI, activityPage, activityPageSize, activityDateStart, activityDateEnd]);
+
+  const loadManufacturingActivityRef = useRef(loadManufacturingActivity);
+  loadManufacturingActivityRef.current = loadManufacturingActivity;
 
   useEffect(() => {
     if (activeTab !== 'activity' || !isAdmin) {
@@ -504,9 +530,9 @@ try {
       }
       return;
     }
-    loadManufacturingActivity({ silent: false });
+    loadManufacturingActivityRef.current({ silent: false });
     manufacturingActivityPollRef.current = setInterval(() => {
-      loadManufacturingActivity({ silent: true });
+      loadManufacturingActivityRef.current({ silent: true });
     }, 60000);
     return () => {
       if (manufacturingActivityPollRef.current) {
@@ -514,7 +540,13 @@ try {
         manufacturingActivityPollRef.current = null;
       }
     };
-  }, [activeTab, isAdmin, loadManufacturingActivity]);
+  }, [activeTab, isAdmin, activityPage, activityPageSize, activityDateStart, activityDateEnd]);
+
+  useEffect(() => {
+    if (activeTab !== 'activity' || !isAdmin) return;
+    const tp = Math.max(1, Math.ceil(manufacturingActivityTotal / activityPageSize) || 1);
+    if (activityPage > tp) setActivityPage(tp);
+  }, [manufacturingActivityTotal, activityPageSize, activityPage, activeTab, isAdmin]);
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
   useEffect(() => {
@@ -2068,13 +2100,28 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       );
     }
 
+    const totalPages = Math.max(1, Math.ceil(manufacturingActivityTotal / activityPageSize) || 1);
+    const rangeFrom =
+      manufacturingActivityTotal === 0 ? 0 : (activityPage - 1) * activityPageSize + 1;
+    const rangeTo = Math.min(activityPage * activityPageSize, manufacturingActivityTotal);
+    const filterSummary =
+      activityDateStart || activityDateEnd
+        ? `Filtered by date${activityDateStart ? ` from ${activityDateStart}` : ''}${activityDateEnd ? ` to ${activityDateEnd}` : ''}. `
+        : '';
+
     return (
       <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border shadow-sm overflow-hidden`}>
         <div className={`px-5 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
           <div>
             <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Activity</h3>
             <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Changes across Manufacturing, sales orders, and purchase orders ({manufacturingActivityTotal.toLocaleString()} stored). Refreshes in the background every minute.
+              Changes across Manufacturing, sales orders, and purchase orders.{' '}
+              <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                {manufacturingActivityTotal.toLocaleString()} matching event
+                {manufacturingActivityTotal === 1 ? '' : 's'} in the database (full history is retained).
+              </span>{' '}
+              {filterSummary}
+              Refreshes in the background every minute.
             </p>
           </div>
           <button
@@ -2090,6 +2137,101 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </button>
         </div>
 
+        <div
+          className={`px-5 py-3 border-b flex flex-col lg:flex-row lg:items-end gap-3 ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-100 bg-gray-50/80'}`}
+        >
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label
+                htmlFor="mfg-activity-start"
+                className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}
+              >
+                From date
+              </label>
+              <input
+                id="mfg-activity-start"
+                type="date"
+                value={activityDateStartDraft}
+                onChange={(e) => setActivityDateStartDraft(e.target.value)}
+                className={`text-sm rounded-lg border px-2 py-1.5 ${
+                  isDark
+                    ? 'bg-gray-800 border-gray-700 text-gray-100'
+                    : 'bg-white border-gray-200 text-gray-900'
+                }`}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="mfg-activity-end"
+                className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}
+              >
+                To date
+              </label>
+              <input
+                id="mfg-activity-end"
+                type="date"
+                value={activityDateEndDraft}
+                onChange={(e) => setActivityDateEndDraft(e.target.value)}
+                className={`text-sm rounded-lg border px-2 py-1.5 ${
+                  isDark
+                    ? 'bg-gray-800 border-gray-700 text-gray-100'
+                    : 'bg-white border-gray-200 text-gray-900'
+                }`}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActivityDateStart(activityDateStartDraft);
+                setActivityDateEnd(activityDateEndDraft);
+                setActivityPage(1);
+              }}
+              className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Apply dates
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActivityDateStartDraft('');
+                setActivityDateEndDraft('');
+                setActivityDateStart('');
+                setActivityDateEnd('');
+                setActivityPage(1);
+              }}
+              className={`px-3 py-2 text-sm rounded-lg border ${
+                isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-800 hover:bg-gray-100'
+              }`}
+            >
+              Clear dates
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+            <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`} htmlFor="mfg-activity-page-size">
+              Rows per page
+            </label>
+            <select
+              id="mfg-activity-page-size"
+              value={activityPageSize}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (Number.isFinite(v)) {
+                  setActivityPageSize(v);
+                  setActivityPage(1);
+                }
+              }}
+              className={`text-sm rounded-lg border px-2 py-1.5 ${
+                isDark ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900'
+              }`}
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+            </select>
+          </div>
+        </div>
+
         {manufacturingActivityError && (
           <div className="mx-5 mt-4 p-3 rounded-lg bg-red-50 text-red-800 text-sm">{manufacturingActivityError}</div>
         )}
@@ -2097,7 +2239,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         {manufacturingActivityLoading && manufacturingActivityLogs.length === 0 ? (
           <div className="p-10 text-center text-sm text-gray-500">Loading activity…</div>
         ) : manufacturingActivityLogs.length === 0 ? (
-          <div className="p-10 text-center text-sm text-gray-500">No activity recorded yet.</div>
+          <div className="p-10 text-center text-sm text-gray-500">
+            {activityDateStart || activityDateEnd
+              ? 'No activity matches the selected date range.'
+              : 'No activity recorded yet.'}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -2180,6 +2326,45 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </table>
           </div>
         )}
+
+        <div
+          className={`px-5 py-3 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
+            isDark ? 'border-gray-800' : 'border-gray-100'
+          }`}
+        >
+          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            {manufacturingActivityTotal === 0
+              ? 'No rows on this page.'
+              : `Showing ${rangeFrom.toLocaleString()}–${rangeTo.toLocaleString()} of ${manufacturingActivityTotal.toLocaleString()}`}
+            {manufacturingActivityTotal > 0 && (
+              <span className="ml-1">
+                · Page {activityPage} of {totalPages}
+              </span>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={activityPage <= 1 || manufacturingActivityLoading}
+              onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+              className={`px-3 py-1.5 text-sm rounded-lg border disabled:opacity-40 ${
+                isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={activityPage >= totalPages || manufacturingActivityLoading}
+              onClick={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
+              className={`px-3 py-1.5 text-sm rounded-lg border disabled:opacity-40 ${
+                isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -11754,7 +11939,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className="flex gap-1 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
-                ...(isAdmin ? [{ id: 'activity', label: 'Activity', icon: 'fa-history' }] : []),
                 { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
                 { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
                 { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
@@ -11762,7 +11946,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
                 { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
                 { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
-                { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
+                { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' },
+                ...(isAdmin ? [{ id: 'activity', label: 'Activity', icon: 'fa-history' }] : [])
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -11783,7 +11968,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           {/* Content Area */}
           <div>
             {activeTab === 'dashboard' && <DashboardView />}
-            {activeTab === 'activity' && <ManufacturingActivityView />}
             {activeTab === 'inventory' && renderInventoryView()}
             {activeTab === 'bom' && <BOMView />}
             {activeTab === 'production' && <ProductionView />}
@@ -11810,6 +11994,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 onInventoryUpdate={(updatedInventory) => setInventory(updatedInventory)}
               />
             )}
+            {activeTab === 'activity' && <ManufacturingActivityView />}
           </div>
         </>
       )}
