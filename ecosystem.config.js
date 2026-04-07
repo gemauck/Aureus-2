@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'abcotronics-erp',
-      script: './server/server.js',
+      script: './server.js',
       instances: 2, // Run 2 instances for load balancing
       exec_mode: 'cluster',
       watch: false,

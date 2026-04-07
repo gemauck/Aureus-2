@@ -123,10 +123,16 @@ fi
 echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then
-  pm2 restart "${PM2_PROCESS_NAME}" --update-env || {
-    echo "WARNING: pm2 restart failed. Check that the process name '${PM2_PROCESS_NAME}' is correct."
-    exit 1
-  }
+  if pm2 describe "${PM2_PROCESS_NAME}" >/dev/null 2>&1; then
+    pm2 restart "${PM2_PROCESS_NAME}" --update-env
+  else
+    echo "  (no existing PM2 process named '${PM2_PROCESS_NAME}'; starting fresh)"
+    if [ -f "${APP_DIR}/ecosystem.config.js" ]; then
+      pm2 start "${APP_DIR}/ecosystem.config.js" --update-env
+    else
+      pm2 start "${APP_DIR}/server.js" --name "${PM2_PROCESS_NAME}" --update-env
+    fi
+  fi
   pm2 save 2>/dev/null || true
 else
   echo "NOTE: pm2 not found. If you use systemd, try:"
