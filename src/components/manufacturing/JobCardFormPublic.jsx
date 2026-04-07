@@ -18,8 +18,34 @@ function sortJobCardStockLocations(list) {
   return fn ? fn(list) : (Array.isArray(list) ? [...list] : []);
 }
 
-function defaultJobCardStockLocationId(locations) {
-  return window.manufacturingStockLocations?.getDefaultManufacturingStockLocation?.(locations)?.id || '';
+/** Quantity at a warehouse when using cached aggregate inventory (locations[] or single locationId row). */
+function jobCardQuantityAtLocation(item, locationId) {
+  if (!item || !locationId) return 0;
+  const locs = Array.isArray(item.locations) ? item.locations : [];
+  if (locs.length > 0) {
+    const loc = locs.find((l) => l.locationId === locationId);
+    return loc ? Number(loc.quantity) || 0 : 0;
+  }
+  if (item.locationId === locationId) {
+    return Number(item.quantity) || 0;
+  }
+  return 0;
+}
+
+/** Offline / fallback: build pick list from cached inventory for one location (qty on hand only). */
+function jobCardStockPickListFromCachedInventory(items, locationId) {
+  if (!locationId || !Array.isArray(items)) return [];
+  const out = [];
+  for (const item of items) {
+    const q = jobCardQuantityAtLocation(item, locationId);
+    if (q <= 0) continue;
+    const sku = item.sku || item.id;
+    if (!sku) continue;
+    if (item.status === 'inactive') continue;
+    out.push({ ...item, quantity: q, sku });
+  }
+  out.sort((a, b) => String(a.name || a.sku || '').localeCompare(String(b.name || b.sku || ''), undefined, { sensitivity: 'base' }));
+  return out;
 }
 
 function readPublicPriorJobCardIds() {
@@ -648,6 +674,8 @@ const JobCardFormPublic = () => {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [inventory, setInventory] = useState([]);
   const [stockLocations, setStockLocations] = useState([]);
+  /** Rows with on-hand qty at `newStockItem.locationId` (from API or cache). */
+  const [stockRowsAtLocation, setStockRowsAtLocation] = useState([]);
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
   const [clients, setClients] = useState([]);
@@ -842,30 +870,78 @@ const JobCardFormPublic = () => {
 
   const stockSkuOptions = useMemo(
     () =>
-      inventory.map(item => ({
-        value: item.sku || item.id,
-        label: `${item.name} (${item.sku || item.id})`
-      })),
-    [inventory]
+      stockRowsAtLocation.map((item) => {
+        const sku = item.sku || item.id;
+        const q = Number(item.quantity) || 0;
+        return {
+          value: sku,
+          label: `${item.name || sku} (${sku}) — ${q} on hand`
+        };
+      }),
+    [stockRowsAtLocation]
   );
 
   const stockLocationOptions = useMemo(
     () =>
-      stockLocations.map(loc => ({
-        value: loc.id,
-        label: `${loc.name} (${loc.code})`
-      })),
+      stockLocations
+        .filter((loc) => loc.status !== 'inactive' && loc.status !== 'suspended')
+        .map((loc) => ({
+          value: loc.id,
+          label: `${loc.name} (${loc.code})`
+        })),
     [stockLocations]
   );
 
   useEffect(() => {
-    if (!stockLocations.length) return;
-    setNewStockItem((prev) => {
-      if (prev.locationId) return prev;
-      const id = defaultJobCardStockLocationId(stockLocations);
-      return id ? { ...prev, locationId: id } : prev;
-    });
-  }, [stockLocations]);
+    const locId = newStockItem.locationId;
+    if (!locId) {
+      setStockRowsAtLocation([]);
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      if (!isOnline) {
+        const rows = jobCardStockPickListFromCachedInventory(inventory, locId);
+        if (!cancelled) setStockRowsAtLocation(rows);
+        return;
+      }
+      try {
+        const response = await fetch(
+          `/api/public/inventory?locationId=${encodeURIComponent(locId)}`,
+          { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const rows = data?.data?.inventory || data?.inventory || [];
+          if (!cancelled) setStockRowsAtLocation(Array.isArray(rows) ? rows : []);
+          return;
+        }
+      } catch (e) {
+        console.warn('⚠️ JobCardFormPublic: location inventory fetch failed:', e?.message || e);
+      }
+      const token = window.storage?.getToken?.();
+      if (token && window.DatabaseAPI?.getInventory) {
+        try {
+          const response = await window.DatabaseAPI.getInventory(locId, { forceRefresh: true });
+          const rows = response?.data?.inventory || [];
+          if (!cancelled) {
+            setStockRowsAtLocation(
+              Array.isArray(rows) ? rows.map((item) => ({ ...item, id: item.id })) : []
+            );
+          }
+          return;
+        } catch (authError) {
+          console.warn('⚠️ JobCardFormPublic: authenticated location inventory failed:', authError?.message || authError);
+        }
+      }
+      const rows = jobCardStockPickListFromCachedInventory(inventory, locId);
+      if (!cancelled) setStockRowsAtLocation(rows);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [newStockItem.locationId, isOnline, inventory]);
 
   const jobStatusOptions = useMemo(
     () => [
@@ -1866,14 +1942,21 @@ const JobCardFormPublic = () => {
   };
 
   const handleAddStockItem = () => {
-    if (!newStockItem.sku || !newStockItem.locationId || newStockItem.quantity <= 0) {
-      alert('Please select a component, location, and quantity greater than zero.');
+    if (!newStockItem.locationId) {
+      alert('Please select the stock location first.');
       return;
     }
-    
-    const inventoryItem = inventory.find(item => item.sku === newStockItem.sku || item.id === newStockItem.sku);
+    if (!newStockItem.sku || newStockItem.quantity <= 0) {
+      alert('Please select a component with stock at that location, and enter a quantity greater than zero.');
+      return;
+    }
+
+    const inventoryItem =
+      stockRowsAtLocation.find(
+        (item) => item.sku === newStockItem.sku || item.id === newStockItem.sku
+      ) || inventory.find((item) => item.sku === newStockItem.sku || item.id === newStockItem.sku);
     if (!inventoryItem) {
-      alert('Selected component could not be found in inventory.');
+      alert('Selected component could not be found for this location.');
       return;
     }
 
@@ -1891,7 +1974,7 @@ const JobCardFormPublic = () => {
       ...prev,
       stockUsed: [...prev.stockUsed, stockItem]
     }));
-    setNewStockItem({ sku: '', quantity: 0, locationId: defaultJobCardStockLocationId(stockLocations) });
+    setNewStockItem((prev) => ({ sku: '', quantity: 0, locationId: prev.locationId }));
   };
 
   const handleRemoveStockItem = (itemId) => {
@@ -2167,7 +2250,7 @@ const JobCardFormPublic = () => {
       });
       setSelectedPhotos([]);
       setTechnicianInput('');
-      setNewStockItem({ sku: '', quantity: 0, locationId: defaultJobCardStockLocationId(stockLocations) });
+      setNewStockItem({ sku: '', quantity: 0, locationId: '' });
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setVoiceAttachments([]);
     setCurrentStep(0);
@@ -2324,7 +2407,7 @@ const JobCardFormPublic = () => {
     }));
 
     setTechnicianInput('');
-    setNewStockItem({ sku: '', quantity: 0, locationId: defaultJobCardStockLocationId(stockLocations) });
+    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setCurrentStep(0);
     setStepError('');
@@ -3362,25 +3445,34 @@ const JobCardFormPublic = () => {
             </span>
           )}
         </header>
+            <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              Select the <strong>stock location</strong> first. The component list only includes items with <strong>quantity on hand</strong> at that warehouse.
+            </p>
             <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-2 mb-3">
-              <div className="sm:col-span-4">
-                <SearchableSelect
-                  id="stock-sku"
-                  aria-label="Stock component"
-                  value={newStockItem.sku}
-                  onChange={v => setNewStockItem({ ...newStockItem, sku: v })}
-                  options={stockSkuOptions}
-                  placeholder="Search component…"
-                />
-              </div>
               <div className="sm:col-span-4">
                 <SearchableSelect
                   id="stock-location"
                   aria-label="Stock location"
                   value={newStockItem.locationId}
-                  onChange={v => setNewStockItem({ ...newStockItem, locationId: v })}
+                  onChange={(v) => setNewStockItem((prev) => ({ ...prev, locationId: v, sku: '' }))}
                   options={stockLocationOptions}
-                  placeholder="Search location…"
+                  placeholder="Select stock location first…"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <SearchableSelect
+                  id="stock-sku"
+                  aria-label="Stock component"
+                  value={newStockItem.sku}
+                  onChange={(v) => setNewStockItem((prev) => ({ ...prev, sku: v }))}
+                  options={stockSkuOptions}
+                  placeholder={
+                    newStockItem.locationId
+                      ? 'Search component…'
+                      : 'Choose location first…'
+                  }
+                  disabled={!newStockItem.locationId}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -3392,8 +3484,8 @@ const JobCardFormPublic = () => {
                   value={newStockItem.quantity || ''}
                   onChange={(e) => setNewStockItem({ ...newStockItem, quantity: parseFloat(e.target.value) || 0 })}
                   placeholder="Qty"
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
-              style={{ fontSize: '16px' }}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
+                  style={{ fontSize: '16px' }}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -3406,6 +3498,11 @@ const JobCardFormPublic = () => {
                 </button>
               </div>
             </div>
+            {newStockItem.locationId && stockSkuOptions.length === 0 && (
+              <p className="text-xs text-gray-500 mb-3">
+                No on-hand stock at this location{!isOnline ? ' (offline — connect to refresh, or stock may be empty).' : '.'}
+              </p>
+            )}
             {formData.stockUsed.length > 0 && (
               <div className="space-y-2">
                 {formData.stockUsed.map(item => (
