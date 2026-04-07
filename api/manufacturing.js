@@ -3406,6 +3406,14 @@ async function handler(req, res) {
       if (!validTypes.includes(body.type)) {
         return badRequest(res, `Invalid movement type. Must be one of: ${validTypes.join(', ')}`)
       }
+
+      const movementTypeNorm = String(body.type).toLowerCase()
+      if (movementTypeNorm === 'receipt' && !isAdminRole(req.user?.role)) {
+        return forbidden(
+          res,
+          'Only administrators can record manual stock receipts. Complete a production order to receive finished goods into stock, or ask an administrator.'
+        )
+      }
       
       // Validate SKU and itemName
       if (!body.sku.trim() || !body.itemName.trim()) {

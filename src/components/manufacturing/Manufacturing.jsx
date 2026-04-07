@@ -5156,7 +5156,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     try {
       const defLoc = defaultManufacturingStockLocation(stockLocations);
       const defId = defLoc?.id || '';
-      const moveType = prefill.type || 'receipt';
+      let moveType = prefill.type || (isAdmin ? 'receipt' : 'consumption');
+      if (!isAdmin && moveType === 'receipt') {
+        moveType = 'consumption';
+      }
       let fromLocationId = prefill.fromLocationId;
       let toLocationId = prefill.toLocationId;
       if (fromLocationId === undefined || fromLocationId === '') {
@@ -5197,6 +5200,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   const handleSaveMovement = async () => {
     try {
+      if (formData.type === 'receipt' && !isAdmin) {
+        alert(
+          'Only administrators can record incoming stock receipts. To add finished goods, complete a production order; ask an administrator for other receipts.'
+        );
+        return;
+      }
       // Robust validation
       const isValidQuantity = formData.quantity !== '' && formData.quantity !== null && formData.quantity !== undefined;
       const isAdjustment = formData.type === 'adjustment';
@@ -5243,7 +5252,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
 
       // Require location selection for transfer/consumption/receipt/production/adjustment
-      const type = formData.type || 'receipt';
+      const type = formData.type || (isAdmin ? 'receipt' : 'consumption');
       if (type === 'transfer') {
         if (!formData.fromLocationId || !formData.toLocationId) {
           alert('Please select From Location and To Location for the transfer.');
@@ -7769,16 +7778,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Movement Type *</label>
                   <select
-                    value={formData.type || 'receipt'}
+                    value={formData.type || (isAdmin ? 'receipt' : 'consumption')}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    <option value="receipt">Receipt (Incoming Stock)</option>
+                    {isAdmin && (
+                      <option value="receipt">Receipt (Incoming Stock)</option>
+                    )}
                     <option value="consumption">Consumption (Outgoing Stock)</option>
                     <option value="production">Production</option>
                     <option value="transfer">Transfer</option>
                     <option value="adjustment">Adjustment</option>
                   </select>
+                  {!isAdmin && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Incoming receipts are limited to administrators. To receive finished product into stock, complete a production order.
+                    </p>
+                  )}
                 </div>
 
                 {/* SKU */}
@@ -8952,6 +8968,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             inventory.filter((item) => inventoryItemLinkedToSupplierName(item, selectedPoSupplier.name))
           )
         : [];
+      const selectedInvForPoLine = newPurchaseOrderItem.sku
+        ? poInventoryOptions.find(
+            (item) =>
+              item.sku === newPurchaseOrderItem.sku || item.id === newPurchaseOrderItem.sku
+          )
+        : null;
+      const inventoryListedUnitCost =
+        selectedInvForPoLine != null ? parseFloat(selectedInvForPoLine.unitCost) : NaN;
 
       return (
         <>
@@ -9071,11 +9095,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         onChange={(e) => {
                           const sku = e.target.value;
                           const invItem = poInventoryOptions.find(item => item.sku === sku || item.id === sku);
-                          setNewPurchaseOrderItem({
-                            ...newPurchaseOrderItem,
-                            sku: sku,
-                            name: invItem ? invItem.name : newPurchaseOrderItem.name
-                          });
+                          const costFromInv = invItem != null ? parseFloat(invItem.unitCost) : NaN;
+                          const hasListedCost = Number.isFinite(costFromInv) && costFromInv > 0;
+                          setNewPurchaseOrderItem((prev) => ({
+                            ...prev,
+                            sku,
+                            name: invItem ? invItem.name : prev.name,
+                            unitPrice: !sku ? 0 : hasListedCost ? costFromInv : prev.unitPrice
+                          }));
                         }}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                       >
@@ -9126,26 +9153,48 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={newPurchaseOrderItem.unitPrice || ''}
-                      onChange={(e) => setNewPurchaseOrderItem({ ...newPurchaseOrderItem, unitPrice: parseFloat(e.target.value) || 0 })}
-                      placeholder="Unit Price *"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddPurchaseOrderItem}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                    >
-                      <i className="fas fa-plus mr-1"></i> Add Item
-                    </button>
+                  <div className="grid grid-cols-12 gap-2 mb-3">
+                    <div className="col-span-12 sm:col-span-4">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Current price (inventory)</label>
+                      <div
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-800 min-h-[38px] flex items-center"
+                        title="Unit cost stored on the inventory item"
+                      >
+                        {!newPurchaseOrderItem.sku ? (
+                          <span className="text-gray-500">Select an item above</span>
+                        ) : !selectedInvForPoLine ? (
+                          '—'
+                        ) : Number.isFinite(inventoryListedUnitCost) && inventoryListedUnitCost > 0 ? (
+                          formatCurrency(inventoryListedUnitCost)
+                        ) : (
+                          <span className="text-gray-500">No unit cost on file</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="col-span-12 sm:col-span-4">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Unit price for this order *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={newPurchaseOrderItem.unitPrice || ''}
+                        onChange={(e) => setNewPurchaseOrderItem({ ...newPurchaseOrderItem, unitPrice: parseFloat(e.target.value) || 0 })}
+                        placeholder="Listed cost or new price"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-12 sm:col-span-4 flex flex-col justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddPurchaseOrderItem}
+                        className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      >
+                        <i className="fas fa-plus mr-1"></i> Add Item
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-gray-600 mb-2">
-                    Enter <strong>quantity</strong> and <strong>unit price</strong> above, then use this if the part is not in inventory yet (creates the catalog item at the receiving location).
+                    <strong>Current price</strong> is the unit cost on the inventory record. Enter a <strong>unit price for this order</strong> if the supplier quote differs. Then use the button below if the part is not in inventory yet (creates the catalog item at the receiving location).
                   </p>
                   <button
                     type="button"
@@ -10042,9 +10091,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const normalizedQty = template
         ? (template.type === 'adjustment' ? parsedQty : Math.abs(parsedQty))
         : '';
-      
+      let moveType = template?.type || (isAdmin ? 'receipt' : 'consumption');
+      if (!isAdmin && moveType === 'receipt') {
+        moveType = 'consumption';
+      }
+
       openAddMovementModal({
-        type: template?.type || 'receipt',
+        type: moveType,
         sku: item.sku,
         itemName: item.name,
         quantity: template ? `${normalizedQty}` : '',
@@ -10057,11 +10110,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         notes: template?.notes || '',
         date: new Date().toISOString().split('T')[0]
       });
-      
+
       if (movementId) {
         setSelectedMovementTemplateId('');
       }
-    }, [item, itemMovementsForDetail, openAddMovementModal]);
+    }, [item, itemMovementsForDetail, openAddMovementModal, isAdmin]);
 
     // Sync editFormData and selectedDetailLocationId when item changes
     useEffect(() => {
