@@ -8,6 +8,7 @@ import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/clientJsonFields.js'
 import { isAdminRole } from '../_lib/authRoles.js'
+import { notifyClientCreationStakeholders } from '../_lib/notifyClientCreationStakeholders.js'
 
 async function handler(req, res) {
   try {
@@ -544,6 +545,14 @@ async function handler(req, res) {
           })
 
           const parsedClient = parseClientJsonFields(converted)
+          void notifyClientCreationStakeholders({
+            clientId: converted.id,
+            clientName: converted.name,
+            source: 'converted',
+            actorId: req.user?.sub || null,
+            actorName: req.user?.name || null,
+            actorEmail: req.user?.email || null
+          }).catch((err) => console.error('📧 Lead conversion stakeholder notify failed:', err?.message || err))
           return ok(res, { client: parsedClient, converted: true })
         }
 

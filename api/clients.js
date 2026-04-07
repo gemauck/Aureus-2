@@ -7,6 +7,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
+import { notifyClientCreationStakeholders } from './_lib/notifyClientCreationStakeholders.js'
 
 // Phase 2: JSON field parsing and dual-write utilities moved to shared module
 // See: api/_lib/clientJsonFields.js
@@ -1351,6 +1352,15 @@ async function handler(req, res) {
         const parsedClient = parseClientJsonFields(client)
         
         
+        void notifyClientCreationStakeholders({
+          clientId: client.id,
+          clientName: client.name,
+          source: 'created',
+          actorId: userId || null,
+          actorName: req.user?.name || null,
+          actorEmail: userEmail !== 'unknown' ? userEmail : (req.user?.email || null)
+        }).catch((err) => console.error('📧 Client creation stakeholder notify failed:', err?.message || err))
+
         // Attach duplicate info (if any) so frontend can show a warning
         return created(res, { client: parsedClient, duplicateWarning: duplicateCheck })
       } catch (dbError) {
