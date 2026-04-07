@@ -55,9 +55,15 @@ async function handler(req, res) {
       if (body.title !== undefined) data.title = String(body.title).trim()
       if (body.slug !== undefined) data.slug = String(body.slug).trim()
       if (body.category !== undefined) data.category = String(body.category)
-      if (body.body !== undefined) data.body = String(body.body)
+      if (body.body !== undefined) {
+        const nextBody = String(body.body)
+        data.body = nextBody
+        if (nextBody !== policy.body) {
+          data.version = policy.version + 1
+        }
+      }
       if (body.status !== undefined) data.status = String(body.status)
-      if (body.version !== undefined && Number.isFinite(Number(body.version))) {
+      if (body.version !== undefined && Number.isFinite(Number(body.version)) && body.body === undefined) {
         data.version = Number(body.version)
       }
       if (body.effectiveFrom !== undefined) {

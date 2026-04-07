@@ -97,6 +97,7 @@ model User {
   erpGoogleCalendarConnection ErpGoogleCalendarConnection?
   erpCalendarEvents           ErpCalendarEvent[]
   hrPoliciesUpdated           HrPolicy[]                    @relation("HrPolicyUpdatedBy")
+  hrPolicyAcknowledgments    HrPolicyAcknowledgment[]
   hrLibraryDocumentsForUser   HrLibraryDocument[]           @relation("HrLibraryDocumentEmployee")
   hrLibraryDocumentsUploaded  HrLibraryDocument[]           @relation("HrLibraryDocumentUploader")
 
@@ -2156,9 +2157,30 @@ model HrPolicy {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   updatedBy     User?     @relation("HrPolicyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  acknowledgments HrPolicyAcknowledgment[]
 
   @@index([status])
   @@index([category])
+}
+
+/// Website-style “accept terms” record: one row per user per policy version accepted.
+model HrPolicyAcknowledgment {
+  id               String   @id @default(cuid())
+  userId           String
+  policyId         String
+  policyVersion    Int
+  bodySha256       String   @default("") @db.VarChar(64)
+  ip               String?  @db.VarChar(128)
+  userAgent        String?  @db.VarChar(512)
+  acknowledgedAt   DateTime @default(now())
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  policy HrPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, policyId, policyVersion])
+  @@index([policyId])
+  @@index([userId])
+  @@index([acknowledgedAt])
 }
 
 model HrLibraryDocument {

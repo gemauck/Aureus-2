@@ -822,6 +822,17 @@ app.all('/api/hr/policies', async (req, res, next) => {
   }
 })
 
+app.all('/api/hr/policy-acknowledgments', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'hr', 'policy-acknowledgments.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ HR policy-acknowledgments API error:', e)
+    return next(e)
+  }
+})
+
 app.all('/api/hr/documents/:id', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'hr', 'documents', '[id].js'))
