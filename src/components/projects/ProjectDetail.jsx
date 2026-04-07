@@ -6588,6 +6588,12 @@ function initializeProjectDetail() {
         return parsed.toLocaleDateString();
     }, []);
 
+    const getTaskCreatorLabel = useCallback((t) => {
+        if (!t || typeof t !== 'object') return '';
+        const fromRel = t.creatorUser && (t.creatorUser.name || t.creatorUser.email);
+        return String(t.createdBy || fromRel || '').trim();
+    }, []);
+
     const kanbanColumns = useMemo(() => {
         const baseOrder = ['to do', 'in progress', 'review', 'blocked', 'done'];
         const seen = new Set();
@@ -9157,6 +9163,11 @@ function initializeProjectDetail() {
                                                                     </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap">
                                                                         <div className="text-xs font-medium text-gray-900">{task.title || 'Untitled task'}</div>
+                                                                        {getTaskCreatorLabel(task) ? (
+                                                                            <div className="text-[10px] text-gray-400 mt-0.5">
+                                                                                Created by {getTaskCreatorLabel(task)}
+                                                                            </div>
+                                                                        ) : null}
                                                                     </td>
                                                                     <td className="px-4 py-2 whitespace-nowrap">
                                                                         <select
@@ -9392,9 +9403,14 @@ function initializeProjectDetail() {
                                                                             className="bg-gray-50 hover:bg-gray-100 cursor-pointer transition"
                                                                         >
                                                                             <td className="px-4 py-1.5 whitespace-nowrap pl-10">
-                                                                                <div className="flex items-center gap-1.5">
-                                                                                    <i className="fas fa-level-up-alt fa-rotate-90 text-[10px] text-gray-400"></i>
-                                                                                    <div className="text-[10px] font-medium text-gray-700">{subtask.title || 'Untitled subtask'}</div>
+                                                                                <div className="flex items-start gap-1.5">
+                                                                                    <i className="fas fa-level-up-alt fa-rotate-90 text-[10px] text-gray-400 mt-0.5"></i>
+                                                                                    <div>
+                                                                                        <div className="text-[10px] font-medium text-gray-700">{subtask.title || 'Untitled subtask'}</div>
+                                                                                        {getTaskCreatorLabel(subtask) ? (
+                                                                                            <div className="text-[9px] text-gray-400 mt-0.5">Created by {getTaskCreatorLabel(subtask)}</div>
+                                                                                        ) : null}
+                                                                                    </div>
                                                                                 </div>
                                                                             </td>
                                                                             <td className="px-4 py-1.5 whitespace-nowrap">

@@ -10,6 +10,7 @@ import { withLogging } from './_lib/logger.js';
 import { formatInSAST } from './_lib/sastDate.js';
 import { createNotificationForUser } from './notifications.js';
 import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js';
+import { mergeCreatorIntoSubscribers } from './_lib/taskSubscribers.js';
 
 // Helper to safely parse JSON fields from database
 function safeParseJson(value, defaultValue = null) {
@@ -25,6 +26,15 @@ function safeParseJson(value, defaultValue = null) {
     }
   }
   return value;
+}
+
+function creatorDisplayFromRecord(record) {
+  if (!record) return '';
+  const u = record.creatorUser;
+  if (u && (u.name || u.email)) {
+    return String(u.name || u.email || '').trim();
+  }
+  return String(record.createdBy || '').trim();
 }
 
 // Transform comment to frontend format
@@ -49,6 +59,8 @@ function transformSubtask(subtask) {
     description: subtask.description || '',
     status: subtask.status,
     priority: subtask.priority || 'Medium',
+    createdById: subtask.createdById || null,
+    createdBy: creatorDisplayFromRecord(subtask),
     ...(subtask.comments && {
       comments: subtask.comments.map(transformComment)
     })
@@ -83,6 +95,8 @@ function transformTask(task, options = {}) {
     dependencies: safeParseJson(task.dependencies, []),
     subscribers: safeParseJson(task.subscribers, []),
     customFields: safeParseJson(task.customFields, {}),
+    createdById: task.createdById || null,
+    createdBy: creatorDisplayFromRecord(task),
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString()
   };
@@ -125,6 +139,21 @@ async function getAssigneeName(assigneeId) {
     return user?.name || '';
   } catch (e) {
     console.warn('Failed to fetch assignee name:', e.message);
+    return '';
+  }
+}
+
+/** Display name for task creator (name, else email) — used when storing denormalized createdBy */
+async function getUserDisplayName(userId) {
+  if (!userId) return '';
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: String(userId) },
+      select: { name: true, email: true }
+    });
+    return (user?.name || user?.email || '').trim();
+  } catch (e) {
+    console.warn('Failed to fetch user display name:', e.message);
     return '';
   }
 }
@@ -172,8 +201,20 @@ async function handler(req, res) {
                 email: true
               }
             },
+            creatorUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            },
             subtasks: {
-              orderBy: [{ createdAt: 'asc' }]
+              orderBy: [{ createdAt: 'asc' }],
+              include: {
+                creatorUser: {
+                  select: { id: true, name: true, email: true }
+                }
+              }
             }
           }
         });
@@ -254,8 +295,20 @@ async function handler(req, res) {
                   email: true
                 }
               },
+              creatorUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              },
               subtasks: {
-                orderBy: [{ createdAt: 'asc' }]
+                orderBy: [{ createdAt: 'asc' }],
+                include: {
+                  creatorUser: {
+                    select: { id: true, name: true, email: true }
+                  }
+                }
               }
             },
             orderBy: { createdAt: 'asc' }
@@ -381,6 +434,13 @@ async function handler(req, res) {
                   email: true
                 }
               },
+              creatorUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              },
               project: {
                 select: {
                   id: true,
@@ -463,9 +523,18 @@ async function handler(req, res) {
             dependencies: true,
             subscribers: true,
             customFields: true,
+            createdById: true,
+            createdBy: true,
             createdAt: true,
             updatedAt: true,
             assigneeUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            },
+            creatorUser: {
               select: {
                 id: true,
                 name: true,
@@ -515,9 +584,18 @@ async function handler(req, res) {
                 dependencies: true,
                 subscribers: true,
                 customFields: true,
+                createdById: true,
+                createdBy: true,
                 createdAt: true,
                 updatedAt: true,
                 assigneeUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                },
+                creatorUser: {
                   select: {
                     id: true,
                     name: true,
@@ -624,6 +702,9 @@ async function handler(req, res) {
         assigneeName = await getAssigneeName(assigneeIdFinal);
       }
 
+      const creatorId = userId ? String(userId) : null;
+      const creatorName = creatorId ? await getUserDisplayName(creatorId) : '';
+
       const task = await prisma.task.create({
         data: {
           projectId: String(projectId),
@@ -632,6 +713,8 @@ async function handler(req, res) {
           description: String(description || ''),
           status: String(status || 'todo'),
           priority: String(priority || 'Medium'),
+          createdById: creatorId,
+          createdBy: creatorName,
           assigneeId: assigneeIdFinal || null,
           assignee: assigneeName,
           assigneeIds: JSON.stringify(assigneeIdsFinal),
@@ -647,11 +730,20 @@ async function handler(req, res) {
           attachments: JSON.stringify(Array.isArray(attachments) ? attachments : []),
           checklist: JSON.stringify(Array.isArray(checklist) ? checklist : []),
           dependencies: JSON.stringify(Array.isArray(dependencies) ? dependencies : []),
-          subscribers: JSON.stringify(Array.isArray(subscribers) ? subscribers : []),
+          subscribers: JSON.stringify(
+            mergeCreatorIntoSubscribers(subscribers, creatorId)
+          ),
           customFields: JSON.stringify(typeof customFields === 'object' && customFields !== null ? customFields : {})
         },
         include: {
           assigneeUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          creatorUser: {
             select: {
               id: true,
               name: true,
@@ -664,7 +756,8 @@ async function handler(req, res) {
       console.log('✅ Created task:', {
         taskId: task.id,
         projectId: task.projectId,
-        title: task.title
+        title: task.title,
+        createdById: task.createdById
       });
 
       const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req);
@@ -718,6 +811,30 @@ async function handler(req, res) {
 
       const body = await parseJsonBody(req);
       const sendNotifications = body.sendNotifications !== false;
+
+      const existingTask = await prisma.task.findUnique({
+        where: { id: String(taskId) },
+        select: {
+          id: true,
+          projectId: true,
+          title: true,
+          status: true,
+          priority: true,
+          assigneeId: true,
+          assignee: true,
+          assigneeIds: true,
+          dueDate: true,
+          description: true,
+          listId: true,
+          createdById: true,
+          subscribers: true
+        }
+      });
+
+      if (!existingTask) {
+        return notFound(res, 'Task not found');
+      }
+
       const updateData = {};
       
       // Build update data object with proper type conversions
@@ -818,9 +935,6 @@ async function handler(req, res) {
       if (body.dependencies !== undefined) {
         updateData.dependencies = JSON.stringify(Array.isArray(body.dependencies) ? body.dependencies : []);
       }
-      if (body.subscribers !== undefined) {
-        updateData.subscribers = JSON.stringify(Array.isArray(body.subscribers) ? body.subscribers : []);
-      }
       if (body.customFields !== undefined) {
         updateData.customFields = JSON.stringify(
           typeof body.customFields === 'object' && body.customFields !== null 
@@ -832,30 +946,28 @@ async function handler(req, res) {
         updateData.parentTaskId = body.parentTaskId ? String(body.parentTaskId) : null;
       }
 
-      if (Object.keys(updateData).length === 0) {
-        return badRequest(res, 'No fields to update');
+      // Subscribers: always include task creator when known (client cannot remove creator from subscribers)
+      let subscriberInput = null;
+      if (body.subscribers !== undefined) {
+        subscriberInput = Array.isArray(body.subscribers) ? body.subscribers.filter(Boolean).map(String) : [];
+      }
+      if (existingTask.createdById) {
+        const baseSubs =
+          subscriberInput !== null ? subscriberInput : safeParseJson(existingTask.subscribers, []);
+        const merged = mergeCreatorIntoSubscribers(baseSubs, existingTask.createdById);
+        const prevNorm = JSON.stringify(
+          [...new Set(safeParseJson(existingTask.subscribers, []).map(String))].sort()
+        );
+        const nextNorm = JSON.stringify([...new Set(merged.map(String))].sort());
+        if (prevNorm !== nextNorm || subscriberInput !== null) {
+          updateData.subscribers = JSON.stringify(merged);
+        }
+      } else if (subscriberInput !== null) {
+        updateData.subscribers = JSON.stringify(subscriberInput);
       }
 
-      // Check if task exists and get current values for activity log diff
-      const existingTask = await prisma.task.findUnique({
-        where: { id: String(taskId) },
-        select: {
-          id: true,
-          projectId: true,
-          title: true,
-          status: true,
-          priority: true,
-          assigneeId: true,
-          assignee: true,
-          assigneeIds: true,
-          dueDate: true,
-          description: true,
-          listId: true
-        }
-      });
-
-      if (!existingTask) {
-        return notFound(res, 'Task not found');
+      if (Object.keys(updateData).length === 0) {
+        return badRequest(res, 'No fields to update');
       }
 
       const task = await prisma.task.update({
@@ -863,6 +975,13 @@ async function handler(req, res) {
         data: updateData,
         include: {
           assigneeUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          creatorUser: {
             select: {
               id: true,
               name: true,

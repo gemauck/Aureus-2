@@ -140,8 +140,14 @@ async function loadProjectWithRelations(projectId) {
       where: { projectId, parentTaskId: null },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
       include: {
-        subtasks: { orderBy: { createdAt: 'asc' } },
-        assigneeUser: { select: { id: true, name: true, email: true } }
+        subtasks: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            creatorUser: { select: { id: true, name: true, email: true } }
+          }
+        },
+        assigneeUser: { select: { id: true, name: true, email: true } },
+        creatorUser: { select: { id: true, name: true, email: true } }
       }
     }).catch(e => { console.warn('⚠️ tasks load skipped:', e.message); return []; }),
     loadDoc ? prisma.documentSection.findMany({
@@ -470,8 +476,14 @@ async function handler(req, res) {
                 where: { projectId: id, parentTaskId: null },
                 orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
                 include: {
-                  subtasks: { orderBy: { createdAt: 'asc' } },
-                  assigneeUser: { select: { id: true, name: true, email: true } }
+                  subtasks: {
+                    orderBy: { createdAt: 'asc' },
+                    include: {
+                      creatorUser: { select: { id: true, name: true, email: true } }
+                    }
+                  },
+                  assigneeUser: { select: { id: true, name: true, email: true } },
+                  creatorUser: { select: { id: true, name: true, email: true } }
                 }
               }).catch(() => []),
               prisma.projectTaskList?.findMany

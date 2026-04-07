@@ -5,6 +5,7 @@ import { prisma } from './_lib/prisma.js';
 import { ok, serverError, badRequest, notFound } from './_lib/response.js';
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js';
 import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js';
+import { mergeCreatorIntoSubscribers } from './_lib/taskSubscribers.js';
 
 let taskCommentColumnsEnsured = false;
 async function ensureTaskCommentColumns() {
@@ -179,7 +180,10 @@ export default async function handler(req, res) {
       // Notify participants: task assignee + all subscribers (prior commenters + previously @mentioned in any comment)
       try {
         const [task, priorComments, mentionedIdsResolved] = await Promise.all([
-          prisma.task.findUnique({ where: { id: String(taskId) }, select: { assigneeId: true, title: true, subscribers: true } }),
+          prisma.task.findUnique({
+            where: { id: String(taskId) },
+            select: { assigneeId: true, title: true, subscribers: true, createdById: true }
+          }),
           prisma.taskComment.findMany({
             where: { taskId: String(taskId), id: { not: comment.id } },
             select: { authorId: true, text: true }
@@ -196,7 +200,13 @@ export default async function handler(req, res) {
             return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
           } catch (_) { return []; }
         })();
-        const subscriberIds = [...new Set([String(finalAuthorId), ...(mentionedIdsResolved || []), ...priorAuthorIds, ...taskSubscribers])].filter(Boolean);
+        const subscriberIds = [...new Set([
+          String(finalAuthorId),
+          ...(task?.createdById ? [String(task.createdById)] : []),
+          ...(mentionedIdsResolved || []),
+          ...priorAuthorIds,
+          ...taskSubscribers
+        ])].filter(Boolean);
         await notifyCommentParticipants({
           commentAuthorId: finalAuthorId,
           commentText: normalizedText,
@@ -210,6 +220,37 @@ export default async function handler(req, res) {
         });
       } catch (notifyErr) {
         console.error('Notify comment participants failed (task comment):', notifyErr);
+      }
+
+      // Persist: task creator must stay in subscribers (same rule as POST/PATCH /api/tasks)
+      try {
+        const t = await prisma.task.findUnique({
+          where: { id: String(taskId) },
+          select: { subscribers: true, createdById: true }
+        });
+        if (t?.createdById) {
+          let parsed = [];
+          try {
+            const raw = t.subscribers;
+            if (raw != null) {
+              const p = typeof raw === 'string' ? JSON.parse(raw) : raw;
+              parsed = Array.isArray(p) ? p.filter(Boolean).map(String) : [];
+            }
+          } catch (_) {
+            parsed = [];
+          }
+          const merged = mergeCreatorIntoSubscribers(parsed, t.createdById);
+          const prevNorm = JSON.stringify([...new Set(parsed)].sort());
+          const nextNorm = JSON.stringify([...new Set(merged)].sort());
+          if (prevNorm !== nextNorm) {
+            await prisma.task.update({
+              where: { id: String(taskId) },
+              data: { subscribers: JSON.stringify(merged) }
+            });
+          }
+        }
+      } catch (subErr) {
+        console.warn('Could not ensure task creator in subscribers (task comment):', subErr?.message);
       }
 
       const { userId: activityUserId, userName: activityUserName } = getActivityUserFromRequest(req);

@@ -4284,7 +4284,17 @@ const Projects = () => {
                                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskModal(task); } }}
                                                 className={`border-b transition-colors ${isDark ? 'border-gray-800/80 hover:bg-gray-800/40' : 'border-gray-100 hover:bg-gray-50/80'}`}
                                             >
-                                                <td className="py-1 px-2 font-medium">{task.title || '—'}</td>
+                                                <td className="py-1 px-2 font-medium">
+                                                    <div>{task.title || '—'}</div>
+                                                    {(() => {
+                                                        const creator = String(task.createdBy || task.creatorUser?.name || task.creatorUser?.email || '').trim();
+                                                        return creator ? (
+                                                            <div className={`text-[10px] font-normal mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                                Created by {creator}
+                                                            </div>
+                                                        ) : null;
+                                                    })()}
+                                                </td>
                                                 <td className="py-1 px-2">{task.project?.name || (task.projectId ? `Project ${task.projectId}` : '—')}</td>
                                                 <td className="py-1 px-2">{task.project?.clientName || '—'}</td>
                                                 <td className="py-1 px-2" onClick={(e) => e.stopPropagation()}>

@@ -763,7 +763,7 @@ const TaskDetailModal = ({
                 subscribers: Array.isArray(task.subscribers) ? task.subscribers : (prev.subscribers || [])
             }));
         }
-    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.assigneeIds, task?.startDate, task?.dueDate, task?.reminderRecurrence, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
+    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.assigneeId, task?.assigneeIds, task?.startDate, task?.dueDate, task?.reminderRecurrence, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies, task?.createdBy, task?.createdById, task?.createdAt, task?.creatorUser]);
 
     // Sync description div content when task changes (contentEditable source of truth when focused)
     useEffect(() => {
@@ -1875,6 +1875,28 @@ const TaskDetailModal = ({
         dueDateDisplay = isNaN(dueDateValue) ? editedTask.dueDate : dueDateValue.toLocaleDateString();
     }
 
+    let createdMetaLine = null;
+    if (!isCreating && task && task.id) {
+        const fromEdited = (editedTask.createdBy || '').trim();
+        const fromRel = editedTask.creatorUser && (editedTask.creatorUser.name || editedTask.creatorUser.email);
+        let name = (fromEdited || fromRel || '').trim();
+        if (!name && editedTask.createdById && Array.isArray(users)) {
+            const u = users.find(us => String(us.id) === String(editedTask.createdById));
+            if (u) name = (u.name || u.email || '').trim();
+        }
+        if (name) {
+            let datePart = '';
+            const raw = editedTask.createdAt || task.createdAt;
+            if (raw) {
+                const d = new Date(raw);
+                if (!isNaN(d.getTime())) {
+                    datePart = d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+                }
+            }
+            createdMetaLine = { name, datePart };
+        }
+    }
+
     return (
         <>
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto flex items-center justify-center" style={{ padding: '1rem' }}>
@@ -2930,6 +2952,22 @@ const TaskDetailModal = ({
                                                     </span>
                                                 )}
                                             </div>
+
+                                            {createdMetaLine && (
+                                                <div className="flex items-start gap-2 text-xs text-gray-600 border-t border-gray-100 pt-3">
+                                                    <i className="fas fa-user-plus text-gray-400 mt-0.5" aria-hidden></i>
+                                                    <p className="leading-snug">
+                                                        <span className="text-gray-500">Created by </span>
+                                                        <span className="font-medium text-gray-800">{createdMetaLine.name}</span>
+                                                        {createdMetaLine.datePart ? (
+                                                            <>
+                                                                <span className="text-gray-400"> · </span>
+                                                                <span className="text-gray-500">{createdMetaLine.datePart}</span>
+                                                            </>
+                                                        ) : null}
+                                                    </p>
+                                                </div>
+                                            )}
 
                                             {/* List Selection */}
                                             {isCreating && !parentTask && taskLists && taskLists.length > 0 && (

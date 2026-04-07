@@ -24,6 +24,12 @@ const KanbanView = ({
     ];
     
     const columns = statusColumns.length > 0 ? statusColumns : defaultStatusColumns;
+
+    const getTaskCreatorLabel = (t) => {
+        if (!t || typeof t !== 'object') return '';
+        const fromRel = t.creatorUser && (t.creatorUser.name || t.creatorUser.email);
+        return String(t.createdBy || fromRel || '').trim();
+    };
     
     // Default color mapping
     const getDefaultStatusColor = (statusLabel) => {
@@ -291,9 +297,18 @@ const KanbanView = ({
 
                                             {/* Actions */}
                                             <div className="mt-1 flex items-center justify-between border-t border-gray-100 pt-1">
-                                                <div className="text-[9px] text-gray-400">
+                                                <div className="text-[9px] text-gray-400 min-w-0 pr-1">
                                                     <i className="fas fa-clock mr-0.5"></i>
                                                     {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}
+                                                    {getTaskCreatorLabel(task) ? (
+                                                        <>
+                                                            <span className="mx-1 text-gray-300">·</span>
+                                                            <span className="whitespace-nowrap" title="Created by">
+                                                                <i className="fas fa-user-plus mr-0.5" aria-hidden></i>
+                                                                {getTaskCreatorLabel(task)}
+                                                            </span>
+                                                        </>
+                                                    ) : null}
                                                 </div>
                                                 {onDeleteTask && (
                                                     <button
