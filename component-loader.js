@@ -79,6 +79,7 @@
         'utils/componentUrlRouting.js',
         'utils/mentionHelper.js',
         'utils/dieselRefundEvidenceEvaluator.js',
+        'utils/manufacturingStockLocations.js',
         
         // Hooks
         'hooks/usePersistence.js',

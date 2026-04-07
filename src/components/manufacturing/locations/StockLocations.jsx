@@ -12,11 +12,18 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
   });
   const [editingLocation, setEditingLocation] = useState(null);
 
+  const normalizeLocationsOrder = (list) => {
+    const fn = window.manufacturingStockLocations?.sortStockLocationsForManufacturing;
+    if (fn) return fn(list);
+    return Array.isArray(list) ? [...list] : [];
+  };
+
   const syncLocationsState = (updater) => {
     setLocations((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
+      const ordered = Array.isArray(next) ? normalizeLocationsOrder(next) : next;
       try {
-        localStorage.setItem('stock_locations', JSON.stringify(next));
+        localStorage.setItem('stock_locations', JSON.stringify(ordered));
       } catch (error) {
         console.error('❌ StockLocations: Failed to cache locations', error);
       }
@@ -26,7 +33,7 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
         try {
           window.dispatchEvent(
             new CustomEvent('stockLocationsUpdated', {
-              detail: { locations: next }
+              detail: { locations: ordered }
             })
           );
         } catch (error) {
@@ -34,7 +41,7 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
         }
       }
 
-      return next;
+      return ordered;
     });
   };
 

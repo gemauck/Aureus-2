@@ -49,6 +49,19 @@ function dedupeInventoryRowsBySku(items) {
   return out;
 }
 
+/** PMB first, then A–Z; uses shared util when loaded (component-loader / core bundle). */
+function sortManufacturingStockLocations(locations) {
+  const fn = window.manufacturingStockLocations?.sortStockLocationsForManufacturing;
+  if (fn) return fn(locations);
+  return Array.isArray(locations) ? [...locations] : [];
+}
+
+function defaultManufacturingStockLocation(locations) {
+  const fn = window.manufacturingStockLocations?.getDefaultManufacturingStockLocation;
+  if (fn) return fn(locations);
+  return Array.isArray(locations) && locations[0] ? locations[0] : null;
+}
+
 // Never throw so caching never breaks loading. Skip cache when over ~2MB to avoid quota.
 const SAFE_STORAGE_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -368,6 +381,7 @@ try {
   
   // Track user input state to prevent data sync from interrupting typing
   const isUserTypingRef = useRef(false);
+  const defaultInventoryLocationAppliedRef = useRef(false);
   const activeInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   
@@ -448,7 +462,7 @@ try {
 
         // Load stock locations from localStorage first, then sync from API
         const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
-        setStockLocations(loadedLocations);
+        setStockLocations(sortManufacturingStockLocations(loadedLocations));
 
         // Load only user-added categories (no default categories)
         // Filter out default categories if they exist in localStorage
@@ -487,7 +501,7 @@ try {
           apiCalls.push(
             window.DatabaseAPI.getStockLocations()
               .then(locResponse => {
-                const locData = locResponse?.data?.locations || [];
+                const locData = sortManufacturingStockLocations(locResponse?.data?.locations || []);
                 setStockLocations(locData);
                 safeSetItem('stock_locations', JSON.stringify(locData));
                 
@@ -504,7 +518,7 @@ try {
                 // Don't fail completely - use localStorage fallback
                 const cached = JSON.parse(localStorage.getItem('stock_locations') || '[]');
                 if (cached.length > 0) {
-                  setStockLocations(cached);
+                  setStockLocations(sortManufacturingStockLocations(cached));
                 }
                 return { type: 'locations', error };
               })
@@ -2136,7 +2150,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const loadLocations = async () => {
         try {
           const locResponse = await window.DatabaseAPI.getStockLocations();
-          const locData = locResponse?.data?.locations || [];
+          const locData = sortManufacturingStockLocations(locResponse?.data?.locations || []);
           setStockLocations(locData);
           safeSetItem('stock_locations', JSON.stringify(locData));
         } catch (error) {
@@ -2152,8 +2166,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const handleLocationUpdate = (event) => {
       const updatedLocations = event.detail?.locations || [];
       if (updatedLocations.length > 0) {
-        setStockLocations(updatedLocations);
-        safeSetItem('stock_locations', JSON.stringify(updatedLocations));
+        const sorted = sortManufacturingStockLocations(updatedLocations);
+        setStockLocations(sorted);
+        safeSetItem('stock_locations', JSON.stringify(sorted));
       }
     };
 
@@ -2162,6 +2177,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       window.removeEventListener('stockLocationsUpdated', handleLocationUpdate);
     };
   }, []);
+
+  // Default inventory tab filter to PMB once locations are known (user can still choose "All locations").
+  useEffect(() => {
+    if (defaultInventoryLocationAppliedRef.current) return;
+    if (!stockLocations.length) return;
+    const pmb = window.manufacturingStockLocations?.isPmbStockLocation
+      ? stockLocations.find((l) => window.manufacturingStockLocations.isPmbStockLocation(l))
+      : null;
+    if (selectedLocationId === 'all' && pmb?.id) {
+      defaultInventoryLocationAppliedRef.current = true;
+      setSelectedLocationId(pmb.id);
+    }
+  }, [stockLocations, selectedLocationId]);
 
   // Handle column sorting - memoized to prevent recreation
   const handleSort = useCallback((key, e) => {
@@ -2228,10 +2256,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   }, []);
 
   const openAddItemModal = useCallback(() => {
-    // Set locationId based on selected location (or main warehouse as default)
+    // Set locationId based on selected location (or PMB / primary default)
     const locationId = selectedLocationId && selectedLocationId !== 'all' 
       ? selectedLocationId 
-      : (stockLocations.find(loc => loc.code === 'LOC001')?.id || null);
+      : (defaultManufacturingStockLocation(stockLocations)?.id || null);
     setSelectedItem(null);
     setFormData({
       sku: '', // Will be auto-generated by backend
@@ -2257,9 +2285,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   const renderInventoryView = () => {
     // Get unique categories from inventory items
     const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
-    
-    // Get main warehouse for default selection
-    const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001');
     
     // Filter logic with column-specific filters
     let filteredInventory = inventory.filter(item => {
@@ -3615,13 +3640,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <button
               onClick={() => { 
                 const nextWO = getNextWorkOrderNumber();
-                const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
+                const defLoc = defaultManufacturingStockLocation(stockLocations);
                 setFormData({ 
                   workOrderNumber: nextWO,
                   startDate: null,
                   priority: 'normal',
                   status: 'requested',
-                  stockLocationId: mainWarehouse?.id || null
+                  stockLocationId: defLoc?.id || null
                 });
                 setModalType('add_production'); 
                 setShowModal(true); 
@@ -3644,13 +3669,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <button
                 onClick={() => { 
                   const nextWO = getNextWorkOrderNumber();
-                  const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
+                  const defLoc = defaultManufacturingStockLocation(stockLocations);
                   setFormData({ 
                     workOrderNumber: nextWO,
                     startDate: null,
                     priority: 'normal',
                     status: 'requested',
-                    stockLocationId: mainWarehouse?.id || null
+                    stockLocationId: defLoc?.id || null
                   });
                   setModalType('add_production'); 
                   setShowModal(true); 
@@ -3766,10 +3791,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <button
                       onClick={() => {
                         setSelectedItem(order);
-                        const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
+                        const defLoc = defaultManufacturingStockLocation(stockLocations);
                         setFormData({ 
                           ...order,
-                          stockLocationId: order.stockLocationId || mainWarehouse?.id || null
+                          stockLocationId: order.stockLocationId || defLoc?.id || null
                         });
                         setModalType('edit_production');
                         setShowModal(true);
@@ -3819,13 +3844,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         <button
                           onClick={() => { 
                             const nextWO = getNextWorkOrderNumber();
-                            const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
+                            const defLoc = defaultManufacturingStockLocation(stockLocations);
                             setFormData({ 
                               workOrderNumber: nextWO,
                               startDate: null,
                               priority: 'normal',
                               status: 'requested',
-                              stockLocationId: mainWarehouse?.id || null
+                              stockLocationId: defLoc?.id || null
                             });
                             setModalType('add_production'); 
                             setShowModal(true); 
@@ -3904,10 +3929,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <button
                             onClick={() => { 
                               setSelectedItem(order);
-                              const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
+                              const defLoc = defaultManufacturingStockLocation(stockLocations);
                               setFormData({ 
                                 ...order,
-                                stockLocationId: order.stockLocationId || mainWarehouse?.id || null
+                                stockLocationId: order.stockLocationId || defLoc?.id || null
                               }); 
                               setModalType('edit_production'); 
                               setShowModal(true); 
@@ -4275,10 +4300,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         }
       } else {
         // Create new - include quantity for initial stock, but not SKU (auto-generated)
-        // Set locationId based on selected location (or main warehouse as default)
+        // Set locationId based on selected location (or PMB / primary default)
         const locationId = selectedLocationId && selectedLocationId !== 'all' 
           ? selectedLocationId 
-          : (stockLocations.find(loc => loc.code === 'LOC001')?.id || null);
+          : (defaultManufacturingStockLocation(stockLocations)?.id || null);
         
         const createData = {
           ...itemData,
@@ -4649,10 +4674,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (salesOrderItems && salesOrderItems.length > 0) {
           
           try {
-            // Get default warehouse location (main warehouse)
-            const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
-            const defaultLocationId = mainWarehouse ? mainWarehouse.id : '';
-            const defaultLocationName = mainWarehouse ? mainWarehouse.name : 'Main Warehouse';
+            // Default consumption source: PMB / primary stock location
+            const defStockLoc = defaultManufacturingStockLocation(stockLocations);
+            const defaultLocationId = defStockLoc ? defStockLoc.id : '';
+            const defaultLocationName = defStockLoc ? defStockLoc.name : 'Stock location';
             
             // Create a stock movement for each item in the sales order
             for (const orderItem of salesOrderItems) {
@@ -4750,8 +4775,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const openAddPurchaseOrderModal = () => {
-    // Get default warehouse location
-    const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
+    const defLoc = defaultManufacturingStockLocation(stockLocations);
     setFormData({
       supplierId: '',
       supplierName: '',
@@ -4759,7 +4783,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       priority: 'normal',
       orderDate: new Date().toISOString().split('T')[0],
       expectedDate: '',
-      toLocationId: mainWarehouse ? mainWarehouse.id : '',
+      toLocationId: defLoc ? defLoc.id : '',
       subtotal: 0,
       tax: 0,
       total: 0,
@@ -5130,16 +5154,35 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   const openAddMovementModal = (prefill = {}) => {
     try {
+      const defLoc = defaultManufacturingStockLocation(stockLocations);
+      const defId = defLoc?.id || '';
+      const moveType = prefill.type || 'receipt';
+      let fromLocationId = prefill.fromLocationId;
+      let toLocationId = prefill.toLocationId;
+      if (fromLocationId === undefined || fromLocationId === '') {
+        if (moveType === 'consumption' || moveType === 'transfer' || moveType === 'adjustment') {
+          fromLocationId = defId;
+        }
+      }
+      if (toLocationId === undefined || toLocationId === '') {
+        if (moveType === 'receipt' || moveType === 'production') {
+          toLocationId = defId;
+        }
+      }
+      const fromIdResolved = fromLocationId || '';
+      const toIdResolved = toLocationId || '';
+      const fromLocObj = stockLocations.find((l) => l.id === fromIdResolved);
+      const toLocObj = stockLocations.find((l) => l.id === toIdResolved);
       setFormData({
-        type: prefill.type || 'receipt',
+        type: moveType,
         sku: prefill.sku || '',
         itemName: prefill.itemName || '',
         quantity: prefill.quantity !== undefined ? prefill.quantity : '',
         unitCost: prefill.unitCost !== undefined ? prefill.unitCost : '',
-        fromLocationId: prefill.fromLocationId || '',
-        toLocationId: prefill.toLocationId || '',
-        fromLocation: prefill.fromLocation || '',
-        toLocation: prefill.toLocation || '',
+        fromLocationId: fromIdResolved,
+        toLocationId: toIdResolved,
+        fromLocation: prefill.fromLocation || (fromLocObj ? fromLocObj.name : ''),
+        toLocation: prefill.toLocation || (toLocObj ? toLocObj.name : ''),
         reference: prefill.reference || '',
         notes: prefill.notes || '',
         date: prefill.date || new Date().toISOString().split('T')[0]
@@ -5620,7 +5663,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         assignedTo: formData.assignedTo !== undefined ? formData.assignedTo : selectedItem.assignedTo,
         notes: formData.notes !== undefined ? formData.notes : selectedItem.notes,
         workOrderNumber: formData.workOrderNumber || selectedItem.workOrderNumber,
-        stockLocationId: formData.stockLocationId !== undefined ? formData.stockLocationId : (selectedItem.stockLocationId || stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN')?.id),
+        stockLocationId: formData.stockLocationId !== undefined ? formData.stockLocationId : (selectedItem.stockLocationId || defaultManufacturingStockLocation(stockLocations)?.id),
         clientId: formData.clientId !== undefined ? formData.clientId : selectedItem.clientId,
         allocationType: formData.allocationType !== undefined ? formData.allocationType : selectedItem.allocationType,
         completedDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
@@ -5731,7 +5774,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const resolvedLocation = (() => {
         const explicitLoc = selectedLocationId && selectedLocationId !== 'all'
           ? stockLocations.find(loc => loc.id === selectedLocationId)
-          : stockLocations.find(loc => loc.code === 'LOC001');
+          : defaultManufacturingStockLocation(stockLocations);
         if (explicitLoc) {
           return `${explicitLoc.name} (${explicitLoc.code})`;
         }
@@ -7091,7 +7134,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Stock Location *</label>
                     <select
-                      value={formData.stockLocationId || (stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN')?.id || '')}
+                      value={formData.stockLocationId || (defaultManufacturingStockLocation(stockLocations)?.id || '')}
                       onChange={(e) => setFormData({ ...formData, stockLocationId: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       disabled={false}
@@ -10912,10 +10955,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
                 { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
+                { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
                 { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
                 { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
                 { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
-                { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
                 { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
                 { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
                 { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }

@@ -56,4 +56,6 @@ Any **new or changed** mutating route (POST, PATCH, DELETE) that affects Manufac
 
 When adding a new `resourceType` branch in `api/manufacturing.js` or new order endpoints, add audit coverage for **every** mutation exit that persists data.
 
+Run **`npm run lint:audit`** before merging manufacturing/order API changes; ESLint enforces `auditManufacturing` / `logAuditFromRequest` before `ok`/`created` in `POST`/`PATCH`/`DELETE` branches (`eslint-rules/manufacturing-audit.mjs`).
+
 

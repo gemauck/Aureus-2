@@ -98,6 +98,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         // UserManagement.jsx removed - using Users.jsx instead
         
         // Manufacturing - MOVED from index.html to lazy loading for better performance
+        './src/utils/manufacturingStockLocations.js',
         './src/components/manufacturing/locations/StockLocations.jsx',
         './src/components/manufacturing/ManufacturingMovementsView.jsx',
         './src/components/manufacturing/JobCards.jsx',
