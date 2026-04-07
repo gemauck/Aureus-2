@@ -69,7 +69,6 @@ import './utils/leaveUtils.js';
 import './utils/hrPolicyFormat.js';
 import './components/leave-platform/EmployeeDetail.jsx';
 import './components/leave-platform/HrPoliciesPanel.jsx';
-import './components/leave-platform/HrPolicyAcceptanceModal.jsx';
 import './components/leave-platform/HrDocumentsPanel.jsx';
 import './components/leave-platform/HrAdminShell.jsx';
 import './components/leave-platform/LeavePlatform.jsx';

@@ -108,7 +108,12 @@ async function handler(req, res) {
           updatedAt: p.updatedAt
         })),
         hasPending: pendingPolicies.length > 0,
-        publishedCount: published.length
+        publishedCount: published.length,
+        myAcknowledgments: acks.map((a) => ({
+          policyId: a.policyId,
+          policyVersion: a.policyVersion,
+          acknowledgedAt: a.acknowledgedAt
+        }))
       })
     }
 

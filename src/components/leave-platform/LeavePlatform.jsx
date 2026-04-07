@@ -191,8 +191,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     const [leaveApprovers, setLeaveApprovers] = useState([]);
     const [birthdays, setBirthdays] = useState([]);
     const [calendarView, setCalendarView] = useState('month');
-    /** Published HR policies the current user has not accepted (null = still loading). */
-    const [hrPolicyGatePending, setHrPolicyGatePending] = useState(null);
 
     // Employee management state
     const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
@@ -204,43 +202,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         useEffect(() => {
             setCurrentTab(initialTab);
         }, [initialTab]);
-
-        useEffect(() => {
-            if (!user?.id) {
-                setHrPolicyGatePending([]);
-                return undefined;
-            }
-            let cancelled = false;
-            (async () => {
-                try {
-                    const token = window.storage?.getToken?.();
-                    if (!token) {
-                        if (!cancelled) setHrPolicyGatePending([]);
-                        return;
-                    }
-                    const res = await fetch('/api/hr/policy-acknowledgments', {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`
-                        }
-                    });
-                    const json = await res.json().catch(() => ({}));
-                    if (cancelled) return;
-                    if (!res.ok) {
-                        setHrPolicyGatePending([]);
-                        return;
-                    }
-                    const payload = json.data ?? json;
-                    const pending = payload?.pendingPolicies;
-                    setHrPolicyGatePending(Array.isArray(pending) ? pending : []);
-                } catch {
-                    if (!cancelled) setHrPolicyGatePending([]);
-                }
-            })();
-            return () => {
-                cancelled = true;
-            };
-        }, [user?.id]);
 
         useEffect(() => {
             const handleTabEvent = (event) => {
@@ -1368,16 +1329,8 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }
     };
 
-    const PolicyGate = typeof window !== 'undefined' ? window.HrPolicyAcceptanceModal : null;
-
     return (
-        <div className="erp-module-root space-y-4 min-w-0 relative">
-            {Array.isArray(hrPolicyGatePending) && hrPolicyGatePending.length > 0 && PolicyGate ? (
-                <PolicyGate
-                    pendingPolicies={hrPolicyGatePending}
-                    onComplete={() => setHrPolicyGatePending([])}
-                />
-            ) : null}
+        <div className="erp-module-root space-y-4 min-w-0">
             {/* Header */}
             <div className="flex flex-col gap-2 min-w-0 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
