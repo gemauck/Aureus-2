@@ -1625,19 +1625,20 @@ model StockMovement {
 }
 
 model StockLocation {
-  id             String              @id @default(cuid())
-  code           String              @unique
-  name           String
-  type           String              @default("warehouse")
-  status         String              @default("active")
-  address        String              @default("")
-  contactPerson  String              @default("")
-  contactPhone   String              @default("")
-  meta           String              @default("{}")
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  inventoryItems InventoryItem[]
-  inventory      LocationInventory[]
+  id              String          @id @default(cuid())
+  code            String          @unique
+  name            String
+  type            String          @default("warehouse")
+  status          String          @default("active")
+  address         String          @default("")
+  contactPerson   String          @default("")
+  contactPhone    String          @default("")
+  meta            String          @default("{}")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  inventoryItems  InventoryItem[]
+  inventory       LocationInventory[]
+  purchaseOrders  PurchaseOrder[]
 
   @@index([type])
   @@index([status])
@@ -1685,31 +1686,35 @@ model Supplier {
 }
 
 model PurchaseOrder {
-  id              String    @id @default(cuid())
-  orderNumber     String    @unique
-  supplierId      String
-  supplierName    String    @default("")
-  status          String    @default("draft")
-  priority        String    @default("normal")
-  orderDate       DateTime  @default(now())
-  expectedDate    DateTime?
-  receivedDate    DateTime?
-  subtotal        Float     @default(0)
-  tax             Float     @default(0)
-  total           Float     @default(0)
-  items           String    @default("[]")
-  shippingAddress String    @default("")
-  shippingMethod  String    @default("")
-  notes           String    @default("")
-  internalNotes   String    @default("")
-  ownerId         String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  supplier        Supplier  @relation(fields: [supplierId], references: [id])
+  id                   String         @id @default(cuid())
+  orderNumber          String         @unique
+  supplierId           String
+  supplierName         String         @default("")
+  status               String         @default("draft")
+  priority             String         @default("normal")
+  orderDate            DateTime       @default(now())
+  expectedDate         DateTime?
+  receivedDate         DateTime?
+  sentAt               DateTime?
+  subtotal             Float          @default(0)
+  tax                  Float          @default(0)
+  total                Float          @default(0)
+  items                String         @default("[]")
+  shippingAddress      String         @default("")
+  shippingMethod       String         @default("")
+  notes                String         @default("")
+  internalNotes        String         @default("")
+  receivingLocationId  String?
+  ownerId              String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  supplier             Supplier       @relation(fields: [supplierId], references: [id])
+  receivingLocation    StockLocation? @relation(fields: [receivingLocationId], references: [id])
 
   @@index([supplierId])
   @@index([status])
   @@index([ownerId])
+  @@index([receivingLocationId])
 }
 
 model Message {
@@ -2043,6 +2048,7 @@ model UserSettings {
 model SystemSettings {
   id                    String   @id @default("system")
   companyName           String   @default("Abcotronics")
+  poLetterheadJson      String   @default("{}")
   timezone              String   @default("Africa/Johannesburg")
   currency              String   @default("ZAR")
   dateFormat            String   @default("DD/MM/YYYY")

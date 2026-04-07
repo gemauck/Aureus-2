@@ -1,5 +1,5 @@
 // Settings Component - Per-user preferences (company name is read-only from system)
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo } = React;
 
 const USER_PREF_DEFAULTS = {
     timezone: 'Africa/Johannesburg',
@@ -25,6 +25,24 @@ const Settings = () => {
     const [saveStatus, setSaveStatus] = useState('');
     const { isDark } = window.useTheme();
 
+    const isDocAdmin = useMemo(() => {
+        let role = '';
+        try {
+            role = (JSON.parse(localStorage.getItem('currentUser') || '{}').role || '').toString();
+        } catch (_) {}
+        return typeof window.isAdminRole === 'function' && window.isAdminRole(role);
+    }, []);
+
+    const [docCompanyName, setDocCompanyName] = useState('');
+    const [docAddressText, setDocAddressText] = useState('');
+    const [docPhone, setDocPhone] = useState('');
+    const [docEmail, setDocEmail] = useState('');
+    const [docVat, setDocVat] = useState('');
+    const [docFooter, setDocFooter] = useState('');
+    const [docLogoDataUrl, setDocLogoDataUrl] = useState('');
+    const [docLoading, setDocLoading] = useState(false);
+    const [docSaveStatus, setDocSaveStatus] = useState('');
+
     // Resolve Notification Settings component from global window (registered by NotificationSettings.jsx)
     const NotificationsComponent = React.useMemo(() => {
         const Comp = window.NotificationSettings;
@@ -35,11 +53,15 @@ const Settings = () => {
         return () => <div className="text-center py-12 text-gray-500">Notifications settings loading...</div>;
     }, []);
 
-    const tabs = [
-        { id: 'general', label: 'General', icon: 'fa-cog' },
-        { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
-        { id: 'data', label: 'Data Management', icon: 'fa-database' }
-    ];
+    const tabs = useMemo(() => {
+        const base = [
+            { id: 'general', label: 'General', icon: 'fa-cog' },
+            ...(isDocAdmin ? [{ id: 'documents', label: 'Purchase documents', icon: 'fa-file-invoice' }] : []),
+            { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
+            { id: 'data', label: 'Data Management', icon: 'fa-database' }
+        ];
+        return base;
+    }, [isDocAdmin]);
 
     const handleSave = async () => {
         setIsLoading(true);
@@ -567,6 +589,143 @@ const Settings = () => {
         loadSettings();
     }, []);
 
+    useEffect(() => {
+        if (!isDocAdmin || isLoadingData || !window.DatabaseAPI?.getDocumentSettings) return;
+        (async () => {
+            try {
+                const res = await window.DatabaseAPI.getDocumentSettings();
+                const d = res?.data;
+                if (!d) return;
+                setDocCompanyName(d.companyName || '');
+                const lh = d.poLetterhead || {};
+                setDocAddressText((lh.addressLines || []).join('\n'));
+                setDocPhone(lh.phone || '');
+                setDocEmail(lh.email || '');
+                setDocVat(lh.vatNumber || '');
+                setDocFooter(lh.footerNote || '');
+                setDocLogoDataUrl(lh.logoDataUrl || '');
+            } catch (e) {
+                console.warn('Document settings load failed:', e);
+            }
+        })();
+    }, [isDocAdmin, isLoadingData]);
+
+    const handleSavePurchaseDocuments = async () => {
+        if (!window.DatabaseAPI?.updateDocumentSettings) {
+            setDocSaveStatus('API not available');
+            return;
+        }
+        setDocLoading(true);
+        setDocSaveStatus('Saving…');
+        try {
+            const addressLines = docAddressText
+                .split('\n')
+                .map((l) => l.trim())
+                .filter(Boolean);
+            const poLetterhead = {
+                addressLines,
+                phone: docPhone.trim(),
+                email: docEmail.trim(),
+                vatNumber: docVat.trim(),
+                footerNote: docFooter.trim()
+            };
+            if (docLogoDataUrl) poLetterhead.logoDataUrl = docLogoDataUrl;
+            const res = await window.DatabaseAPI.updateDocumentSettings({
+                companyName: docCompanyName.trim() || 'Abcotronics',
+                poLetterhead
+            });
+            const d = res?.data;
+            if (d?.companyName) {
+                setCompanyName(d.companyName);
+                const merged = { ...settings, companyName: d.companyName };
+                localStorage.setItem('systemSettings', JSON.stringify(merged));
+                if (window.setSystemSettings) window.setSystemSettings(merged);
+                window.dispatchEvent(new CustomEvent('systemSettingsChanged', { detail: merged }));
+            }
+            setDocSaveStatus('Saved.');
+            setTimeout(() => setDocSaveStatus(''), 4000);
+        } catch (e) {
+            setDocSaveStatus(e?.message || 'Save failed');
+            setTimeout(() => setDocSaveStatus(''), 5000);
+        } finally {
+            setDocLoading(false);
+        }
+    };
+
+    const renderPurchaseDocumentsSettings = () => (
+        <div className="space-y-6">
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                Letterhead and logo appear on downloaded purchase order PDFs (Manufacturing → Purchase order → Download PDF).
+            </p>
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Company name (PDF header)</label>
+                <input
+                    type="text"
+                    value={docCompanyName}
+                    onChange={(e) => setDocCompanyName(e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                />
+            </div>
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Address (one line per row)</label>
+                <textarea
+                    value={docAddressText}
+                    onChange={(e) => setDocAddressText(e.target.value)}
+                    rows={4}
+                    className={`w-full px-3 py-2 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Phone</label>
+                    <input type="text" value={docPhone} onChange={(e) => setDocPhone(e.target.value)} className={`w-full px-3 py-2 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
+                </div>
+                <div>
+                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Email</label>
+                    <input type="text" value={docEmail} onChange={(e) => setDocEmail(e.target.value)} className={`w-full px-3 py-2 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
+                </div>
+            </div>
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>VAT / registration number</label>
+                <input type="text" value={docVat} onChange={(e) => setDocVat(e.target.value)} className={`w-full px-3 py-2 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
+            </div>
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Footer note</label>
+                <textarea value={docFooter} onChange={(e) => setDocFooter(e.target.value)} rows={2} className={`w-full px-3 py-2 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
+            </div>
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Logo (PNG or JPEG)</label>
+                <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={(e) => {
+                        const file = e.target.files && e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => setDocLogoDataUrl(reader.result);
+                        reader.readAsDataURL(file);
+                    }}
+                    className="text-sm w-full"
+                />
+                {docLogoDataUrl && (
+                    <div className="mt-2 flex items-center gap-3">
+                        <img src={docLogoDataUrl} alt="Logo preview" className="h-12 object-contain border border-gray-200 rounded" />
+                        <button type="button" onClick={() => setDocLogoDataUrl('')} className="text-sm text-red-600 hover:underline">Remove logo</button>
+                    </div>
+                )}
+            </div>
+            {docSaveStatus && <p className={`text-sm ${docSaveStatus.includes('Saved') ? 'text-green-600' : 'text-red-600'}`}>{docSaveStatus}</p>}
+            <button
+                type="button"
+                onClick={handleSavePurchaseDocuments}
+                disabled={docLoading}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            >
+                {docLoading ? 'Saving…' : 'Save purchase document settings'}
+            </button>
+        </div>
+    );
+
     const renderGeneralSettings = () => (
         <div className="space-y-6">
             <div>
@@ -577,7 +736,9 @@ const Settings = () => {
                     {companyName}
                 </p>
                 <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                    Company name is set at the system level and cannot be changed here.
+                    {isDocAdmin
+                        ? 'Administrators can update the company name and PO letterhead under Purchase documents.'
+                        : 'Company name is set at the system level. Ask an administrator to change it.'}
                 </p>
             </div>
 
@@ -805,6 +966,8 @@ const Settings = () => {
         switch (activeTab) {
             case 'general':
                 return renderGeneralSettings();
+            case 'documents':
+                return renderPurchaseDocumentsSettings();
             case 'notifications':
                 return <NotificationsComponent />;
             case 'data':
@@ -888,6 +1051,7 @@ const Settings = () => {
                                 {renderTabContent()}
 
                                 {/* Action Buttons */}
+                                {activeTab !== 'documents' && (
                                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-6 border-t border-gray-200 dark:border-gray-600">
                                     <button
                                         onClick={handleReset}
@@ -913,6 +1077,7 @@ const Settings = () => {
                                         )}
                                     </button>
                                 </div>
+                                )}
                             </div>
                         </div>
                     </div>

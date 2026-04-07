@@ -1076,35 +1076,11 @@ const TaskDetailModal = ({
     const handleCommentChange = (e) => {
         const textarea = e.target;
         const text = textarea.value;
-        const oldText = newComment;
-        
-        // Determine the correct cursor position
-        let cursorPos = textarea.selectionStart;
-        let selectionEnd = textarea.selectionEnd;
-        
-        // Special handling for first keystroke - ALWAYS force cursor to position 1
-        const isFirstKeystroke = oldText.length === 0 && text.length === 1;
-        
-        if (isFirstKeystroke) {
-            // For the first character, cursor MUST be at position 1 (right after the character)
-            cursorPos = 1;
-            selectionEnd = 1;
-        } else if (text.length > oldText.length) {
-            // Text was added - cursor should be at the end of the new text
-            // This handles normal typing where characters are appended
-            cursorPos = text.length;
-            selectionEnd = text.length;
-        } else if (text.length < oldText.length) {
-            // Text was deleted - keep cursor at current position or adjust if needed
-            // If cursor seems wrong, try to maintain relative position
-            if (cursorPos === 0 && text.length > 0) {
-                // Likely React reset it - try to calculate based on deletion
-                cursorPos = Math.min(text.length, oldText.length - (oldText.length - text.length));
-                selectionEnd = cursorPos;
-            }
-        }
-        // If text length is same, cursor position is likely correct (e.g., selection change)
-        
+        // Use the browser's selection after this edit — do not infer cursor from old/new
+        // length (that incorrectly forced the caret to the end on any insertion).
+        const cursorPos = textarea.selectionStart;
+        const selectionEnd = textarea.selectionEnd;
+
         // Find @ symbol before cursor
         const textBeforeCursor = text.substring(0, cursorPos);
         const lastAtIndex = textBeforeCursor.lastIndexOf('@');
@@ -1134,43 +1110,21 @@ const TaskDetailModal = ({
         
         // Update state
         setNewComment(text);
-        
-        // Force cursor position after state update
-        // Use multiple strategies to ensure cursor is restored, especially for first keystroke
+
+        // Controlled input re-renders can reset selection; restore caret from the edit we just applied
         const forceCursorPosition = () => {
             if (commentTextareaRef.current && commentTextareaRef.current.value === text) {
-                // Ensure cursor position is within valid range
                 const newCursorPos = Math.min(Math.max(cursorPos, 0), text.length);
                 const newSelectionEnd = Math.min(Math.max(selectionEnd, 0), text.length);
-                
-                // For first keystroke, be extra aggressive
-                if (isFirstKeystroke && text.length === 1) {
-                    commentTextareaRef.current.setSelectionRange(1, 1);
-                } else {
-                    commentTextareaRef.current.setSelectionRange(newCursorPos, newSelectionEnd);
-                }
+                commentTextareaRef.current.setSelectionRange(newCursorPos, newSelectionEnd);
             }
         };
-        
-        // For first keystroke, use more aggressive restoration
-        if (isFirstKeystroke) {
-            // Try multiple times with different timing strategies
-            queueMicrotask(forceCursorPosition);
-            requestAnimationFrame(() => {
-                forceCursorPosition();
-                requestAnimationFrame(forceCursorPosition);
-            });
-            setTimeout(forceCursorPosition, 0);
-            setTimeout(forceCursorPosition, 10);
-            setTimeout(forceCursorPosition, 50);
-        } else {
-            // Normal restoration for subsequent keystrokes
-            queueMicrotask(forceCursorPosition);
-            requestAnimationFrame(() => {
-                requestAnimationFrame(forceCursorPosition);
-            });
-            setTimeout(forceCursorPosition, 0);
-        }
+
+        queueMicrotask(forceCursorPosition);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(forceCursorPosition);
+        });
+        setTimeout(forceCursorPosition, 0);
     };
 
     const uploadCommentFiles = async (files) => {

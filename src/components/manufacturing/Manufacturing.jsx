@@ -208,6 +208,25 @@ try {
   const [newSalesOrderItem, setNewSalesOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
   const [purchaseOrderItems, setPurchaseOrderItems] = useState([]);
   const [newPurchaseOrderItem, setNewPurchaseOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+  const [poNewItemSubOpen, setPoNewItemSubOpen] = useState(false);
+  const [poNewItemSaving, setPoNewItemSaving] = useState(false);
+  const [poNewItemForm, setPoNewItemForm] = useState({
+    name: '',
+    category: '',
+    type: 'component',
+    unit: 'pcs',
+    reorderPoint: '',
+    reorderQty: '',
+    unitCost: '',
+    supplier: '',
+    boxNumber: '',
+    manufacturingPartNumber: '',
+    legacyPartNumber: ''
+  });
+  const [poReceiptOpen, setPoReceiptOpen] = useState(false);
+  const [poReceiptLines, setPoReceiptLines] = useState([]);
+  const [poReceiptSaving, setPoReceiptSaving] = useState(false);
+  const [poPdfLoading, setPoPdfLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
@@ -1842,6 +1861,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       active: 'text-green-600 bg-green-50',
       inactive: 'text-gray-600 bg-gray-50',
       draft: 'text-gray-600 bg-gray-50',
+      final: 'text-indigo-700 bg-indigo-50',
+      sent: 'text-blue-700 bg-blue-50',
+      goods_received: 'text-green-700 bg-green-50',
+      received: 'text-green-700 bg-green-50',
       consumption: 'text-red-600 bg-red-50',
       receipt: 'text-green-600 bg-green-50',
       production: 'text-blue-600 bg-blue-50',
@@ -4746,6 +4769,113 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setPurchaseOrderItems(purchaseOrderItems.filter(item => item.id !== itemId));
   };
 
+  const openPoNewItemSubModal = () => {
+    if (!formData.toLocationId) {
+      alert('Please select a receiving location first.');
+      return;
+    }
+    setPoNewItemForm({
+      name: (newPurchaseOrderItem.name || '').trim(),
+      category: categories[0] || '',
+      type: 'component',
+      unit: 'pcs',
+      reorderPoint: '',
+      reorderQty: '',
+      unitCost: newPurchaseOrderItem.unitPrice > 0 ? String(newPurchaseOrderItem.unitPrice) : '',
+      supplier: '',
+      boxNumber: '',
+      manufacturingPartNumber: '',
+      legacyPartNumber: ''
+    });
+    setPoNewItemSubOpen(true);
+  };
+
+  const handleSavePoNewInventoryItem = async () => {
+    if (!formData.toLocationId) {
+      alert('Please select a receiving location.');
+      return;
+    }
+    const nm = (poNewItemForm.name || '').trim();
+    if (!nm) {
+      alert('Item name is required.');
+      return;
+    }
+    if (!poNewItemForm.category) {
+      alert('Category is required.');
+      return;
+    }
+    if (!poNewItemForm.type) {
+      alert('Type is required.');
+      return;
+    }
+    if (!poNewItemForm.unit) {
+      alert('Unit is required.');
+      return;
+    }
+    if (!newPurchaseOrderItem.quantity || newPurchaseOrderItem.quantity <= 0) {
+      alert('Set order quantity (> 0) in the row above before creating the catalog item.');
+      return;
+    }
+    if (!newPurchaseOrderItem.unitPrice || newPurchaseOrderItem.unitPrice <= 0) {
+      alert('Set unit price (> 0) in the row above before creating the catalog item.');
+      return;
+    }
+    try {
+      setPoNewItemSaving(true);
+      const createData = {
+        name: nm,
+        category: poNewItemForm.category,
+        type: poNewItemForm.type,
+        unit: poNewItemForm.unit,
+        quantity: 0,
+        reorderPoint: poNewItemForm.reorderPoint === '' ? 0 : parseFloat(poNewItemForm.reorderPoint) || 0,
+        reorderQty: poNewItemForm.reorderQty === '' ? 0 : parseFloat(poNewItemForm.reorderQty) || 0,
+        unitCost: poNewItemForm.unitCost === '' ? 0 : parseFloat(poNewItemForm.unitCost) || 0,
+        supplier: poNewItemForm.supplier || '',
+        locationId: formData.toLocationId,
+        lastRestocked: new Date().toISOString().split('T')[0]
+      };
+      if (poNewItemForm.boxNumber) createData.boxNumber = poNewItemForm.boxNumber;
+      if (poNewItemForm.manufacturingPartNumber) createData.manufacturingPartNumber = poNewItemForm.manufacturingPartNumber;
+      if (poNewItemForm.legacyPartNumber) createData.legacyPartNumber = poNewItemForm.legacyPartNumber;
+
+      const response = await safeCallAPI('createInventoryItem', createData);
+      const created = response?.data?.item;
+      if (!created?.sku) {
+        alert('Item created but SKU missing in response.');
+        return;
+      }
+      const qty = parseFloat(newPurchaseOrderItem.quantity);
+      const unitPrice = parseFloat(newPurchaseOrderItem.unitPrice);
+      const line = {
+        id: Date.now().toString(),
+        sku: created.sku,
+        name: created.name || nm,
+        quantity: qty,
+        unitPrice: unitPrice,
+        total: qty * unitPrice,
+        supplierPartNumber: newPurchaseOrderItem.supplierPartNumber || ''
+      };
+      setPurchaseOrderItems([...purchaseOrderItems, line]);
+      setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0, supplierPartNumber: '' });
+      try {
+        const invResponse = await safeCallAPI('getInventory');
+        if (invResponse?.data?.inventory) {
+          setInventory(invResponse.data.inventory.map((item) => ({ ...item, id: item.id })));
+          safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
+        }
+      } catch (e) {
+        console.warn('Could not refresh inventory:', e);
+      }
+      setPoNewItemSubOpen(false);
+    } catch (error) {
+      console.error('PO new item error:', error);
+      alert(error?.message || 'Failed to create inventory item.');
+    } finally {
+      setPoNewItemSaving(false);
+    }
+  };
+
   const handleSavePurchaseOrder = async () => {
     try {
       // Validation
@@ -4773,7 +4903,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const orderData = {
         supplierId: formData.supplierId || '',
         supplierName: formData.supplierName || '',
-        status: 'draft', // Purchase orders start as draft and must be marked as received to update inventory
+        status: 'draft', // Final → Sent → Goods received to post stock
         priority: formData.priority || 'normal',
         orderDate: formData.orderDate || new Date().toISOString().split('T')[0],
         expectedDate: formData.expectedDate || null,
@@ -4789,7 +4919,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           supplierPartNumber: item.supplierPartNumber || ''
         })),
         notes: formData.notes || '',
-        internalNotes: formData.internalNotes || ''
+        internalNotes: formData.internalNotes || '',
+        receivingLocationId: formData.toLocationId || null
       };
 
       const response = await safeCallAPI('createPurchaseOrder', orderData);
@@ -4806,7 +4937,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         const updatedOrders = [...purchaseOrders, orderWithParsedItems];
         setPurchaseOrders(updatedOrders);
         safeSetItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
-        alert('Purchase order created successfully! Mark it as "received" to record stock movements and update inventory.');
+        alert('Purchase order created as Draft. Finalize it, mark as Sent, then confirm goods receipt to update inventory.');
         
         setShowModal(false);
         setFormData({});
@@ -7866,13 +7997,40 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
 
     if (modalType === 'view_purchase') {
+      const mergePoIntoLists = (updatedOrder) => {
+        const updatedOrders = purchaseOrders.map((order) =>
+          order.id === updatedOrder.id ? updatedOrder : order
+        );
+        setPurchaseOrders(updatedOrders);
+        safeSetItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+        setSelectedItem(updatedOrder);
+      };
+      const refreshInvAfterPo = async () => {
+        try {
+          const invResponse = await safeCallAPI('getInventory');
+          if (invResponse?.data?.inventory) {
+            setInventory(invResponse.data.inventory.map((x) => ({ ...x, id: x.id })));
+            safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
+          }
+        } catch (invError) {
+          console.warn('⚠️ Failed to refresh inventory:', invError);
+        }
+      };
+      const poRecvLabel =
+        selectedItem?.receivingLocation &&
+        `${selectedItem.receivingLocation.name} (${selectedItem.receivingLocation.code})`;
+      const poRecvFallback =
+        selectedItem?.receivingLocationId && getLocationLabel(selectedItem.receivingLocationId);
+      const poSt = selectedItem?.status;
+
       return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Purchase Order Details</h2>
               <button
-                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                onClick={() => { setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <i className="fas fa-times"></i>
@@ -7889,7 +8047,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <div>
                       <p className="text-xs text-gray-500">Status</p>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(selectedItem.status)}`}>
-                        {(selectedItem.status || '').replace('_', ' ')}
+                        {(selectedItem.status || '').replace(/_/g, ' ')}
                       </span>
                     </div>
                     <div className="col-span-2">
@@ -7904,6 +8062,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <p className="text-xs text-gray-500">Expected Date</p>
                       <p className="text-sm text-gray-900">{selectedItem.expectedDate ? (selectedItem.expectedDate.split('T')[0] || selectedItem.expectedDate) : '-'}</p>
                     </div>
+                    {selectedItem.sentAt && (
+                      <div>
+                        <p className="text-xs text-gray-500">Sent</p>
+                        <p className="text-sm text-gray-900">{selectedItem.sentAt.split('T')[0] || selectedItem.sentAt}</p>
+                      </div>
+                    )}
                     {selectedItem.receivedDate && (
                       <div>
                         <p className="text-xs text-gray-500">Received Date</p>
@@ -7913,19 +8077,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <div>
                       <p className="text-xs text-gray-500">Priority</p>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
-                        selectedItem.priority === 'high' ? 'text-red-600 bg-red-50' : 
-                        selectedItem.priority === 'normal' ? 'text-blue-600 bg-blue-50' : 
+                        selectedItem.priority === 'high' ? 'text-red-600 bg-red-50' :
+                        selectedItem.priority === 'normal' ? 'text-blue-600 bg-blue-50' :
                         'text-gray-600 bg-gray-50'
                       }`}>
                         {selectedItem.priority}
                       </span>
                     </div>
-                    {selectedItem.toLocation && (
-                      <div>
-                        <p className="text-xs text-gray-500">Receiving Location</p>
-                        <p className="text-sm text-gray-900">{selectedItem.toLocation}</p>
-                      </div>
-                    )}
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Receiving Location</p>
+                      <p className="text-sm text-gray-900">{poRecvLabel || poRecvFallback || selectedItem.toLocation || '—'}</p>
+                    </div>
                     <div>
                       <p className="text-xs text-gray-500">Subtotal</p>
                       <p className="text-sm font-semibold text-gray-900">{formatCurrency(selectedItem.subtotal || 0)}</p>
@@ -7940,7 +8102,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                   </div>
 
-                  {/* Items List */}
                   {selectedItem.items && (
                     <div className="border-t border-gray-200 pt-4">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3">Order Items</h3>
@@ -7954,10 +8115,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                   <div className="flex-1">
                                     <p className="text-sm font-medium text-gray-900">{item.name || item.itemName}</p>
                                     <p className="text-xs text-gray-500">SKU: {item.sku || '-'}</p>
+                                    {item.quantityReceived != null && (
+                                      <p className="text-xs text-green-700 mt-1">
+                                        Received: {item.quantityReceived} @ {formatCurrency(item.receivedUnitPrice || 0)}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="text-right">
-                                    <p className="text-sm font-semibold text-gray-900">Qty: {item.quantity}</p>
-                                    <p className="text-xs text-gray-500">{formatCurrency(item.total || item.unitPrice * item.quantity)}</p>
+                                    <p className="text-sm font-semibold text-gray-900">Ordered: {item.quantity}</p>
+                                    <p className="text-xs text-gray-500">{formatCurrency(item.total || (item.unitPrice || 0) * (item.quantity || 0))}</p>
                                   </div>
                                 </div>
                               </div>
@@ -7970,7 +8136,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                   )}
 
-                  {/* Notes */}
                   {(selectedItem.notes || selectedItem.internalNotes) && (
                     <div className="border-t border-gray-200 pt-4">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3">Notes</h3>
@@ -7991,53 +8156,91 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </div>
               )}
             </div>
-            <div className="p-4 border-t border-gray-200 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                {selectedItem && selectedItem.status !== 'received' && (
+            <div className="p-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedItem && window.DatabaseAPI?.downloadPurchaseOrderPdf && (
                   <button
+                    type="button"
+                    disabled={poPdfLoading}
                     onClick={async () => {
-                      if (confirm('Mark this purchase order as received? This will record stock movements and update inventory.')) {
-                        try {
-                          const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, {
-                            status: 'received'
-                          });
-                          if (response?.data?.purchaseOrder) {
-                            const updatedOrder = response.data.purchaseOrder;
-                            const updatedOrders = purchaseOrders.map(order => 
-                              order.id === selectedItem.id ? updatedOrder : order
-                            );
-                            setPurchaseOrders(updatedOrders);
-                            safeSetItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
-                            setSelectedItem(updatedOrder);
-                            
-                            // Refresh inventory to show updated stock levels
-                            try {
-                              const invResponse = await safeCallAPI('getInventory');
-                              if (invResponse?.data?.inventory) {
-                                setInventory(invResponse.data.inventory);
-                                safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
-                              }
-                            } catch (invError) {
-                              console.warn('⚠️ Failed to refresh inventory:', invError);
-                            }
-                            
-                            alert('Purchase order marked as received! Stock movements recorded and inventory updated.');
-                          }
-                        } catch (error) {
-                          console.error('❌ Error updating purchase order status:', error);
-                          alert(`Failed to mark order as received: ${error.message}`);
-                        }
+                      try {
+                        setPoPdfLoading(true);
+                        const blob = await window.DatabaseAPI.downloadPurchaseOrderPdf(selectedItem.id);
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${selectedItem.orderNumber || 'PO'}.pdf`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e) {
+                        alert(e?.message || 'Failed to download PDF');
+                      } finally {
+                        setPoPdfLoading(false);
                       }
                     }}
-                    className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
                   >
-                    <i className="fas fa-check mr-1"></i>
-                    Mark as Received
+                    <i className="fas fa-file-pdf mr-1 text-red-600"></i>
+                    {poPdfLoading ? 'PDF…' : 'Download PDF'}
+                  </button>
+                )}
+                {selectedItem && poSt === 'draft' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, { status: 'final' });
+                        if (response?.data?.purchaseOrder) mergePoIntoLists(response.data.purchaseOrder);
+                      } catch (e) {
+                        alert(e?.message || 'Failed to finalize');
+                      }
+                    }}
+                    className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                  >
+                    Mark Final
+                  </button>
+                )}
+                {selectedItem && poSt === 'final' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, { status: 'sent' });
+                        if (response?.data?.purchaseOrder) mergePoIntoLists(response.data.purchaseOrder);
+                      } catch (e) {
+                        alert(e?.message || 'Failed to mark sent');
+                      }
+                    }}
+                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Mark Sent
+                  </button>
+                )}
+                {selectedItem && poSt === 'sent' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const items = typeof selectedItem.items === 'string' ? JSON.parse(selectedItem.items || '[]') : (selectedItem.items || []);
+                      setPoReceiptLines(
+                        items.map((it) => ({
+                          sku: it.sku,
+                          name: it.name || it.itemName || '',
+                          quantityOrdered: parseFloat(it.quantity) || 0,
+                          quantityReceived: parseFloat(it.quantity) || 0,
+                          unitPrice: parseFloat(it.unitPrice) || 0
+                        }))
+                      );
+                      setPoReceiptOpen(true);
+                    }}
+                    className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    Confirm goods receipt
                   </button>
                 )}
               </div>
               <button
-                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                type="button"
+                onClick={() => { setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Close
@@ -8045,6 +8248,96 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
           </div>
         </div>
+        {poReceiptOpen && selectedItem && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-md font-semibold text-gray-900">Confirm receipt</h3>
+                <button type="button" onClick={() => setPoReceiptOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                <p className="text-xs text-gray-500">Adjust quantity received and unit price per line. Received quantity cannot exceed ordered.</p>
+                {poReceiptLines.map((row, idx) => (
+                  <div key={row.sku || idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <p className="font-medium text-gray-900">{row.name || row.sku}</p>
+                    <p className="text-xs text-gray-500">SKU: {row.sku} · Ordered: {row.quantityOrdered}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-600">Qty received</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={row.quantityOrdered}
+                          step="1"
+                          value={row.quantityReceived}
+                          onChange={(e) => {
+                            const next = [...poReceiptLines];
+                            next[idx] = { ...next[idx], quantityReceived: parseFloat(e.target.value) || 0 };
+                            setPoReceiptLines(next);
+                          }}
+                          className="w-full px-2 py-1 border border-gray-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Unit price</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={row.unitPrice}
+                          onChange={(e) => {
+                            const next = [...poReceiptLines];
+                            next[idx] = { ...next[idx], unitPrice: parseFloat(e.target.value) || 0 };
+                            setPoReceiptLines(next);
+                          }}
+                          className="w-full px-2 py-1 border border-gray-300 rounded"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+                <button type="button" onClick={() => setPoReceiptOpen(false)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg">Cancel</button>
+                <button
+                  type="button"
+                  disabled={poReceiptSaving}
+                  onClick={async () => {
+                    try {
+                      setPoReceiptSaving(true);
+                      const receivedLines = poReceiptLines.map((r) => ({
+                        sku: r.sku,
+                        quantityReceived: r.quantityReceived,
+                        unitPrice: r.unitPrice
+                      }));
+                      const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, {
+                        status: 'goods_received',
+                        receivedLines,
+                        tax: selectedItem.tax
+                      });
+                      if (response?.data?.purchaseOrder) {
+                        mergePoIntoLists(response.data.purchaseOrder);
+                        await refreshInvAfterPo();
+                        setPoReceiptOpen(false);
+                        alert('Goods receipt recorded and inventory updated.');
+                      }
+                    } catch (e) {
+                      alert(e?.message || 'Receipt failed');
+                    } finally {
+                      setPoReceiptSaving(false);
+                    }
+                  }}
+                  className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {poReceiptSaving ? 'Saving…' : 'Post receipt'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
       );
     }
 
@@ -8584,6 +8877,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const total = subtotal + tax;
 
       return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
@@ -8659,7 +8953,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-xs text-blue-700">
                     <i className="fas fa-info-circle mr-1"></i>
-                    <strong>Note:</strong> Purchase orders are created with "draft" status. Stock movements will only be recorded and inventory updated when the order is marked as "received".
+                    <strong>Note:</strong> New POs start as <strong>Draft</strong>. Move to <strong>Final</strong>, then <strong>Sent</strong>, then confirm <strong>Goods received</strong> with quantities and prices to post stock.
                   </p>
                 </div>
 
@@ -8748,6 +9042,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <i className="fas fa-plus mr-1"></i> Add Item
                     </button>
                   </div>
+                  <p className="text-xs text-gray-600 mb-2">
+                    Enter <strong>quantity</strong> and <strong>unit price</strong> above, then use this if the part is not in inventory yet (creates the catalog item at the receiving location).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openPoNewItemSubModal}
+                    className="mb-3 px-3 py-2 text-sm border border-dashed border-gray-400 rounded-lg text-gray-700 hover:bg-gray-100 w-full sm:w-auto"
+                  >
+                    <i className="fas fa-box-open mr-1"></i> Create new inventory item for this line
+                  </button>
 
                   {/* Items List */}
                   {purchaseOrderItems.length > 0 && (
@@ -8757,7 +9061,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">{item.name}</p>
                             <p className="text-xs text-gray-600">
-                              SKU: {item.sku} • Qty: {item.quantity} • R {item.unitPrice.toFixed(2)} each
+                              SKU: {item.sku} • Qty: {item.quantity} • R {(item.unitPrice || 0).toFixed(2)} each
                               {item.supplierPartNumber && ` • Supplier Part: ${item.supplierPartNumber}`}
                             </p>
                           </div>
@@ -8857,7 +9161,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
             <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
               <button
-                onClick={() => { setShowModal(false); setFormData({}); setPurchaseOrderItems([]); }}
+                onClick={() => { setShowModal(false); setFormData({}); setPurchaseOrderItems([]); setPoNewItemSubOpen(false); }}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Cancel
@@ -8871,6 +9175,145 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
           </div>
         </div>
+        {poNewItemSubOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-md font-semibold text-gray-900">New inventory item</h3>
+                <button type="button" onClick={() => setPoNewItemSubOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                <p className="text-xs text-gray-500">Creates a catalog record (SKU auto-generated) with zero stock. Order qty and unit price from the PO row above are applied to this PO line.</p>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Item name *</label>
+                  <input
+                    type="text"
+                    value={poNewItemForm.name}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                    <select
+                      value={poNewItemForm.category}
+                      onChange={(e) => setPoNewItemForm({ ...poNewItemForm, category: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Select…</option>
+                      {categories.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Type *</label>
+                    <select
+                      value={poNewItemForm.type}
+                      onChange={(e) => setPoNewItemForm({ ...poNewItemForm, type: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="component">component</option>
+                      <option value="raw_material">raw_material</option>
+                      <option value="finished_good">finished_good</option>
+                      <option value="work_in_progress">work_in_progress</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Unit *</label>
+                  <input
+                    type="text"
+                    value={poNewItemForm.unit}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, unit: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Reorder point</label>
+                    <input
+                      type="number"
+                      value={poNewItemForm.reorderPoint}
+                      onChange={(e) => setPoNewItemForm({ ...poNewItemForm, reorderPoint: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Reorder qty</label>
+                    <input
+                      type="number"
+                      value={poNewItemForm.reorderQty}
+                      onChange={(e) => setPoNewItemForm({ ...poNewItemForm, reorderQty: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Default unit cost</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={poNewItemForm.unitCost}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, unitCost: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Supplier</label>
+                  <input
+                    type="text"
+                    value={poNewItemForm.supplier}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, supplier: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Box #</label>
+                  <input
+                    type="text"
+                    value={poNewItemForm.boxNumber}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, boxNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Mfg part #</label>
+                  <input
+                    type="text"
+                    value={poNewItemForm.manufacturingPartNumber}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, manufacturingPartNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Legacy part #</label>
+                  <input
+                    type="text"
+                    value={poNewItemForm.legacyPartNumber}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, legacyPartNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+              </div>
+              <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+                <button type="button" onClick={() => setPoNewItemSubOpen(false)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg">Cancel</button>
+                <button
+                  type="button"
+                  disabled={poNewItemSaving}
+                  onClick={handleSavePoNewInventoryItem}
+                  className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {poNewItemSaving ? 'Saving…' : 'Create & add to PO'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
       );
     }
 
@@ -9113,7 +9556,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <div className="flex items-start gap-2 mb-2">
                         <h3 className="text-base font-semibold text-gray-900">{order.orderNumber}</h3>
                         <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize flex-shrink-0 ${getStatusColor(order.status)}`}>
-                          {(order.status || '').replace('_', ' ')}
+                          {(order.status || '').replace(/_/g, ' ')}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-1">Supplier: {order.supplierName || '-'}</p>
@@ -9218,7 +9661,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <td className="px-3 py-2 text-sm text-gray-900">{order.supplierName || '-'}</td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
-                          {(order.status || '').replace('_', ' ')}
+                          {(order.status || '').replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-900">{formatDate(order.orderDate)}</td>

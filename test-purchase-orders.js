@@ -128,6 +128,10 @@ async function test1_CreatePurchaseOrder() {
   console.log('\n📝 Test 1: Create Purchase Order')
   
   try {
+    const mainWarehouse = await prisma.stockLocation.findFirst({
+      where: { code: TEST_CONFIG.locationCode }
+    })
+
     const purchaseOrderData = {
       supplierId: TEST_CONFIG.supplierId,
       supplierName: TEST_CONFIG.supplierName,
@@ -167,7 +171,8 @@ async function test1_CreatePurchaseOrder() {
         subtotal: purchaseOrderData.subtotal,
         tax: purchaseOrderData.tax,
         total: purchaseOrderData.total,
-        items: JSON.stringify(purchaseOrderData.items)
+        items: JSON.stringify(purchaseOrderData.items),
+        receivingLocationId: mainWarehouse?.id || null
       }
     })
     
@@ -209,7 +214,7 @@ async function test2_GetPurchaseOrders() {
 }
 
 async function test3_UpdatePurchaseOrderStatus(testOrder) {
-  console.log('\n🔄 Test 3: Update Purchase Order Status to Received')
+  console.log('\n🔄 Test 3: Update Purchase Order Status to goods_received (receipt simulation)')
   
   if (!testOrder) {
     logTest('Update Purchase Order Status', false, new Error('No test order available'))
@@ -228,7 +233,6 @@ async function test3_UpdatePurchaseOrderStatus(testOrder) {
     const initialQty1 = initialInventory1?.quantity || 0
     const initialQty2 = initialInventory2?.quantity || 0
     
-    // Update order status to 'received'
     const items = JSON.parse(testOrder.items)
     const mainWarehouse = await prisma.stockLocation.findFirst({
       where: { code: TEST_CONFIG.locationCode }
@@ -379,12 +383,19 @@ async function test3_UpdatePurchaseOrderStatus(testOrder) {
         }
       }
       
-      // Update purchase order
+      const mergedItems = items.map((item) => ({
+        ...item,
+        quantityReceived: parseFloat(item.quantity) || 0,
+        receivedUnitPrice: parseFloat(item.unitPrice) || 0,
+        receivedLineTotal: (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+      }))
+
       await tx.purchaseOrder.update({
         where: { id: testOrder.id },
         data: {
-          status: 'received',
-          receivedDate: now
+          status: 'goods_received',
+          receivedDate: now,
+          items: JSON.stringify(mergedItems)
         }
       })
     }, {
@@ -416,16 +427,16 @@ async function test3_UpdatePurchaseOrderStatus(testOrder) {
     const updatedOrder = await prisma.purchaseOrder.findUnique({
       where: { id: testOrder.id }
     })
-    const statusUpdated = updatedOrder?.status === 'received'
+    const statusUpdated = updatedOrder?.status === 'goods_received'
     
     const allPassed = qty1Increased && qty2Increased && movementsCreated && statusUpdated
     
-    logTest('Update Purchase Order Status to Received', allPassed, 
+    logTest('Update Purchase Order Status to goods_received', allPassed, 
       allPassed ? null : new Error(`Qty1: ${qty1Increased}, Qty2: ${qty2Increased}, Movements: ${movementsCreated}, Status: ${statusUpdated}`))
     
     return updatedOrder
   } catch (error) {
-    logTest('Update Purchase Order Status to Received', false, error)
+    logTest('Update Purchase Order Status to goods_received', false, error)
     return null
   }
 }

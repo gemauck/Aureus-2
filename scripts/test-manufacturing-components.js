@@ -201,7 +201,7 @@ test('Shipped sales orders have stock movements', async () => {
 // Test 10: Purchase orders update inventory when received
 test('Received purchase orders have stock movements', async () => {
   const receivedOrders = await prisma.purchaseOrder.findMany({
-    where: { status: 'received' }
+    where: { status: { in: ['goods_received', 'received'] } }
   })
   
   for (const order of receivedOrders) {

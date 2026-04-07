@@ -2108,6 +2108,36 @@ const DatabaseAPI = {
         return response;
     },
 
+    async getDocumentSettings() {
+        return this.makeRequest('/system/document-settings', { method: 'GET', forceRefresh: true });
+    },
+
+    async updateDocumentSettings(payload) {
+        return this.makeRequest('/system/document-settings', {
+            method: 'PATCH',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    /** Returns a Blob (application/pdf). Caller should revoke object URLs after download. */
+    async downloadPurchaseOrderPdf(id) {
+        let token = window.storage?.getToken?.() || localStorage.getItem('token');
+        if (!token) {
+            throw new Error('No authentication token found. Please log in.');
+        }
+        const url = `${this.API_BASE}/api/purchase-orders/${encodeURIComponent(id)}/pdf`;
+        const res = await fetch(url, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw new Error(text || `Failed to download PDF (${res.status})`);
+        }
+        return res.blob();
+    },
+
     // JOB CARDS OPERATIONS
     async getJobCards() {
         const raw = await this.makeRequest('/jobcards');

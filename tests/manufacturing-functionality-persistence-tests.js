@@ -779,6 +779,7 @@ async function run() {
     supplierId: supplier.id,
     supplierName: 'Test Supplier',
     status: 'draft',
+    receivingLocationId: mainLocation.id,
     items: [
       {
         sku: componentB.sku,
@@ -792,12 +793,20 @@ async function run() {
   })
   assertTrue(!!purchaseOrder?.id, 'Purchase order created')
 
+  const finalPoRes = await updatePurchaseOrder(purchaseOrder.id, { status: 'final' })
+  recordResult('Purchase order finalized', finalPoRes.status === 200, finalPoRes.status === 200 ? '' : apiErrorMessage(finalPoRes))
+
+  const sentPoRes = await updatePurchaseOrder(purchaseOrder.id, { status: 'sent' })
+  recordResult('Purchase order sent', sentPoRes.status === 200, sentPoRes.status === 200 ? '' : apiErrorMessage(sentPoRes))
+
   const receiveRes = await updatePurchaseOrder(purchaseOrder.id, {
-    status: 'received',
+    status: 'goods_received',
+    receivedLines: [{ sku: componentB.sku, quantityReceived: 10, unitPrice: 8 }],
+    tax: 0,
     receivedDate: new Date().toISOString()
   })
   const purchaseReceivedOk = receiveRes.status === 200
-  recordResult('Purchase order received', purchaseReceivedOk, purchaseReceivedOk ? '' : apiErrorMessage(receiveRes))
+  recordResult('Purchase order goods received', purchaseReceivedOk, purchaseReceivedOk ? '' : apiErrorMessage(receiveRes))
   successRefs.purchase = purchaseReceivedOk
 
   if (purchaseReceivedOk) {
@@ -805,8 +814,7 @@ async function run() {
     assertEqual(compBAfterPurchase?.quantity, 67, 'Purchase order receipt increases component stock')
 
     const repeatReceive = await updatePurchaseOrder(purchaseOrder.id, {
-      status: 'received',
-      receivedDate: new Date().toISOString()
+      status: 'goods_received'
     })
     recordResult('Purchase order receive is idempotent', repeatReceive.status === 200, repeatReceive.status === 200 ? '' : apiErrorMessage(repeatReceive))
     const compBAfterRepeat = await getInventoryItem(componentB.id)

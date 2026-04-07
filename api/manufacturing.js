@@ -1379,6 +1379,8 @@ async function handler(req, res) {
           await ensureLocationInventoryPlaceholder(locationId, item)
           // Update the LocationInventory with the initial quantity
           await upsertLocationInventoryQuantity(locationId, item, quantity)
+        } else if (locationId && quantity === 0) {
+          await ensureLocationInventoryPlaceholder(locationId, item)
         }
         
         // Create stock movement for starting balance (best practice: record all inventory changes)

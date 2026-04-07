@@ -665,7 +665,8 @@ async function generateDummyData() {
           orderNumber: 'PO0001',
           supplierId: suppliers[0].id,
           supplierName: suppliers[0].name,
-          status: 'pending',
+          status: 'draft',
+          receivingLocationId: mainWarehouse.id,
           items: JSON.stringify([
             { sku: components[0].sku, name: components[0].name, quantity: 50, unitPrice: 145.00 }
           ]),
@@ -677,14 +678,15 @@ async function generateDummyData() {
           ownerId: null
         }
       })
-      console.log(`   ✅ Created purchase order PO0001 (pending)`)
+      console.log(`   ✅ Created purchase order PO0001 (draft)`)
 
       const po2 = await tx.purchaseOrder.create({
         data: {
           orderNumber: 'PO0002',
           supplierId: suppliers[1].id,
           supplierName: suppliers[1].name,
-          status: 'received',
+          status: 'goods_received',
+          receivingLocationId: mainWarehouse.id,
           items: JSON.stringify([
             { sku: components[3].sku, name: components[3].name, quantity: 20, unitPrice: 72.00 }
           ]),
