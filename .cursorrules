@@ -45,6 +45,15 @@ For list or detail views that poll or refetch (discussions, notifications, task 
 
 Examples: `TeamDiscussions.jsx` (loadDetail with silent + reply merge), `NotificationCenter.jsx` (loadNotifications({ silent: true }) and only update list when ids changed).
 
+## Manufacturing audit trail (mandatory for new mutations)
 
+Any **new or changed** mutating route (POST, PATCH, DELETE) that affects Manufacturing or related order flows **must** write to `AuditLog` after a **successful** database change, using the existing helpers:
+
+- **`api/manufacturing.js`**: call `auditManufacturing(action, resource, entityId, details)` immediately before each successful `return ok` / `return created` on mutation paths. Use `entity` semantics via the wrapper (`manufacturing` + `details.resource`).
+- **`api/sales-orders.js`** and **`api/purchase-orders.js`**: call `logAuditFromRequest(prisma, req, { action, entity, entityId, details })` from `api/_lib/manufacturingAuditLog.js` with `entity` of `sales_orders` or `purchase_orders` respectively.
+
+**Do not** rely on the browser `AuditLogger` alone for these APIs. **Do not** log successful GET/list/detail unless product explicitly requires read auditing. Failures in audit writes must stay non-fatal (use `void` on the promise where appropriate); never let audit logging break the main request.
+
+When adding a new `resourceType` branch in `api/manufacturing.js` or new order endpoints, add audit coverage for **every** mutation exit that persists data.
 
 

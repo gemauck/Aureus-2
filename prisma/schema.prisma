@@ -1150,6 +1150,8 @@ model AuditLog {
   diff      String?
   createdAt DateTime @default(now())
   actor     User     @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entity, createdAt])
 }
 
 model Invitation {

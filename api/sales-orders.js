@@ -5,6 +5,8 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+// Mutations: after successful create/update/delete, call logAuditFromRequest (see .cursorrules / manufacturingAuditLog.js).
+import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 
 async function handler(req, res) {
   try {
@@ -114,6 +116,18 @@ async function handler(req, res) {
           items: typeof salesOrder.items === 'string' ? JSON.parse(salesOrder.items) : salesOrder.items
         }
         
+        void logAuditFromRequest(prisma, req, {
+          action: 'create',
+          entity: 'sales_orders',
+          entityId: salesOrder.id,
+          details: {
+            resource: 'sales-orders',
+            method: req.method,
+            path: urlPath,
+            summary: `Sales order ${salesOrder.orderNumber}`,
+            orderNumber: salesOrder.orderNumber
+          }
+        })
         return created(res, { salesOrder: responseOrder })
       } catch (dbError) {
         console.error('❌ Database error creating sales order:', dbError)
@@ -369,6 +383,21 @@ async function handler(req, res) {
             items: typeof salesOrder.items === 'string' ? JSON.parse(salesOrder.items) : salesOrder.items
           }
           
+          void logAuditFromRequest(prisma, req, {
+            action: 'update',
+            entity: 'sales_orders',
+            entityId: id,
+            details: {
+              resource: 'sales-orders',
+              method: req.method,
+              path: urlPath,
+              summary: `Sales order ${salesOrder.orderNumber}`,
+              orderNumber: salesOrder.orderNumber,
+              statusFrom: oldStatus,
+              statusTo: salesOrder.status,
+              fieldsUpdated: Object.keys(updateData)
+            }
+          })
           return ok(res, { salesOrder: responseOrder })
         } catch (dbError) {
           console.error('❌ Database error updating sales order:', dbError)
@@ -379,6 +408,17 @@ async function handler(req, res) {
       if (req.method === 'DELETE') {
         try {
           await prisma.salesOrder.delete({ where: { id } })
+          void logAuditFromRequest(prisma, req, {
+            action: 'delete',
+            entity: 'sales_orders',
+            entityId: id,
+            details: {
+              resource: 'sales-orders',
+              method: req.method,
+              path: urlPath,
+              summary: `Deleted sales order ${id}`
+            }
+          })
           return ok(res, { deleted: true })
         } catch (dbError) {
           console.error('❌ Database error deleting sales order:', dbError)

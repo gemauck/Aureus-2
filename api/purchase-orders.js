@@ -6,6 +6,8 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isAdminUser } from './_lib/adminRoles.js'
+// Mutations: after successful create/update/delete, call logAuditFromRequest (see .cursorrules / manufacturingAuditLog.js).
+import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 
 const S_DRAFT = 'draft'
 const S_FINAL = 'final'
@@ -369,6 +371,18 @@ async function handler(req, res) {
           items: parseItemsJson(full)
         }
 
+        void logAuditFromRequest(prisma, req, {
+          action: 'create',
+          entity: 'purchase_orders',
+          entityId: purchaseOrder.id,
+          details: {
+            resource: 'purchase-orders',
+            method: req.method,
+            path: urlPath,
+            summary: `Purchase order ${purchaseOrder.orderNumber}`,
+            orderNumber: purchaseOrder.orderNumber
+          }
+        })
         return created(res, { purchaseOrder: responseOrder })
       } catch (dbError) {
         console.error('❌ Database error creating purchase order:', dbError)
@@ -544,6 +558,20 @@ async function handler(req, res) {
               ...purchaseOrder,
               items: parseItemsJson(purchaseOrder)
             }
+            void logAuditFromRequest(prisma, req, {
+              action: 'update',
+              entity: 'purchase_orders',
+              entityId: id,
+              details: {
+                resource: 'purchase-orders',
+                method: req.method,
+                path: urlPath,
+                summary: `Goods received ${purchaseOrder.orderNumber}`,
+                orderNumber: purchaseOrder.orderNumber,
+                statusFrom: oldStatus,
+                statusTo: S_GOODS_RECEIVED
+              }
+            })
             return ok(res, { purchaseOrder: responseOrder })
           } catch (stockMovementError) {
             console.error('❌ Error creating stock movements:', stockMovementError)
@@ -580,6 +608,21 @@ async function handler(req, res) {
             ...full,
             items: parseItemsJson(full)
           }
+          void logAuditFromRequest(prisma, req, {
+            action: 'update',
+            entity: 'purchase_orders',
+            entityId: id,
+            details: {
+              resource: 'purchase-orders',
+              method: req.method,
+              path: urlPath,
+              summary: `Purchase order ${full.orderNumber} updated`,
+              orderNumber: full.orderNumber,
+              statusFrom: oldStatus,
+              statusTo: full.status,
+              fieldsUpdated: Object.keys(updateData)
+            }
+          })
           return ok(res, { purchaseOrder: responseOrder })
         } catch (dbError) {
           console.error('❌ Database error updating purchase order:', dbError)
@@ -597,6 +640,18 @@ async function handler(req, res) {
             }
           }
           await prisma.purchaseOrder.delete({ where: { id } })
+          void logAuditFromRequest(prisma, req, {
+            action: 'delete',
+            entity: 'purchase_orders',
+            entityId: id,
+            details: {
+              resource: 'purchase-orders',
+              method: req.method,
+              path: urlPath,
+              summary: `Deleted purchase order ${existingOrder.orderNumber || id}`,
+              orderNumber: existingOrder.orderNumber
+            }
+          })
           return ok(res, { deleted: true })
         } catch (dbError) {
           console.error('❌ Database error deleting purchase order:', dbError)

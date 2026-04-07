@@ -21,6 +21,34 @@ const normalizeManufacturingTab = (value = 'dashboard') => {
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
 };
 
+/** True if catalog row is tied to this supplier (primary supplier name or supplierPartNumbers[].supplier). */
+function inventoryItemLinkedToSupplierName(item, supplierName) {
+  const needle = String(supplierName || '').trim().toLowerCase();
+  if (!needle) return false;
+  const primary = String(item?.supplier || '').trim().toLowerCase();
+  if (primary === needle) return true;
+  try {
+    const raw = item?.supplierPartNumbers;
+    const parts = typeof raw === 'string' ? JSON.parse(raw || '[]') : (raw || []);
+    if (!Array.isArray(parts)) return false;
+    return parts.some((sp) => String(sp?.supplier || '').trim().toLowerCase() === needle);
+  } catch {
+    return false;
+  }
+}
+
+function dedupeInventoryRowsBySku(items) {
+  const out = [];
+  const seen = new Set();
+  for (const row of items) {
+    const k = row.sku || row.id;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(row);
+  }
+  return out;
+}
+
 // Never throw so caching never breaks loading. Skip cache when over ~2MB to avoid quota.
 const SAFE_STORAGE_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -8875,6 +8903,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const subtotal = purchaseOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
       const tax = formData.tax || 0;
       const total = subtotal + tax;
+      const selectedPoSupplier = suppliers.find(s => s.id === formData.supplierId);
+      const poInventoryOptions = selectedPoSupplier
+        ? dedupeInventoryRowsBySku(
+            inventory.filter((item) => inventoryItemLinkedToSupplierName(item, selectedPoSupplier.name))
+          )
+        : [];
 
       return (
         <>
@@ -8897,11 +8931,25 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <select
                     value={formData.supplierId || ''}
                     onChange={(e) => {
-                      const selectedSupplier = suppliers.find(s => s.id === e.target.value);
+                      const nextId = e.target.value;
+                      const selectedSupplier = suppliers.find(s => s.id === nextId);
                       setFormData({
                         ...formData,
-                        supplierId: e.target.value,
+                        supplierId: nextId,
                         supplierName: selectedSupplier ? selectedSupplier.name : ''
+                      });
+                      setNewPurchaseOrderItem((prev) => {
+                        if (!nextId || !selectedSupplier) {
+                          return prev.sku ? { ...prev, sku: '', name: '', supplierPartNumber: '' } : prev;
+                        }
+                        const stillLinked = prev.sku && inventory.some(
+                          (it) => (it.sku === prev.sku || it.id === prev.sku) &&
+                            inventoryItemLinkedToSupplierName(it, selectedSupplier.name)
+                        );
+                        if (!stillLinked && prev.sku) {
+                          return { ...prev, sku: '', name: '', supplierPartNumber: '' };
+                        }
+                        return prev;
                       });
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -8960,25 +9008,36 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 {/* Order Items Section */}
                 <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3">Order Items</h3>
+                  {!formData.supplierId && (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                      Choose a supplier above to see inventory items linked to that supplier.
+                    </p>
+                  )}
+                  {formData.supplierId && poInventoryOptions.length === 0 && (
+                    <p className="text-xs text-gray-600 mb-3">
+                      No inventory items are linked to <strong>{selectedPoSupplier?.name || 'this supplier'}</strong> yet. Set the supplier on an inventory item, add supplier part numbers, or use &quot;Create new inventory item for this line&quot;.
+                    </p>
+                  )}
                   
                   {/* Add Item Form */}
                   <div className="grid grid-cols-12 gap-2 mb-3">
                     <div className="col-span-3">
                       <select
                         value={newPurchaseOrderItem.sku}
+                        disabled={!formData.supplierId}
                         onChange={(e) => {
                           const sku = e.target.value;
-                          const invItem = inventory.find(item => item.sku === sku || item.id === sku);
+                          const invItem = poInventoryOptions.find(item => item.sku === sku || item.id === sku);
                           setNewPurchaseOrderItem({
                             ...newPurchaseOrderItem,
                             sku: sku,
                             name: invItem ? invItem.name : newPurchaseOrderItem.name
                           });
                         }}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                       >
-                        <option value="">Select from inventory</option>
-                        {inventory.map(item => (
+                        <option value="">{formData.supplierId ? 'Select from inventory' : 'Select a supplier first'}</option>
+                        {poInventoryOptions.map(item => (
                           <option key={item.id || item.sku} value={item.sku || item.id}>
                             {item.name} ({item.sku || item.id})
                           </option>

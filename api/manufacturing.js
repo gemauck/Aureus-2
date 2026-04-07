@@ -5,6 +5,7 @@ import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isAdminRole } from './_lib/authRoles.js'
+import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 
 const INVENTORY_TEMPLATE_FIELDS = {
   sku: true,
@@ -503,6 +504,21 @@ async function handler(req, res) {
       return new Date(date).toISOString().split('T')[0]
     }
 
+    // New mutations in this handler: call auditManufacturing() before return ok/created (see .cursorrules).
+    const auditManufacturing = (action, resource, entityId, details = {}) => {
+      void logAuditFromRequest(prisma, req, {
+        action,
+        entity: 'manufacturing',
+        entityId: entityId != null && String(entityId) !== '' ? String(entityId) : String(resource),
+        details: {
+          resource,
+          method: req.method,
+          path: urlPath,
+          ...details
+        }
+      })
+    }
+
     // PURGE ALL MANUFACTURING DATA
     if (req.method === 'DELETE' && resourceType === 'purge') {
       try {
@@ -552,6 +568,11 @@ async function handler(req, res) {
           }
         })
 
+        auditManufacturing('purge', 'purge', 'manufacturing-purge', {
+          summary: 'Full manufacturing data purge',
+          deleted: result.deleted,
+          existingCounts: result.existing
+        })
         return ok(res, { deleted: true, ...result })
       } catch (error) {
         console.error('❌ Failed to purge manufacturing data:', error)
@@ -563,6 +584,7 @@ async function handler(req, res) {
     if (req.method === 'POST' && resourceType === 'sync') {
       try {
         await syncInventoryAcrossAllLocations(true)
+        auditManufacturing('sync', 'sync', 'inventory-sync', { summary: 'Sync inventory across all locations' })
         return ok(res, { synced: true })
       } catch (error) {
         console.error('❌ Sync manufacturing inventory failed:', error)
@@ -650,6 +672,9 @@ async function handler(req, res) {
         
         // Return the location in the expected format
         const responseData = { location }
+        auditManufacturing('create', 'locations', location.id, {
+          summary: `Location ${location.name} (${location.code})`
+        })
         return created(res, responseData)
       } catch (e) {
         console.error('❌ POST /manufacturing/locations - Error:', e);
@@ -677,6 +702,10 @@ async function handler(req, res) {
           contactPhone: body.contactPhone ?? undefined,
           meta: body.meta !== undefined ? JSON.stringify(body.meta) : undefined
         }})
+        auditManufacturing('update', 'locations', id, {
+          summary: `Location ${location.name} (${location.code})`,
+          changedFields: Object.keys(body).filter((k) => body[k] !== undefined)
+        })
         return ok(res, { location })
       } catch (e) {
         if (e.code === 'P2025') return notFound(res, 'Location not found')
@@ -722,6 +751,7 @@ async function handler(req, res) {
           await tx.stockLocation.delete({ where: { id } })
         })
 
+        auditManufacturing('delete', 'locations', id, { summary: `Deleted location ${id}` })
         return ok(res, { deleted: true })
       } catch (e) {
         if (e.code === 'P2025') return notFound(res, 'Location not found')
@@ -927,6 +957,12 @@ async function handler(req, res) {
           return { movement }
         })
 
+        auditManufacturing('create', 'stock-transactions', result.movement.id, {
+          summary: `${type} ${body.sku} qty ${qty}`,
+          movementId: result.movement.movementId,
+          sku: body.sku,
+          transactionType: type
+        })
         return created(res, { movement: {
           ...result.movement,
           date: formatDate(result.movement.date),
@@ -1252,6 +1288,11 @@ async function handler(req, res) {
           }
         }
 
+        auditManufacturing('create', 'inventory', 'bulk-import', {
+          summary: `Bulk import: ${created.length} created, ${errors.length} errors`,
+          createdCount: created.length,
+          errorCount: errors.length
+        })
         return ok(res, {
           message: `Bulk import completed: ${created.length} items created, ${errors.length} errors`,
           created: created.length,
@@ -1425,6 +1466,10 @@ async function handler(req, res) {
           }
         }
         
+        auditManufacturing('create', 'inventory', item.id, {
+          summary: `Inventory ${item.sku} ${item.name}`,
+          sku: item.sku
+        })
         return created(res, { 
           item: {
             ...item,
@@ -1557,6 +1602,11 @@ async function handler(req, res) {
           }
         }
         
+        auditManufacturing('update', 'inventory', id, {
+          summary: `Updated inventory ${item.sku} ${item.name}`,
+          sku: item.sku,
+          fieldsUpdated: Object.keys(updateData)
+        })
         return ok(res, { 
           item: {
             ...item,
@@ -1609,6 +1659,10 @@ async function handler(req, res) {
           // Remove all clones for this SKU across locations
           await tx.inventoryItem.deleteMany({ where: { sku: itemToDelete.sku } })
         })
+        auditManufacturing('delete', 'inventory', id, {
+          summary: `Deleted inventory SKU ${itemToDelete.sku}`,
+          sku: itemToDelete.sku
+        })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete inventory item:', error)
@@ -1637,6 +1691,7 @@ async function handler(req, res) {
       if (!name) return badRequest(res, 'name is required')
       try {
         const group = await prisma.bOMGroup.create({ data: { name } })
+        auditManufacturing('create', 'bom-groups', group.id, { summary: `BOM group ${group.name}` })
         return created(res, { group })
       } catch (error) {
         console.error('❌ Failed to create BOM group:', error)
@@ -1647,6 +1702,7 @@ async function handler(req, res) {
       try {
         await prisma.bOM.updateMany({ where: { groupId: id }, data: { groupId: null } })
         await prisma.bOMGroup.delete({ where: { id } })
+        auditManufacturing('delete', 'bom-groups', id, { summary: `Deleted BOM group ${id}` })
         return ok(res, { deleted: true })
       } catch (error) {
         if (error.code === 'P2025') return notFound(res, 'BOM group not found')
@@ -1782,6 +1838,10 @@ async function handler(req, res) {
           }
         })
         
+        auditManufacturing('create', 'boms', bom.id, {
+          summary: `BOM ${bom.productSku} ${bom.productName}`,
+          productSku: bom.productSku
+        })
         return created(res, { 
           bom: {
             ...bom,
@@ -1877,6 +1937,10 @@ async function handler(req, res) {
           data: updateData
         })
         
+        auditManufacturing('update', 'boms', id, {
+          summary: `BOM ${bom.productSku} updated`,
+          fieldsUpdated: Object.keys(updateData)
+        })
         return ok(res, { 
           bom: {
             ...bom,
@@ -1899,6 +1963,7 @@ async function handler(req, res) {
     if (req.method === 'DELETE' && id) {
       try {
         await prisma.bOM.delete({ where: { id } })
+        auditManufacturing('delete', 'boms', id, { summary: `Deleted BOM ${id}` })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete BOM:', error)
@@ -2058,6 +2123,10 @@ async function handler(req, res) {
           return await tx.productionOrder.create({ data: createData })
         })
         
+        auditManufacturing('create', 'production-orders', order.id, {
+          summary: `Production order ${order.productName} x${order.quantity}`,
+          workOrderNumber: order.workOrderNumber
+        })
         return created(res, { 
           order: {
             ...order,
@@ -3096,6 +3165,12 @@ async function handler(req, res) {
           responseData.stockWarnings = stockWarnings
         }
         
+        auditManufacturing('update', 'production-orders', id, {
+          summary: `Production order ${order?.productName || id}`,
+          statusFrom: oldStatus,
+          statusTo: order?.status,
+          fieldsUpdated: Object.keys(fieldsToUpdate)
+        })
         return ok(res, responseData)
       } catch (error) {
         console.error('❌ Failed to update production order:', error)
@@ -3228,6 +3303,9 @@ async function handler(req, res) {
           await prisma.productionOrder.delete({ where: { id } })
         }
         
+        auditManufacturing('delete', 'production-orders', id, {
+          summary: `Deleted production order ${orderToDelete.workOrderNumber || id}`
+        })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete production order:', error)
@@ -3867,6 +3945,11 @@ async function handler(req, res) {
           return { movement, item }
         })
 
+        auditManufacturing('create', 'stock-movements', result.movement.id, {
+          summary: `${body.type} ${body.sku} qty ${quantity}`,
+          movementId: result.movement.movementId,
+          sku: body.sku
+        })
         return created(res, {
           movement: {
             ...result.movement,
@@ -3918,6 +4001,11 @@ async function handler(req, res) {
       try {
         const count = await prisma.stockMovement.count()
         const result = await prisma.stockMovement.deleteMany({})
+        auditManufacturing('delete', 'stock-movements', 'all', {
+          summary: `Deleted all stock movements (${result.count})`,
+          count: result.count,
+          previousCount: count
+        })
         return ok(res, { deleted: true, count: result.count })
       } catch (error) {
         console.error('❌ Failed to delete all stock movements:', error)
@@ -3929,6 +4017,7 @@ async function handler(req, res) {
     if (req.method === 'DELETE' && id) {
       try {
         await prisma.stockMovement.delete({ where: { id } })
+        auditManufacturing('delete', 'stock-movements', id, { summary: `Deleted stock movement ${id}` })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete stock movement:', error)
@@ -4130,6 +4219,10 @@ async function handler(req, res) {
         return { createdMovements, updatedOrder }
       })
 
+      auditManufacturing('consume', 'production-orders', id, {
+        summary: `Consumed BOM for order ${order.productName} qty ${consumeQuantity}`,
+        movementsCreated: result.createdMovements.length
+      })
       return ok(res, {
         consumed: true,
         movements: result.createdMovements.map(m => ({
@@ -4237,6 +4330,9 @@ async function handler(req, res) {
           }
         })
         
+        auditManufacturing('create', 'suppliers', supplier.id, {
+          summary: `Supplier ${supplier.name} (${supplier.code})`
+        })
         return created(res, { 
           supplier: {
             ...supplier,
@@ -4273,6 +4369,10 @@ async function handler(req, res) {
           data: updateData
         })
         
+        auditManufacturing('update', 'suppliers', id, {
+          summary: `Supplier ${supplier.name}`,
+          fieldsUpdated: Object.keys(updateData)
+        })
         return ok(res, { 
           supplier: {
             ...supplier,
@@ -4309,6 +4409,7 @@ async function handler(req, res) {
         }
         
         await prisma.supplier.delete({ where: { id } })
+        auditManufacturing('delete', 'suppliers', id, { summary: `Deleted supplier ${id}` })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete supplier:', error)
