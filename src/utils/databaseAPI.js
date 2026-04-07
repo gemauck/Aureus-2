@@ -2072,6 +2072,8 @@ const DatabaseAPI = {
         const q = new URLSearchParams();
         q.set('limit', String(limit));
         q.set('offset', String(offset));
+        if (options.startDate) q.set('startDate', String(options.startDate).trim());
+        if (options.endDate) q.set('endDate', String(options.endDate).trim());
         const path = `/manufacturing/activity?${q.toString()}`;
         return this.makeRequest(path, {
             method: 'GET',
@@ -2115,6 +2117,14 @@ const DatabaseAPI = {
             body: JSON.stringify(purchaseOrderData)
         });
         return response;
+    },
+
+    /** Structured audit trail entries for a PO (create, amend, goods received, etc.). */
+    async getPurchaseOrderAmendments(id) {
+        return this._callPurchaseOrdersEndpoint(`${id}/amendments`, {
+            method: 'GET',
+            forceRefresh: true
+        });
     },
 
     async deletePurchaseOrder(id) {

@@ -15,7 +15,7 @@ const useAuth = window.useAuth || (() => {
 // Helper to safely get React for error fallbacks
 const getReactForError = () => window.React || ReactGlobal;
 
-const MANUFACTURING_TABS = ['dashboard', 'activity', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations'];
+const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'activity'];
 const normalizeManufacturingTab = (value = 'dashboard') => {
   const normalized = (value || 'dashboard').toLowerCase();
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
@@ -268,7 +268,26 @@ try {
   const [poReceiptLines, setPoReceiptLines] = useState([]);
   const [poReceiptSaving, setPoReceiptSaving] = useState(false);
   const [poPdfLoading, setPoPdfLoading] = useState(false);
+  const [poEditMode, setPoEditMode] = useState(false);
+  const [poEditDraft, setPoEditDraft] = useState(null);
+  const [poEditInitial, setPoEditInitial] = useState(null);
+  const [poAmendmentReason, setPoAmendmentReason] = useState('');
+  const [poEditSaving, setPoEditSaving] = useState(false);
+  const [poAmendmentHistoryOpen, setPoAmendmentHistoryOpen] = useState(false);
+  const [poAmendmentHistory, setPoAmendmentHistory] = useState([]);
+  const [poAmendmentHistoryLoading, setPoAmendmentHistoryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const resetPurchaseOrderEditUi = useCallback(() => {
+    setPoEditMode(false);
+    setPoEditDraft(null);
+    setPoEditInitial(null);
+    setPoAmendmentReason('');
+    setPoEditSaving(false);
+    setPoAmendmentHistoryOpen(false);
+    setPoAmendmentHistory([]);
+    setPoAmendmentHistoryLoading(false);
+  }, []);
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
@@ -5154,7 +5173,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         alert('Please select a supplier');
         return;
       }
-      
+
       if (purchaseOrderItems.length === 0) {
         alert('Please add at least one order item');
         return;
@@ -8328,15 +8347,195 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const poRecvFallback =
         selectedItem?.receivingLocationId && getLocationLabel(selectedItem.receivingLocationId);
       const poSt = selectedItem?.status;
+      const poCanAmend = selectedItem && ['draft', 'final', 'sent'].includes(String(poSt || ''));
+      const poCanEditFully = poSt === 'draft' || isAdmin;
+
+      const loadPoAmendmentHistory = async () => {
+        if (!selectedItem?.id) return;
+        setPoAmendmentHistoryLoading(true);
+        try {
+          const res = await safeCallAPI('getPurchaseOrderAmendments', selectedItem.id);
+          const list =
+            (res && res.data && res.data.amendments) ||
+            (res && res.amendments) ||
+            [];
+          setPoAmendmentHistory(Array.isArray(list) ? list : []);
+        } catch (err) {
+          console.warn('PO amendment history failed:', err);
+          setPoAmendmentHistory([]);
+        } finally {
+          setPoAmendmentHistoryLoading(false);
+        }
+      };
+
+      const startPoEdit = () => {
+        if (!selectedItem || !poCanAmend) return;
+        const itemsRaw =
+          typeof selectedItem.items === 'string'
+            ? JSON.parse(selectedItem.items || '[]')
+            : [...(selectedItem.items || [])];
+        const lines = itemsRaw.map((it, idx) => {
+          const q = parseFloat(it.quantity) || 0;
+          const p = parseFloat(it.unitPrice) || 0;
+          return {
+            id: it.id || `line-${idx}-${it.sku || idx}`,
+            sku: it.sku || '',
+            name: it.name || it.itemName || '',
+            quantity: q,
+            unitPrice: p,
+            total: parseFloat(it.total) || q * p,
+            supplierPartNumber: it.supplierPartNumber || ''
+          };
+        });
+        const draft = {
+          supplierId: selectedItem.supplierId || '',
+          supplierName: selectedItem.supplierName || '',
+          orderDate: selectedItem.orderDate
+            ? (selectedItem.orderDate.split('T')[0] || selectedItem.orderDate)
+            : '',
+          expectedDate: selectedItem.expectedDate
+            ? (selectedItem.expectedDate.split('T')[0] || selectedItem.expectedDate)
+            : '',
+          priority: selectedItem.priority || 'normal',
+          receivingLocationId: selectedItem.receivingLocationId || '',
+          notes: selectedItem.notes || '',
+          internalNotes: selectedItem.internalNotes || '',
+          tax: parseFloat(selectedItem.tax) || 0,
+          items: lines,
+          shippingAddress: selectedItem.shippingAddress || '',
+          shippingMethod: selectedItem.shippingMethod || ''
+        };
+        setPoEditInitial(JSON.parse(JSON.stringify(draft)));
+        setPoEditDraft(draft);
+        setPoAmendmentReason('');
+        setPoEditMode(true);
+      };
+
+      const cancelPoEdit = () => {
+        setPoEditMode(false);
+        setPoEditDraft(null);
+        setPoEditInitial(null);
+        setPoAmendmentReason('');
+      };
+
+      const savePoEdit = async () => {
+        if (!poEditDraft || !selectedItem) return;
+        const itemsPayload = poEditDraft.items.map((it) => {
+          const q = parseFloat(it.quantity) || 0;
+          const p = parseFloat(it.unitPrice) || 0;
+          return {
+            sku: it.sku || '',
+            name: it.name || '',
+            quantity: q,
+            unitPrice: p,
+            total: q * p,
+            supplierPartNumber: it.supplierPartNumber || ''
+          };
+        });
+        const subtotal = itemsPayload.reduce((s, it) => s + it.total, 0);
+        const tax = parseFloat(poEditDraft.tax) || 0;
+        const total = subtotal + tax;
+
+        let payload;
+        if (poCanEditFully) {
+          payload = {
+            supplierId: poEditDraft.supplierId,
+            supplierName: poEditDraft.supplierName,
+            orderDate: poEditDraft.orderDate,
+            expectedDate: poEditDraft.expectedDate || null,
+            priority: poEditDraft.priority,
+            receivingLocationId: poEditDraft.receivingLocationId || null,
+            notes: poEditDraft.notes,
+            internalNotes: poEditDraft.internalNotes,
+            shippingAddress: poEditDraft.shippingAddress || '',
+            shippingMethod: poEditDraft.shippingMethod || '',
+            items: itemsPayload,
+            subtotal,
+            tax,
+            total
+          };
+        } else {
+          payload = {
+            notes: poEditDraft.notes,
+            internalNotes: poEditDraft.internalNotes
+          };
+        }
+
+        const materialNeedsReason =
+          (poSt === 'final' || poSt === 'sent') &&
+          poEditInitial &&
+          (poCanEditFully
+            ? (() => {
+                const keys = [
+                  'supplierId',
+                  'supplierName',
+                  'orderDate',
+                  'expectedDate',
+                  'priority',
+                  'receivingLocationId',
+                  'notes',
+                  'tax',
+                  'items',
+                  'shippingAddress',
+                  'shippingMethod'
+                ];
+                for (const k of keys) {
+                  if (JSON.stringify(poEditInitial[k]) !== JSON.stringify(poEditDraft[k])) {
+                    return true;
+                  }
+                }
+                const initSub = (poEditInitial.items || []).reduce(
+                  (s, it) =>
+                    s +
+                    (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0),
+                  0
+                );
+                if (Math.abs(initSub - subtotal) > 0.001) return true;
+                if (Math.abs((parseFloat(poEditInitial.tax) || 0) - tax) > 0.001) return true;
+                return false;
+              })()
+            : JSON.stringify(poEditInitial.notes) !== JSON.stringify(poEditDraft.notes));
+
+        if (materialNeedsReason && !poAmendmentReason.trim()) {
+          alert(
+            'Please enter an amendment reason. Final and Sent orders require a short reason when you change line items, dates, supplier-facing notes, or other committed fields (internal-notes-only updates do not require a reason).'
+          );
+          return;
+        }
+        const trimmedReason = poAmendmentReason.trim();
+        if (trimmedReason) {
+          payload.amendmentReason = trimmedReason;
+        }
+
+        try {
+          setPoEditSaving(true);
+          const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, payload);
+          if (response?.data?.purchaseOrder) {
+            mergePoIntoLists(response.data.purchaseOrder);
+            setPoEditMode(false);
+            setPoEditDraft(null);
+            setPoEditInitial(null);
+            setPoAmendmentReason('');
+            if (poAmendmentHistoryOpen) {
+              loadPoAmendmentHistory();
+            }
+          }
+        } catch (e) {
+          alert(e?.message || 'Failed to save changes');
+        } finally {
+          setPoEditSaving(false);
+        }
+      };
 
       return (
+
         <>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Purchase Order Details</h2>
               <button
-                onClick={() => { setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
+                onClick={() => { resetPurchaseOrderEditUi(); setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <i className="fas fa-times"></i>
@@ -8345,6 +8544,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className="p-4">
               {selectedItem && (
                 <div className="space-y-4">
+                  {!poEditMode ? (
+                    <>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">Order Number</p>
@@ -8459,9 +8660,327 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       )}
                     </div>
                   )}
+                    </>
+                  ) : (
+                    poEditDraft && (
+                    <div className="space-y-3 border border-blue-200 rounded-lg p-4 bg-blue-50/40">
+                      <h3 className="text-sm font-semibold text-gray-900">Amend purchase order</h3>
+                      {!poCanEditFully && (
+                        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                          For Final and Sent orders, only administrators can change line items, supplier, and logistics. You can still update order notes and internal notes.
+                        </p>
+                      )}
+                      {poCanEditFully && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Supplier</label>
+                            <select
+                              value={poEditDraft.supplierId}
+                              onChange={(e) => {
+                                const sid = e.target.value;
+                                const sup = suppliers.find((s) => s.id === sid);
+                                setPoEditDraft({
+                                  ...poEditDraft,
+                                  supplierId: sid,
+                                  supplierName: sup ? sup.name : ''
+                                });
+                              }}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                            >
+                              {suppliers.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Order date</label>
+                            <input
+                              type="date"
+                              value={poEditDraft.orderDate || ''}
+                              onChange={(e) => setPoEditDraft({ ...poEditDraft, orderDate: e.target.value })}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Expected date</label>
+                            <input
+                              type="date"
+                              value={poEditDraft.expectedDate || ''}
+                              onChange={(e) => setPoEditDraft({ ...poEditDraft, expectedDate: e.target.value })}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Priority</label>
+                            <select
+                              value={poEditDraft.priority || 'normal'}
+                              onChange={(e) => setPoEditDraft({ ...poEditDraft, priority: e.target.value })}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                            >
+                              <option value="low">Low</option>
+                              <option value="normal">Normal</option>
+                              <option value="high">High</option>
+                              <option value="urgent">Urgent</option>
+                            </select>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Receiving location</label>
+                            <select
+                              value={poEditDraft.receivingLocationId || ''}
+                              onChange={(e) => setPoEditDraft({ ...poEditDraft, receivingLocationId: e.target.value })}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                            >
+                              <option value="">Select location…</option>
+                              {stockLocations.filter((loc) => loc.status === 'active').map((loc) => (
+                                <option key={loc.id} value={loc.id}>{loc.name} ({loc.code})</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Notes for supplier</label>
+                        <textarea
+                          value={poEditDraft.notes || ''}
+                          onChange={(e) => setPoEditDraft({ ...poEditDraft, notes: e.target.value })}
+                          rows={2}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Internal notes</label>
+                        <textarea
+                          value={poEditDraft.internalNotes || ''}
+                          onChange={(e) => setPoEditDraft({ ...poEditDraft, internalNotes: e.target.value })}
+                          rows={2}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                        />
+                      </div>
+                      {poCanEditFully && (
+                        <>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-semibold text-gray-800">Line items</h4>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPoEditDraft({
+                                    ...poEditDraft,
+                                    items: [
+                                      ...poEditDraft.items,
+                                      {
+                                        id: `new-${Date.now()}`,
+                                        sku: '',
+                                        name: '',
+                                        quantity: 1,
+                                        unitPrice: 0,
+                                        total: 0,
+                                        supplierPartNumber: ''
+                                      }
+                                    ]
+                                  })}
+                                className="text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                + Add line
+                              </button>
+                            </div>
+                            {poEditDraft.items.map((line, lix) => (
+                              <div key={line.id || lix} className="grid grid-cols-12 gap-1.5 border border-gray-200 rounded p-2 bg-white">
+                                <input
+                                  className="col-span-12 sm:col-span-2 text-xs border border-gray-200 rounded px-1 py-1"
+                                  placeholder="SKU"
+                                  value={line.sku}
+                                  onChange={(e) => {
+                                    const next = [...poEditDraft.items];
+                                    next[lix] = { ...next[lix], sku: e.target.value };
+                                    setPoEditDraft({ ...poEditDraft, items: next });
+                                  }}
+                                />
+                                <input
+                                  className="col-span-12 sm:col-span-4 text-xs border border-gray-200 rounded px-1 py-1"
+                                  placeholder="Name"
+                                  value={line.name}
+                                  onChange={(e) => {
+                                    const next = [...poEditDraft.items];
+                                    next[lix] = { ...next[lix], name: e.target.value };
+                                    setPoEditDraft({ ...poEditDraft, items: next });
+                                  }}
+                                />
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  className="col-span-4 sm:col-span-2 text-xs border border-gray-200 rounded px-1 py-1"
+                                  placeholder="Qty"
+                                  value={line.quantity}
+                                  onChange={(e) => {
+                                    const q = parseFloat(e.target.value) || 0;
+                                    const next = [...poEditDraft.items];
+                                    const p = parseFloat(next[lix].unitPrice) || 0;
+                                    next[lix] = { ...next[lix], quantity: q, total: q * p };
+                                    setPoEditDraft({ ...poEditDraft, items: next });
+                                  }}
+                                />
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  className="col-span-4 sm:col-span-2 text-xs border border-gray-200 rounded px-1 py-1"
+                                  placeholder="Unit price"
+                                  value={line.unitPrice}
+                                  onChange={(e) => {
+                                    const p = parseFloat(e.target.value) || 0;
+                                    const next = [...poEditDraft.items];
+                                    const q = parseFloat(next[lix].quantity) || 0;
+                                    next[lix] = { ...next[lix], unitPrice: p, total: q * p };
+                                    setPoEditDraft({ ...poEditDraft, items: next });
+                                  }}
+                                />
+                                <div className="col-span-3 sm:col-span-1 flex items-center text-xs text-gray-600">
+                                  {formatCurrency((parseFloat(line.quantity) || 0) * (parseFloat(line.unitPrice) || 0))}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="col-span-1 text-red-600 hover:text-red-800 text-xs py-1"
+                                  onClick={() =>
+                                    setPoEditDraft({
+                                      ...poEditDraft,
+                                      items: poEditDraft.items.filter((_, j) => j !== lix)
+                                    })}
+                                  title="Remove line"
+                                >
+                                  <i className="fas fa-times" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 max-w-xs">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Tax</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={poEditDraft.tax}
+                                onChange={(e) =>
+                                  setPoEditDraft({ ...poEditDraft, tax: parseFloat(e.target.value) || 0 })
+                                }
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg"
+                              />
+                            </div>
+                            <div className="text-sm pt-5">
+                              <p className="text-xs text-gray-500">Total</p>
+                              <p className="font-semibold text-blue-700">
+                                {formatCurrency(
+                                  poEditDraft.items.reduce(
+                                    (s, it) =>
+                                      s + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0),
+                                    0
+                                  ) + (parseFloat(poEditDraft.tax) || 0)
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {(poSt === 'final' || poSt === 'sent') && (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Reason for this amendment {((poSt === 'final' || poSt === 'sent') && poCanEditFully) ? '(required if you change items, dates, supplier notes, etc.)' : '(required if you change supplier-facing order notes)'}
+                          </label>
+                          <textarea
+                            value={poAmendmentReason}
+                            onChange={(e) => setPoAmendmentReason(e.target.value)}
+                            rows={2}
+                            placeholder="e.g. Supplier confirmed price change; typo on qty."
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={poEditSaving}
+                          onClick={savePoEdit}
+                          className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {poEditSaving ? 'Saving…' : 'Save changes'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelPoEdit}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="border-t border-gray-200 pt-3">
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-blue-700 hover:text-blue-900"
+                      onClick={() => {
+                        const next = !poAmendmentHistoryOpen;
+                        setPoAmendmentHistoryOpen(next);
+                        if (next) loadPoAmendmentHistory();
+                      }}
+                    >
+                      <i className={`fas fa-chevron-${poAmendmentHistoryOpen ? 'up' : 'down'} mr-1`} />
+                      Correction history (audit trail)
+                    </button>
+                    {poAmendmentHistoryOpen && (
+                      <div className="mt-2 space-y-2 max-h-64 overflow-y-auto text-xs">
+                        {poAmendmentHistoryLoading && <p className="text-gray-500">Loading…</p>}
+                        {!poAmendmentHistoryLoading && poAmendmentHistory.length === 0 && (
+                          <p className="text-gray-500">No audit entries yet.</p>
+                        )}
+                        {!poAmendmentHistoryLoading &&
+                          poAmendmentHistory.map((entry) => (
+                            <div key={entry.id} className="border border-gray-100 rounded-lg p-2 bg-gray-50">
+                              <p className="font-medium text-gray-800">
+                                {entry.summary}
+                                <span className="ml-2 text-gray-500 font-normal">
+                                  {entry.createdAt
+                                    ? new Date(entry.createdAt).toLocaleString()
+                                    : ''}
+                                </span>
+                              </p>
+                              <p className="text-gray-600">
+                                {entry.actorName}
+                                {entry.actorRole ? ` · ${entry.actorRole}` : ''}
+                                {entry.action ? ` · ${entry.action}` : ''}
+                              </p>
+                              {entry.amendmentReason && (
+                                <p className="text-gray-700 mt-1">
+                                  <span className="font-medium">Reason:</span> {entry.amendmentReason}
+                                </p>
+                              )}
+                              {Array.isArray(entry.changes) && entry.changes.length > 0 && (
+                                <ul className="mt-1 list-disc list-inside text-gray-600 space-y-0.5">
+                                  {entry.changes.slice(0, 12).map((ch, ci) => (
+                                    <li key={ci}>
+                                      <span className="font-medium">{ch.path}:</span>{' '}
+                                      {ch.path === 'items'
+                                        ? `${(ch.oldValue && ch.oldValue.length) || 0} line(s) → ${(ch.newValue && ch.newValue.length) || 0} line(s)`
+                                        : `${JSON.stringify(ch.oldValue)} → ${JSON.stringify(ch.newValue)}`}
+                                    </li>
+                                  ))}
+                                  {entry.changes.length > 12 && (
+                                    <li className="text-gray-500">…and {entry.changes.length - 12} more</li>
+                                  )}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
+
             <div className="p-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 {selectedItem && window.DatabaseAPI?.downloadPurchaseOrderPdf && (
@@ -8490,7 +9009,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     {poPdfLoading ? 'PDF…' : 'Download PDF'}
                   </button>
                 )}
-                {selectedItem && poSt === 'draft' && (
+                {selectedItem && poCanAmend && !poEditMode && (
+                  <button
+                    type="button"
+                    onClick={startPoEdit}
+                    className="px-3 py-2 text-sm border border-blue-600 text-blue-700 rounded-lg hover:bg-blue-50"
+                  >
+                    <i className="fas fa-edit mr-1"></i> Amend order
+                  </button>
+                )}
+                {selectedItem && poSt === 'draft' && !poEditMode && (
                   <button
                     type="button"
                     onClick={async () => {
@@ -8506,7 +9034,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     Mark Final
                   </button>
                 )}
-                {selectedItem && poSt === 'final' && (
+                {selectedItem && poSt === 'final' && !poEditMode && (
                   <button
                     type="button"
                     onClick={async () => {
@@ -8522,7 +9050,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     Mark Sent
                   </button>
                 )}
-                {selectedItem && poSt === 'sent' && (
+                {selectedItem && poSt === 'sent' && !poEditMode && (
                   <button
                     type="button"
                     onClick={() => {
@@ -8546,7 +9074,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </div>
               <button
                 type="button"
-                onClick={() => { setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
+                onClick={() => { resetPurchaseOrderEditUi(); setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Close
@@ -9973,7 +10501,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   {/* Actions */}
                   <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
                     <button
-                      onClick={() => { setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
+                      onClick={() => { resetPurchaseOrderEditUi(); setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
                       className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
                     >
                       <i className="fas fa-eye mr-1"></i> View
@@ -10040,7 +10568,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => { setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
+                            onClick={() => { resetPurchaseOrderEditUi(); setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
                             className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                             title="View"
                           >

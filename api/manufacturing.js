@@ -35,6 +35,34 @@ const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {
   return 'out_of_stock'
 }
 
+/**
+ * Activity list date filter: YYYY-MM-DD is interpreted as whole UTC calendar days; other strings use Date parsing.
+ */
+function manufacturingActivityCreatedAtFilter(startDate, endDate) {
+  const createdAt = {}
+  const s = typeof startDate === 'string' ? startDate.trim() : ''
+  if (s) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [y, m, d] = s.split('-').map(Number)
+      createdAt.gte = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0))
+    } else {
+      const dt = new Date(s)
+      if (!Number.isNaN(dt.getTime())) createdAt.gte = dt
+    }
+  }
+  const e = typeof endDate === 'string' ? endDate.trim() : ''
+  if (e) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(e)) {
+      const [y, m, d] = e.split('-').map(Number)
+      createdAt.lte = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
+    } else {
+      const dt = new Date(e)
+      if (!Number.isNaN(dt.getTime())) createdAt.lte = dt
+    }
+  }
+  return Object.keys(createdAt).length ? createdAt : null
+}
+
 /** Prefer same ordering as buildAllLocationsInventoryResponse templateBySku (stable when duplicate SKUs exist). */
 async function findCanonicalInventoryItemBySkuTx(tx, sku) {
   if (!sku) return null
@@ -607,6 +635,10 @@ async function handler(req, res) {
 
         try {
           const where = { entity: { in: MANUFACTURING_ACTIVITY_ENTITIES } }
+          const dateFilter = manufacturingActivityCreatedAtFilter(req.query?.startDate, req.query?.endDate)
+          if (dateFilter) {
+            where.createdAt = dateFilter
+          }
           const [auditLogs, total] = await Promise.all([
             prisma.auditLog.findMany({
               where,

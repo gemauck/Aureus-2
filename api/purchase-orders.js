@@ -42,6 +42,94 @@ function parseItemsJson(order) {
   return Array.isArray(raw) ? raw : []
 }
 
+function normalizeDateForCompare(value) {
+  if (value == null || value === '') return null
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  const s = String(value)
+  return s.split('T')[0] || s
+}
+
+function normalizeLineForSnapshot(line) {
+  const qty = parseFloat(line.quantity) || 0
+  const unit = parseFloat(line.unitPrice) || 0
+  return {
+    sku: line.sku || '',
+    name: line.name || line.itemName || '',
+    quantity: qty,
+    unitPrice: unit,
+    total: parseFloat(line.total) || qty * unit,
+    supplierPartNumber: line.supplierPartNumber || ''
+  }
+}
+
+/** Plain snapshot for before/after amendment diffs (audit trail). */
+function snapshotPurchaseOrder(order) {
+  const items = parseItemsJson(order).map(normalizeLineForSnapshot)
+  return {
+    supplierId: order.supplierId || '',
+    supplierName: order.supplierName || '',
+    status: order.status || '',
+    priority: order.priority || 'normal',
+    orderDate: normalizeDateForCompare(order.orderDate),
+    expectedDate: order.expectedDate ? normalizeDateForCompare(order.expectedDate) : null,
+    sentAt: order.sentAt ? normalizeDateForCompare(order.sentAt) : null,
+    subtotal: parseFloat(order.subtotal) || 0,
+    tax: parseFloat(order.tax) || 0,
+    total: parseFloat(order.total) || 0,
+    items,
+    notes: order.notes || '',
+    internalNotes: order.internalNotes || '',
+    receivingLocationId: order.receivingLocationId || null,
+    shippingAddress: order.shippingAddress || '',
+    shippingMethod: order.shippingMethod || ''
+  }
+}
+
+function diffPurchaseOrderSnapshots(beforeSnap, afterSnap) {
+  const changes = []
+  const scalarKeys = [
+    'supplierId',
+    'supplierName',
+    'status',
+    'priority',
+    'orderDate',
+    'expectedDate',
+    'sentAt',
+    'subtotal',
+    'tax',
+    'total',
+    'notes',
+    'internalNotes',
+    'receivingLocationId',
+    'shippingAddress',
+    'shippingMethod'
+  ]
+  for (const k of scalarKeys) {
+    const a = beforeSnap[k]
+    const b = afterSnap[k]
+    if (JSON.stringify(a) !== JSON.stringify(b)) {
+      changes.push({ path: k, oldValue: a, newValue: b })
+    }
+  }
+  const ib = JSON.stringify(beforeSnap.items)
+  const ia = JSON.stringify(afterSnap.items)
+  if (ib !== ia) {
+    changes.push({ path: 'items', oldValue: beforeSnap.items, newValue: afterSnap.items })
+  }
+  return changes
+}
+
+/** Final/Sent POs need a stated reason if anything other than status/sentAt/internalNotes changes. */
+function amendmentChangesRequireReason(oldStatus, changes) {
+  if (oldStatus !== S_FINAL && oldStatus !== S_SENT) return false
+  const material = changes.filter((c) => {
+    if (c.path === 'status' || c.path === 'sentAt') return false
+    if (c.path === 'internalNotes') return false
+    return true
+  })
+  return material.length > 0
+}
+
 function allowedStatusStep(from, to) {
   if (from === to) return true
   if (from === S_DRAFT && to === S_FINAL) return true
@@ -308,6 +396,58 @@ async function handler(req, res) {
       }
     }
 
+    if (
+      req.method === 'GET' &&
+      pathSegments.length === 3 &&
+      pathSegments[0] === 'purchase-orders' &&
+      pathSegments[2] === 'amendments'
+    ) {
+      const poId = pathSegments[1]
+      try {
+        const exists = await prisma.purchaseOrder.findUnique({
+          where: { id: poId },
+          select: { id: true, orderNumber: true }
+        })
+        if (!exists) return notFound(res, 'Purchase order not found')
+
+        const logs = await prisma.auditLog.findMany({
+          where: { entity: 'purchase_orders', entityId: poId },
+          include: {
+            actor: { select: { id: true, name: true, email: true, role: true } }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 100
+        })
+
+        const amendments = logs.map((log) => {
+          let diff = {}
+          try {
+            diff = JSON.parse(log.diff || '{}')
+          } catch {
+            diff = {}
+          }
+          const details = diff.details && typeof diff.details === 'object' ? diff.details : {}
+          return {
+            id: log.id,
+            action: log.action,
+            createdAt: log.createdAt,
+            actorName: log.actor?.name || log.actor?.email || diff.user || 'Unknown',
+            actorRole: log.actor?.role || diff.userRole || '',
+            summary: details.summary || `${log.action} purchase order`,
+            amendmentReason: details.amendmentReason || null,
+            statusDuringAmendment: details.statusDuringAmendment || null,
+            changes: Array.isArray(details.changes) ? details.changes : [],
+            orderNumber: details.orderNumber || exists.orderNumber
+          }
+        })
+
+        return ok(res, { amendments })
+      } catch (dbError) {
+        console.error('❌ Database error listing PO amendments:', dbError)
+        return serverError(res, 'Failed to list purchase order amendments', dbError.message)
+      }
+    }
+
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'purchase-orders') {
       const body = await parseJsonBody(req)
 
@@ -426,6 +566,11 @@ async function handler(req, res) {
 
       if (req.method === 'PATCH') {
         const body = await parseJsonBody(req)
+        const amendmentReasonRaw =
+          body.amendmentReason != null && String(body.amendmentReason).trim() !== ''
+            ? String(body.amendmentReason).trim()
+            : ''
+        let amendmentChanges = []
 
         const existingOrder = await prisma.purchaseOrder.findUnique({ where: { id } })
         if (!existingOrder) {
@@ -583,6 +728,25 @@ async function handler(req, res) {
           }
         }
 
+        if (Object.keys(updateData).length > 0) {
+          const mergedForDiff = { ...existingOrder, ...updateData }
+          if (updateData.items !== undefined) {
+            mergedForDiff.items = updateData.items
+          }
+          const beforeSnap = snapshotPurchaseOrder(existingOrder)
+          const afterSnap = snapshotPurchaseOrder(mergedForDiff)
+          amendmentChanges = diffPurchaseOrderSnapshots(beforeSnap, afterSnap)
+
+          if (amendmentChanges.length > 0 && amendmentChangesRequireReason(oldStatus, amendmentChanges)) {
+            if (!amendmentReasonRaw) {
+              return badRequest(
+                res,
+                'Amendment reason is required when changing a Final or Sent purchase order (aside from status-only or internal notes-only updates).'
+              )
+            }
+          }
+        }
+
         if (Object.keys(updateData).length === 0) {
           const full = await prisma.purchaseOrder.findUnique({
             where: { id },
@@ -609,18 +773,22 @@ async function handler(req, res) {
             items: parseItemsJson(full)
           }
           void logAuditFromRequest(prisma, req, {
-            action: 'update',
+            action: 'amend',
             entity: 'purchase_orders',
             entityId: id,
             details: {
               resource: 'purchase-orders',
               method: req.method,
               path: urlPath,
-              summary: `Purchase order ${full.orderNumber} updated`,
+              summary:
+                amendmentChanges.length > 0
+                  ? `PO ${full.orderNumber} amended (${amendmentChanges.length} change group(s))`
+                  : `PO ${full.orderNumber} updated`,
               orderNumber: full.orderNumber,
-              statusFrom: oldStatus,
+              amendmentReason: amendmentReasonRaw || null,
+              statusDuringAmendment: oldStatus,
               statusTo: full.status,
-              fieldsUpdated: Object.keys(updateData)
+              changes: amendmentChanges
             }
           })
           return ok(res, { purchaseOrder: responseOrder })
