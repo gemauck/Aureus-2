@@ -2575,7 +2575,8 @@ const LeaveBalancesView = ({
                 leaveType: balance.leaveType || balance.type,
                 available: avail,
                 used,
-                entitlement: Number.isFinite(entitlement) ? entitlement : 0
+                entitlement: Number.isFinite(entitlement) ? entitlement : 0,
+                source: balance.source
             };
         });
     }, [balances]);
@@ -2623,6 +2624,14 @@ const LeaveBalancesView = ({
                             <span className="block mt-1 text-xs text-gray-400">Calendar year {balanceDisplayYear}.</span>
                         )}
                     </p>
+                    {filteredBalances.some(b => b.source === 'computed') && (
+                        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mt-2 max-w-3xl">
+                            Some figures are <strong>estimated</strong> from each person&apos;s <strong>employment start date</strong>{' '}
+                            (annual prorated to 21 days per cycle, family 3 days, sick prorated to 30 — BCEA-style baseline).
+                            Approved leave in this year reduces the estimate. HR can replace any type with official balances via
+                            Import or manual entry.
+                        </p>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     {isAdmin && (

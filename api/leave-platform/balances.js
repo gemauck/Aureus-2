@@ -5,6 +5,10 @@ import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { isHrAdministrator, requireLeaveModuleAccess } from '../_lib/hrAccess.js'
+import {
+  buildComputedBalanceRowsForUser,
+  mergeDbAndComputedBalances
+} from './_lib/computedLeaveBalances.js'
 
 async function handler(req, res) {
   try {
@@ -65,7 +69,10 @@ async function handler(req, res) {
           }
         })
 
-        const formattedBalances = balances.map(balance => ({
+        const yStart = new Date(effectiveYear, 0, 1)
+        const yEnd = new Date(effectiveYear, 11, 31, 23, 59, 59, 999)
+
+        const withRecordFlag = balances.map(balance => ({
           id: balance.id,
           userId: balance.userId,
           employeeName: balance.user.name,
@@ -75,10 +82,97 @@ async function handler(req, res) {
           used: balance.used,
           balance: balance.balance,
           year: balance.year,
-          notes: balance.notes
+          notes: balance.notes,
+          source: 'record'
         }))
 
-        return ok(res, { balances: formattedBalances, balanceYear: effectiveYear })
+        let formattedBalances
+
+        if (!isElevated) {
+          const me = await prisma.user.findUnique({
+            where: { id: currentUserId },
+            select: { id: true, name: true, email: true, employmentDate: true }
+          })
+          let computed = []
+          if (me?.employmentDate) {
+            const myApps = await prisma.leaveApplication.findMany({
+              where: {
+                userId: currentUserId,
+                status: 'approved',
+                AND: [{ startDate: { lte: yEnd } }, { endDate: { gte: yStart } }]
+              }
+            })
+            computed = buildComputedBalanceRowsForUser(me, effectiveYear, myApps)
+          }
+          formattedBalances = mergeDbAndComputedBalances(withRecordFlag, computed)
+        } else {
+          const staff = await prisma.user.findMany({
+            where: { status: 'active', employmentDate: { not: null } },
+            select: { id: true, name: true, email: true, employmentDate: true }
+          })
+
+          const userMap = new Map(staff.map(u => [u.id, u]))
+          for (const row of withRecordFlag) {
+            if (!userMap.has(row.userId)) {
+              userMap.set(row.userId, {
+                id: row.userId,
+                name: row.employeeName,
+                email: row.employeeEmail,
+                employmentDate: null
+              })
+            }
+          }
+
+          const allUserIdsForApps = [...userMap.keys()]
+          const allApps =
+            allUserIdsForApps.length > 0
+              ? await prisma.leaveApplication.findMany({
+                  where: {
+                    status: 'approved',
+                    userId: { in: allUserIdsForApps },
+                    AND: [{ startDate: { lte: yEnd } }, { endDate: { gte: yStart } }]
+                  }
+                })
+              : []
+
+          const appsByUser = new Map()
+          for (const a of allApps) {
+            if (!appsByUser.has(a.userId)) appsByUser.set(a.userId, [])
+            appsByUser.get(a.userId).push(a)
+          }
+
+          const dbByUser = new Map()
+          for (const row of withRecordFlag) {
+            if (!dbByUser.has(row.userId)) dbByUser.set(row.userId, [])
+            dbByUser.get(row.userId).push(row)
+          }
+
+          const merged = []
+          for (const [uid, u] of userMap) {
+            const dbRows = dbByUser.get(uid) || []
+            const apps = appsByUser.get(uid) || []
+            const computed = u.employmentDate
+              ? buildComputedBalanceRowsForUser(u, effectiveYear, apps)
+              : []
+            const part = mergeDbAndComputedBalances(dbRows, computed)
+            if (part.length > 0) merged.push(...part)
+          }
+
+          formattedBalances = merged.sort((a, b) => {
+            const na = (a.employeeName || '').localeCompare(b.employeeName || '', undefined, {
+              sensitivity: 'base'
+            })
+            if (na !== 0) return na
+            return String(a.leaveType || '').localeCompare(String(b.leaveType || ''))
+          })
+        }
+
+        return ok(res, {
+          balances: formattedBalances,
+          balanceYear: effectiveYear,
+          computedBalancesNote:
+            'Rows with source "computed" follow a BCEA-style baseline from each person’s employment start date. Official balances from Import or HR entry replace those types when present.'
+        })
       } catch (dbError) {
         console.error('❌ Database error fetching leave balances:', dbError)
         return serverError(res, 'Failed to fetch leave balances', dbError.message)
