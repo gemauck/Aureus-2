@@ -47,7 +47,8 @@ const DEPARTMENTS = [
     { id: 'data', name: 'Data & Analytics', icon: 'fa-chart-line', color: 'sky' },
     { id: 'support', name: 'Support', icon: 'fa-headset', color: 'green' },
     { id: 'commercial', name: 'Commercial', icon: 'fa-handshake', color: 'orange' },
-    { id: 'business-development', name: 'Business Development', icon: 'fa-rocket', color: 'pink' }
+    { id: 'business-development', name: 'Business Development', icon: 'fa-rocket', color: 'pink' },
+    { id: 'hr', name: 'HR', icon: 'fa-user-friends', color: 'purple' }
 ];
 
 const normalizeDepartmentKeyCandidate = (value) => {

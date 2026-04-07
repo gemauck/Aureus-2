@@ -140,6 +140,18 @@ async function main() {
       ]
     },
     { 
+      id: 'hr', 
+      name: 'HR', 
+      icon: 'fa-user-friends', 
+      color: 'purple',
+      description: 'Human resources and personnel management',
+      permissions: [
+        'Coordinate recruitment, onboarding, and employee lifecycle processes',
+        'Maintain personnel records and HR policies aligned with company standards',
+        'Support leave, benefits, and workplace relations with leadership'
+      ]
+    },
+    { 
       id: 'project-management', 
       name: 'Project Management', 
       icon: 'fa-project-diagram', 

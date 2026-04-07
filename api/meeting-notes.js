@@ -16,7 +16,8 @@ const DEPARTMENTS = [
   { id: 'data', name: 'Data & Analytics' },
   { id: 'support', name: 'Support' },
   { id: 'commercial', name: 'Commercial' },
-  { id: 'business-development', name: 'Business Development' }
+  { id: 'business-development', name: 'Business Development' },
+  { id: 'hr', name: 'HR' }
 ]
 
 const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])

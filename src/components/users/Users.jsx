@@ -70,6 +70,7 @@ const Users = () => {
         'Support',
         'Data Analytics',
         'Finance',
+        'HR',
         'Business Development',
         'Commercial',
         'Compliance'
