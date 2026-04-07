@@ -13,6 +13,15 @@ const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
 const MAX_PUBLIC_PRIOR_IDS = 200;
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
 
+function sortJobCardStockLocations(list) {
+  const fn = window.manufacturingStockLocations?.sortStockLocationsForManufacturing;
+  return fn ? fn(list) : (Array.isArray(list) ? [...list] : []);
+}
+
+function defaultJobCardStockLocationId(locations) {
+  return window.manufacturingStockLocations?.getDefaultManufacturingStockLocation?.(locations)?.id || '';
+}
+
 function readPublicPriorJobCardIds() {
   try {
     const raw = localStorage.getItem(JOB_CARD_PUBLIC_PRIOR_IDS_KEY);
@@ -849,6 +858,15 @@ const JobCardFormPublic = () => {
     [stockLocations]
   );
 
+  useEffect(() => {
+    if (!stockLocations.length) return;
+    setNewStockItem((prev) => {
+      if (prev.locationId) return prev;
+      const id = defaultJobCardStockLocationId(stockLocations);
+      return id ? { ...prev, locationId: id } : prev;
+    });
+  }, [stockLocations]);
+
   const jobStatusOptions = useMemo(
     () => [
       { value: 'draft', label: 'Draft' },
@@ -1580,14 +1598,15 @@ const JobCardFormPublic = () => {
         
         
         if (cachedLocations.length > 0) {
-          setStockLocations(cachedLocations);
+          setStockLocations(sortJobCardStockLocations(cachedLocations));
         } else {
           const defaultLocations = [
             { id: 'LOC001', code: 'WH-MAIN', name: 'Main Warehouse', type: 'warehouse', status: 'active' },
             { id: 'LOC002', code: 'LDV-001', name: 'Service LDV 1', type: 'vehicle', status: 'active' }
           ];
-          setStockLocations(defaultLocations);
-          localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
+          const ordered = sortJobCardStockLocations(defaultLocations);
+          setStockLocations(ordered);
+          localStorage.setItem('stock_locations', JSON.stringify(ordered));
         }
         
         // Try to load from public API endpoint (no auth required)
@@ -1605,9 +1624,10 @@ const JobCardFormPublic = () => {
               const locations = data?.data?.locations || data?.locations || [];
               
               if (locations.length > 0) {
-                setStockLocations(locations);
-                localStorage.setItem('stock_locations', JSON.stringify(locations));
-                localStorage.setItem('manufacturing_locations', JSON.stringify(locations));
+                const ordered = sortJobCardStockLocations(locations);
+                setStockLocations(ordered);
+                localStorage.setItem('stock_locations', JSON.stringify(ordered));
+                localStorage.setItem('manufacturing_locations', JSON.stringify(ordered));
               }
             } else {
               console.warn('⚠️ JobCardFormPublic: Public locations API returned error:', response.status);
@@ -1619,9 +1639,10 @@ const JobCardFormPublic = () => {
                   if (response?.data?.locations || Array.isArray(response?.data)) {
                     const locations = response.data.locations || response.data || [];
                     if (locations.length > 0) {
-                      setStockLocations(locations);
-                      localStorage.setItem('stock_locations', JSON.stringify(locations));
-                      localStorage.setItem('manufacturing_locations', JSON.stringify(locations));
+                      const ordered = sortJobCardStockLocations(locations);
+                      setStockLocations(ordered);
+                      localStorage.setItem('stock_locations', JSON.stringify(ordered));
+                      localStorage.setItem('manufacturing_locations', JSON.stringify(ordered));
                     }
                   }
                 } catch (authError) {
@@ -1870,7 +1891,7 @@ const JobCardFormPublic = () => {
       ...prev,
       stockUsed: [...prev.stockUsed, stockItem]
     }));
-    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+    setNewStockItem({ sku: '', quantity: 0, locationId: defaultJobCardStockLocationId(stockLocations) });
   };
 
   const handleRemoveStockItem = (itemId) => {
@@ -2146,7 +2167,7 @@ const JobCardFormPublic = () => {
       });
       setSelectedPhotos([]);
       setTechnicianInput('');
-      setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+      setNewStockItem({ sku: '', quantity: 0, locationId: defaultJobCardStockLocationId(stockLocations) });
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setVoiceAttachments([]);
     setCurrentStep(0);
@@ -2303,7 +2324,7 @@ const JobCardFormPublic = () => {
     }));
 
     setTechnicianInput('');
-    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+    setNewStockItem({ sku: '', quantity: 0, locationId: defaultJobCardStockLocationId(stockLocations) });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setCurrentStep(0);
     setStepError('');
