@@ -171,6 +171,7 @@ async function test1_CreatePurchaseOrder() {
         subtotal: purchaseOrderData.subtotal,
         tax: purchaseOrderData.tax,
         total: purchaseOrderData.total,
+        includeVat: true,
         items: JSON.stringify(purchaseOrderData.items),
         receivingLocationId: mainWarehouse?.id || null
       }

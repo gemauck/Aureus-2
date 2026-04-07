@@ -14,6 +14,14 @@ const S_FINAL = 'final'
 const S_SENT = 'sent'
 const S_GOODS_RECEIVED = 'goods_received'
 
+/** South African standard VAT rate for purchase order totals (line amounts are ex VAT). */
+const PO_VAT_RATE = 0.15
+
+function vatAmountFromSubtotal(subtotal) {
+  const s = parseFloat(subtotal) || 0
+  return Math.round(s * PO_VAT_RATE * 100) / 100
+}
+
 /** Fields non-admins cannot change once PO is final or sent */
 const NON_ADMIN_LOCKED = new Set([
   'supplierId',
@@ -22,6 +30,7 @@ const NON_ADMIN_LOCKED = new Set([
   'subtotal',
   'tax',
   'total',
+  'includeVat',
   'receivingLocationId',
   'orderDate',
   'expectedDate',
@@ -76,6 +85,7 @@ function snapshotPurchaseOrder(order) {
     subtotal: parseFloat(order.subtotal) || 0,
     tax: parseFloat(order.tax) || 0,
     total: parseFloat(order.total) || 0,
+    includeVat: order.includeVat === true,
     items,
     notes: order.notes || '',
     internalNotes: order.internalNotes || '',
@@ -98,6 +108,7 @@ function diffPurchaseOrderSnapshots(beforeSnap, afterSnap) {
     'subtotal',
     'tax',
     'total',
+    'includeVat',
     'notes',
     'internalNotes',
     'receivingLocationId',
@@ -175,10 +186,14 @@ function mergeReceipt(items, receivedLines, taxOverride, existingOrder) {
     })
   }
 
-  const tax =
-    taxOverride !== undefined && taxOverride !== null && !Number.isNaN(parseFloat(taxOverride))
-      ? parseFloat(taxOverride)
-      : parseFloat(existingOrder.tax) || 0
+  let tax
+  if (taxOverride !== undefined && taxOverride !== null && !Number.isNaN(parseFloat(taxOverride))) {
+    tax = parseFloat(taxOverride)
+  } else if (existingOrder.includeVat === true) {
+    tax = vatAmountFromSubtotal(subtotal)
+  } else {
+    tax = parseFloat(existingOrder.tax) || 0
+  }
   const total = subtotal + tax
 
   return { items: merged, subtotal, tax, total }
@@ -487,6 +502,7 @@ async function handler(req, res) {
         subtotal: parseFloat(body.subtotal) || 0,
         tax: parseFloat(body.tax) || 0,
         total: parseFloat(body.total) || 0,
+        includeVat: body.includeVat === true,
         items: Array.isArray(items) ? JSON.stringify(items) : '[]',
         shippingAddress: body.shippingAddress || '',
         shippingMethod: body.shippingMethod || '',
@@ -637,6 +653,7 @@ async function handler(req, res) {
           'subtotal',
           'tax',
           'total',
+          'includeVat',
           'items',
           'shippingAddress',
           'shippingMethod',

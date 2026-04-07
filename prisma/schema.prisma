@@ -1707,6 +1707,8 @@ model PurchaseOrder {
   subtotal             Float          @default(0)
   tax                  Float          @default(0)
   total                Float          @default(0)
+  /// When true, tax is 15% of subtotal (ZA VAT); when false, tax is 0 unless explicitly overridden.
+  includeVat           Boolean        @default(false)
   items                String         @default("[]")
   shippingAddress      String         @default("")
   shippingMethod       String         @default("")

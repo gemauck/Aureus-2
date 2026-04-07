@@ -164,9 +164,16 @@ export function buildPurchaseOrderPdfBuffer(opts) {
     const sub = parseFloat(purchaseOrder.subtotal) || 0
     const tax = parseFloat(purchaseOrder.tax) || 0
     const tot = parseFloat(purchaseOrder.total) || 0
-    doc.font('Helvetica').fontSize(9)
-    doc.text(`Subtotal: ${formatMoney(sub, currency)}`, left, doc.y, { width: contentW, align: 'right' })
-    doc.text(`Tax: ${formatMoney(tax, currency)}`, left, doc.y, { width: contentW, align: 'right' })
+    const includeVat = purchaseOrder.includeVat === true
+    doc.font('Helvetica').fontSize(9).fillColor('#222222')
+    doc.text(`Subtotal (ex VAT): ${formatMoney(sub, currency)}`, left, doc.y, { width: contentW, align: 'right' })
+    if (includeVat) {
+      doc.text(`VAT (15%): ${formatMoney(tax, currency)}`, left, doc.y, { width: contentW, align: 'right' })
+    } else {
+      doc.font('Helvetica').fontSize(8).fillColor('#555555')
+      doc.text('VAT: Not included on this order.', left, doc.y, { width: contentW, align: 'right' })
+      doc.font('Helvetica').fontSize(9).fillColor('#222222')
+    }
     doc.font('Helvetica-Bold').text(`Total: ${formatMoney(tot, currency)}`, left, doc.y, { width: contentW, align: 'right' })
 
     if (purchaseOrder.notes) {

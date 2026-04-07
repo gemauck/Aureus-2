@@ -789,7 +789,9 @@ async function run() {
       }
     ],
     subtotal: 80,
-    total: 80
+    tax: 0,
+    total: 80,
+    includeVat: false
   })
   assertTrue(!!purchaseOrder?.id, 'Purchase order created')
 
@@ -802,7 +804,6 @@ async function run() {
   const receiveRes = await updatePurchaseOrder(purchaseOrder.id, {
     status: 'goods_received',
     receivedLines: [{ sku: componentB.sku, quantityReceived: 10, unitPrice: 8 }],
-    tax: 0,
     receivedDate: new Date().toISOString()
   })
   const purchaseReceivedOk = receiveRes.status === 200

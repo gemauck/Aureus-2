@@ -49,6 +49,20 @@ function dedupeInventoryRowsBySku(items) {
   return out;
 }
 
+/** ZA VAT rate for PO totals (line unit prices are ex VAT). */
+const PO_VAT_RATE = 0.15;
+
+function purchaseOrderVatFromSubtotal(subtotal) {
+  const s = parseFloat(subtotal) || 0;
+  return Math.round(s * PO_VAT_RATE * 100) / 100;
+}
+
+/** API / cached rows may omit includeVat until refreshed. */
+function purchaseOrderIncludeVatFromOrder(order) {
+  if (order && typeof order.includeVat === 'boolean') return order.includeVat;
+  return (parseFloat(order?.tax) || 0) > 0.0001;
+}
+
 /** PMB first, then A–Z; uses shared util when loaded (component-loader / core bundle). */
 function sortManufacturingStockLocations(locations) {
   const fn = window.manufacturingStockLocations?.sortStockLocationsForManufacturing;
@@ -5210,6 +5224,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       subtotal: 0,
       tax: 0,
       total: 0,
+      includeVat: true,
       notes: '',
       internalNotes: ''
     });
@@ -5370,9 +5385,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         return;
       }
 
-      // Calculate totals
+      // Calculate totals (line amounts ex VAT; optional 15% VAT)
       const subtotal = purchaseOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
-      const tax = parseFloat(formData.tax || 0);
+      const includeVat = formData.includeVat === true;
+      const tax = includeVat ? purchaseOrderVatFromSubtotal(subtotal) : 0;
       const total = subtotal + tax;
 
       const orderData = {
@@ -5385,6 +5401,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         subtotal: subtotal,
         tax: tax,
         total: total,
+        includeVat,
         items: purchaseOrderItems.map(item => ({
           sku: item.sku,
           name: item.name,
@@ -8585,7 +8602,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           receivingLocationId: selectedItem.receivingLocationId || '',
           notes: selectedItem.notes || '',
           internalNotes: selectedItem.internalNotes || '',
-          tax: parseFloat(selectedItem.tax) || 0,
+          includeVat: purchaseOrderIncludeVatFromOrder(selectedItem),
           items: lines,
           shippingAddress: selectedItem.shippingAddress || '',
           shippingMethod: selectedItem.shippingMethod || ''
@@ -8618,7 +8635,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           };
         });
         const subtotal = itemsPayload.reduce((s, it) => s + it.total, 0);
-        const tax = parseFloat(poEditDraft.tax) || 0;
+        const includeVat = poEditDraft.includeVat === true;
+        const tax = includeVat ? purchaseOrderVatFromSubtotal(subtotal) : 0;
         const total = subtotal + tax;
 
         let payload;
@@ -8637,7 +8655,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             items: itemsPayload,
             subtotal,
             tax,
-            total
+            total,
+            includeVat
           };
         } else {
           payload = {
@@ -8659,7 +8678,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   'priority',
                   'receivingLocationId',
                   'notes',
-                  'tax',
+                  'includeVat',
                   'items',
                   'shippingAddress',
                   'shippingMethod'
@@ -8676,7 +8695,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   0
                 );
                 if (Math.abs(initSub - subtotal) > 0.001) return true;
-                if (Math.abs((parseFloat(poEditInitial.tax) || 0) - tax) > 0.001) return true;
+                if (!!poEditInitial.includeVat !== !!poEditDraft.includeVat) return true;
                 return false;
               })()
             : JSON.stringify(poEditInitial.notes) !== JSON.stringify(poEditDraft.notes));
@@ -8781,11 +8800,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <p className="text-sm text-gray-900">{poRecvLabel || poRecvFallback || selectedItem.toLocation || '—'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Subtotal</p>
+                      <p className="text-xs text-gray-500">Subtotal (ex VAT)</p>
                       <p className="text-sm font-semibold text-gray-900">{formatCurrency(selectedItem.subtotal || 0)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Tax</p>
+                      <p className="text-xs text-gray-500">VAT (15%)</p>
+                      <p className="text-sm text-gray-900">
+                        {purchaseOrderIncludeVatFromOrder(selectedItem) ? 'Included' : 'Not included'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Tax amount</p>
                       <p className="text-sm text-gray-900">{formatCurrency(selectedItem.tax || 0)}</p>
                     </div>
                     <div>
@@ -9039,31 +9064,62 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                               </div>
                             ))}
                           </div>
-                          <div className="grid grid-cols-2 gap-2 max-w-xs">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Tax</label>
+                          <div className="space-y-2 max-w-md">
+                            <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
                               <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={poEditDraft.tax}
+                                type="checkbox"
+                                checked={poEditDraft.includeVat === true}
                                 onChange={(e) =>
-                                  setPoEditDraft({ ...poEditDraft, tax: parseFloat(e.target.value) || 0 })
+                                  setPoEditDraft({ ...poEditDraft, includeVat: e.target.checked })
                                 }
-                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg"
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                               />
-                            </div>
-                            <div className="text-sm pt-5">
-                              <p className="text-xs text-gray-500">Total</p>
-                              <p className="font-semibold text-blue-700">
-                                {formatCurrency(
-                                  poEditDraft.items.reduce(
-                                    (s, it) =>
-                                      s + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0),
-                                    0
-                                  ) + (parseFloat(poEditDraft.tax) || 0)
-                                )}
-                              </p>
+                              Include VAT at 15% (on subtotal ex VAT)
+                            </label>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <p className="text-xs text-gray-500">Tax amount</p>
+                                <p className="font-medium text-gray-900">
+                                  {formatCurrency(
+                                    poEditDraft.includeVat === true
+                                      ? purchaseOrderVatFromSubtotal(
+                                          poEditDraft.items.reduce(
+                                            (s, it) =>
+                                              s +
+                                              (parseFloat(it.quantity) || 0) *
+                                                (parseFloat(it.unitPrice) || 0),
+                                            0
+                                          )
+                                        )
+                                      : 0
+                                  )}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500">Total</p>
+                                <p className="font-semibold text-blue-700">
+                                  {formatCurrency(
+                                    poEditDraft.items.reduce(
+                                      (s, it) =>
+                                        s +
+                                        (parseFloat(it.quantity) || 0) *
+                                          (parseFloat(it.unitPrice) || 0),
+                                      0
+                                    ) +
+                                      (poEditDraft.includeVat === true
+                                        ? purchaseOrderVatFromSubtotal(
+                                            poEditDraft.items.reduce(
+                                              (s, it) =>
+                                                s +
+                                                (parseFloat(it.quantity) || 0) *
+                                                  (parseFloat(it.unitPrice) || 0),
+                                              0
+                                            )
+                                          )
+                                        : 0)
+                                  )}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         </>
@@ -9333,8 +9389,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       }));
                       const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, {
                         status: 'goods_received',
-                        receivedLines,
-                        tax: selectedItem.tax
+                        receivedLines
                       });
                       if (response?.data?.purchaseOrder) {
                         mergePoIntoLists(response.data.purchaseOrder);
@@ -9890,9 +9945,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     // ADD PURCHASE ORDER
     if (modalType === 'add_purchase') {
-      // Calculate totals from items
+      // Calculate totals from items (ex VAT; optional 15% VAT)
       const subtotal = purchaseOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
-      const tax = formData.tax || 0;
+      const tax = formData.includeVat === true ? purchaseOrderVatFromSubtotal(subtotal) : 0;
       const total = subtotal + tax;
       const selectedPoSupplier = suppliers.find(s => s.id === formData.supplierId);
       const poInventoryOptions = selectedPoSupplier
@@ -10167,22 +10222,24 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Totals */}
                 {purchaseOrderItems.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.includeVat === true}
+                        onChange={(e) => setFormData({ ...formData, includeVat: e.target.checked })}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Include VAT at 15% (applied to subtotal; unit prices are ex VAT)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                       <div>
-                        <p className="text-gray-600">Subtotal:</p>
+                        <p className="text-gray-600">Subtotal (ex VAT):</p>
                         <p className="text-lg font-bold text-gray-900">R {subtotal.toFixed(2)}</p>
                       </div>
                       <div>
-                        <label className="block text-gray-600 mb-1">Tax (R)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.tax || ''}
-                          onChange={(e) => setFormData({ ...formData, tax: parseFloat(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
+                        <p className="text-gray-600">VAT (15%):</p>
+                        <p className="text-lg font-bold text-gray-900">R {tax.toFixed(2)}</p>
                       </div>
                       <div>
                         <p className="text-gray-600">Total:</p>
