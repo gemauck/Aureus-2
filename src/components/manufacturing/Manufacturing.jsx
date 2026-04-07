@@ -15,7 +15,7 @@ const useAuth = window.useAuth || (() => {
 // Helper to safely get React for error fallbacks
 const getReactForError = () => window.React || ReactGlobal;
 
-const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations'];
+const MANUFACTURING_TABS = ['dashboard', 'activity', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations'];
 const normalizeManufacturingTab = (value = 'dashboard') => {
   const normalized = (value || 'dashboard').toLowerCase();
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
@@ -427,6 +427,75 @@ try {
   const [showBomGroupsModal, setShowBomGroupsModal] = useState(false);
   const bomGroupInputRef = useRef(null);
 
+  const [manufacturingActivityLogs, setManufacturingActivityLogs] = useState([]);
+  const [manufacturingActivityTotal, setManufacturingActivityTotal] = useState(0);
+  const [manufacturingActivityLoading, setManufacturingActivityLoading] = useState(false);
+  const [manufacturingActivityError, setManufacturingActivityError] = useState(null);
+  const [manufacturingActivityExpandedId, setManufacturingActivityExpandedId] = useState(null);
+  const manufacturingActivityPollRef = useRef(null);
+
+  const loadManufacturingActivity = useCallback(async (options = {}) => {
+    const silent = options.silent === true;
+    if (!isAdmin) return;
+    if (!silent) {
+      setManufacturingActivityLoading(true);
+    }
+    setManufacturingActivityError(null);
+    try {
+      const raw = await safeCallAPI('getManufacturingActivity', { limit: 200, offset: 0, forceRefresh: true });
+      const logs = Array.isArray(raw?.logs)
+        ? raw.logs
+        : (Array.isArray(raw?.data?.logs) ? raw.data.logs : []);
+      const total = typeof raw?.total === 'number'
+        ? raw.total
+        : (typeof raw?.data?.total === 'number' ? raw.data.total : logs.length);
+
+      setManufacturingActivityLogs((prev) => {
+        if (silent && prev.length > 0 && logs.length > 0) {
+          if (prev.length === logs.length && prev[0]?.id === logs[0]?.id) {
+            let same = true;
+            for (let i = 0; i < prev.length; i++) {
+              if (prev[i]?.id !== logs[i]?.id) {
+                same = false;
+                break;
+              }
+            }
+            if (same) return prev;
+          }
+        }
+        return logs;
+      });
+      setManufacturingActivityTotal(total);
+    } catch (e) {
+      if (!silent) {
+        setManufacturingActivityError(e?.message || 'Failed to load activity');
+      }
+    } finally {
+      if (!silent) {
+        setManufacturingActivityLoading(false);
+      }
+    }
+  }, [isAdmin, safeCallAPI]);
+
+  useEffect(() => {
+    if (activeTab !== 'activity' || !isAdmin) {
+      if (manufacturingActivityPollRef.current) {
+        clearInterval(manufacturingActivityPollRef.current);
+        manufacturingActivityPollRef.current = null;
+      }
+      return;
+    }
+    loadManufacturingActivity({ silent: false });
+    manufacturingActivityPollRef.current = setInterval(() => {
+      loadManufacturingActivity({ silent: true });
+    }, 60000);
+    return () => {
+      if (manufacturingActivityPollRef.current) {
+        clearInterval(manufacturingActivityPollRef.current);
+        manufacturingActivityPollRef.current = null;
+      }
+    };
+  }, [activeTab, isAdmin, loadManufacturingActivity]);
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
   useEffect(() => {
@@ -1944,6 +2013,156 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const pendingUnits = productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').reduce((sum, o) => sum + (o.quantity - o.quantityProduced), 0);
     
     return { activeOrders, completedOrders, totalProduction, pendingUnits };
+  };
+
+  const ManufacturingActivityView = () => {
+    const formatModuleLabel = (m) => {
+      if (m === 'manufacturing') return 'Manufacturing';
+      if (m === 'sales_orders') return 'Sales orders';
+      if (m === 'purchase_orders') return 'Purchase orders';
+      return m || '—';
+    };
+    const areaLabel = (log) => {
+      const res = log.details?.resource;
+      if (log.module === 'manufacturing' && res) {
+        return `${formatModuleLabel(log.module)} · ${String(res).replace(/-/g, ' ')}`;
+      }
+      return formatModuleLabel(log.module);
+    };
+    const summaryText = (log) =>
+      log.details?.summary || `${log.action}${log.entityId ? ` · ${log.entityId}` : ''}`.trim();
+
+    if (!isAdmin) {
+      return (
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-8 text-center shadow-sm`}>
+          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            Manufacturing activity is visible to administrators only.
+          </p>
+          <button
+            type="button"
+            onClick={() => changeTab('dashboard')}
+            className="mt-4 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Back to dashboard
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border shadow-sm overflow-hidden`}>
+        <div className={`px-5 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
+          <div>
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Activity</h3>
+            <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Changes across Manufacturing, sales orders, and purchase orders ({manufacturingActivityTotal.toLocaleString()} stored). Refreshes in the background every minute.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadManufacturingActivity({ silent: false })}
+            disabled={manufacturingActivityLoading}
+            className={`inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border ${
+              isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-800 hover:bg-gray-50'
+            } disabled:opacity-50`}
+          >
+            <i className={`fas fa-sync-alt ${manufacturingActivityLoading ? 'fa-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+
+        {manufacturingActivityError && (
+          <div className="mx-5 mt-4 p-3 rounded-lg bg-red-50 text-red-800 text-sm">{manufacturingActivityError}</div>
+        )}
+
+        {manufacturingActivityLoading && manufacturingActivityLogs.length === 0 ? (
+          <div className="p-10 text-center text-sm text-gray-500">Loading activity…</div>
+        ) : manufacturingActivityLogs.length === 0 ? (
+          <div className="p-10 text-center text-sm text-gray-500">No activity recorded yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={`${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+                  <th className="text-left px-4 py-2 font-medium whitespace-nowrap">When</th>
+                  <th className="text-left px-4 py-2 font-medium">Who</th>
+                  <th className="text-left px-4 py-2 font-medium whitespace-nowrap">Action</th>
+                  <th className="text-left px-4 py-2 font-medium">Area</th>
+                  <th className="text-left px-4 py-2 font-medium">Summary</th>
+                  <th className="w-8 px-2 py-2" aria-label="Expand" />
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
+                {manufacturingActivityLogs.map((log) => {
+                  const expanded = manufacturingActivityExpandedId === log.id;
+                  const dt = log.timestamp ? new Date(log.timestamp) : null;
+                  const whenStr = dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleString() : '—';
+                  return (
+                    <Fragment key={log.id}>
+                      <tr className={isDark ? 'hover:bg-gray-800/60' : 'hover:bg-gray-50'}>
+                        <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{whenStr}</td>
+                        <td className={`px-4 py-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <span className="font-medium">{log.user}</span>
+                          {log.userEmail && (
+                            <span className={`block text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{log.userEmail}</span>
+                          )}
+                        </td>
+                        <td className={`px-4 py-2 capitalize whitespace-nowrap ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                          {log.action}
+                        </td>
+                        <td className={`px-4 py-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{areaLabel(log)}</td>
+                        <td
+                          className={`px-4 py-2 ${isDark ? 'text-gray-300' : 'text-gray-800'} max-w-md truncate`}
+                          title={summaryText(log)}
+                        >
+                          {summaryText(log)}
+                        </td>
+                        <td className="px-2 py-2">
+                          <button
+                            type="button"
+                            className={`p-1 rounded ${isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'}`}
+                            onClick={() => setManufacturingActivityExpandedId(expanded ? null : log.id)}
+                            aria-expanded={expanded}
+                          >
+                            <i className={`fas fa-chevron-${expanded ? 'up' : 'down'} text-xs`} />
+                          </button>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className={isDark ? 'bg-gray-800/40' : 'bg-gray-50'}>
+                          <td colSpan={6} className="px-4 py-3">
+                            <pre
+                              className={`text-xs overflow-x-auto p-3 rounded border ${
+                                isDark ? 'border-gray-700 text-gray-300 bg-gray-900' : 'border-gray-200 text-gray-800 bg-white'
+                              }`}
+                            >
+                              {JSON.stringify(
+                                {
+                                  id: log.id,
+                                  timestamp: log.timestamp,
+                                  user: log.user,
+                                  action: log.action,
+                                  module: log.module,
+                                  entityId: log.entityId,
+                                  details: log.details,
+                                  ipAddress: log.ipAddress
+                                },
+                                null,
+                                2
+                              )}
+                            </pre>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const DashboardView = () => {
@@ -5157,7 +5376,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const defLoc = defaultManufacturingStockLocation(stockLocations);
       const defId = defLoc?.id || '';
       let moveType = prefill.type || (isAdmin ? 'receipt' : 'consumption');
-      if (!isAdmin && moveType === 'receipt') {
+      if (!isAdmin && (moveType === 'receipt' || moveType === 'adjustment')) {
         moveType = 'consumption';
       }
       let fromLocationId = prefill.fromLocationId;
@@ -7788,11 +8007,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <option value="consumption">Consumption (Outgoing Stock)</option>
                     <option value="production">Production</option>
                     <option value="transfer">Transfer</option>
-                    <option value="adjustment">Adjustment</option>
+                    {isAdmin && <option value="adjustment">Adjustment</option>}
                   </select>
                   {!isAdmin && (
                     <p className="text-xs text-gray-500 mt-1">
-                      Incoming receipts are limited to administrators. To receive finished product into stock, complete a production order.
+                      Incoming receipts and manual adjustments are limited to administrators. To receive finished product into stock, complete a production order.
                     </p>
                   )}
                 </div>
@@ -11007,6 +11226,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className="flex gap-1 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
+                ...(isAdmin ? [{ id: 'activity', label: 'Activity', icon: 'fa-history' }] : []),
                 { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
                 { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
                 { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
@@ -11035,6 +11255,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           {/* Content Area */}
           <div>
             {activeTab === 'dashboard' && <DashboardView />}
+            {activeTab === 'activity' && <ManufacturingActivityView />}
             {activeTab === 'inventory' && renderInventoryView()}
             {activeTab === 'bom' && <BOMView />}
             {activeTab === 'production' && <ProductionView />}

@@ -2063,6 +2063,22 @@ const DatabaseAPI = {
         return response;
     },
 
+    /**
+     * Admin-only: audit trail entries for Manufacturing (inventory, BOMs, etc.), sales orders, purchase orders.
+     */
+    async getManufacturingActivity(options = {}) {
+        const limit = Math.min(500, Math.max(1, parseInt(options.limit, 10) || 150));
+        const offset = Math.max(0, parseInt(options.offset, 10) || 0);
+        const q = new URLSearchParams();
+        q.set('limit', String(limit));
+        q.set('offset', String(offset));
+        const path = `/manufacturing/activity?${q.toString()}`;
+        return this.makeRequest(path, {
+            method: 'GET',
+            forceRefresh: options.forceRefresh !== false
+        });
+    },
+
     // PURCHASE ORDERS OPERATIONS
     async getPurchaseOrders() {
         const raw = await this._callPurchaseOrdersEndpoint();

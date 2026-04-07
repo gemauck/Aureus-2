@@ -592,6 +592,73 @@ async function handler(req, res) {
       }
     }
 
+    // ACTIVITY / AUDIT (admin-only) — Manufacturing + Sales Orders + Purchase Orders
+    const MANUFACTURING_ACTIVITY_ENTITIES = ['manufacturing', 'sales_orders', 'purchase_orders']
+    if (resourceType === 'activity') {
+      if (req.method === 'GET') {
+        if (!isAdminRole(req.user?.role)) {
+          return forbidden(res, 'Admin access required to view manufacturing activity.')
+        }
+        let limit = parseInt(req.query?.limit, 10)
+        if (!Number.isFinite(limit) || limit < 1) limit = 150
+        limit = Math.min(500, limit)
+        let offset = parseInt(req.query?.offset, 10)
+        if (!Number.isFinite(offset) || offset < 0) offset = 0
+
+        try {
+          const where = { entity: { in: MANUFACTURING_ACTIVITY_ENTITIES } }
+          const [auditLogs, total] = await Promise.all([
+            prisma.auditLog.findMany({
+              where,
+              include: {
+                actor: {
+                  select: { id: true, name: true, email: true, role: true }
+                }
+              },
+              orderBy: { createdAt: 'desc' },
+              take: limit,
+              skip: offset
+            }),
+            prisma.auditLog.count({ where })
+          ])
+
+          const logs = auditLogs.map((log) => {
+            let diff = {}
+            try {
+              diff = JSON.parse(log.diff || '{}')
+            } catch {
+              /* ignore */
+            }
+            const userName = log.actor?.name || log.actor?.email || diff.user || 'System'
+            const userRole = log.actor?.role || diff.userRole || 'System'
+            const details = diff.details && typeof diff.details === 'object' ? diff.details : {}
+
+            return {
+              id: log.id,
+              timestamp: log.createdAt.toISOString(),
+              user: userName,
+              userId: log.actorId,
+              userEmail: log.actor?.email || null,
+              userRole,
+              action: log.action,
+              module: log.entity,
+              entityId: log.entityId || null,
+              details,
+              ipAddress: diff.ipAddress || 'N/A',
+              sessionId: diff.sessionId || 'N/A',
+              success: diff.success !== undefined ? diff.success : true
+            }
+          })
+
+          return ok(res, { logs, total, limit, offset })
+        } catch (error) {
+          console.error('❌ Failed to list manufacturing activity:', error)
+          return serverError(res, 'Failed to load manufacturing activity', error.message)
+        }
+      }
+      return badRequest(res, 'Invalid method for manufacturing activity')
+    }
+
   // STOCK LOCATIONS
   if (resourceType === 'locations') {
     // LIST
@@ -779,6 +846,9 @@ async function handler(req, res) {
       const body = req.body || {}
       const type = String(body.type || '').toLowerCase() // receipt, transfer, sale, adjustment
       if (!['receipt','transfer','sale','adjustment'].includes(type)) return badRequest(res, 'Invalid type')
+      if (type === 'adjustment' && !isAdminRole(req.user?.role)) {
+        return forbidden(res, 'Only administrators can record stock adjustments. Ask an administrator.')
+      }
       if (!body.sku || !body.itemName) return badRequest(res, 'sku and itemName required')
       const qty = parseFloat(body.quantity) || 0
       if (qty <= 0) return badRequest(res, 'quantity must be greater than 0')
@@ -3408,10 +3478,15 @@ async function handler(req, res) {
       }
 
       const movementTypeNorm = String(body.type).toLowerCase()
-      if (movementTypeNorm === 'receipt' && !isAdminRole(req.user?.role)) {
+      if (
+        (movementTypeNorm === 'receipt' || movementTypeNorm === 'adjustment') &&
+        !isAdminRole(req.user?.role)
+      ) {
         return forbidden(
           res,
-          'Only administrators can record manual stock receipts. Complete a production order to receive finished goods into stock, or ask an administrator.'
+          movementTypeNorm === 'receipt'
+            ? 'Only administrators can record manual stock receipts. Complete a production order to receive finished goods into stock, or ask an administrator.'
+            : 'Only administrators can record manual stock adjustments. Ask an administrator.'
         )
       }
       
