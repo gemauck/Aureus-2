@@ -3,6 +3,17 @@ const { useState, useEffect, useMemo } = React;
 
 const API_BASE = window.location.origin + '/api';
 const PAGE_SIZE = 20;
+const mergeUniqueById = (existing, incoming) => {
+    const seen = new Set((existing || []).map((item) => String(item?.id || '')));
+    const next = [...(existing || [])];
+    (incoming || []).forEach((item) => {
+        const key = String(item?.id || '');
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        next.push(item);
+    });
+    return next;
+};
 
 const SafetyCultureInspections = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
@@ -28,6 +39,8 @@ const SafetyCultureInspections = () => {
     const [issuesSort, setIssuesSort] = useState({ key: 'created', dir: 'desc' });
     const [inspectionPage, setInspectionPage] = useState(1);
     const [issuesPage, setIssuesPage] = useState(1);
+    const [autoLoadingInspections, setAutoLoadingInspections] = useState(false);
+    const [autoLoadingIssues, setAutoLoadingIssues] = useState(false);
 
     const getHeaders = () => {
         const token = window.storage?.getToken?.();
@@ -62,6 +75,10 @@ const SafetyCultureInspections = () => {
                 const inspData = inspJson?.data ?? inspJson;
                 setInspections(inspData.inspections ?? []);
                 setMetadata(inspData.metadata ?? { next_page: null, remaining_records: 0 });
+                // Auto-fetch remaining pages so newest feed items appear without manual "Load all".
+                if (inspData?.metadata?.next_page) {
+                    void loadAllInspectionsFrom(inspData.metadata.next_page, true);
+                }
             } catch (e) {
                 setError(e.message || 'Failed to load Safety Culture data');
             } finally {
@@ -70,6 +87,30 @@ const SafetyCultureInspections = () => {
         };
         check();
     }, []);
+
+    const loadAllInspectionsFrom = async (startNextPage = null, silent = false) => {
+        if (!silent) setLoadingMore(true);
+        if (silent) setAutoLoadingInspections(true);
+        try {
+            let next = startNextPage || metadata?.next_page;
+            while (next) {
+                const url = `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(next)}`;
+                const res = await fetch(url, { headers: getHeaders() });
+                const json = await res.json().catch(() => ({}));
+                const data = json?.data ?? json;
+                const more = data.inspections ?? [];
+                setInspections(prev => mergeUniqueById(prev, more));
+                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
+                setMetadata(meta);
+                next = meta?.next_page || null;
+            }
+        } catch (e) {
+            setError(e.message || 'Failed to load all inspections');
+        } finally {
+            if (!silent) setLoadingMore(false);
+            if (silent) setAutoLoadingInspections(false);
+        }
+    };
 
     const loadMore = async () => {
         const next = metadata?.next_page;
@@ -81,7 +122,7 @@ const SafetyCultureInspections = () => {
             const json = await res.json().catch(() => ({}));
             const data = json?.data ?? json;
             const more = data.inspections ?? [];
-            setInspections(prev => [...prev, ...more]);
+            setInspections(prev => mergeUniqueById(prev, more));
             setMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
         } catch (e) {
             setError(e.message || 'Failed to load more');
@@ -93,18 +134,7 @@ const SafetyCultureInspections = () => {
     const loadAllInspections = async () => {
         setLoadingMore(true);
         try {
-            let next = metadata?.next_page;
-            while (next) {
-                const url = `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(next)}`;
-                const res = await fetch(url, { headers: getHeaders() });
-                const json = await res.json().catch(() => ({}));
-                const data = json?.data ?? json;
-                const more = data.inspections ?? [];
-                setInspections(prev => [...prev, ...more]);
-                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
-                setMetadata(meta);
-                next = meta?.next_page || null;
-            }
+            await loadAllInspectionsFrom(metadata?.next_page, false);
         } catch (e) {
             setError(e.message || 'Failed to load all inspections');
         } finally {
@@ -120,10 +150,36 @@ const SafetyCultureInspections = () => {
             const data = json?.data ?? json;
             setIssues(data.issues ?? []);
             setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
+            // Auto-fetch remaining issue pages so recently created issues are visible immediately.
+            if (data?.metadata?.next_page) {
+                void loadAllIssuesFrom(data.metadata.next_page, true);
+            }
         } catch (e) {
             setError(e.message || 'Failed to load issues');
         } finally {
             setIssuesLoading(false);
+        }
+    };
+
+    const loadAllIssuesFrom = async (startNextPage = null, silent = false) => {
+        if (!silent) setIssuesLoadingMore(true);
+        if (silent) setAutoLoadingIssues(true);
+        try {
+            let next = startNextPage || issuesMetadata?.next_page;
+            while (next) {
+                const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
+                const json = await res.json().catch(() => ({}));
+                const data = json?.data ?? json;
+                setIssues(prev => mergeUniqueById(prev, data.issues ?? []));
+                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
+                setIssuesMetadata(meta);
+                next = meta?.next_page || null;
+            }
+        } catch (e) {
+            setError(e.message || 'Failed to load all issues');
+        } finally {
+            if (!silent) setIssuesLoadingMore(false);
+            if (silent) setAutoLoadingIssues(false);
         }
     };
 
@@ -135,7 +191,7 @@ const SafetyCultureInspections = () => {
             const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
             const data = json?.data ?? json;
-            setIssues(prev => [...prev, ...(data.issues ?? [])]);
+            setIssues(prev => mergeUniqueById(prev, data.issues ?? []));
             setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
         } catch (e) {
             setError(e.message || 'Failed to load more issues');
@@ -147,16 +203,7 @@ const SafetyCultureInspections = () => {
     const loadAllIssues = async () => {
         setIssuesLoadingMore(true);
         try {
-            let next = issuesMetadata?.next_page;
-            while (next) {
-                const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
-                const json = await res.json().catch(() => ({}));
-                const data = json?.data ?? json;
-                setIssues(prev => [...prev, ...(data.issues ?? [])]);
-                const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
-                setIssuesMetadata(meta);
-                next = meta?.next_page || null;
-            }
+            await loadAllIssuesFrom(issuesMetadata?.next_page, false);
         } catch (e) {
             setError(e.message || 'Failed to load all issues');
         } finally {
@@ -491,6 +538,12 @@ const SafetyCultureInspections = () => {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
                         Showing {activeTab === 'inspections' ? filteredInspections.length : filteredIssues.length} of {activeTab === 'inspections' ? inspections.length : issues.length} {activeTab === 'inspections' ? 'inspections' : 'issues'}
                     </p>
+                )}
+                {activeTab === 'inspections' && autoLoadingInspections && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Loading remaining inspections in background...</p>
+                )}
+                {activeTab === 'issues' && autoLoadingIssues && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Loading remaining issues in background...</p>
                 )}
             </div>
 
