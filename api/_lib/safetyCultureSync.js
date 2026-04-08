@@ -13,6 +13,7 @@ import {
   normaliseFeedData
 } from './safetyCultureClient.js'
 import { SAFETY_CULTURE_SYNC_STATE_ID } from './safetyCultureCacheRead.js'
+import { sanitizePayloadForPrismaJson } from './safetyCultureJsonSafe.js'
 
 const MAX_SYNC_PAGES = Math.min(
   Math.max(10, parseInt(process.env.SAFETY_CULTURE_SYNC_MAX_PAGES || '300', 10) || 300),
@@ -74,7 +75,7 @@ async function ensureSyncState() {
 
 async function upsertInspectionsBatch(items) {
   const valid = items.filter((item) => item?.id != null && String(item.id).trim().length > 0)
-  const CHUNK = 35
+  const CHUNK = 15
   for (let i = 0; i < valid.length; i += CHUNK) {
     const slice = valid.slice(i, i + CHUNK)
     await prisma.$transaction(
@@ -82,16 +83,17 @@ async function upsertInspectionsBatch(items) {
         const ext = String(item.id).trim()
         const modifiedAt = inspectionModifiedAt(item)
         const templateId = extractTemplateId(item)
+        const payloadJson = sanitizePayloadForPrismaJson(item)
         return prisma.safetyCultureCachedInspection.upsert({
           where: { externalId: ext },
           create: {
             externalId: ext,
-            payloadJson: item,
+            payloadJson,
             modifiedAt,
             templateId
           },
           update: {
-            payloadJson: item,
+            payloadJson,
             modifiedAt,
             templateId
           }
@@ -103,22 +105,23 @@ async function upsertInspectionsBatch(items) {
 
 async function upsertIssuesBatch(items) {
   const valid = items.filter((item) => String(item?.id ?? item?.unique_id ?? '').trim().length > 0)
-  const CHUNK = 35
+  const CHUNK = 15
   for (let i = 0; i < valid.length; i += CHUNK) {
     const slice = valid.slice(i, i + CHUNK)
     await prisma.$transaction(
       slice.map((item) => {
         const ext = String(item?.id ?? item?.unique_id ?? '').trim()
         const modifiedAt = issueModifiedAt(item)
+        const payloadJson = sanitizePayloadForPrismaJson(item)
         return prisma.safetyCultureCachedIssue.upsert({
           where: { externalId: ext },
           create: {
             externalId: ext,
-            payloadJson: item,
+            payloadJson,
             modifiedAt
           },
           update: {
-            payloadJson: item,
+            payloadJson,
             modifiedAt
           }
         })

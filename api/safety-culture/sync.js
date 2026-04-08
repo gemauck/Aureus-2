@@ -36,7 +36,16 @@ async function handler(req, res) {
   try {
     const result = await runSafetyCultureSync({ full, inspections, issues, enrichCap })
     if (!result.ok) {
-      return serverError(res, result.error || result.inspections?.error || result.issues?.error, {
+      const msg =
+        result.error ||
+        result.inspections?.error ||
+        result.issues?.error ||
+        'Safety Culture sync failed'
+      console.error('[safety-culture/sync]', msg, {
+        inspectionsOk: result.inspections?.ok,
+        issuesOk: result.issues?.ok
+      })
+      return serverError(res, msg, {
         inspections: result.inspections,
         issues: result.issues
       })

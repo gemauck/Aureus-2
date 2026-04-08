@@ -11,6 +11,7 @@ import {
   fetchInspectionAnswers
 } from '../../_lib/safetyCultureClient.js'
 import { prisma } from '../../_lib/prisma.js'
+import { sanitizePayloadForPrismaJson } from '../../_lib/safetyCultureJsonSafe.js'
 
 async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -68,17 +69,19 @@ async function handler(req, res) {
     }
 
     if (process.env.SAFETY_CULTURE_DISABLE_LOCAL_CACHE !== 'true') {
+      const detailJson = sanitizePayloadForPrismaJson(payload)
+      const payloadJson = sanitizePayloadForPrismaJson({ id })
       void prisma.safetyCultureCachedInspection
         .upsert({
           where: { externalId: id },
           create: {
             externalId: id,
-            payloadJson: { id },
-            detailJson: payload
+            payloadJson,
+            detailJson
           },
-          update: { detailJson: payload }
+          update: { detailJson }
         })
-        .catch(() => {})
+        .catch((err) => console.warn('inspection detail cache upsert:', err?.message || err))
     }
 
     return ok(res, payload)
