@@ -6,6 +6,10 @@
  * Usage (from repo root):
  *   node scripts/test-import-latest-sc-issue-job-card.js
  *   node scripts/test-import-latest-sc-issue-job-card.js <issue-uuid>
+ *   node scripts/test-import-latest-sc-issue-job-card.js --refresh JC0003
+ *     Re-fetches SafetyCulture detail and updates that job card (notes, photos, snapshot).
+ *   node scripts/test-import-latest-sc-issue-job-card.js --refresh JC0003 --from-snapshot
+ *     Same layout as a live refresh but uses safetyCultureSnapshotJson only (no API key).
  *
  * Optional env:
  *   SC_ISSUE_ID=<uuid>     — same as passing uuid as first argument
@@ -108,25 +112,116 @@ async function main() {
     Math.max(1, parseInt(process.env.SC_ISSUES_FEED_LIMIT || '100', 10) || 100)
   )
 
-  const specificId = String(
-    process.argv[2] || process.env.SC_ISSUE_ID || ''
-  ).trim()
+  const argv = process.argv.slice(2)
+  const fromSnapshot = argv.includes('--from-snapshot')
+  if (fromSnapshot) argv.splice(argv.indexOf('--from-snapshot'), 1)
+
+  let refreshJobNumber = null
+  const rfIdx = argv.indexOf('--refresh')
+  if (rfIdx >= 0 && argv[rfIdx + 1]) {
+    refreshJobNumber = String(argv[rfIdx + 1]).trim()
+    argv.splice(rfIdx, 2)
+  }
+  const refreshMode = Boolean(refreshJobNumber)
+
+  let specificId = String(argv[0] || process.env.SC_ISSUE_ID || '').trim()
 
   let issue
   let issueId
   let detailResult = null
-  const testLabel = specificId ? 'test import by id' : 'test script'
+  let resolvedFromSnapshot = false
 
-  if (specificId) {
-    const existing = await prisma.jobCard.findFirst({
-      where: { safetyCultureIssueId: specificId },
-      select: { id: true, jobCardNumber: true }
+  if (refreshJobNumber) {
+    const jc = await prisma.jobCard.findUnique({
+      where: { jobCardNumber: refreshJobNumber },
+      select: {
+        id: true,
+        safetyCultureIssueId: true,
+        safetyCultureSnapshotJson: true
+      }
     })
-    if (existing) {
-      console.log(
-        `Issue ${specificId} is already a job card: ${existing.jobCardNumber} (id=${existing.id})`
-      )
+    if (!jc) {
+      console.error(`No job card found: ${refreshJobNumber}`)
+      process.exitCode = 1
       return
+    }
+    if (!jc.safetyCultureIssueId) {
+      console.error(
+        `${refreshJobNumber} has no safetyCultureIssueId; only SC issue imports can be refreshed.`
+      )
+      process.exitCode = 1
+      return
+    }
+
+    if (fromSnapshot) {
+      const raw = jc.safetyCultureSnapshotJson
+      if (!raw || !String(raw).trim()) {
+        console.error(
+          `${refreshJobNumber} has no safetyCultureSnapshotJson; use refresh without --from-snapshot (API).`
+        )
+        process.exitCode = 1
+        return
+      }
+      let snap
+      try {
+        snap = JSON.parse(raw)
+      } catch (e) {
+        console.error('Invalid safetyCultureSnapshotJson:', e.message)
+        process.exitCode = 1
+        return
+      }
+      issueId = snap.id || jc.safetyCultureIssueId
+      const detailObj =
+        snap.detail && typeof snap.detail === 'object' && !snap.detail.error
+          ? snap.detail
+          : null
+      detailResult = { data: detailObj }
+      issue =
+        snap.feed && typeof snap.feed === 'object' && Object.keys(snap.feed).length
+          ? { ...snap.feed }
+          : issueFieldsForJobCard(detailObj, issueId)
+      if (!issueId) {
+        console.error('Snapshot missing issue id.')
+        process.exitCode = 1
+        return
+      }
+      if (!issue.id) issue = { ...issue, id: issueId }
+      resolvedFromSnapshot = true
+      console.log(
+        `Refreshing ${refreshJobNumber} from stored snapshot (no API); issue ${issueId} (id=${jc.id})`
+      )
+    } else {
+      specificId = jc.safetyCultureIssueId
+      console.log(
+        `Refreshing ${refreshJobNumber} from SafetyCulture issue ${specificId} (id=${jc.id})`
+      )
+    }
+  }
+
+  const testLabel = resolvedFromSnapshot
+    ? 'refresh from stored snapshot'
+    : refreshMode
+      ? 'refresh from SafetyCulture'
+      : specificId
+        ? 'test import by id'
+        : 'test script'
+
+  if (!resolvedFromSnapshot && specificId) {
+    if (!refreshMode) {
+      const existing = await prisma.jobCard.findFirst({
+        where: { safetyCultureIssueId: specificId },
+        select: { id: true, jobCardNumber: true }
+      })
+      if (existing) {
+        console.log(
+          `Issue ${specificId} is already a job card: ${existing.jobCardNumber} (id=${existing.id})`
+        )
+        console.log(
+          'Tip: node scripts/test-import-latest-sc-issue-job-card.js --refresh ' +
+            existing.jobCardNumber
+        )
+        return
+      }
     }
 
     detailResult = await fetchIssueDetails(specificId)
@@ -144,7 +239,7 @@ async function main() {
       return
     }
     console.log('Importing issue by id:', issueId, issue.title || issue.description || '')
-  } else {
+  } else if (!resolvedFromSnapshot) {
     const existingRows = await prisma.jobCard.findMany({
       where: { safetyCultureIssueId: { not: null } },
       select: { safetyCultureIssueId: true }
@@ -217,16 +312,21 @@ async function main() {
       })
     : null
 
-  const lastCard = await prisma.jobCard.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { jobCardNumber: true }
-  })
-  let nextNum = 1
-  if (lastCard?.jobCardNumber) {
-    const m = lastCard.jobCardNumber.match(/JC(\d+)/)
-    if (m) nextNum = parseInt(m[1], 10) + 1
+  let jobCardNumber
+  if (!refreshMode) {
+    const lastCard = await prisma.jobCard.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { jobCardNumber: true }
+    })
+    let nextNum = 1
+    if (lastCard?.jobCardNumber) {
+      const m = lastCard.jobCardNumber.match(/JC(\d+)/)
+      if (m) nextNum = parseInt(m[1], 10) + 1
+    }
+    jobCardNumber = `JC${String(nextNum).padStart(4, '0')}`
+  } else {
+    jobCardNumber = refreshJobNumber
   }
-  const jobCardNumber = `JC${String(nextNum).padStart(4, '0')}`
 
   const title =
     enriched.title || enriched.name || enriched.description || issueId
@@ -261,75 +361,84 @@ async function main() {
         ? new Date()
         : null
 
-  const row = await prisma.jobCard.create({
-    data: {
-      jobCardNumber,
-      agentName:
-        enriched.assignee_name ||
-        enriched.assigneeName ||
-        enriched.creator_user_name ||
-        '',
-      otherTechnicians: '[]',
-      clientId: null,
-      clientName:
-        enriched.client_name ||
-        enriched.site_name ||
-        issue.site_name ||
-        '',
-      siteId:
-        enriched.site_id != null
-          ? String(enriched.site_id)
-          : issue.site_id != null
-            ? String(issue.site_id)
-            : '',
-      siteName: enriched.site_name || issue.site_name || '',
-      location: enriched.location_name || issue.location_name || '',
-      locationLatitude:
-        enriched.latitude != null && enriched.latitude !== ''
-          ? String(enriched.latitude)
-          : issue.latitude != null && issue.latitude !== ''
-            ? String(issue.latitude)
-            : '',
-      locationLongitude:
-        enriched.longitude != null && enriched.longitude !== ''
-          ? String(enriched.longitude)
-          : issue.longitude != null && issue.longitude !== ''
-            ? String(issue.longitude)
-            : '',
-      timeOfArrival:
-        enriched.occurred_at || issue.occurred_at
-          ? new Date(enriched.occurred_at || issue.occurred_at)
-          : enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
-            ? new Date(
-                enriched.created_at ||
-                  enriched.createdAt ||
-                  issue.created_at ||
-                  issue.createdAt
-              )
-            : null,
-      completedAt,
-      submittedAt:
-        enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
+  const sharedFields = {
+    agentName:
+      enriched.assignee_name ||
+      enriched.assigneeName ||
+      enriched.creator_user_name ||
+      '',
+    clientName:
+      enriched.client_name ||
+      enriched.site_name ||
+      issue.site_name ||
+      '',
+    siteId:
+      enriched.site_id != null
+        ? String(enriched.site_id)
+        : issue.site_id != null
+          ? String(issue.site_id)
+          : '',
+    siteName: enriched.site_name || issue.site_name || '',
+    location: enriched.location_name || issue.location_name || '',
+    locationLatitude:
+      enriched.latitude != null && enriched.latitude !== ''
+        ? String(enriched.latitude)
+        : issue.latitude != null && issue.latitude !== ''
+          ? String(issue.latitude)
+          : '',
+    locationLongitude:
+      enriched.longitude != null && enriched.longitude !== ''
+        ? String(enriched.longitude)
+        : issue.longitude != null && issue.longitude !== ''
+          ? String(issue.longitude)
+          : '',
+    timeOfArrival:
+      enriched.occurred_at || issue.occurred_at
+        ? new Date(enriched.occurred_at || issue.occurred_at)
+        : enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
           ? new Date(
               enriched.created_at ||
                 enriched.createdAt ||
                 issue.created_at ||
                 issue.createdAt
             )
-          : new Date(),
-      reasonForVisit: 'Safety Culture Issue',
-      diagnosis: title,
-      otherComments: `${`Imported from Safety Culture issue (${testLabel}).${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim()}${buildSafetyCultureIssueNotesAppendix(issueId, issue, detailData)}`.trim(),
-      photos: photosJson,
-      status:
-        statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
-          ? 'completed'
-          : 'draft',
-      safetyCultureIssueId: issueId,
-      safetyCultureSnapshotJson: snapshotJson,
-      ownerId: null
-    }
-  })
+          : null,
+    completedAt,
+    submittedAt:
+      enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
+        ? new Date(
+            enriched.created_at ||
+              enriched.createdAt ||
+              issue.created_at ||
+              issue.createdAt
+          )
+        : new Date(),
+    reasonForVisit: 'Safety Culture Issue',
+    diagnosis: title,
+    otherComments: `${`Imported from Safety Culture issue (${testLabel}).${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim()}${buildSafetyCultureIssueNotesAppendix(issueId, issue, detailData)}`.trim(),
+    photos: photosJson,
+    status:
+      statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
+        ? 'completed'
+        : 'draft',
+    safetyCultureIssueId: issueId,
+    safetyCultureSnapshotJson: snapshotJson
+  }
+
+  const row = refreshMode
+    ? await prisma.jobCard.update({
+        where: { jobCardNumber: refreshJobNumber },
+        data: sharedFields
+      })
+    : await prisma.jobCard.create({
+        data: {
+          jobCardNumber,
+          ...sharedFields,
+          otherTechnicians: '[]',
+          clientId: null,
+          ownerId: null
+        }
+      })
 
   const snapLen = snapshotJson ? snapshotJson.length : 0
   let mediaCount = 0
@@ -338,7 +447,12 @@ async function main() {
   } catch {
     mediaCount = 0
   }
-  console.log('OK — created job card', row.jobCardNumber, 'id=', row.id)
+  console.log(
+    refreshMode ? 'OK — updated job card' : 'OK — created job card',
+    row.jobCardNumber,
+    'id=',
+    row.id
+  )
   console.log('Snapshot chars:', snapLen, 'SC media slots in photos:', mediaCount)
 }
 
