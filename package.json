@@ -24,6 +24,7 @@
     "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit",
     "test:deploy": "node tests/deployment-test.js",
     "test:safety": "node tests/deployment-safety-test.js",
+    "test:sc-import-latest": "node scripts/test-import-latest-sc-job-card.js",
     "test:all": "npm run test:safety && npm run test:deploy",
     "test:manufacturing": "node tests/manufacturing-browser-test.js",
     "test:manufacturing:api": "node tests/manufacturing-api-integration-tests.js",
