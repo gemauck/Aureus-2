@@ -4,7 +4,7 @@
  * @see https://developer.safetyculture.com/reference/mediaservice_getdownloadsignedurl
  */
 import { authRequired } from '../../_lib/authRequired.js'
-import { badRequest, ok, serverError } from '../../_lib/response.js'
+import { badRequest, forbidden, ok, serverError } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
 import { safetyCultureRequest } from '../../_lib/safetyCultureClient.js'
@@ -29,6 +29,12 @@ async function handler(req, res) {
   const result = await safetyCultureRequest(path)
 
   if (result?.error) {
+    if (result?.status === 403) {
+      return forbidden(res, 'Media unavailable: permission denied by SafetyCulture')
+    }
+    if (result?.status === 404) {
+      return badRequest(res, 'Media unavailable: file or token not found')
+    }
     return serverError(res, result.error, result.details)
   }
 

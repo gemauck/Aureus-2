@@ -3,6 +3,7 @@ const { useState, useEffect, useMemo } = React;
 
 const API_BASE = window.location.origin + '/api';
 const PAGE_SIZE = 20;
+const scMediaSignedUrlCache = new Map();
 /** Non-OK API responses use `{ error: { message, code } }` — surface instead of empty lists. */
 const apiErrorFromResponse = (res, json) => {
     if (res.ok) return null;
@@ -160,6 +161,17 @@ const ScMediaTile = ({ item, isDark, getHeaders }) => {
             setErr('Missing media id or token');
             return;
         }
+        const cacheKey = `${id}:${token}:${mediaType || ''}`;
+        const cached = scMediaSignedUrlCache.get(cacheKey);
+        if (cached?.url) {
+            setSrc(cached.url);
+            setErr(null);
+            return;
+        }
+        if (cached?.error) {
+            setErr(cached.error);
+            return;
+        }
         let cancelled = false;
         (async () => {
             try {
@@ -174,12 +186,17 @@ const ScMediaTile = ({ item, isDark, getHeaders }) => {
                         json?.error ||
                         json?.message ||
                         `Could not load media (${res.status})`;
-                    if (!cancelled) setErr(String(msg));
+                    const safeMsg = String(msg);
+                    scMediaSignedUrlCache.set(cacheKey, { error: safeMsg });
+                    if (!cancelled) setErr(safeMsg);
                     return;
                 }
+                scMediaSignedUrlCache.set(cacheKey, { url: u });
                 if (!cancelled) setSrc(u);
             } catch (e) {
-                if (!cancelled) setErr(e.message || 'Request failed');
+                const safeMsg = e.message || 'Request failed';
+                scMediaSignedUrlCache.set(cacheKey, { error: safeMsg });
+                if (!cancelled) setErr(safeMsg);
             }
         })();
         return () => {
