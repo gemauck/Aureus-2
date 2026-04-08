@@ -56,8 +56,48 @@ export function isHrAdministratorUser(user) {
   return lower.includes('manage_hr_admin')
 }
 
+/** Align with api/_lib/adminRoles.js isAdminUser (role or admin-tier permission). */
+const ADMIN_PERMISSION_KEYS = new Set([
+  'admin',
+  'administrator',
+  'superadmin',
+  'super-admin',
+  'super_admin',
+  'super_administrator',
+  'system_admin',
+])
+
+function normalizePermissionsForAdmin(permissions) {
+  if (!permissions) return []
+  if (Array.isArray(permissions)) return permissions
+  if (typeof permissions === 'string') {
+    try {
+      const parsed = JSON.parse(permissions)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      return permissions
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    }
+  }
+  return []
+}
+
+export function isAdminUser(user) {
+  if (!user) return false
+  if (isAdminRole(user.role)) return true
+  const normalizedPermissions = normalizePermissionsForAdmin(user.permissions).map((permission) =>
+    String(permission || '')
+      .trim()
+      .toLowerCase()
+  )
+  return normalizedPermissions.some((permission) => ADMIN_PERMISSION_KEYS.has(permission))
+}
+
 if (typeof window !== 'undefined') {
   window.isAdminRole = isAdminRole
   window.isSuperAdminRole = isSuperAdminRole
   window.isHrAdministratorUser = isHrAdministratorUser
+  window.isAdminUser = isAdminUser
 }

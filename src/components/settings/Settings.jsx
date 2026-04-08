@@ -16,6 +16,24 @@ const USER_PREF_DEFAULTS = {
     slack: false
 };
 
+function resolveUserForAdminChecks(authUser) {
+    if (authUser && (authUser.id || authUser.email)) return authUser;
+    try {
+        if (window.storage?.getUser) {
+            const u = window.storage.getUser();
+            if (u && (u.id || u.email)) return u;
+        }
+    } catch (_) {}
+    try {
+        const raw = localStorage.getItem('currentUser');
+        if (raw && raw !== 'null') {
+            const p = JSON.parse(raw);
+            if (p && (p.id || p.email)) return p;
+        }
+    } catch (_) {}
+    return null;
+}
+
 const Settings = () => {
     const [activeTab, setActiveTab] = useState('general');
     const [companyName, setCompanyName] = useState('Abcotronics');
@@ -25,13 +43,14 @@ const Settings = () => {
     const [saveStatus, setSaveStatus] = useState('');
     const { isDark } = window.useTheme();
 
+    const authHook = window.useAuth || (() => ({ user: null }));
+    const { user: authUser } = authHook();
+
     const isDocAdmin = useMemo(() => {
-        let role = '';
-        try {
-            role = (JSON.parse(localStorage.getItem('currentUser') || '{}').role || '').toString();
-        } catch (_) {}
-        return typeof window.isAdminRole === 'function' && window.isAdminRole(role);
-    }, []);
+        const u = resolveUserForAdminChecks(authUser);
+        if (typeof window.isAdminUser === 'function') return window.isAdminUser(u);
+        return typeof window.isAdminRole === 'function' && window.isAdminRole(u?.role);
+    }, [authUser?.id, authUser?.email, authUser?.role, authUser?.permissions]);
 
     const [docCompanyName, setDocCompanyName] = useState('');
     const [docAddressText, setDocAddressText] = useState('');
@@ -737,8 +756,8 @@ const Settings = () => {
                 </p>
                 <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                     {isDocAdmin
-                        ? 'Administrators can update the company name and PO letterhead under Purchase documents.'
-                        : 'Company name is set at the system level. Ask an administrator to change it.'}
+                        ? 'Open the Purchase documents tab in the sidebar to set the company name, logo, and address used on purchase order PDFs.'
+                        : 'Company name and purchase order letterhead (logo, address on PO PDFs) are managed in Settings → Purchase documents. That tab is only visible to administrators—ask an admin to update them.'}
                 </p>
             </div>
 
