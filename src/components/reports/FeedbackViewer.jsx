@@ -1,6 +1,17 @@
 // Admin Feedback Viewer Component
 const { useState, useEffect } = React;
 
+function feedbackScreenshotFromMeta(meta) {
+    if (!meta) return null;
+    try {
+        const o = typeof meta === 'string' ? JSON.parse(meta) : meta;
+        const u = o?.screenshotDataUrl;
+        return typeof u === 'string' && u.startsWith('data:image/') ? u : null;
+    } catch {
+        return null;
+    }
+}
+
 const FeedbackViewer = () => {
     const [feedback, setFeedback] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -342,7 +353,9 @@ const FeedbackViewer = () => {
                         <p>No feedback found</p>
                     </div>
                 ) : (
-                    filteredFeedback.map((item) => (
+                    filteredFeedback.map((item) => {
+                        const screenshotUrl = feedbackScreenshotFromMeta(item.meta);
+                        return (
                         <div
                             key={item.id}
                             className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-lg p-4`}
@@ -402,6 +415,28 @@ const FeedbackViewer = () => {
                                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'} whitespace-pre-wrap mb-2`}>
                                         {item.message}
                                     </p>
+                                    {screenshotUrl && (
+                                        <div className="mb-3">
+                                            <div className={`text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                Screenshot
+                                            </div>
+                                            <a
+                                                href={screenshotUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className={`text-xs ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'} underline`}
+                                            >
+                                                Open full size
+                                            </a>
+                                            <img
+                                                src={screenshotUrl}
+                                                alt="Feedback screenshot"
+                                                className={`mt-1 max-w-full max-h-64 rounded border object-contain object-left ${
+                                                    isDark ? 'border-gray-600 bg-gray-900' : 'border-gray-200 bg-gray-50'
+                                                }`}
+                                            />
+                                        </div>
+                                    )}
                                     <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                                         <div><strong>Section:</strong> {item.section || 'general'}</div>
                                         <div><strong>Page:</strong> <code className="bg-gray-100 px-1 rounded">{item.pageUrl}</code></div>
@@ -479,7 +514,8 @@ const FeedbackViewer = () => {
                                 </div>
                             </div>
                         </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>

@@ -28,6 +28,16 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     const severityLabel = feedback.severity === 'high' ? '🔴 High' :
                          feedback.severity === 'medium' ? '🟡 Medium' : '🟢 Low'
 
+    let hasScreenshot = false
+    try {
+      if (feedback.meta) {
+        const m = typeof feedback.meta === 'string' ? JSON.parse(feedback.meta) : feedback.meta
+        hasScreenshot = Boolean(m?.screenshotDataUrl && String(m.screenshotDataUrl).startsWith('data:image/'))
+      }
+    } catch (_) {
+      hasScreenshot = false
+    }
+
     const subject = `New ${feedback.type} on ${section} - ${process.env.APP_NAME || 'Abcotronics ERP'}`
     
     const htmlContent = `
@@ -45,6 +55,7 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
             <p style="color: #333; margin-bottom: 10px;"><strong>Page:</strong> ${feedback.pageUrl}</p>
             <p style="color: #333; margin-bottom: 10px;"><strong>Severity:</strong> ${severityLabel}</p>
             <p style="color: #333; margin-bottom: 10px;"><strong>Type:</strong> ${feedback.type}</p>
+            ${hasScreenshot ? '<p style="color: #333; margin-bottom: 10px;"><strong>Screenshot:</strong> Included — open <strong>Reports → User Feedback</strong> in the ERP to view the image.</p>' : ''}
             
             <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 15px 0; border-radius: 4px;">
               <p style="color: #555; margin: 0; white-space: pre-wrap;">${feedback.message}</p>
@@ -466,6 +477,13 @@ async function handler(req, res) {
       let metaValue = body.meta || null
       if (metaValue && typeof metaValue === 'object') {
         metaValue = JSON.stringify(metaValue)
+      }
+      const FEEDBACK_META_MAX_LENGTH = 5_242_880 // ~5 MiB — keeps DB payloads reasonable
+      if (metaValue != null && typeof metaValue === 'string' && metaValue.length > FEEDBACK_META_MAX_LENGTH) {
+        return badRequest(
+          res,
+          'Feedback attachment is too large. Use a smaller screenshot or a lower-resolution image.'
+        )
       }
 
       const record = {
