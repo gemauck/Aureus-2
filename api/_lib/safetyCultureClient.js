@@ -35,7 +35,7 @@ export function normaliseFeedData(result) {
  * @returns {Promise<{ data?: any; metadata?: any; error?: string }>}
  */
 export async function safetyCultureRequest(path, options = {}) {
-  const apiKey = process.env.SAFETY_CULTURE_API_KEY
+  const apiKey = (process.env.SAFETY_CULTURE_API_KEY || '').trim()
   if (!apiKey || !apiKey.startsWith('scapi_')) {
     return { error: 'SAFETY_CULTURE_API_KEY not configured or invalid (must start with scapi_)' }
   }

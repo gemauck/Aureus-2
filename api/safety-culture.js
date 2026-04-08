@@ -13,7 +13,7 @@ async function handler(req, res) {
     return ok(res, { error: 'Method not allowed', allowed: ['GET'] })
   }
 
-  const apiKey = process.env.SAFETY_CULTURE_API_KEY
+  const apiKey = (process.env.SAFETY_CULTURE_API_KEY || '').trim()
   const configured = !!(apiKey && apiKey.startsWith('scapi_'))
 
   // Quick connectivity test if configured
