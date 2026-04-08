@@ -5734,12 +5734,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     try {
       const defLoc = defaultManufacturingStockLocation(stockLocations);
       const defId = defLoc?.id || '';
-      let moveType = prefill.type || (isAdmin ? 'receipt' : 'consumption');
+      let moveType = prefill.type || (isAdmin ? 'receipt' : 'transfer');
       if (moveType === 'production') {
-        moveType = isAdmin ? 'receipt' : 'consumption';
+        moveType = isAdmin ? 'receipt' : 'transfer';
       }
-      if (!isAdmin && (moveType === 'receipt' || moveType === 'adjustment')) {
-        moveType = 'consumption';
+      if (!isAdmin && (moveType === 'receipt' || moveType === 'adjustment' || moveType === 'consumption')) {
+        moveType = 'transfer';
       }
       let fromLocationId = prefill.fromLocationId;
       let toLocationId = prefill.toLocationId;
@@ -5784,6 +5784,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (formData.type === 'receipt' && !isAdmin) {
         alert(
           'Only administrators can record incoming stock receipts. To add finished goods, complete a production order; ask an administrator for other receipts.'
+        );
+        return;
+      }
+      if (formData.type === 'consumption' && !isAdmin) {
+        alert(
+          'Only administrators can record manual stock consumption in Manufacturing. Ask an administrator, or use Transfer to move stock between locations.'
         );
         return;
       }
@@ -5833,7 +5839,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
 
       // Require location selection for transfer/consumption/receipt/production/adjustment
-      const type = formData.type || (isAdmin ? 'receipt' : 'consumption');
+      const type = formData.type || (isAdmin ? 'receipt' : 'transfer');
       if (type === 'transfer') {
         if (!formData.fromLocationId || !formData.toLocationId) {
           alert('Please select From Location and To Location for the transfer.');
@@ -8359,20 +8365,22 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Movement Type *</label>
                   <select
-                    value={formData.type || (isAdmin ? 'receipt' : 'consumption')}
+                    value={formData.type || (isAdmin ? 'receipt' : 'transfer')}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     {isAdmin && (
                       <option value="receipt">Receipt (Incoming Stock)</option>
                     )}
-                    <option value="consumption">Consumption (Outgoing Stock)</option>
+                    {isAdmin && (
+                      <option value="consumption">Consumption (Outgoing Stock)</option>
+                    )}
                     <option value="transfer">Transfer</option>
                     {isAdmin && <option value="adjustment">Adjustment</option>}
                   </select>
                   {!isAdmin && (
                     <p className="text-xs text-gray-500 mt-1">
-                      Incoming receipts and manual adjustments are limited to administrators. To receive finished product into stock, complete a production order.
+                      Receipts, consumption, and manual adjustments are limited to administrators (including super administrators). To receive finished product into stock, complete a production order. Use Transfer to move stock between locations.
                     </p>
                   )}
                 </div>
@@ -11509,11 +11517,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }, [movements, item?.sku, selectedDetailLocationId, selectedDetailLocationCode]);
 
     const recentMovementTemplates = useMemo(() => {
-      const eligible = itemMovementsForDetail.filter((m) => m.type !== 'production');
+      let eligible = itemMovementsForDetail.filter((m) => m.type !== 'production');
+      if (!isAdmin) {
+        eligible = eligible.filter((m) => m.type !== 'consumption');
+      }
       if (!eligible.length) return [];
       const startIndex = Math.max(eligible.length - 5, 0);
       return eligible.slice(startIndex).reverse();
-    }, [itemMovementsForDetail]);
+    }, [itemMovementsForDetail, isAdmin]);
 
     useEffect(() => {
       setSelectedMovementTemplateId('');
@@ -11561,12 +11572,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const normalizedQty = template
         ? (template.type === 'adjustment' ? parsedQty : Math.abs(parsedQty))
         : '';
-      let moveType = template?.type || (isAdmin ? 'receipt' : 'consumption');
+      let moveType = template?.type || (isAdmin ? 'receipt' : 'transfer');
       if (moveType === 'production') {
-        moveType = isAdmin ? 'receipt' : 'consumption';
+        moveType = isAdmin ? 'receipt' : 'transfer';
       }
-      if (!isAdmin && (moveType === 'receipt' || moveType === 'adjustment')) {
-        moveType = 'consumption';
+      if (!isAdmin && (moveType === 'receipt' || moveType === 'adjustment' || moveType === 'consumption')) {
+        moveType = 'transfer';
       }
 
       openAddMovementModal({
