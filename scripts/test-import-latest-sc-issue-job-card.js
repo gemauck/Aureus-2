@@ -21,6 +21,10 @@ import {
   normaliseFeedData
 } from '../api/_lib/safetyCultureClient.js'
 import { serializeSafetyCultureSnapshot } from '../api/_lib/safetyCultureSnapshot.js'
+import {
+  buildIssueJobCardPhotosJson,
+  overlayIssueJobCardFieldsFromDetail
+} from '../api/_lib/safetyCultureIssueJobCard.js'
 
 /**
  * Map incident/detail API payload (mixed snake_case / camelCase / nested) to feed-like row.
@@ -31,6 +35,8 @@ function issueFieldsForJobCard(d, fallbackId) {
   const loc = d.location && typeof d.location === 'object' ? d.location : {}
   const cat = d.category && typeof d.category === 'object' ? d.category : {}
   const task = d.task && typeof d.task === 'object' ? d.task : {}
+  const asg = d.assignee && typeof d.assignee === 'object' ? d.assignee : {}
+  const cre = d.creator && typeof d.creator === 'object' ? d.creator : {}
   const id = d.id || d.issue_id || fallbackId
   const taskDesc = task.description || task.DESCRIPTION
   return {
@@ -47,9 +53,18 @@ function issueFieldsForJobCard(d, fallbackId) {
     url: d.url || d.web_url || d.link,
     web_url: d.web_url,
     link: d.link,
-    assignee_name: d.assignee_name || d.assigneeName,
-    assigneeName: d.assigneeName,
-    creator_user_name: d.creator_user_name || d.creatorUserName,
+    assignee_name:
+      d.assignee_name ||
+      d.assigneeName ||
+      asg.name ||
+      asg.display_name ||
+      asg.full_name,
+    assigneeName: d.assigneeName || asg.name,
+    creator_user_name:
+      d.creator_user_name ||
+      d.creatorUserName ||
+      cre.name ||
+      cre.display_name,
     site_name: d.site_name || d.siteName || site.name,
     site_id: d.site_id ?? d.siteId ?? site.id,
     location_name:
@@ -180,10 +195,13 @@ async function main() {
     issueId = issue.id
     console.log('Picked issue:', issueId, issue.title || issue.name || issue.unique_id || '')
 
-    if (includeSnapshot) {
-      detailResult = await fetchIssueDetails(issueId)
-    }
+    detailResult = await fetchIssueDetails(issueId)
   }
+
+  const detailData =
+    detailResult && !detailResult.error ? detailResult.data ?? null : null
+  const enriched = overlayIssueJobCardFieldsFromDetail({ ...issue }, detailData)
+  const photosJson = buildIssueJobCardPhotosJson(issue, detailData)
 
   const snapshotJson = includeSnapshot
     ? serializeSafetyCultureSnapshot({
@@ -209,21 +227,35 @@ async function main() {
   }
   const jobCardNumber = `JC${String(nextNum).padStart(4, '0')}`
 
-  const title = issue.title || issue.name || issue.description || issueId
-  const issueLink = issue.url || issue.web_url || issue.link
+  const title =
+    enriched.title || enriched.name || enriched.description || issueId
+  const issueLink =
+    enriched.url || enriched.web_url || enriched.link ||
+    issue.url || issue.web_url || issue.link
   const linkText = issueLink ? `\nSafety Culture issue: ${issueLink}` : ''
   const meta = []
-  if (issue.status) meta.push(`Status: ${issue.status}`)
-  if (issue.priority) meta.push(`Priority: ${issue.priority}`)
-  if (issue.unique_id) meta.push(`Unique ID: ${issue.unique_id}`)
-  if (issue.category_label) meta.push(`Category: ${issue.category_label}`)
-  if (issue.inspection_name) meta.push(`Inspection: ${issue.inspection_name}`)
-  if (issue.due_at) meta.push(`Due: ${issue.due_at}`)
+  const st = enriched.status ?? issue.status
+  const pr = enriched.priority ?? issue.priority
+  const uid = enriched.unique_id ?? issue.unique_id
+  const cat = enriched.category_label ?? issue.category_label
+  const insp = enriched.inspection_name ?? issue.inspection_name
+  const due = enriched.due_at ?? issue.due_at
+  if (st) meta.push(`Status: ${st}`)
+  if (pr) meta.push(`Priority: ${pr}`)
+  if (uid) meta.push(`Unique ID: ${uid}`)
+  if (cat) meta.push(`Category: ${cat}`)
+  if (insp) meta.push(`Inspection: ${insp}`)
+  if (due) meta.push(`Due: ${due}`)
 
-  const statusLow = (issue.status || '').toLowerCase()
+  const statusLow = (st || '').toLowerCase()
   const completedAt =
-    issue.completed_at || issue.completedAt
-      ? new Date(issue.completed_at || issue.completedAt)
+    enriched.completed_at || enriched.completedAt || issue.completed_at || issue.completedAt
+      ? new Date(
+          enriched.completed_at ||
+            enriched.completedAt ||
+            issue.completed_at ||
+            issue.completedAt
+        )
       : statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
         ? new Date()
         : null
@@ -232,30 +264,63 @@ async function main() {
     data: {
       jobCardNumber,
       agentName:
-        issue.assignee_name ||
-        issue.assigneeName ||
-        issue.creator_user_name ||
+        enriched.assignee_name ||
+        enriched.assigneeName ||
+        enriched.creator_user_name ||
         '',
       otherTechnicians: '[]',
       clientId: null,
-      clientName: issue.site_name || '',
-      siteId: issue.site_id != null ? String(issue.site_id) : '',
-      siteName: issue.site_name || '',
-      location: issue.location_name || '',
-      timeOfArrival: issue.occurred_at
-        ? new Date(issue.occurred_at)
-        : issue.created_at || issue.createdAt
-          ? new Date(issue.created_at || issue.createdAt)
-          : null,
+      clientName:
+        enriched.client_name ||
+        enriched.site_name ||
+        issue.site_name ||
+        '',
+      siteId:
+        enriched.site_id != null
+          ? String(enriched.site_id)
+          : issue.site_id != null
+            ? String(issue.site_id)
+            : '',
+      siteName: enriched.site_name || issue.site_name || '',
+      location: enriched.location_name || issue.location_name || '',
+      locationLatitude:
+        enriched.latitude != null && enriched.latitude !== ''
+          ? String(enriched.latitude)
+          : issue.latitude != null && issue.latitude !== ''
+            ? String(issue.latitude)
+            : '',
+      locationLongitude:
+        enriched.longitude != null && enriched.longitude !== ''
+          ? String(enriched.longitude)
+          : issue.longitude != null && issue.longitude !== ''
+            ? String(issue.longitude)
+            : '',
+      timeOfArrival:
+        enriched.occurred_at || issue.occurred_at
+          ? new Date(enriched.occurred_at || issue.occurred_at)
+          : enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
+            ? new Date(
+                enriched.created_at ||
+                  enriched.createdAt ||
+                  issue.created_at ||
+                  issue.createdAt
+              )
+            : null,
       completedAt,
-      submittedAt: (issue.created_at || issue.createdAt)
-        ? new Date(issue.created_at || issue.createdAt)
-        : new Date(),
+      submittedAt:
+        enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
+          ? new Date(
+              enriched.created_at ||
+                enriched.createdAt ||
+                issue.created_at ||
+                issue.createdAt
+            )
+          : new Date(),
       reasonForVisit: 'Safety Culture Issue',
       diagnosis: title,
       otherComments:
         `Imported from Safety Culture issue (${testLabel}).${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim(),
-      photos: '[]',
+      photos: photosJson,
       status:
         statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
           ? 'completed'
@@ -267,8 +332,14 @@ async function main() {
   })
 
   const snapLen = snapshotJson ? snapshotJson.length : 0
+  let mediaCount = 0
+  try {
+    mediaCount = JSON.parse(photosJson).length
+  } catch {
+    mediaCount = 0
+  }
   console.log('OK — created job card', row.jobCardNumber, 'id=', row.id)
-  console.log('Snapshot chars:', snapLen)
+  console.log('Snapshot chars:', snapLen, 'SC media slots in photos:', mediaCount)
 }
 
 main()

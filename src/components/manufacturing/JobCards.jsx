@@ -104,11 +104,112 @@ function partitionJobCardAttachments(photosInput) {
       voicesBySection[sec].push({ url, mimeType: p.mimeType, idx });
       return;
     }
+    const isScMedia =
+      typeof p === 'object' &&
+      p &&
+      p.kind === 'safetyCultureMedia' &&
+      p.mediaId &&
+      p.token;
+    if (isScMedia) {
+      visualItems.push({
+        raw: p,
+        safetyCulture: true,
+        mediaId: String(p.mediaId),
+        token: String(p.token),
+        mediaType: p.mediaType != null ? String(p.mediaType) : '',
+        filename: p.filename != null ? String(p.filename) : 'media',
+        idx
+      });
+      return;
+    }
     if (url) {
       visualItems.push({ raw: p, url, idx });
     }
   });
   return { visualItems, voicesBySection };
+}
+
+/** Lazy-load SafetyCulture binary via signed URL (same contract as Tools → SC modals). */
+function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, idx }) {
+  const [src, setSrc] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    if (!mediaId || !token) {
+      setErr('Missing media credentials');
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const params = new URLSearchParams({ id: String(mediaId), token: String(token) });
+        if (mediaType) params.set('media_type', String(mediaType));
+        const headers = {};
+        const t = typeof window !== 'undefined' && window.storage?.getToken?.();
+        if (t) headers.Authorization = `Bearer ${t}`;
+        const res = await fetch(`/api/safety-culture/media/sign-url?${params}`, { headers });
+        const json = await res.json().catch(() => ({}));
+        const u = json?.data?.url;
+        if (!res.ok || !u) {
+          const msg =
+            (typeof json?.error === 'object' && json?.error?.message) ||
+            json?.error ||
+            json?.message ||
+            `Could not load media (${res.status})`;
+          if (!cancelled) setErr(String(msg));
+          return;
+        }
+        if (!cancelled) {
+          setErr(null);
+          setSrc(u);
+        }
+      } catch (e) {
+        if (!cancelled) setErr(e?.message || 'Request failed');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaId, token, mediaType]);
+
+  const isVideo =
+    String(mediaType).includes('VIDEO') ||
+    /\.(mp4|webm|mov|m4v)$/i.test(filename || '');
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950/50">
+      <div className="truncate px-2 py-1 text-[11px] text-slate-400" title={filename}>
+        {filename}
+      </div>
+      {err ? (
+        <div className="px-2 pb-2 text-xs text-red-400">{err}</div>
+      ) : null}
+      {!err && !src ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+          <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+          Loading…
+        </div>
+      ) : null}
+      {src && isVideo ? (
+        <video
+          src={src}
+          className="max-h-64 w-full object-contain bg-black"
+          controls
+          playsInline
+          preload="metadata"
+        />
+      ) : null}
+      {src && !isVideo ? (
+        <figure className="group relative overflow-hidden bg-slate-800">
+          <img
+            src={src}
+            alt={`SafetyCulture attachment ${idx + 1}`}
+            className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+          />
+        </figure>
+      ) : null}
+    </div>
+  );
 }
 
 /**
@@ -1520,7 +1621,21 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   ) : attachmentParts.visualItems.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {attachmentParts.visualItems.map(({ url, idx }) => {
+                      {attachmentParts.visualItems.map((item) => {
+                        const { idx } = item;
+                        if (item.safetyCulture) {
+                          return (
+                            <JobCardSafetyCultureThumbnail
+                              key={`sc-${item.mediaId}-${idx}`}
+                              mediaId={item.mediaId}
+                              token={item.token}
+                              mediaType={item.mediaType}
+                              filename={item.filename}
+                              idx={idx}
+                            />
+                          );
+                        }
+                        const { url } = item;
                         if (url && jobCardAttachmentUrlIsVideo(url)) {
                           return (
                             <div

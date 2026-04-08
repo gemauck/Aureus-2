@@ -16,6 +16,10 @@ import { parseJsonBody } from '../_lib/body.js'
 import { prisma } from '../_lib/prisma.js'
 import { fetchIssues, fetchIssuesNextPage, fetchIssueDetails, normaliseFeedData } from '../_lib/safetyCultureClient.js'
 import { serializeSafetyCultureSnapshot } from '../_lib/safetyCultureSnapshot.js'
+import {
+  buildIssueJobCardPhotosJson,
+  overlayIssueJobCardFieldsFromDetail
+} from '../_lib/safetyCultureIssueJobCard.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -80,10 +84,11 @@ async function handler(req, res) {
         }
 
         try {
-          let detailResult = null
-          if (includeSnapshot) {
-            detailResult = await fetchIssueDetails(issueId)
-          }
+          const detailResult = await fetchIssueDetails(issueId)
+
+          const detailData =
+            detailResult && !detailResult.error ? detailResult.data ?? null : null
+          const enriched = overlayIssueJobCardFieldsFromDetail({ ...issue }, detailData)
 
           const snapshotJson = includeSnapshot
             ? serializeSafetyCultureSnapshot({
@@ -99,52 +104,104 @@ async function handler(req, res) {
             : null
 
           const jobCardNumber = `JC${String(nextNum++).padStart(4, '0')}`
-          const title = issue.title || issue.name || issue.description || issueId
-          const issueLink = issue.url || issue.web_url || issue.link
+          const title =
+            enriched.title ||
+            enriched.name ||
+            enriched.description ||
+            issueId
+          const issueLink =
+            enriched.url || enriched.web_url || enriched.link ||
+            issue.url || issue.web_url || issue.link
           const linkText = issueLink ? `\nSafety Culture issue: ${issueLink}` : ''
           const meta = []
-          if (issue.status) meta.push(`Status: ${issue.status}`)
-          if (issue.priority) meta.push(`Priority: ${issue.priority}`)
-          if (issue.unique_id) meta.push(`Unique ID: ${issue.unique_id}`)
-          if (issue.category_label) meta.push(`Category: ${issue.category_label}`)
-          if (issue.inspection_name) meta.push(`Inspection: ${issue.inspection_name}`)
-          if (issue.due_at) meta.push(`Due: ${issue.due_at}`)
+          const st = enriched.status ?? issue.status
+          const pr = enriched.priority ?? issue.priority
+          const uid = enriched.unique_id ?? issue.unique_id
+          const cat = enriched.category_label ?? issue.category_label
+          const insp = enriched.inspection_name ?? issue.inspection_name
+          const due = enriched.due_at ?? issue.due_at
+          if (st) meta.push(`Status: ${st}`)
+          if (pr) meta.push(`Priority: ${pr}`)
+          if (uid) meta.push(`Unique ID: ${uid}`)
+          if (cat) meta.push(`Category: ${cat}`)
+          if (insp) meta.push(`Inspection: ${insp}`)
+          if (due) meta.push(`Due: ${due}`)
 
-          const statusLow = (issue.status || '').toLowerCase()
+          const statusLow = (st || '').toLowerCase()
           const completedAt =
-            issue.completed_at || issue.completedAt
-              ? new Date(issue.completed_at || issue.completedAt)
+            enriched.completed_at || enriched.completedAt || issue.completed_at || issue.completedAt
+              ? new Date(
+                  enriched.completed_at ||
+                    enriched.completedAt ||
+                    issue.completed_at ||
+                    issue.completedAt
+                )
               : statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
                 ? new Date()
                 : null
+
+          const photosJson = buildIssueJobCardPhotosJson(issue, detailData)
 
           await prisma.jobCard.create({
             data: {
               jobCardNumber,
               agentName:
-                issue.assignee_name ||
-                issue.assigneeName ||
-                issue.creator_user_name ||
+                enriched.assignee_name ||
+                enriched.assigneeName ||
+                enriched.creator_user_name ||
                 '',
               otherTechnicians: '[]',
               clientId: null,
-              clientName: issue.site_name || '',
-              siteId: issue.site_id != null ? String(issue.site_id) : '',
-              siteName: issue.site_name || '',
-              location: issue.location_name || '',
-              timeOfArrival: issue.occurred_at
-                ? new Date(issue.occurred_at)
-                : issue.created_at || issue.createdAt
-                  ? new Date(issue.created_at || issue.createdAt)
-                  : null,
+              clientName:
+                enriched.client_name ||
+                enriched.site_name ||
+                issue.site_name ||
+                '',
+              siteId:
+                enriched.site_id != null
+                  ? String(enriched.site_id)
+                  : issue.site_id != null
+                    ? String(issue.site_id)
+                    : '',
+              siteName: enriched.site_name || issue.site_name || '',
+              location: enriched.location_name || issue.location_name || '',
+              locationLatitude:
+                enriched.latitude != null && enriched.latitude !== ''
+                  ? String(enriched.latitude)
+                  : issue.latitude != null && issue.latitude !== ''
+                    ? String(issue.latitude)
+                    : '',
+              locationLongitude:
+                enriched.longitude != null && enriched.longitude !== ''
+                  ? String(enriched.longitude)
+                  : issue.longitude != null && issue.longitude !== ''
+                    ? String(issue.longitude)
+                    : '',
+              timeOfArrival:
+                enriched.occurred_at || issue.occurred_at
+                  ? new Date(enriched.occurred_at || issue.occurred_at)
+                  : enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
+                    ? new Date(
+                        enriched.created_at ||
+                          enriched.createdAt ||
+                          issue.created_at ||
+                          issue.createdAt
+                      )
+                    : null,
               completedAt,
-              submittedAt: (issue.created_at || issue.createdAt)
-                ? new Date(issue.created_at || issue.createdAt)
-                : new Date(),
+              submittedAt:
+                enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
+                  ? new Date(
+                      enriched.created_at ||
+                        enriched.createdAt ||
+                        issue.created_at ||
+                        issue.createdAt
+                    )
+                  : new Date(),
               reasonForVisit: 'Safety Culture Issue',
               diagnosis: title,
               otherComments: `Imported from Safety Culture issue.${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim(),
-              photos: '[]',
+              photos: photosJson,
               status:
                 statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
                   ? 'completed'
