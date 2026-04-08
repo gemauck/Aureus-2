@@ -79,6 +79,9 @@ export async function fetchInspections(params = {}) {
     q.set('modified_after', params.modified_after)
   }
   if (params.limit != null) q.set('limit', String(params.limit))
+  // Ask feed API for newest items first so page 1 is the latest data.
+  q.set('order', params.order || 'desc')
+  q.set('sort', params.sort || 'modified_at')
   if (params.completed) q.set('completed', params.completed) // e.g. true, false, both
   if (params.archived) q.set('archived', params.archived)   // e.g. true, false, both
 
@@ -114,6 +117,9 @@ export async function fetchIssues(params = {}) {
   const q = new URLSearchParams()
   if (params.modified_after) q.set('modified_after', params.modified_after)
   if (params.limit != null) q.set('limit', String(params.limit))
+  // Ask feed API for newest items first so page 1 is the latest data.
+  q.set('order', params.order || 'desc')
+  q.set('sort', params.sort || 'modified_at')
 
   const path = `/feed/issues${q.toString() ? `?${q.toString()}` : ''}`
   return safetyCultureRequest(path)
