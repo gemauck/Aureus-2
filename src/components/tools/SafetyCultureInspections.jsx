@@ -68,7 +68,7 @@ const SafetyCultureInspections = () => {
                     setError('Unable to connect to Safety Culture. Check your API key.');
                 }
                 // Fetch latest 100 inspections
-                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=100`, {
+                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=500`, {
                     headers: getHeaders()
                 });
                 const inspJson = await inspRes.json().catch(() => ({}));
@@ -145,7 +145,7 @@ const SafetyCultureInspections = () => {
     const loadIssues = async () => {
         setIssuesLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=100`, { headers: getHeaders() });
+            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=500`, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
             const data = json?.data ?? json;
             setIssues(data.issues ?? []);
@@ -607,9 +607,18 @@ const SafetyCultureInspections = () => {
                     {!issuesLoading && (sortedIssues.length > 0 || issues.length > 0) && (
                         <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
                             <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                Page {issuesPage} of {issuesTotalPages} • Showing {sortedIssues.length} of {(issuesMetadata?.next_page && issuesMetadata.remaining_records != null)
-                                    ? sortedIssues.length + issuesMetadata.remaining_records
-                                    : sortedIssues.length} issues
+                                Page {issuesPage} of {issuesTotalPages}
+                                {' · '}
+                                {issues.length} newest loaded
+                                {issuesMetadata?.scanned_total != null && issuesMetadata.scanned_total > 0 && (
+                                    <> · {issuesMetadata.scanned_total} row(s) scanned from SafetyCulture</>
+                                )}
+                                {issuesMetadata?.not_returned_after_sort > 0 && (
+                                    <> · {issuesMetadata.not_returned_after_sort} older in scan not listed (increase limit or use Load more)</>
+                                )}
+                                {issuesMetadata?.next_page && issuesMetadata?.remaining_records != null && (
+                                    <> · Upstream: ~{issuesMetadata.remaining_records} more in feed</>
+                                )}
                             </span>
                             <div className="flex items-center gap-2">
                                 <div className="flex gap-1">
@@ -798,9 +807,18 @@ const SafetyCultureInspections = () => {
             {(sortedInspections.length > 0 || inspections.length > 0) && (
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
                     <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Page {inspectionPage} of {inspectionTotalPages} • Showing {sortedInspections.length} of {(metadata?.next_page && metadata.remaining_records != null)
-                            ? sortedInspections.length + metadata.remaining_records
-                            : sortedInspections.length} inspections
+                        Page {inspectionPage} of {inspectionTotalPages}
+                        {' · '}
+                        {inspections.length} newest loaded
+                        {metadata?.scanned_total != null && metadata.scanned_total > 0 && (
+                            <> · {metadata.scanned_total} row(s) scanned from SafetyCulture</>
+                        )}
+                        {metadata?.not_returned_after_sort > 0 && (
+                            <> · {metadata.not_returned_after_sort} older in scan not listed (increase limit or use Load more)</>
+                        )}
+                        {metadata?.next_page && metadata?.remaining_records != null && (
+                            <> · Upstream: ~{metadata.remaining_records} more in feed</>
+                        )}
                     </span>
                     <div className="flex items-center gap-2">
                         <div className="flex gap-1">

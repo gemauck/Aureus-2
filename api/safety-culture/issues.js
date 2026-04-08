@@ -39,7 +39,7 @@ async function handler(req, res) {
   const url = new URL(req.url || '', 'http://localhost')
   const modifiedAfter = url.searchParams.get('modified_after')
   const limit = url.searchParams.get('limit')
-  const requestedLimit = Math.max(1, Math.min(parseInt(limit || '50', 10) || 50, 200))
+  const requestedLimit = Math.max(1, Math.min(parseInt(limit || '50', 10) || 50, 500))
   const nextPage = url.searchParams.get('next_page')
 
   let result
@@ -61,9 +61,10 @@ async function handler(req, res) {
 
   // Safety Culture feed pagination can return older pages first.
   // For first-page requests, collect additional pages server-side and then return newest items.
+  let feedCursorAfterScan = null
   if (!nextPage) {
-    const MAX_PAGES = 30
-    const MAX_ITEMS = 3000
+    const MAX_PAGES = 100
+    const MAX_ITEMS = 20000
     let pagesRead = 0
     let cursor = metadata?.next_page || null
 
@@ -77,6 +78,7 @@ async function handler(req, res) {
       cursor = metadata?.next_page || null
       pagesRead += 1
     }
+    feedCursorAfterScan = cursor
   }
 
   const sortedFeedItems = [...feedItems].sort((a, b) => latestIssueTs(b) - latestIssueTs(a))
@@ -89,9 +91,26 @@ async function handler(req, res) {
   )
   const sorted = [...enriched].sort((a, b) => latestIssueTs(b) - latestIssueTs(a))
 
+  let outMetadata
+  if (nextPage) {
+    outMetadata = result.metadata ?? { next_page: null, remaining_records: 0 }
+  } else {
+    const moreUpstreamPages = Boolean(feedCursorAfterScan)
+    const notReturnedAfterSort = Math.max(0, sortedFeedItems.length - requestedLimit)
+    outMetadata = {
+      next_page: moreUpstreamPages ? feedCursorAfterScan : null,
+      remaining_records: moreUpstreamPages
+        ? (metadata?.remaining_records ?? 0)
+        : 0,
+      scanned_total: sortedFeedItems.length,
+      returned_count: sorted.length,
+      not_returned_after_sort: notReturnedAfterSort
+    }
+  }
+
   return ok(res, {
     issues: sorted,
-    metadata: nextPage ? (result.metadata ?? { next_page: null, remaining_records: 0 }) : { next_page: null, remaining_records: 0 }
+    metadata: outMetadata
   })
 }
 
