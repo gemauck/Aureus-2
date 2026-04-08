@@ -1,7 +1,8 @@
 /**
  * Safety Culture issues feed
  * GET /api/safety-culture/issues
- * Query: modified_after, modified_before, limit, next_page, enrich_cap (0–150)
+ * Query: modified_after, modified_before, limit, next_page, enrich_cap (0–150),
+ *   live=1|refresh=1 (force API), cache_offset (paginate local cache)
  */
 import { authRequired } from '../_lib/authRequired.js'
 import { ok, serverError } from '../_lib/response.js'
@@ -14,6 +15,7 @@ import {
   fetchIssuesNextPage,
   normaliseFeedData
 } from '../_lib/safetyCultureClient.js'
+import { tryServeIssuesFromLocalCache } from '../_lib/safetyCultureCacheRead.js'
 
 /** Keep first HTTP response under typical proxy timeouts (nginx ~60s). */
 const FEED_SCAN_MAX_PAGES = 12
@@ -53,6 +55,32 @@ async function handler(req, res) {
   const enrichCap = Number.isFinite(enrichCapRaw)
     ? Math.max(0, Math.min(enrichCapRaw, MAX_ENRICH_CAP))
     : DEFAULT_ENRICH_CAP
+
+  const live = url.searchParams.get('live') === '1' || url.searchParams.get('refresh') === '1'
+  const cacheOffsetRaw = url.searchParams.get('cache_offset')
+  const cacheOffset = cacheOffsetRaw != null ? Math.max(0, parseInt(cacheOffsetRaw, 10) || 0) : 0
+
+  const bypassCache =
+    live ||
+    Boolean(nextPage) ||
+    Boolean(modifiedAfter) ||
+    Boolean(modifiedBefore) ||
+    process.env.SAFETY_CULTURE_DISABLE_LOCAL_CACHE === 'true'
+
+  if (!bypassCache) {
+    try {
+      const fromCache = await tryServeIssuesFromLocalCache({
+        offset: cacheOffset,
+        limit: requestedLimit,
+        modifiedBefore: modifiedBefore || undefined
+      })
+      if (fromCache) {
+        return ok(res, fromCache)
+      }
+    } catch (e) {
+      console.warn('safety-culture issues local cache read failed, falling back to API', e.message)
+    }
+  }
 
   let result
   if (nextPage) {

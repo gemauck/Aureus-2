@@ -44,6 +44,27 @@ async function handler(req, res) {
       }
     }
 
+    let localCache = null
+    try {
+      const [inspectionRows, issueRows, syncState] = await Promise.all([
+        prisma.safetyCultureCachedInspection.count(),
+        prisma.safetyCultureCachedIssue.count(),
+        prisma.safetyCultureSyncState.findUnique({
+          where: { id: 'safety-culture-sync' }
+        })
+      ])
+      localCache = {
+        inspections: inspectionRows,
+        issues: issueRows,
+        lastInspectionsSyncAt: syncState?.lastInspectionsSyncAt ?? null,
+        lastIssuesSyncAt: syncState?.lastIssuesSyncAt ?? null,
+        lastRunAt: syncState?.lastRunAt ?? null,
+        lastRunError: syncState?.lastRunError ?? null
+      }
+    } catch (e) {
+      console.warn('safety-culture status: local cache counts failed', e.message)
+    }
+
     return ok(res, {
       integration: 'safety-culture',
       configured,
@@ -56,9 +77,11 @@ async function handler(req, res) {
         issues: '/api/safety-culture/issues',
         issueDetail: '/api/safety-culture/issues/detail?id=',
         mediaSignUrl: '/api/safety-culture/media/sign-url?id=&token=',
-        groups: '/api/safety-culture/groups'
+        groups: '/api/safety-culture/groups',
+        sync: 'POST /api/safety-culture/sync'
       },
       docs: 'https://developer.safetyculture.com/',
+      ...(localCache && { localCache }),
       ...(configured && { groupsCount: groupsPreview })
     })
   }

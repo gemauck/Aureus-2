@@ -10,6 +10,7 @@ import {
   fetchInspectionDetails,
   fetchInspectionAnswers
 } from '../../_lib/safetyCultureClient.js'
+import { prisma } from '../../_lib/prisma.js'
 
 async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -26,7 +27,24 @@ async function handler(req, res) {
     url.searchParams.get('include_answers') === '1' ||
     url.searchParams.get('include_answers') === 'true'
 
+  const live =
+    url.searchParams.get('live') === '1' || url.searchParams.get('refresh') === '1'
+
   try {
+    if (!live && process.env.SAFETY_CULTURE_DISABLE_LOCAL_CACHE !== 'true') {
+      const row = await prisma.safetyCultureCachedInspection.findUnique({
+        where: { externalId: id },
+        select: { detailJson: true }
+      })
+      const cached = row?.detailJson
+      if (cached && typeof cached === 'object') {
+        const hasAnswers = Object.prototype.hasOwnProperty.call(cached, 'answers')
+        if (!includeAnswers || hasAnswers) {
+          return ok(res, cached)
+        }
+      }
+    }
+
     const detail = await fetchInspectionDetails(id)
     if (detail?.error) {
       return serverError(res, detail.error, detail.details)
@@ -43,11 +61,27 @@ async function handler(req, res) {
       }
     }
 
-    return ok(res, {
+    const payload = {
       id,
       detail: detail?.data ?? detail,
       ...(includeAnswers && { answers, answersError })
-    })
+    }
+
+    if (process.env.SAFETY_CULTURE_DISABLE_LOCAL_CACHE !== 'true') {
+      void prisma.safetyCultureCachedInspection
+        .upsert({
+          where: { externalId: id },
+          create: {
+            externalId: id,
+            payloadJson: { id },
+            detailJson: payload
+          },
+          update: { detailJson: payload }
+        })
+        .catch(() => {})
+    }
+
+    return ok(res, payload)
   } catch (e) {
     console.error('inspection detail error', e)
     return serverError(res, 'Failed to load inspection detail', e.message)

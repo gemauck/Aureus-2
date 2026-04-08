@@ -1899,6 +1899,46 @@ model JobCard {
   @@index([vehicleId])
 }
 
+/// Local cache of SafetyCulture inspection feed rows (optional detailJson for modal/answers).
+model SafetyCultureCachedInspection {
+  id          String    @id @default(cuid())
+  externalId  String    @unique
+  payloadJson Json
+  modifiedAt  DateTime?
+  templateId  String?
+  detailJson  Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([modifiedAt])
+  @@index([templateId])
+}
+
+/// Local cache of SafetyCulture issue feed rows (optional issue detail for modal).
+model SafetyCultureCachedIssue {
+  id          String    @id @default(cuid())
+  externalId  String    @unique
+  payloadJson Json
+  modifiedAt  DateTime?
+  detailJson  Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([modifiedAt])
+}
+
+/// Watermarks and timestamps for incremental SafetyCulture sync (modified_after).
+model SafetyCultureSyncState {
+  id                    String    @id @default("safety-culture-sync")
+  inspectionsWatermark  String?
+  issuesWatermark       String?
+  lastInspectionsSyncAt DateTime?
+  lastIssuesSyncAt      DateTime?
+  lastRunAt             DateTime?
+  lastRunError          String?
+  updatedAt             DateTime  @updatedAt
+}
+
 model ServiceFormTemplate {
   id          String                @id @default(cuid())
   name        String

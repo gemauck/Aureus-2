@@ -3105,6 +3105,42 @@ app.listen(PORT, '0.0.0.0', async () => {
       console.warn('   Set DISABLE_TASK_REMINDERS_CRON=true to disable')
     }
   }
+
+  // Safety Culture: incremental feed sync into local DB (every 30 minutes)
+  if (process.env.DISABLE_SAFETY_CULTURE_SYNC_CRON !== 'true') {
+    try {
+      const cron = (await import('node-cron')).default
+      const { runSafetyCultureSync } = await import('./api/_lib/safetyCultureSync.js')
+      const { resolveSafetyCultureApiKey } = await import('./api/_lib/safetyCultureApiKey.js')
+      cron.schedule('*/30 * * * *', async () => {
+        try {
+          const key = await resolveSafetyCultureApiKey()
+          if (!key || !key.startsWith('scapi_')) return
+          const enrichCap = parseInt(process.env.SAFETY_CULTURE_CRON_SYNC_ENRICH_CAP || '0', 10)
+          const result = await runSafetyCultureSync({
+            full: false,
+            inspections: true,
+            issues: true,
+            enrichCap: Number.isFinite(enrichCap) ? enrichCap : 0
+          })
+          if (result.ok) {
+            console.log('✅ Safety Culture cache sync:', {
+              inspections: result.inspections?.upserted,
+              issues: result.issues?.upserted
+            })
+          } else {
+            console.warn('⚠️ Safety Culture cache sync failed:', result.error || result.inspections?.error || result.issues?.error)
+          }
+        } catch (error) {
+          console.error('❌ Safety Culture cache sync error:', error)
+        }
+      }, { timezone: 'Africa/Johannesburg' })
+      console.log('✅ Safety Culture cache sync cron scheduled (every 30 minutes)')
+    } catch (error) {
+      console.warn('⚠️ Failed to setup Safety Culture sync cron:', error.message)
+      console.warn('   Set DISABLE_SAFETY_CULTURE_SYNC_CRON=true to disable')
+    }
+  }
 })
 
 process.on('SIGTERM', () => {

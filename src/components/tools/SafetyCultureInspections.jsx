@@ -12,11 +12,13 @@ const apiErrorFromResponse = (res, json) => {
     return json?.message ? String(json.message) : `Request failed (${res.status})`;
 };
 
+/** Dedupe list merges by SafetyCulture id, or issue `unique_id` when `id` is absent. */
 const mergeUniqueById = (existing, incoming) => {
-    const seen = new Set((existing || []).map((item) => String(item?.id || '')));
+    const keyOf = (item) => String(item?.id ?? item?.unique_id ?? '');
+    const seen = new Set((existing || []).map(keyOf).filter(Boolean));
     const next = [...(existing || [])];
     (incoming || []).forEach((item) => {
-        const key = String(item?.id || '');
+        const key = keyOf(item);
         if (!key || seen.has(key)) return;
         seen.add(key);
         next.push(item);
@@ -338,6 +340,8 @@ const SafetyCultureInspections = () => {
     const [inspectionExtraWithAnswers, setInspectionExtraWithAnswers] = useState(false);
     const [issueExtra, setIssueExtra] = useState(null);
     const [issueExtraLoading, setIssueExtraLoading] = useState(false);
+    const [cacheSyncing, setCacheSyncing] = useState(false);
+    const [cacheSyncError, setCacheSyncError] = useState(null);
 
     const getHeaders = () => {
         const token = window.storage?.getToken?.();
@@ -384,7 +388,9 @@ const SafetyCultureInspections = () => {
                 setInspections(inspData.inspections ?? []);
                 setMetadata(inspData.metadata ?? { next_page: null, remaining_records: 0 });
                 if (inspData?.metadata?.next_page) {
-                    void loadAllInspectionsFrom(inspData.metadata.next_page, true);
+                    void loadAllInspectionsFrom(inspData.metadata.next_page, true, null);
+                } else if (inspData?.metadata?.cache_offset_next != null) {
+                    void loadAllInspectionsFrom(null, true, inspData.metadata.cache_offset_next);
                 }
             } catch (e) {
                 setError(e.message || 'Failed to load Safety Culture data');
@@ -444,13 +450,27 @@ const SafetyCultureInspections = () => {
         }
     };
 
-    const loadAllInspectionsFrom = async (startNextPage = null, silent = false) => {
+    const loadAllInspectionsFrom = async (startNextPage = null, silent = false, startCacheOffset = null) => {
         if (!silent) setLoadingMore(true);
         if (silent) setAutoLoadingInspections(true);
         try {
-            let next = startNextPage || metadata?.next_page;
-            while (next) {
-                const url = `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(next)}`;
+            let next = startNextPage ?? null;
+            let cacheOff = startCacheOffset ?? null;
+            if (next == null && cacheOff == null) {
+                next = metadata?.next_page || null;
+                if (metadata?.source === 'local_cache' && metadata?.cache_offset_next != null) {
+                    cacheOff = metadata.cache_offset_next;
+                }
+            }
+            while (true) {
+                let url;
+                if (cacheOff != null) {
+                    url = `${API_BASE}/safety-culture/inspections?limit=200&cache_offset=${cacheOff}&enrich_cap=100`;
+                } else if (next) {
+                    url = `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(next)}`;
+                } else {
+                    break;
+                }
                 const res = await fetch(url, { headers: getHeaders() });
                 const json = await res.json().catch(() => ({}));
                 const data = json?.data ?? json;
@@ -458,7 +478,15 @@ const SafetyCultureInspections = () => {
                 setInspections(prev => mergeUniqueById(prev, more));
                 const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
                 setMetadata(meta);
-                next = meta?.next_page || null;
+                if (meta.source === 'local_cache' && meta.cache_offset_next != null) {
+                    cacheOff = meta.cache_offset_next;
+                    next = null;
+                } else if (meta.next_page) {
+                    next = meta.next_page;
+                    cacheOff = null;
+                } else {
+                    break;
+                }
             }
         } catch (e) {
             setError(e.message || 'Failed to load all inspections');
@@ -470,10 +498,14 @@ const SafetyCultureInspections = () => {
 
     const loadMore = async () => {
         const next = metadata?.next_page;
-        if (!next) return;
+        const cacheNext = metadata?.source === 'local_cache' ? metadata?.cache_offset_next : null;
+        if (!next && cacheNext == null) return;
         setLoadingMore(true);
         try {
-            const url = `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(next)}`;
+            const url =
+                cacheNext != null
+                    ? `${API_BASE}/safety-culture/inspections?limit=200&cache_offset=${cacheNext}&enrich_cap=100`
+                    : `${API_BASE}/safety-culture/inspections?next_page=${encodeURIComponent(next)}`;
             const res = await fetch(url, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
             const data = json?.data ?? json;
@@ -490,7 +522,11 @@ const SafetyCultureInspections = () => {
     const loadAllInspections = async () => {
         setLoadingMore(true);
         try {
-            await loadAllInspectionsFrom(metadata?.next_page, false);
+            await loadAllInspectionsFrom(
+                metadata?.next_page,
+                false,
+                metadata?.source === 'local_cache' ? metadata?.cache_offset_next : null
+            );
         } catch (e) {
             setError(e.message || 'Failed to load all inspections');
         } finally {
@@ -516,7 +552,9 @@ const SafetyCultureInspections = () => {
             setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });
             // Auto-fetch remaining issue pages so recently created issues are visible immediately.
             if (data?.metadata?.next_page) {
-                void loadAllIssuesFrom(data.metadata.next_page, true);
+                void loadAllIssuesFrom(data.metadata.next_page, true, null);
+            } else if (data?.metadata?.cache_offset_next != null) {
+                void loadAllIssuesFrom(null, true, data.metadata.cache_offset_next);
             }
         } catch (e) {
             setError(e.message || 'Failed to load issues');
@@ -525,19 +563,69 @@ const SafetyCultureInspections = () => {
         }
     };
 
-    const loadAllIssuesFrom = async (startNextPage = null, silent = false) => {
+    const runCacheSync = async (full = false) => {
+        if (!status?.connected) return;
+        setCacheSyncing(true);
+        setCacheSyncError(null);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture/sync`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ full, enrichCap: 40 })
+            });
+            const json = await res.json().catch(() => ({}));
+            const apiErr = apiErrorFromResponse(res, json);
+            if (apiErr) {
+                setCacheSyncError(apiErr);
+                return;
+            }
+            setReloadNonce((n) => n + 1);
+            if (activeTab === 'issues') {
+                void loadIssues();
+            }
+        } catch (e) {
+            setCacheSyncError(e.message || 'Sync failed');
+        } finally {
+            setCacheSyncing(false);
+        }
+    };
+
+    const loadAllIssuesFrom = async (startNextPage = null, silent = false, startCacheOffset = null) => {
         if (!silent) setIssuesLoadingMore(true);
         if (silent) setAutoLoadingIssues(true);
         try {
-            let next = startNextPage || issuesMetadata?.next_page;
-            while (next) {
-                const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
+            let next = startNextPage ?? null;
+            let cacheOff = startCacheOffset ?? null;
+            if (next == null && cacheOff == null) {
+                next = issuesMetadata?.next_page || null;
+                if (issuesMetadata?.source === 'local_cache' && issuesMetadata?.cache_offset_next != null) {
+                    cacheOff = issuesMetadata.cache_offset_next;
+                }
+            }
+            while (true) {
+                let url;
+                if (cacheOff != null) {
+                    url = `${API_BASE}/safety-culture/issues?limit=200&cache_offset=${cacheOff}&enrich_cap=100`;
+                } else if (next) {
+                    url = `${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`;
+                } else {
+                    break;
+                }
+                const res = await fetch(url, { headers: getHeaders() });
                 const json = await res.json().catch(() => ({}));
                 const data = json?.data ?? json;
                 setIssues(prev => mergeUniqueById(prev, data.issues ?? []));
                 const meta = data.metadata ?? { next_page: null, remaining_records: 0 };
                 setIssuesMetadata(meta);
-                next = meta?.next_page || null;
+                if (meta.source === 'local_cache' && meta.cache_offset_next != null) {
+                    cacheOff = meta.cache_offset_next;
+                    next = null;
+                } else if (meta.next_page) {
+                    next = meta.next_page;
+                    cacheOff = null;
+                } else {
+                    break;
+                }
             }
         } catch (e) {
             setError(e.message || 'Failed to load all issues');
@@ -549,10 +637,15 @@ const SafetyCultureInspections = () => {
 
     const loadMoreIssues = async () => {
         const next = issuesMetadata?.next_page;
-        if (!next) return;
+        const cacheNext = issuesMetadata?.source === 'local_cache' ? issuesMetadata?.cache_offset_next : null;
+        if (!next && cacheNext == null) return;
         setIssuesLoadingMore(true);
         try {
-            const res = await fetch(`${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`, { headers: getHeaders() });
+            const url =
+                cacheNext != null
+                    ? `${API_BASE}/safety-culture/issues?limit=200&cache_offset=${cacheNext}&enrich_cap=100`
+                    : `${API_BASE}/safety-culture/issues?next_page=${encodeURIComponent(next)}`;
+            const res = await fetch(url, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
             const data = json?.data ?? json;
             setIssues(prev => mergeUniqueById(prev, data.issues ?? []));
@@ -567,7 +660,11 @@ const SafetyCultureInspections = () => {
     const loadAllIssues = async () => {
         setIssuesLoadingMore(true);
         try {
-            await loadAllIssuesFrom(issuesMetadata?.next_page, false);
+            await loadAllIssuesFrom(
+                issuesMetadata?.next_page,
+                false,
+                issuesMetadata?.source === 'local_cache' ? issuesMetadata?.cache_offset_next : null
+            );
         } catch (e) {
             setError(e.message || 'Failed to load all issues');
         } finally {
@@ -591,7 +688,7 @@ const SafetyCultureInspections = () => {
         ? issues.filter((i) => {
             const title = (i.title || i.name || i.description || '').toLowerCase();
             const status = (i.status || '').toLowerCase();
-            const id = (i.id || '').toLowerCase();
+            const id = (i.id || i.unique_id || '').toLowerCase();
             return title.includes(issuesSearchLower) || status.includes(issuesSearchLower) || id.includes(issuesSearchLower);
         })
         : issues;
@@ -773,7 +870,7 @@ const SafetyCultureInspections = () => {
     };
 
     const loadIssueFromApi = async (issueId) => {
-        const id = issueId || selectedIssue?.id;
+        const id = issueId || selectedIssue?.id || selectedIssue?.unique_id;
         if (!id) return;
         setIssueExtraLoading(true);
         setIssueExtra(null);
@@ -940,6 +1037,51 @@ const SafetyCultureInspections = () => {
                         </a>
                     </div>
                 </div>
+                {status?.configured && status?.connected && status?.localCache != null && (
+                    <div
+                        className={`flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}
+                    >
+                        <span>
+                            Local cache: {status.localCache.inspections} inspections, {status.localCache.issues}{' '}
+                            issues
+                            {status.localCache.lastRunAt
+                                ? ` · Last sync ${formatDate(status.localCache.lastRunAt)}`
+                                : ''}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => void runCacheSync(false)}
+                            disabled={cacheSyncing}
+                            className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                        >
+                            {cacheSyncing ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin mr-1"></i>Syncing…
+                                </>
+                            ) : (
+                                <>Update cache</>
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void runCacheSync(true)}
+                            disabled={cacheSyncing}
+                            title="Re-fetch all feed pages (slower)"
+                            className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                        >
+                            Full re-sync
+                        </button>
+                        <span className="opacity-80">Lists read from DB when populated; add ?live=1 to API to force SafetyCulture.</span>
+                    </div>
+                )}
+                {cacheSyncError ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">{cacheSyncError}</p>
+                ) : null}
+                {status?.localCache?.lastRunError ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Last sync error: {status.localCache.lastRunError}
+                    </p>
+                ) : null}
                 <div className={`flex flex-wrap gap-x-6 gap-y-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                     <label className="inline-flex items-center gap-2 cursor-pointer">
                         <input
@@ -1070,7 +1212,7 @@ const SafetyCultureInspections = () => {
                                     ) : (
                                         paginatedIssues.map((issue) => (
                                             <tr
-                                                key={issue.id}
+                                                key={issue.id || issue.unique_id}
                                                 onClick={() => setSelectedIssue(issue)}
                                                 className={`border-t cursor-pointer ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}
                                             >
@@ -1109,8 +1251,12 @@ const SafetyCultureInspections = () => {
                                 {issuesMetadata?.not_returned_after_sort > 0 && (
                                     <> · {issuesMetadata.not_returned_after_sort} older in scan not listed (increase limit or use Load more)</>
                                 )}
-                                {issuesMetadata?.next_page && issuesMetadata?.remaining_records != null && (
+                                {(issuesMetadata?.next_page || issuesMetadata?.cache_offset_next != null) &&
+                                    issuesMetadata?.remaining_records != null && (
                                     <> · Upstream: ~{issuesMetadata.remaining_records} more in feed</>
+                                )}
+                                {issuesMetadata?.source === 'local_cache' && issuesMetadata?.cache_rows_loaded != null && (
+                                    <> · Local cache ({issuesMetadata.cache_rows_loaded} rows scanned for filters)</>
                                 )}
                             </span>
                             <div className="flex items-center gap-2">
@@ -1130,7 +1276,7 @@ const SafetyCultureInspections = () => {
                                         Next
                                     </button>
                                 </div>
-                            {issuesMetadata?.next_page && (
+                            {(issuesMetadata?.next_page || issuesMetadata?.cache_offset_next != null) && (
                                 <>
                                     <button
                                         onClick={loadMoreIssues}
@@ -1175,12 +1321,12 @@ const SafetyCultureInspections = () => {
                     >
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 z-10 bg-inherit">
                             <h4 className="font-semibold text-gray-900 dark:text-gray-100">
-                                Issue: {selectedIssue.title || selectedIssue.name || selectedIssue.description || selectedIssue.id}
+                                Issue: {selectedIssue.title || selectedIssue.name || selectedIssue.description || selectedIssue.id || selectedIssue.unique_id}
                             </h4>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => void loadIssueFromApi(selectedIssue.id)}
+                                    onClick={() => void loadIssueFromApi(selectedIssue.id || selectedIssue.unique_id)}
                                     disabled={issueExtraLoading}
                                     className="text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
                                 >
@@ -1364,8 +1510,11 @@ const SafetyCultureInspections = () => {
                         {metadata?.not_returned_after_sort > 0 && (
                             <> · {metadata.not_returned_after_sort} older in scan not listed (increase limit or use Load more)</>
                         )}
-                        {metadata?.next_page && metadata?.remaining_records != null && (
+                        {(metadata?.next_page || metadata?.cache_offset_next != null) && metadata?.remaining_records != null && (
                             <> · Upstream: ~{metadata.remaining_records} more in feed</>
+                        )}
+                        {metadata?.source === 'local_cache' && metadata?.cache_rows_loaded != null && (
+                            <> · Local cache ({metadata.cache_rows_loaded} rows scanned for filters)</>
                         )}
                     </span>
                     <div className="flex items-center gap-2">
@@ -1385,7 +1534,7 @@ const SafetyCultureInspections = () => {
                                 Next
                             </button>
                         </div>
-                    {metadata?.next_page && (
+                    {(metadata?.next_page || metadata?.cache_offset_next != null) && (
                         <>
                             <button
                                 onClick={loadMore}
