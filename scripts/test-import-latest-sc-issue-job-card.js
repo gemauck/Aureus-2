@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * One-off: import the newest SafetyCulture issue that is not yet linked to a job card.
+ * One-off: import a SafetyCulture issue as a job card.
  * Uses DATABASE_URL + SafetyCulture API key (env or System table, same as the app).
  *
  * Usage (from repo root):
  *   node scripts/test-import-latest-sc-issue-job-card.js
+ *   node scripts/test-import-latest-sc-issue-job-card.js <issue-uuid>
  *
  * Optional env:
+ *   SC_ISSUE_ID=<uuid>     — same as passing uuid as first argument
  *   SC_IMPORT_SNAPSHOT=0   — skip snapshot (not recommended)
- *   SC_ISSUES_FEED_LIMIT=100 — max feed rows to scan
+ *   SC_ISSUES_FEED_LIMIT=100 — max feed rows to scan (latest-unimported mode only)
  */
 import 'dotenv/config'
 import { prisma } from '../api/_lib/prisma.js'
@@ -19,6 +21,50 @@ import {
   normaliseFeedData
 } from '../api/_lib/safetyCultureClient.js'
 import { serializeSafetyCultureSnapshot } from '../api/_lib/safetyCultureSnapshot.js'
+
+/**
+ * Map incident/detail API payload (mixed snake_case / camelCase / nested) to feed-like row.
+ */
+function issueFieldsForJobCard(d, fallbackId) {
+  if (!d || typeof d !== 'object') d = {}
+  const site = d.site && typeof d.site === 'object' ? d.site : {}
+  const loc = d.location && typeof d.location === 'object' ? d.location : {}
+  const cat = d.category && typeof d.category === 'object' ? d.category : {}
+  const task = d.task && typeof d.task === 'object' ? d.task : {}
+  const id = d.id || d.issue_id || fallbackId
+  const taskDesc = task.description || task.DESCRIPTION
+  return {
+    id,
+    title: d.title || task.title || (taskDesc ? String(taskDesc).slice(0, 500) : undefined),
+    name: d.name,
+    description: d.description || taskDesc,
+    status: d.status,
+    priority: d.priority,
+    unique_id: d.unique_id,
+    category_label: d.category_label || cat.label || cat.name,
+    inspection_name: d.inspection_name || d.inspectionName,
+    due_at: d.due_at || d.dueAt,
+    url: d.url || d.web_url || d.link,
+    web_url: d.web_url,
+    link: d.link,
+    assignee_name: d.assignee_name || d.assigneeName,
+    assigneeName: d.assigneeName,
+    creator_user_name: d.creator_user_name || d.creatorUserName,
+    site_name: d.site_name || d.siteName || site.name,
+    site_id: d.site_id ?? d.siteId ?? site.id,
+    location_name:
+      d.location_name ||
+      d.locationName ||
+      loc.name ||
+      [loc.city, loc.region, loc.country].filter(Boolean).join(', ') ||
+      '',
+    occurred_at: d.occurred_at || d.occurredAt,
+    created_at: d.created_at || d.createdAt,
+    createdAt: d.createdAt,
+    completed_at: d.completed_at || d.completedAt,
+    completedAt: d.completedAt
+  }
+}
 
 function issueSortTs(issue) {
   const candidates = [
@@ -46,60 +92,97 @@ async function main() {
     Math.max(1, parseInt(process.env.SC_ISSUES_FEED_LIMIT || '100', 10) || 100)
   )
 
-  const existingRows = await prisma.jobCard.findMany({
-    where: { safetyCultureIssueId: { not: null } },
-    select: { safetyCultureIssueId: true }
-  })
-  const importedIds = new Set(
-    existingRows.map((r) => r.safetyCultureIssueId).filter(Boolean)
-  )
+  const specificId = String(
+    process.argv[2] || process.env.SC_ISSUE_ID || ''
+  ).trim()
 
-  let fetched = 0
-  let nextPage = null
-  const all = []
+  let issue
+  let issueId
+  let detailResult = null
+  const testLabel = specificId ? 'test import by id' : 'test script'
 
-  do {
-    const result = nextPage
-      ? await fetchIssuesNextPage(nextPage)
-      : await fetchIssues({
-          limit: Math.min(100, feedLimit - fetched)
-        })
+  if (specificId) {
+    const existing = await prisma.jobCard.findFirst({
+      where: { safetyCultureIssueId: specificId },
+      select: { id: true, jobCardNumber: true }
+    })
+    if (existing) {
+      console.log(
+        `Issue ${specificId} is already a job card: ${existing.jobCardNumber} (id=${existing.id})`
+      )
+      return
+    }
 
-    if (result.error) {
-      console.error('SafetyCulture issues feed error:', result.error)
+    detailResult = await fetchIssueDetails(specificId)
+    if (detailResult?.error) {
+      console.error('fetchIssueDetails:', detailResult.error, detailResult.details || '')
       process.exitCode = 1
       return
     }
 
-    const batch = normaliseFeedData(result)
-    all.push(...batch)
-    fetched += batch.length
-    nextPage = result.metadata?.next_page || null
-  } while (nextPage && fetched < feedLimit)
-
-  if (!all.length) {
-    console.log('No issues returned from SafetyCulture feed.')
-    return
-  }
-
-  const pending = all
-    .filter((i) => i.id && !importedIds.has(i.id))
-    .sort((a, b) => issueSortTs(b) - issueSortTs(a))
-
-  const issue = pending[0]
-  if (!issue) {
-    console.log(
-      `No unimported issues in the first ${all.length} feed row(s). All may already be job cards.`
+    issue = issueFieldsForJobCard(detailResult.data, specificId)
+    issueId = issue.id
+    if (!issueId) {
+      console.error('Could not resolve issue id from SafetyCulture API response.')
+      process.exitCode = 1
+      return
+    }
+    console.log('Importing issue by id:', issueId, issue.title || issue.description || '')
+  } else {
+    const existingRows = await prisma.jobCard.findMany({
+      where: { safetyCultureIssueId: { not: null } },
+      select: { safetyCultureIssueId: true }
+    })
+    const importedIds = new Set(
+      existingRows.map((r) => r.safetyCultureIssueId).filter(Boolean)
     )
-    return
-  }
 
-  const issueId = issue.id
-  console.log('Picked issue:', issueId, issue.title || issue.name || issue.unique_id || '')
+    let fetched = 0
+    let nextPage = null
+    const all = []
 
-  let detailResult = null
-  if (includeSnapshot) {
-    detailResult = await fetchIssueDetails(issueId)
+    do {
+      const result = nextPage
+        ? await fetchIssuesNextPage(nextPage)
+        : await fetchIssues({
+            limit: Math.min(100, feedLimit - fetched)
+          })
+
+      if (result.error) {
+        console.error('SafetyCulture issues feed error:', result.error)
+        process.exitCode = 1
+        return
+      }
+
+      const batch = normaliseFeedData(result)
+      all.push(...batch)
+      fetched += batch.length
+      nextPage = result.metadata?.next_page || null
+    } while (nextPage && fetched < feedLimit)
+
+    if (!all.length) {
+      console.log('No issues returned from SafetyCulture feed.')
+      return
+    }
+
+    const pending = all
+      .filter((i) => i.id && !importedIds.has(i.id))
+      .sort((a, b) => issueSortTs(b) - issueSortTs(a))
+
+    issue = pending[0]
+    if (!issue) {
+      console.log(
+        `No unimported issues in the first ${all.length} feed row(s). All may already be job cards.`
+      )
+      return
+    }
+
+    issueId = issue.id
+    console.log('Picked issue:', issueId, issue.title || issue.name || issue.unique_id || '')
+
+    if (includeSnapshot) {
+      detailResult = await fetchIssueDetails(issueId)
+    }
   }
 
   const snapshotJson = includeSnapshot
@@ -171,7 +254,7 @@ async function main() {
       reasonForVisit: 'Safety Culture Issue',
       diagnosis: title,
       otherComments:
-        `Imported from Safety Culture issue (test script).${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim(),
+        `Imported from Safety Culture issue (${testLabel}).${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim(),
       photos: '[]',
       status:
         statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
