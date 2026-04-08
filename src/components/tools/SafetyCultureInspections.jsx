@@ -568,10 +568,13 @@ const SafetyCultureInspections = () => {
         setCacheSyncing(true);
         setCacheSyncError(null);
         try {
+            // Incremental: moderate detail merge. Full re-sync: max cap (200) server allows per run —
+            // still only the *first* N rows get detail API merge; all rows get feed data.
+            const enrichCap = full ? 200 : 40;
             const res = await fetch(`${API_BASE}/safety-culture/sync`, {
                 method: 'POST',
                 headers: getHeaders(),
-                body: JSON.stringify({ full, enrichCap: 40 })
+                body: JSON.stringify({ full, enrichCap })
             });
             const json = await res.json().catch(() => ({}));
             const apiErr = apiErrorFromResponse(res, json);
@@ -1066,12 +1069,15 @@ const SafetyCultureInspections = () => {
                             type="button"
                             onClick={() => void runCacheSync(true)}
                             disabled={cacheSyncing}
-                            title="Re-fetch all feed pages (slower)"
+                            title="Re-fetch all inspection/issue feed pages into the database (up to server page limit). First 200 rows also merge SafetyCulture detail per run; open a row to cache its detail anytime."
                             className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
                         >
                             Full re-sync
                         </button>
-                        <span className="opacity-80">Lists read from DB when populated; add ?live=1 to API to force SafetyCulture.</span>
+                        <span className="opacity-80">
+                            Lists read from DB when populated; add ?live=1 to API to force SafetyCulture. Raise
+                            SAFETY_CULTURE_SYNC_MAX_PAGES on the server if feeds are huge.
+                        </span>
                     </div>
                 )}
                 {cacheSyncError ? (
