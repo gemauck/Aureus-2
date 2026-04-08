@@ -23,6 +23,7 @@ const SafetyCultureInspections = () => {
     const [issuesLoadingMore, setIssuesLoadingMore] = useState(false);
     const [issuesSearchQuery, setIssuesSearchQuery] = useState('');
     const [selectedIssue, setSelectedIssue] = useState(null);
+    const [selectedInspection, setSelectedInspection] = useState(null);
     const [inspectionSort, setInspectionSort] = useState({ key: 'completed', dir: 'desc' }); // default: last at top
     const [issuesSort, setIssuesSort] = useState({ key: 'created', dir: 'desc' });
     const [inspectionPage, setInspectionPage] = useState(1);
@@ -234,6 +235,14 @@ const SafetyCultureInspections = () => {
 
     const inspectionTotalPages = Math.max(1, Math.ceil(sortedInspections.length / PAGE_SIZE));
     const issuesTotalPages = Math.max(1, Math.ceil(sortedIssues.length / PAGE_SIZE));
+
+    useEffect(() => {
+        setInspectionPage((p) => Math.min(p, inspectionTotalPages));
+    }, [inspectionTotalPages]);
+
+    useEffect(() => {
+        setIssuesPage((p) => Math.min(p, issuesTotalPages));
+    }, [issuesTotalPages]);
 
     const SortableTh = ({ label, sortKey, currentSort, onSort, isDark, className = '' }) => {
         const isActive = currentSort.key === sortKey;
@@ -666,6 +675,7 @@ const SafetyCultureInspections = () => {
                         <tr className={isDark ? 'bg-gray-700/50 text-gray-300' : 'bg-gray-50 text-gray-600'}>
                             <SortableTh label="Inspection" sortKey="name" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
                             <SortableTh label="Template" sortKey="template" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
+                                        <th className={`text-left p-3 font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Owner</th>
                             <SortableTh label="Score" sortKey="score" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
                             <SortableTh label="Started" sortKey="started" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
                             <SortableTh label="Completed" sortKey="completed" currentSort={inspectionSort} onSort={setInspectionSortKey} isDark={isDark} />
@@ -675,7 +685,7 @@ const SafetyCultureInspections = () => {
                     <tbody>
                         {sortedInspections.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="p-6 text-center text-gray-500">
+                                <td colSpan={7} className="p-6 text-center text-gray-500">
                                     {inspections.length === 0 ? 'No inspections found' : 'No inspections match your search'}
                                 </td>
                             </tr>
@@ -683,13 +693,17 @@ const SafetyCultureInspections = () => {
                             paginatedInspections.map((insp) => (
                                 <tr
                                     key={insp.id}
-                                    className={`border-t ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}
+                                    onClick={() => setSelectedInspection(insp)}
+                                    className={`border-t cursor-pointer ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'}`}
                                 >
                                     <td className="p-3 font-medium text-gray-900 dark:text-gray-100">
                                         {insp.name || insp.template_name || insp.id}
                                     </td>
                                     <td className="p-3 text-gray-600 dark:text-gray-400">
                                         {insp.template_name || '-'}
+                                    </td>
+                                    <td className="p-3 text-gray-600 dark:text-gray-400">
+                                        {insp.owner_name || insp.owner?.name || insp.author_name || '-'}
                                     </td>
                                     <td className="p-3">
                                         {insp.score != null ? (
@@ -712,6 +726,7 @@ const SafetyCultureInspections = () => {
                                                 href={insp.web_report_link}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
                                                 className="text-blue-600 hover:underline"
                                             >
                                                 View
@@ -783,6 +798,64 @@ const SafetyCultureInspections = () => {
                 </div>
             )}
             </>
+            )}
+
+            {selectedInspection && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+                    onClick={() => setSelectedInspection(null)}
+                >
+                    <div
+                        className={`max-w-2xl w-full max-h-[90vh] overflow-auto rounded-lg shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 z-10 bg-inherit">
+                            <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                                Inspection: {selectedInspection.name || selectedInspection.template_name || selectedInspection.id}
+                            </h4>
+                            <div className="flex items-center gap-2">
+                                {selectedInspection.web_report_link && (
+                                    <a
+                                        href={selectedInspection.web_report_link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-blue-600 hover:underline"
+                                    >
+                                        Open report →
+                                    </a>
+                                )}
+                                <button
+                                    onClick={() => setSelectedInspection(null)}
+                                    className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-4 space-y-3 text-sm">
+                            {Object.entries(selectedInspection)
+                                .sort(([a], [b]) => {
+                                    const order = ['id', 'name', 'template_name', 'owner_name', 'score', 'max_score', 'date_started', 'date_completed', 'modified_at'];
+                                    const ai = order.indexOf(a);
+                                    const bi = order.indexOf(b);
+                                    if (ai >= 0 && bi >= 0) return ai - bi;
+                                    if (ai >= 0) return -1;
+                                    if (bi >= 0) return 1;
+                                    return a.localeCompare(b);
+                                })
+                                .map(([key, val]) => (
+                                <div key={key} className="flex gap-3">
+                                    <span className={`font-medium min-w-[140px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {key.replace(/_/g, ' ')}
+                                    </span>
+                                    <span className={`flex-1 break-words ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {renderIssueDetailValue(val)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

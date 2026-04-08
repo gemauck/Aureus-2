@@ -129,3 +129,129 @@ export async function fetchIssuesNextPage(nextPagePath) {
   const path = nextPagePath.startsWith('/') ? nextPagePath : `/${nextPagePath}`
   return safetyCultureRequest(path)
 }
+
+/**
+ * Fetch full inspection details by inspection/audit id.
+ * SafetyCulture commonly uses the /audits/{id} resource for inspection detail.
+ * @param {string} auditId
+ * @returns {Promise<{ data?: any; error?: string; details?: any }>}
+ */
+export async function fetchInspectionDetails(auditId) {
+  if (!auditId) return { error: 'Missing inspection id' }
+  const id = encodeURIComponent(String(auditId))
+  const candidates = [
+    `/audits/${id}`,
+    `/inspections/${id}`,
+    `/feed/inspections/${id}`
+  ]
+  let lastError = null
+  for (const path of candidates) {
+    const result = await safetyCultureRequest(path)
+    if (!result?.error) return result
+    lastError = { path, error: result.error, details: result.details, status: result.status }
+  }
+  return {
+    error: 'Unable to fetch inspection details',
+    details: { auditId, lastError }
+  }
+}
+
+/**
+ * Fetch full issue details by issue id with endpoint fallbacks.
+ * Different SafetyCulture APIs use either issues or incidents naming.
+ * @param {string} issueId
+ * @returns {Promise<{ data?: any; error?: string; details?: any }>}
+ */
+export async function fetchIssueDetails(issueId) {
+  if (!issueId) return { error: 'Missing issue id' }
+  const id = encodeURIComponent(String(issueId))
+  const candidates = [
+    `/issues/${id}`,
+    `/incidents/${id}`,
+    `/feed/issues/${id}`
+  ]
+  let lastError = null
+  for (const path of candidates) {
+    const result = await safetyCultureRequest(path)
+    if (!result?.error) return result
+    lastError = { path, error: result.error, details: result.details, status: result.status }
+  }
+  return {
+    error: 'Unable to fetch issue details',
+    details: { issueId, lastError }
+  }
+}
+
+/**
+ * Execute async mapper with bounded concurrency.
+ * @template T,U
+ * @param {T[]} items
+ * @param {(item: T, idx: number) => Promise<U>} mapper
+ * @param {number} concurrency
+ * @returns {Promise<U[]>}
+ */
+export async function mapWithConcurrency(items, mapper, concurrency = 5) {
+  const safeConcurrency = Math.max(1, Math.min(Number(concurrency) || 1, 20))
+  if (!Array.isArray(items) || items.length === 0) return []
+  const out = new Array(items.length)
+  let cursor = 0
+
+  async function worker() {
+    while (true) {
+      const i = cursor
+      cursor += 1
+      if (i >= items.length) return
+      out[i] = await mapper(items[i], i)
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(safeConcurrency, items.length) }, () => worker())
+  await Promise.all(workers)
+  return out
+}
+
+/**
+ * Enrich feed items with per-item detail payloads.
+ * On detail failures, preserve the original item and attach non-fatal enrichment status.
+ * @param {Array<object>} items
+ * @param {(item: object) => string | undefined | null} getItemId
+ * @param {(id: string) => Promise<{ data?: any; error?: string; details?: any }>} fetchDetails
+ * @param {{ concurrency?: number }} options
+ * @returns {Promise<Array<object>>}
+ */
+export async function enrichFeedItems(items, getItemId, fetchDetails, options = {}) {
+  const list = Array.isArray(items) ? items : []
+  const concurrency = options.concurrency ?? 5
+
+  return mapWithConcurrency(list, async (item) => {
+    const id = getItemId?.(item)
+    if (!id) {
+      return {
+        ...item,
+        _enrichment: { ok: false, skipped: true, reason: 'missing_id' }
+      }
+    }
+
+    const detailResult = await fetchDetails(id)
+    if (detailResult?.error) {
+      return {
+        ...item,
+        _enrichment: { ok: false, error: detailResult.error }
+      }
+    }
+
+    const detail = detailResult?.data ?? detailResult
+    if (!detail || typeof detail !== 'object') {
+      return {
+        ...item,
+        _enrichment: { ok: false, error: 'detail_payload_empty' }
+      }
+    }
+
+    return {
+      ...item,
+      ...detail,
+      _enrichment: { ok: true }
+    }
+  }, concurrency)
+}

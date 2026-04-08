@@ -59,6 +59,13 @@ GET /api/safety-culture/inspections?modified_after=2025-01-01T00:00:00.000Z&limi
 - `archived` – `true`, `false`, or `both`
 - `next_page` – Use `metadata.next_page` from previous response for pagination
 
+**Behavior notes:**
+
+- Each inspection item is enriched with detail fields from item-level Safety Culture endpoints where available.
+- If a detail request fails for a single inspection, the base feed item is still returned and includes `_enrichment` status.
+- Results are returned newest-to-oldest (server-side) using completion/modified/start timestamps.
+- Pagination remains Safety Culture-native via `metadata.next_page` and `metadata.remaining_records`.
+
 **Response:**
 
 ```json
@@ -90,6 +97,25 @@ GET /api/safety-culture/groups
 ```
 
 Returns the groups and organizations your Safety Culture account belongs to.
+
+### Issues feed
+
+```
+GET /api/safety-culture/issues?modified_after=2025-01-01T00:00:00.000Z&limit=50
+```
+
+**Query parameters:**
+
+- `modified_after` - ISO date; only issues modified after this date
+- `limit` - Max records per page (default 50)
+- `next_page` - Use `metadata.next_page` from previous response for pagination
+
+**Behavior notes:**
+
+- Each issue item is enriched with detail fields from item-level Safety Culture issue/incidents endpoints where available.
+- If a detail request fails for a single issue, the base feed item is still returned and includes `_enrichment` status.
+- Results are returned newest-to-oldest (server-side) using modified/updated/created timestamps.
+- Pagination remains Safety Culture-native via `metadata.next_page` and `metadata.remaining_records`.
 
 ## Import inspections as job cards
 
