@@ -1889,6 +1889,8 @@ model JobCard {
   serviceForms        ServiceFormInstance[]
   safetyCultureAuditId String?              @unique // Links to Safety Culture inspection for import deduplication
   safetyCultureIssueId String?              @unique // Links to Safety Culture issue for import deduplication
+  /// Full JSON snapshot from SafetyCulture (feed row + API detail + optional answers) for imports; can be large.
+  safetyCultureSnapshotJson String?
 
   @@index([clientId])
   @@index([ownerId])
@@ -2074,6 +2076,8 @@ model SystemSettings {
   googleCalendar        Boolean  @default(false)
   quickbooks            Boolean  @default(false)
   slack                 Boolean  @default(false)
+  /// Safety Culture (iAuditor) API token; optional when SAFETY_CULTURE_API_KEY env is unset. Admin-only to write via API.
+  safetyCultureApiKey   String?
   updatedBy             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

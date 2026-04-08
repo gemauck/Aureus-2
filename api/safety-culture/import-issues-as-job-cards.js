@@ -1,7 +1,12 @@
 /**
  * Import Safety Culture issues as ERP Job Cards
  * POST /api/safety-culture/import-issues-as-job-cards
- * Body: { limit?: number, modified_after?: string } - optional filters
+ * Body: {
+ *   limit?: number,
+ *   modified_after?: string,
+ *   modified_before?: string,
+ *   include_snapshot?: boolean (default true),
+ * }
  */
 import { authRequired } from '../_lib/authRequired.js'
 import { ok, serverError, badRequest } from '../_lib/response.js'
@@ -9,7 +14,8 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { prisma } from '../_lib/prisma.js'
-import { fetchIssues, fetchIssuesNextPage } from '../_lib/safetyCultureClient.js'
+import { fetchIssues, fetchIssuesNextPage, fetchIssueDetails, normaliseFeedData } from '../_lib/safetyCultureClient.js'
+import { serializeSafetyCultureSnapshot } from '../_lib/safetyCultureSnapshot.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -25,11 +31,12 @@ async function handler(req, res) {
 
   const limit = Math.min(Math.max(parseInt(body.limit, 10) || 100, 1), 500)
   const modifiedAfter = body.modified_after || null
+  const modifiedBefore = body.modified_before || null
+  const includeSnapshot = body.include_snapshot !== false
 
   try {
     const results = { imported: 0, skipped: 0, errors: [] }
 
-    // Get next job card number
     const lastCard = await prisma.jobCard.findFirst({
       orderBy: { createdAt: 'desc' },
       select: { jobCardNumber: true }
@@ -48,21 +55,15 @@ async function handler(req, res) {
         ? await fetchIssuesNextPage(nextPage)
         : await fetchIssues({
             limit: Math.min(50, limit - fetched),
-            modified_after: modifiedAfter || undefined
+            modified_after: modifiedAfter || undefined,
+            modified_before: modifiedBefore || undefined
           })
 
       if (result.error) {
         return serverError(res, result.error, result.details)
       }
 
-      // Safety Culture feed may return data in different structures
-      const issues = Array.isArray(result.data)
-        ? result.data
-        : Array.isArray(result.issues)
-          ? result.issues
-          : Array.isArray(result)
-            ? result
-            : []
+      const issues = normaliseFeedData(result)
       fetched += issues.length
 
       for (const issue of issues) {
@@ -79,6 +80,24 @@ async function handler(req, res) {
         }
 
         try {
+          let detailResult = null
+          if (includeSnapshot) {
+            detailResult = await fetchIssueDetails(issueId)
+          }
+
+          const snapshotJson = includeSnapshot
+            ? serializeSafetyCultureSnapshot({
+                version: 1,
+                source: 'issue',
+                id: issueId,
+                capturedAt: new Date().toISOString(),
+                feed: issue,
+                detail: detailResult?.error
+                  ? { error: detailResult.error, details: detailResult.details }
+                  : (detailResult?.data ?? detailResult ?? null)
+              })
+            : null
+
           const jobCardNumber = `JC${String(nextNum++).padStart(4, '0')}`
           const title = issue.title || issue.name || issue.description || issueId
           const issueLink = issue.url || issue.web_url || issue.link
@@ -86,23 +105,39 @@ async function handler(req, res) {
           const meta = []
           if (issue.status) meta.push(`Status: ${issue.status}`)
           if (issue.priority) meta.push(`Priority: ${issue.priority}`)
+          if (issue.unique_id) meta.push(`Unique ID: ${issue.unique_id}`)
+          if (issue.category_label) meta.push(`Category: ${issue.category_label}`)
+          if (issue.inspection_name) meta.push(`Inspection: ${issue.inspection_name}`)
+          if (issue.due_at) meta.push(`Due: ${issue.due_at}`)
+
+          const statusLow = (issue.status || '').toLowerCase()
+          const completedAt =
+            issue.completed_at || issue.completedAt
+              ? new Date(issue.completed_at || issue.completedAt)
+              : statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
+                ? new Date()
+                : null
 
           await prisma.jobCard.create({
             data: {
               jobCardNumber,
-              agentName: issue.assignee_name || issue.assigneeName || '',
+              agentName:
+                issue.assignee_name ||
+                issue.assigneeName ||
+                issue.creator_user_name ||
+                '',
               otherTechnicians: '[]',
               clientId: null,
-              clientName: '',
-              siteId: '',
-              siteName: '',
-              location: '',
-              timeOfArrival: issue.created_at || issue.createdAt
-                ? new Date(issue.created_at || issue.createdAt)
-                : null,
-              completedAt: (issue.status || '').toLowerCase() === 'closed' && (issue.due_date || issue.dueDate)
-                ? new Date(issue.due_date || issue.dueDate)
-                : null,
+              clientName: issue.site_name || '',
+              siteId: issue.site_id != null ? String(issue.site_id) : '',
+              siteName: issue.site_name || '',
+              location: issue.location_name || '',
+              timeOfArrival: issue.occurred_at
+                ? new Date(issue.occurred_at)
+                : issue.created_at || issue.createdAt
+                  ? new Date(issue.created_at || issue.createdAt)
+                  : null,
+              completedAt,
               submittedAt: (issue.created_at || issue.createdAt)
                 ? new Date(issue.created_at || issue.createdAt)
                 : new Date(),
@@ -110,8 +145,12 @@ async function handler(req, res) {
               diagnosis: title,
               otherComments: `Imported from Safety Culture issue.${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim(),
               photos: '[]',
-              status: (issue.status || '').toLowerCase() === 'closed' ? 'completed' : 'draft',
+              status:
+                statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
+                  ? 'completed'
+                  : 'draft',
               safetyCultureIssueId: issueId,
+              safetyCultureSnapshotJson: snapshotJson,
               ownerId: req.user?.sub || null
             }
           })

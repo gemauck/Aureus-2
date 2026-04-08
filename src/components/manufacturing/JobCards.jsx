@@ -1123,6 +1123,29 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   )}
 
+                  {selectedJobCard.safetyCultureSnapshotJson ? (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                        Safety Culture — imported snapshot
+                      </div>
+                      <details className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40">
+                        <summary className="cursor-pointer p-3 text-sm text-slate-200">
+                          View full JSON snapshot (feed + SafetyCulture API detail)
+                        </summary>
+                        <pre className="text-xs overflow-auto max-h-96 p-3 border-t border-slate-800 text-slate-300 whitespace-pre-wrap">
+                          {(() => {
+                            try {
+                              const o = JSON.parse(selectedJobCard.safetyCultureSnapshotJson);
+                              return JSON.stringify(o, null, 2);
+                            } catch {
+                              return selectedJobCard.safetyCultureSnapshotJson;
+                            }
+                          })()}
+                        </pre>
+                      </details>
+                    </div>
+                  ) : null}
+
                   {attachmentParts.voicesBySection.customerFeedback &&
                   attachmentParts.voicesBySection.customerFeedback.length > 0 ? (
                     <div>

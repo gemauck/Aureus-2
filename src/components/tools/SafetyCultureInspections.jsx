@@ -24,6 +24,23 @@ const mergeUniqueById = (existing, incoming) => {
     return next;
 };
 
+const SC_ADMIN_ROLES = new Set([
+    'admin',
+    'administrator',
+    'superadmin',
+    'super-admin',
+    'super_admin',
+    'super_administrator',
+    'system_admin'
+]);
+
+const isScKeyAdminUser = () => {
+    const u = window.storage?.getUser?.();
+    if (!u) return false;
+    const role = (u.role || '').toString().trim().toLowerCase();
+    return SC_ADMIN_ROLES.has(role);
+};
+
 const SafetyCultureInspections = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
     const [status, setStatus] = useState(null);
@@ -50,6 +67,17 @@ const SafetyCultureInspections = () => {
     const [issuesPage, setIssuesPage] = useState(1);
     const [autoLoadingInspections, setAutoLoadingInspections] = useState(false);
     const [autoLoadingIssues, setAutoLoadingIssues] = useState(false);
+    const [reloadNonce, setReloadNonce] = useState(0);
+    const [scApiKeyDraft, setScApiKeyDraft] = useState('');
+    const [keySaving, setKeySaving] = useState(false);
+    const [keySaveError, setKeySaveError] = useState(null);
+    const [importIncludeSnapshot, setImportIncludeSnapshot] = useState(true);
+    const [importIncludeAnswers, setImportIncludeAnswers] = useState(false);
+    const [inspectionExtra, setInspectionExtra] = useState(null);
+    const [inspectionExtraLoading, setInspectionExtraLoading] = useState(false);
+    const [inspectionExtraWithAnswers, setInspectionExtraWithAnswers] = useState(false);
+    const [issueExtra, setIssueExtra] = useState(null);
+    const [issueExtraLoading, setIssueExtraLoading] = useState(false);
 
     const getHeaders = () => {
         const token = window.storage?.getToken?.();
@@ -63,21 +91,26 @@ const SafetyCultureInspections = () => {
         const check = async () => {
             setLoading(true);
             setError(null);
+            setKeySaveError(null);
             try {
                 const res = await fetch(`${API_BASE}/safety-culture`, { headers: getHeaders() });
                 const json = await res.json().catch(() => ({}));
                 const data = json?.data ?? json;
                 setStatus(data);
                 if (!data?.configured) {
-                    setError('Safety Culture API key not configured. Add SAFETY_CULTURE_API_KEY to .env');
+                    setError(
+                        isScKeyAdminUser()
+                            ? 'No valid Safety Culture API key is active. Paste a key below (stored in the database) or set SAFETY_CULTURE_API_KEY on the server.'
+                            : 'Safety Culture is not configured. Ask an administrator to add the API key.'
+                    );
+                    setInspections([]);
                     setLoading(false);
                     return;
                 }
                 if (!data?.connected) {
                     setError('Unable to connect to Safety Culture. Check your API key.');
                 }
-                // Fetch latest 100 inspections
-                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=200`, {
+                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=200&enrich_cap=100`, {
                     headers: getHeaders()
                 });
                 const inspJson = await inspRes.json().catch(() => ({}));
@@ -90,7 +123,6 @@ const SafetyCultureInspections = () => {
                 const inspData = inspJson?.data ?? inspJson;
                 setInspections(inspData.inspections ?? []);
                 setMetadata(inspData.metadata ?? { next_page: null, remaining_records: 0 });
-                // Auto-fetch remaining pages so newest feed items appear without manual "Load all".
                 if (inspData?.metadata?.next_page) {
                     void loadAllInspectionsFrom(inspData.metadata.next_page, true);
                 }
@@ -101,7 +133,56 @@ const SafetyCultureInspections = () => {
             }
         };
         check();
-    }, []);
+    }, [reloadNonce]);
+
+    const saveScApiKey = async () => {
+        if (!isScKeyAdminUser()) return;
+        setKeySaving(true);
+        setKeySaveError(null);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture`, {
+                method: 'PATCH',
+                headers: getHeaders(),
+                body: JSON.stringify({ safetyCultureApiKey: scApiKeyDraft.trim() })
+            });
+            const json = await res.json().catch(() => ({}));
+            const apiErr = apiErrorFromResponse(res, json);
+            if (apiErr) {
+                setKeySaveError(apiErr);
+                return;
+            }
+            setScApiKeyDraft('');
+            setReloadNonce((n) => n + 1);
+        } catch (e) {
+            setKeySaveError(e.message || 'Failed to save API key');
+        } finally {
+            setKeySaving(false);
+        }
+    };
+
+    const clearStoredScApiKey = async () => {
+        if (!isScKeyAdminUser()) return;
+        setKeySaving(true);
+        setKeySaveError(null);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture`, {
+                method: 'PATCH',
+                headers: getHeaders(),
+                body: JSON.stringify({ safetyCultureApiKey: '' })
+            });
+            const json = await res.json().catch(() => ({}));
+            const apiErr = apiErrorFromResponse(res, json);
+            if (apiErr) {
+                setKeySaveError(apiErr);
+                return;
+            }
+            setReloadNonce((n) => n + 1);
+        } catch (e) {
+            setKeySaveError(e.message || 'Failed to clear API key');
+        } finally {
+            setKeySaving(false);
+        }
+    };
 
     const loadAllInspectionsFrom = async (startNextPage = null, silent = false) => {
         if (!silent) setLoadingMore(true);
@@ -161,7 +242,7 @@ const SafetyCultureInspections = () => {
         setIssuesLoading(true);
         setError(null);
         try {
-            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=200`, { headers: getHeaders() });
+            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=200&enrich_cap=100`, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
             const apiErr = apiErrorFromResponse(res, json);
             if (apiErr) {
@@ -314,6 +395,15 @@ const SafetyCultureInspections = () => {
         setIssuesPage((p) => Math.min(p, issuesTotalPages));
     }, [issuesTotalPages]);
 
+    useEffect(() => {
+        setInspectionExtra(null);
+        setInspectionExtraWithAnswers(false);
+    }, [selectedInspection?.id]);
+
+    useEffect(() => {
+        setIssueExtra(null);
+    }, [selectedIssue?.id]);
+
     const SortableTh = ({ label, sortKey, currentSort, onSort, isDark, className = '' }) => {
         const isActive = currentSort.key === sortKey;
         return (
@@ -340,7 +430,11 @@ const SafetyCultureInspections = () => {
             const res = await fetch(`${API_BASE}/safety-culture/import-job-cards`, {
                 method: 'POST',
                 headers: getHeaders(),
-                body: JSON.stringify({ limit: 200 })
+                body: JSON.stringify({
+                    limit: 200,
+                    include_snapshot: importIncludeSnapshot,
+                    include_answers: importIncludeSnapshot && importIncludeAnswers
+                })
             });
             const json = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -368,7 +462,10 @@ const SafetyCultureInspections = () => {
             const res = await fetch(`${API_BASE}/safety-culture/import-issues-as-job-cards`, {
                 method: 'POST',
                 headers: getHeaders(),
-                body: JSON.stringify({ limit: 200 })
+                body: JSON.stringify({
+                    limit: 200,
+                    include_snapshot: importIncludeSnapshot
+                })
             });
             const json = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -386,6 +483,56 @@ const SafetyCultureInspections = () => {
             setImportResult({ error: String(e.message || 'Import failed') });
         } finally {
             setImportingIssues(false);
+        }
+    };
+
+    const loadInspectionFromApi = async (withAnswers, auditId) => {
+        const id = auditId || selectedInspection?.id;
+        if (!id) return;
+        setInspectionExtraLoading(true);
+        setInspectionExtra(null);
+        setInspectionExtraWithAnswers(!!withAnswers);
+        try {
+            const q = withAnswers ? '&include_answers=1' : '';
+            const res = await fetch(
+                `${API_BASE}/safety-culture/inspections/detail?id=${encodeURIComponent(id)}${q}`,
+                { headers: getHeaders() }
+            );
+            const json = await res.json().catch(() => ({}));
+            const apiErr = apiErrorFromResponse(res, json);
+            if (apiErr) {
+                setInspectionExtra({ error: apiErr });
+                return;
+            }
+            setInspectionExtra(json?.data ?? json);
+        } catch (e) {
+            setInspectionExtra({ error: e.message || 'Request failed' });
+        } finally {
+            setInspectionExtraLoading(false);
+        }
+    };
+
+    const loadIssueFromApi = async (issueId) => {
+        const id = issueId || selectedIssue?.id;
+        if (!id) return;
+        setIssueExtraLoading(true);
+        setIssueExtra(null);
+        try {
+            const res = await fetch(
+                `${API_BASE}/safety-culture/issues/detail?id=${encodeURIComponent(id)}`,
+                { headers: getHeaders() }
+            );
+            const json = await res.json().catch(() => ({}));
+            const apiErr = apiErrorFromResponse(res, json);
+            if (apiErr) {
+                setIssueExtra({ error: apiErr });
+                return;
+            }
+            setIssueExtra(json?.data ?? json);
+        } catch (e) {
+            setIssueExtra({ error: e.message || 'Request failed' });
+        } finally {
+            setIssueExtraLoading(false);
         }
     };
 
@@ -422,14 +569,60 @@ const SafetyCultureInspections = () => {
     }
 
     if (error && !status?.configured) {
+        const showAdminKeyForm = isScKeyAdminUser();
         return (
             <div className={`rounded-lg border p-6 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <div className="flex items-center gap-3 text-amber-600">
-                    <i className="fas fa-exclamation-triangle text-xl"></i>
-                    <div>
-                        <p className="font-medium">Safety Culture not configured</p>
-                        <p className="text-sm opacity-90">{error}</p>
-                        <p className="text-xs mt-2 opacity-75">See docs/SAFETY-CULTURE-INTEGRATION.md for setup.</p>
+                <div className="flex items-start gap-3 text-amber-600">
+                    <i className="fas fa-exclamation-triangle text-xl mt-0.5"></i>
+                    <div className="flex-1 min-w-0 space-y-3">
+                        <p className="font-medium text-gray-900 dark:text-gray-100">Safety Culture not configured</p>
+                        <p className="text-sm opacity-90 text-gray-700 dark:text-gray-300">{error}</p>
+                        {status?.storedKeyInDatabase && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                                A key is saved in the database but is missing or invalid. Replace it below or clear it.
+                            </p>
+                        )}
+                        {showAdminKeyForm ? (
+                            <div className={`rounded-md border p-4 space-y-3 ${isDark ? 'border-gray-600 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                    Safety Culture API key (starts with scapi_)
+                                </label>
+                                <input
+                                    type="password"
+                                    autoComplete="off"
+                                    value={scApiKeyDraft}
+                                    onChange={(e) => setScApiKeyDraft(e.target.value)}
+                                    placeholder="scapi_…"
+                                    className={`w-full max-w-xl rounded border px-3 py-2 text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'}`}
+                                />
+                                {keySaveError && (
+                                    <p className="text-sm text-red-600 dark:text-red-400">{keySaveError}</p>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => void saveScApiKey()}
+                                        disabled={keySaving || !scApiKeyDraft.trim()}
+                                        className="px-3 py-1.5 rounded-lg bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {keySaving ? 'Saving…' : 'Save key'}
+                                    </button>
+                                    {status?.storedKeyInDatabase ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => void clearStoredScApiKey()}
+                                            disabled={keySaving}
+                                            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+                                        >
+                                            Clear stored key
+                                        </button>
+                                    ) : null}
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Keys are stored as plain text in the database; restrict who can use admin accounts. If SAFETY_CULTURE_API_KEY is set on the server, it takes priority over the database value.
+                                </p>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
             </div>
@@ -438,59 +631,83 @@ const SafetyCultureInspections = () => {
 
     return (
         <div className={`rounded-lg border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                    <i className="fas fa-clipboard-check text-green-600"></i>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Safety Culture Inspections</h3>
-                    {status?.connected && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
-                            Connected
-                        </span>
-                    )}
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                        <i className="fas fa-clipboard-check text-green-600"></i>
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Safety Culture Inspections</h3>
+                        {status?.connected && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                                Connected
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                            onClick={runImport}
+                            disabled={importing || importingIssues || !status?.connected}
+                            className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {importing ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin"></i>
+                                    Importing...
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fas fa-download"></i>
+                                    Import Inspections as Job Cards
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={runImportIssues}
+                            disabled={importing || importingIssues || !status?.connected}
+                            className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {importingIssues ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin"></i>
+                                    Importing...
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fas fa-exclamation-circle"></i>
+                                    Import Issues as Job Cards
+                                </>
+                            )}
+                        </button>
+                        <a
+                            href="https://app.safetyculture.com/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:underline"
+                        >
+                            Open in Safety Culture →
+                        </a>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                    <button
-                        onClick={runImport}
-                        disabled={importing || importingIssues || !status?.connected}
-                        className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {importing ? (
-                            <>
-                                <i className="fas fa-spinner fa-spin"></i>
-                                Importing...
-                            </>
-                        ) : (
-                            <>
-                                <i className="fas fa-download"></i>
-                                Import Inspections as Job Cards
-                            </>
-                        )}
-                    </button>
-                    <button
-                        onClick={runImportIssues}
-                        disabled={importing || importingIssues || !status?.connected}
-                        className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {importingIssues ? (
-                            <>
-                                <i className="fas fa-spinner fa-spin"></i>
-                                Importing...
-                            </>
-                        ) : (
-                            <>
-                                <i className="fas fa-exclamation-circle"></i>
-                                Import Issues as Job Cards
-                            </>
-                        )}
-                    </button>
-                    <a
-                        href="https://app.safetyculture.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:underline"
-                    >
-                        Open in Safety Culture →
-                    </a>
+                <div className={`flex flex-wrap gap-x-6 gap-y-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={importIncludeSnapshot}
+                            onChange={(e) => {
+                                setImportIncludeSnapshot(e.target.checked);
+                                if (!e.target.checked) setImportIncludeAnswers(false);
+                            }}
+                        />
+                        Full snapshot on job card (feed + API detail)
+                    </label>
+                    <label className={`inline-flex items-center gap-2 cursor-pointer ${!importIncludeSnapshot ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <input
+                            type="checkbox"
+                            checked={importIncludeAnswers}
+                            disabled={!importIncludeSnapshot}
+                            onChange={(e) => setImportIncludeAnswers(e.target.checked)}
+                        />
+                        Include inspection answers (slow / large)
+                    </label>
                 </div>
             </div>
 
@@ -700,7 +917,7 @@ const SafetyCultureInspections = () => {
                     onClick={() => setSelectedIssue(null)}
                 >
                     <div
-                        className={`max-w-2xl w-full max-h-[90vh] overflow-auto rounded-lg shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+                        className={`max-w-4xl w-full max-h-[90vh] overflow-auto rounded-lg shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 z-10 bg-inherit">
@@ -708,6 +925,14 @@ const SafetyCultureInspections = () => {
                                 Issue: {selectedIssue.title || selectedIssue.name || selectedIssue.description || selectedIssue.id}
                             </h4>
                             <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void loadIssueFromApi(selectedIssue.id)}
+                                    disabled={issueExtraLoading}
+                                    className="text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                                >
+                                    {issueExtraLoading ? 'Loading…' : 'Load full API record'}
+                                </button>
                                 {(selectedIssue.url || selectedIssue.web_url || selectedIssue.link) && (
                                     <a
                                         href={selectedIssue.url || selectedIssue.web_url || selectedIssue.link}
@@ -726,6 +951,19 @@ const SafetyCultureInspections = () => {
                                 </button>
                             </div>
                         </div>
+                        {issueExtra?.error && (
+                            <div className="mx-4 mt-3 text-sm text-red-600 dark:text-red-400">{issueExtra.error}</div>
+                        )}
+                        {issueExtra && !issueExtra.error && (
+                            <details className="mx-4 mt-3 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
+                                <summary className="cursor-pointer text-sm font-medium text-gray-800 dark:text-gray-200">
+                                    SafetyCulture API detail (JSON)
+                                </summary>
+                                <pre className={`mt-2 text-xs overflow-auto max-h-64 p-2 rounded ${isDark ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
+                                    {JSON.stringify(issueExtra.detail ?? issueExtra, null, 2)}
+                                </pre>
+                            </details>
+                        )}
                         <div className="p-4 space-y-3 text-sm">
                             {Object.entries(selectedIssue)
                                 .sort(([a], [b]) => {
@@ -900,14 +1138,31 @@ const SafetyCultureInspections = () => {
                     onClick={() => setSelectedInspection(null)}
                 >
                     <div
-                        className={`max-w-2xl w-full max-h-[90vh] overflow-auto rounded-lg shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+                        className={`max-w-4xl w-full max-h-[90vh] overflow-auto rounded-lg shadow-xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 z-10 bg-inherit">
+                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 z-10 bg-inherit flex-wrap gap-2">
                             <h4 className="font-semibold text-gray-900 dark:text-gray-100">
                                 Inspection: {selectedInspection.name || selectedInspection.template_name || selectedInspection.id}
                             </h4>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                    type="button"
+                                    onClick={() => void loadInspectionFromApi(false, selectedInspection.id)}
+                                    disabled={inspectionExtraLoading}
+                                    className="text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                                >
+                                    {inspectionExtraLoading && !inspectionExtraWithAnswers ? 'Loading…' : 'API detail'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void loadInspectionFromApi(true, selectedInspection.id)}
+                                    disabled={inspectionExtraLoading}
+                                    className="text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                                    title="Fetches all checklist answers; may be slow"
+                                >
+                                    {inspectionExtraLoading && inspectionExtraWithAnswers ? 'Loading…' : 'API + answers'}
+                                </button>
                                 {selectedInspection.web_report_link && (
                                     <a
                                         href={selectedInspection.web_report_link}
@@ -926,6 +1181,24 @@ const SafetyCultureInspections = () => {
                                 </button>
                             </div>
                         </div>
+                        {inspectionExtra?.error && (
+                            <div className="mx-4 mt-3 text-sm text-red-600 dark:text-red-400">{inspectionExtra.error}</div>
+                        )}
+                        {inspectionExtra && !inspectionExtra.error && (
+                            <details className="mx-4 mt-3 border border-gray-200 dark:border-gray-600 rounded-lg p-3" open>
+                                <summary className="cursor-pointer text-sm font-medium text-gray-800 dark:text-gray-200">
+                                    SafetyCulture API {inspectionExtraWithAnswers ? '(detail + answers)' : '(detail)'}
+                                    {Array.isArray(inspectionExtra.answers) && (
+                                        <span className="ml-2 font-normal opacity-75">
+                                            — {inspectionExtra.answers.length} answer row(s)
+                                        </span>
+                                    )}
+                                </summary>
+                                <pre className={`mt-2 text-xs overflow-auto max-h-96 p-2 rounded ${isDark ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
+                                    {JSON.stringify(inspectionExtra, null, 2)}
+                                </pre>
+                            </details>
+                        )}
                         <div className="p-4 space-y-3 text-sm">
                             {Object.entries(selectedInspection)
                                 .sort(([a], [b]) => {

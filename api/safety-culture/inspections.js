@@ -1,7 +1,8 @@
 /**
  * Safety Culture inspections feed
  * GET /api/safety-culture/inspections
- * Query: modified_after (ISO date), limit, completed, archived, next_page
+ * Query: modified_after, modified_before, limit, completed, archived, next_page,
+ *   template (repeatable), web_report_link (private|public), enrich_cap (0–150)
  */
 import { authRequired } from '../_lib/authRequired.js'
 import { ok, badRequest, serverError } from '../_lib/response.js'
@@ -18,7 +19,8 @@ import {
 /** Keep first HTTP response under typical proxy timeouts (nginx ~60s). */
 const FEED_SCAN_MAX_PAGES = 12
 const FEED_SCAN_MAX_ROWS = 2500
-const LIST_ENRICH_CAP = 50
+const DEFAULT_ENRICH_CAP = 50
+const MAX_ENRICH_CAP = 150
 
 function toTs(value) {
   if (!value) return 0
@@ -47,11 +49,21 @@ async function handler(req, res) {
 
   const url = new URL(req.url || '', 'http://localhost')
   const modifiedAfter = url.searchParams.get('modified_after')
+  const modifiedBefore = url.searchParams.get('modified_before')
   const limit = url.searchParams.get('limit')
   const requestedLimit = Math.max(1, Math.min(parseInt(limit || '50', 10) || 50, 500))
   const completed = url.searchParams.get('completed') || 'both'
   const archived = url.searchParams.get('archived') || 'both'
   const nextPage = url.searchParams.get('next_page')
+  const webReportLinkRaw = url.searchParams.get('web_report_link')
+  const webReportLink =
+    webReportLinkRaw === 'public' || webReportLinkRaw === 'private' ? webReportLinkRaw : undefined
+  const templates = url.searchParams.getAll('template').filter(Boolean)
+  const templateParam = templates.length ? templates : undefined
+  const enrichCapRaw = parseInt(url.searchParams.get('enrich_cap') || '', 10)
+  const enrichCap = Number.isFinite(enrichCapRaw)
+    ? Math.max(0, Math.min(enrichCapRaw, MAX_ENRICH_CAP))
+    : DEFAULT_ENRICH_CAP
 
   let result
   if (nextPage) {
@@ -59,9 +71,12 @@ async function handler(req, res) {
   } else {
     result = await fetchInspections({
       modified_after: modifiedAfter || undefined,
+      modified_before: modifiedBefore || undefined,
       limit: requestedLimit,
       completed: completed === 'true' ? true : completed === 'false' ? false : 'both',
-      archived: archived === 'true' ? true : archived === 'false' ? false : 'both'
+      archived: archived === 'true' ? true : archived === 'false' ? false : 'both',
+      web_report_link: webReportLink,
+      template: templateParam
     })
   }
 
@@ -98,7 +113,7 @@ async function handler(req, res) {
     latestItems,
     (item) => item?.id,
     fetchInspectionDetails,
-    { cap: LIST_ENRICH_CAP, concurrency: 8 }
+    { cap: enrichCap, concurrency: 8 }
   )
 
   const sorted = [...enriched].sort((a, b) => latestInspectionTs(b) - latestInspectionTs(a))

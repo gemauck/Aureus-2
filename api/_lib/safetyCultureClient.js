@@ -4,6 +4,8 @@
  * Base URL: https://api.safetyculture.io
  */
 
+import { resolveSafetyCultureApiKey } from './safetyCultureApiKey.js'
+
 const BASE_URL = 'https://api.safetyculture.io'
 
 /** Feed APIs typically cap page size (docs use 20–100); larger values can error. */
@@ -35,7 +37,8 @@ export function normaliseFeedData(result) {
  * @returns {Promise<{ data?: any; metadata?: any; error?: string }>}
  */
 export async function safetyCultureRequest(path, options = {}) {
-  const apiKey = (process.env.SAFETY_CULTURE_API_KEY || '').trim()
+  const override = options.apiKey != null ? String(options.apiKey).trim() : ''
+  const apiKey = override || (await resolveSafetyCultureApiKey())
   if (!apiKey || !apiKey.startsWith('scapi_')) {
     return { error: 'SAFETY_CULTURE_API_KEY not configured or invalid (must start with scapi_)' }
   }
@@ -100,9 +103,25 @@ export async function fetchInspections(params = {}) {
   if (params.modified_after) {
     q.set('modified_after', params.modified_after)
   }
+  if (params.modified_before) {
+    q.set('modified_before', params.modified_before)
+  }
   if (params.limit != null) q.set('limit', String(clampFeedPageLimit(params.limit)))
-  if (params.completed) q.set('completed', params.completed) // e.g. true, false, both
-  if (params.archived) q.set('archived', params.archived)   // e.g. true, false, both
+  if (params.completed != null && params.completed !== '') {
+    q.set('completed', String(params.completed))
+  }
+  if (params.archived != null && params.archived !== '') {
+    q.set('archived', String(params.archived))
+  }
+  if (params.web_report_link === 'public' || params.web_report_link === 'private') {
+    q.set('web_report_link', params.web_report_link)
+  }
+  if (params.template != null) {
+    const templates = Array.isArray(params.template) ? params.template : [params.template]
+    for (const t of templates) {
+      if (t != null && String(t).trim()) q.append('template', String(t).trim())
+    }
+  }
 
   const path = `/feed/inspections${q.toString() ? `?${q.toString()}` : ''}`
   return safetyCultureRequest(path)
@@ -135,10 +154,102 @@ export async function fetchGroups() {
 export async function fetchIssues(params = {}) {
   const q = new URLSearchParams()
   if (params.modified_after) q.set('modified_after', params.modified_after)
+  if (params.modified_before) q.set('modified_before', params.modified_before)
   if (params.limit != null) q.set('limit', String(clampFeedPageLimit(params.limit)))
 
   const path = `/feed/issues${q.toString() ? `?${q.toString()}` : ''}`
   return safetyCultureRequest(path)
+}
+
+/**
+ * Parse SafetyCulture streaming / NDJSON answer payloads (newline-delimited JSON objects).
+ * @param {string} text
+ * @returns {object[]}
+ */
+export function parseSafetyCultureNdjsonLines(text) {
+  if (!text || typeof text !== 'string') return []
+  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean)
+  const out = []
+  for (const line of lines) {
+    try {
+      out.push(JSON.parse(line))
+    } catch {
+      // skip non-JSON lines
+    }
+  }
+  return out
+}
+
+/**
+ * List inspection answers (question responses). May return many rows; uses extended timeout.
+ * @param {string} inspectionId - SafetyCulture inspection / audit id
+ * @returns {Promise<{ answers: object[]; raw?: string; error?: string; details?: any }>}
+ */
+export async function fetchInspectionAnswers(inspectionId) {
+  if (!inspectionId) return { error: 'Missing inspection id', answers: [] }
+  const id = encodeURIComponent(String(inspectionId))
+  const path = `/inspections/v1/answers/${id}`
+  const apiKey = await resolveSafetyCultureApiKey()
+  if (!apiKey || !apiKey.startsWith('scapi_')) {
+    return { error: 'SAFETY_CULTURE_API_KEY not configured or invalid (must start with scapi_)', answers: [] }
+  }
+  const url = `${BASE_URL}${path}`
+  const timeoutMs = 120000
+  let timeoutId
+  try {
+    const controller = new AbortController()
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json, application/x-ndjson, */*'
+      },
+      signal: controller.signal
+    })
+    if (timeoutId) clearTimeout(timeoutId)
+    const text = await res.text()
+    if (!res.ok) {
+      let body
+      try {
+        body = text ? JSON.parse(text) : null
+      } catch {
+        body = { message: text }
+      }
+      return {
+        error: body?.message || body?.error || `Safety Culture API error: ${res.status}`,
+        answers: [],
+        details: body
+      }
+    }
+    const trimmed = text.trim()
+    if (trimmed.startsWith('[')) {
+      try {
+        const arr = JSON.parse(trimmed)
+        return { answers: Array.isArray(arr) ? arr : [] }
+      } catch {
+        /* fall through */
+      }
+    }
+    const parsed = parseSafetyCultureNdjsonLines(text)
+    if (parsed.length > 0) return { answers: parsed }
+    if (trimmed) {
+      try {
+        const one = JSON.parse(trimmed)
+        return { answers: [one] }
+      } catch {
+        return { answers: [], raw: trimmed.slice(0, 2000) }
+      }
+    }
+    return { answers: [] }
+  } catch (err) {
+    if (timeoutId) clearTimeout(timeoutId)
+    const isTimeout = err.name === 'AbortError'
+    return {
+      error: isTimeout ? 'Safety Culture answers request timed out' : (err.message || 'Failed to fetch answers'),
+      answers: []
+    }
+  }
 }
 
 /**

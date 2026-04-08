@@ -1,7 +1,7 @@
 /**
  * Safety Culture issues feed
  * GET /api/safety-culture/issues
- * Query: modified_after (ISO date), limit, next_page
+ * Query: modified_after, modified_before, limit, next_page, enrich_cap (0–150)
  */
 import { authRequired } from '../_lib/authRequired.js'
 import { ok, serverError } from '../_lib/response.js'
@@ -18,7 +18,8 @@ import {
 /** Keep first HTTP response under typical proxy timeouts (nginx ~60s). */
 const FEED_SCAN_MAX_PAGES = 12
 const FEED_SCAN_MAX_ROWS = 2500
-const LIST_ENRICH_CAP = 50
+const DEFAULT_ENRICH_CAP = 50
+const MAX_ENRICH_CAP = 150
 
 function toTs(value) {
   if (!value) return 0
@@ -44,9 +45,14 @@ async function handler(req, res) {
 
   const url = new URL(req.url || '', 'http://localhost')
   const modifiedAfter = url.searchParams.get('modified_after')
+  const modifiedBefore = url.searchParams.get('modified_before')
   const limit = url.searchParams.get('limit')
   const requestedLimit = Math.max(1, Math.min(parseInt(limit || '50', 10) || 50, 500))
   const nextPage = url.searchParams.get('next_page')
+  const enrichCapRaw = parseInt(url.searchParams.get('enrich_cap') || '', 10)
+  const enrichCap = Number.isFinite(enrichCapRaw)
+    ? Math.max(0, Math.min(enrichCapRaw, MAX_ENRICH_CAP))
+    : DEFAULT_ENRICH_CAP
 
   let result
   if (nextPage) {
@@ -54,6 +60,7 @@ async function handler(req, res) {
   } else {
     result = await fetchIssues({
       modified_after: modifiedAfter || undefined,
+      modified_before: modifiedBefore || undefined,
       limit: requestedLimit
     })
   }
@@ -91,7 +98,7 @@ async function handler(req, res) {
     latestItems,
     (item) => item?.id,
     fetchIssueDetails,
-    { cap: LIST_ENRICH_CAP, concurrency: 8 }
+    { cap: enrichCap, concurrency: 8 }
   )
   const sorted = [...enriched].sort((a, b) => latestIssueTs(b) - latestIssueTs(a))
 
