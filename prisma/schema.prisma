@@ -1529,6 +1529,8 @@ model InventoryItem {
   locationId              String?
   manufacturingPartNumber String         @default("")
   boxNumber               String         @default("")
+  /// True when created from a stock-count row without SKU; admin should complete catalog details.
+  needsCatalogReview      Boolean        @default(false)
   boms                    BOM[]          @relation("BOMFinishedProduct")
   stockLocation           StockLocation? @relation(fields: [locationId], references: [id])
 
@@ -1537,6 +1539,7 @@ model InventoryItem {
   @@index([status])
   @@index([ownerId])
   @@index([locationId])
+  @@index([needsCatalogReview])
 }
 
 model BOMGroup {

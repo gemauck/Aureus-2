@@ -15,7 +15,7 @@ const useAuth = window.useAuth || (() => {
 // Helper to safely get React for error fallbacks
 const getReactForError = () => window.React || ReactGlobal;
 
-const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'activity'];
+const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'activity'];
 const normalizeManufacturingTab = (value = 'dashboard') => {
   const normalized = (value || 'dashboard').toLowerCase();
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
@@ -267,6 +267,10 @@ try {
   const [newPurchaseOrderItem, setNewPurchaseOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
   const [poNewItemSubOpen, setPoNewItemSubOpen] = useState(false);
   const [poNewItemSaving, setPoNewItemSaving] = useState(false);
+  const [poNewItemShowCategoryInput, setPoNewItemShowCategoryInput] = useState(false);
+  const [poNewItemNewCategoryName, setPoNewItemNewCategoryName] = useState('');
+  const [poNewItemShowBoxInput, setPoNewItemShowBoxInput] = useState(false);
+  const [poNewItemNewBoxNumber, setPoNewItemNewBoxNumber] = useState('');
   const [poNewItemForm, setPoNewItemForm] = useState({
     name: '',
     category: '',
@@ -278,7 +282,11 @@ try {
     supplier: '',
     boxNumber: '',
     manufacturingPartNumber: '',
-    legacyPartNumber: ''
+    legacyPartNumber: '',
+    supplierPartNumbers: '[]',
+    thumbnail: '',
+    inProductionQuantity: '',
+    completedQuantity: ''
   });
   const [poReceiptOpen, setPoReceiptOpen] = useState(false);
   const [poReceiptLines, setPoReceiptLines] = useState([]);
@@ -305,6 +313,8 @@ try {
     setPoAmendmentHistoryLoading(false);
   }, []);
   const [filterCategory, setFilterCategory] = useState('all');
+  /** When true, inventory list shows only items flagged from stock-count import. */
+  const [showCatalogReviewOnly, setShowCatalogReviewOnly] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
@@ -2067,8 +2077,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }).length;
     const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
     const categories = [...new Set(inventory.map(item => item.category))].length;
+    const needsCatalogReviewCount = inventory.filter((item) => item.needsCatalogReview).length;
     
-    return { totalValue, lowStockItems, totalItems, categories };
+    return { totalValue, lowStockItems, totalItems, categories, needsCatalogReviewCount };
   };
 
 
@@ -2450,6 +2461,50 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </div>
         </div>
 
+        {invStats.needsCatalogReviewCount > 0 && (
+          <div
+            className={`${isDark ? 'bg-gray-900 border-orange-800' : 'bg-orange-50 border-orange-200'} rounded-xl border p-4 shadow-sm`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-orange-100' : 'text-orange-900'}`}>
+                  <i className="fas fa-clipboard-check text-orange-600"></i>
+                  Complete catalog details
+                </h3>
+                <p className={`text-xs mt-1 ${isDark ? 'text-orange-200/80' : 'text-orange-800'}`}>
+                  {invStats.needsCatalogReviewCount} item(s) were created from a stock count without a SKU. Add supplier and part data in Inventory.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCatalogReviewOnly(true);
+                  changeTab('inventory');
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-lg border whitespace-nowrap ${
+                  isDark
+                    ? 'border-orange-700 text-orange-100 hover:bg-orange-900/30'
+                    : 'border-orange-300 text-orange-900 hover:bg-orange-100'
+                }`}
+              >
+                Review in inventory
+              </button>
+            </div>
+            <ul className={`mt-3 space-y-1 text-xs max-h-28 overflow-y-auto ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              {inventory
+                .filter((row) => row.needsCatalogReview)
+                .slice(0, 8)
+                .map((row) => (
+                  <li key={row.sku || row.id} className="truncate">
+                    <span className="font-medium">{row.sku}</span>
+                    {': '}
+                    {row.name}
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+
         {/* Recent Activity & Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Low Stock Alerts */}
@@ -2756,9 +2811,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesType = !columnFilters.type || (item.type || '').toString().toLowerCase().includes(columnFilters.type.toLowerCase());
       const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
       const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
-      
+      const matchesCatalogReview = !showCatalogReviewOnly || item.needsCatalogReview;
+
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart && 
-             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesBoxNumber && matchesType && matchesStatus && matchesLocation;
+             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesBoxNumber && matchesType && matchesStatus && matchesLocation && matchesCatalogReview;
     });
 
     // Sorting logic
@@ -2837,6 +2893,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     return (
       <div className="erp-module-root space-y-4 min-w-0">
+        {showCatalogReviewOnly && (
+          <div
+            className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 rounded-xl border ${
+              isDark ? 'bg-amber-900/20 border-amber-800 text-amber-100' : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}
+          >
+            <span className="text-sm">
+              Showing only items that need catalog completion (from stock count). Edit details to clear the flag.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowCatalogReviewOnly(false)}
+              className={`text-sm font-medium px-3 py-1.5 rounded-lg border ${
+                isDark ? 'border-amber-700 hover:bg-amber-900/40' : 'border-amber-300 hover:bg-amber-100'
+              }`}
+            >
+              Show all inventory
+            </button>
+          </div>
+        )}
         {/* Controls */}
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
@@ -5275,6 +5351,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       alert('Please select a receiving location first.');
       return;
     }
+    const poSupplier = suppliers.find((s) => s.id === formData.supplierId);
+    const supplierName = poSupplier?.name || '';
+    const lineSupplierPart = (newPurchaseOrderItem.supplierPartNumber || '').trim();
+    const supplierPartNumbers =
+      supplierName && lineSupplierPart
+        ? JSON.stringify([{ supplier: supplierName, partNumber: lineSupplierPart }])
+        : supplierName
+          ? JSON.stringify([{ supplier: supplierName, partNumber: '' }])
+          : '[]';
+    setPoNewItemShowCategoryInput(false);
+    setPoNewItemNewCategoryName('');
+    setPoNewItemShowBoxInput(false);
+    setPoNewItemNewBoxNumber('');
     setPoNewItemForm({
       name: (newPurchaseOrderItem.name || '').trim(),
       category: categories[0] || '',
@@ -5283,12 +5372,44 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       reorderPoint: '',
       reorderQty: '',
       unitCost: newPurchaseOrderItem.unitPrice > 0 ? String(newPurchaseOrderItem.unitPrice) : '',
-      supplier: '',
+      supplier: supplierName,
       boxNumber: '',
       manufacturingPartNumber: '',
-      legacyPartNumber: ''
+      legacyPartNumber: '',
+      supplierPartNumbers,
+      thumbnail: '',
+      inProductionQuantity: '',
+      completedQuantity: ''
     });
     setPoNewItemSubOpen(true);
+  };
+
+  const handlePoNewItemAddCategory = () => {
+    const trimmedName = (poNewItemNewCategoryName || '').trim().toLowerCase().replace(/\s+/g, '_');
+    if (trimmedName && !categories.includes(trimmedName)) {
+      const updatedCategories = [...categories, trimmedName];
+      setCategories(updatedCategories);
+      safeSetItem('inventory_categories', JSON.stringify(updatedCategories));
+      setPoNewItemForm((f) => ({ ...f, category: trimmedName }));
+      setPoNewItemNewCategoryName('');
+      setPoNewItemShowCategoryInput(false);
+    } else if (categories.includes(trimmedName)) {
+      alert('Category already exists!');
+    }
+  };
+
+  const handlePoNewItemAddBoxNumber = () => {
+    const trimmed = (poNewItemNewBoxNumber || '').trim();
+    if (trimmed && !boxNumbers.includes(trimmed)) {
+      const updated = [...boxNumbers, trimmed].sort((a, b) => a.localeCompare(b));
+      setBoxNumbers(updated);
+      safeSetItem('inventory_box_numbers', JSON.stringify(updated));
+      setPoNewItemForm((f) => ({ ...f, boxNumber: trimmed }));
+      setPoNewItemNewBoxNumber('');
+      setPoNewItemShowBoxInput(false);
+    } else if (boxNumbers.includes(trimmed)) {
+      alert('Box number already exists!');
+    }
   };
 
   const handleSavePoNewInventoryItem = async () => {
@@ -5334,7 +5455,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         unitCost: poNewItemForm.unitCost === '' ? 0 : parseFloat(poNewItemForm.unitCost) || 0,
         supplier: poNewItemForm.supplier || '',
         locationId: formData.toLocationId,
-        lastRestocked: new Date().toISOString().split('T')[0]
+        lastRestocked: new Date().toISOString().split('T')[0],
+        thumbnail: poNewItemForm.thumbnail || '',
+        supplierPartNumbers: poNewItemForm.supplierPartNumbers || '[]',
+        inProductionQuantity:
+          poNewItemForm.inProductionQuantity === '' ? 0 : parseFloat(poNewItemForm.inProductionQuantity) || 0,
+        completedQuantity:
+          poNewItemForm.completedQuantity === '' ? 0 : parseFloat(poNewItemForm.completedQuantity) || 0
       };
       if (poNewItemForm.boxNumber) createData.boxNumber = poNewItemForm.boxNumber;
       if (poNewItemForm.manufacturingPartNumber) createData.manufacturingPartNumber = poNewItemForm.manufacturingPartNumber;
@@ -10354,7 +10481,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         </div>
         {poNewItemSubOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
-            <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200">
               <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 className="text-md font-semibold text-gray-900">New inventory item</h3>
                 <button type="button" onClick={() => setPoNewItemSubOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -10362,7 +10489,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </button>
               </div>
               <div className="p-4 space-y-3 text-sm">
-                <p className="text-xs text-gray-500">Creates a catalog record (SKU auto-generated) with zero stock. Order qty and unit price from the PO row above are applied to this PO line.</p>
+                <p className="text-xs text-gray-500">
+                  Create a new local item. If this item is already in your Parts Database, add it from the PO line instead of creating it here. SKU is auto-generated; starting stock is zero. Order qty and unit price from the PO row above apply to this PO line.
+                </p>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Item name *</label>
                   <input
@@ -10370,45 +10499,350 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     value={poNewItemForm.name}
                     onChange={(e) => setPoNewItemForm({ ...poNewItemForm, name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    placeholder="e.g., GPS Module GT-U7"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="col-span-2 space-y-2">
+                  <label className="block text-xs font-medium text-gray-700">Supplier part no.</label>
+                  {(() => {
+                    try {
+                      const supplierParts =
+                        typeof poNewItemForm.supplierPartNumbers === 'string'
+                          ? JSON.parse(poNewItemForm.supplierPartNumbers || '[]')
+                          : poNewItemForm.supplierPartNumbers || [];
+                      return (
+                        <div className="space-y-2">
+                          {supplierParts.map((sp, idx) => (
+                            <div key={idx} className="flex gap-2 flex-wrap sm:flex-nowrap">
+                              <select
+                                value={sp.supplier || ''}
+                                onChange={(e) => {
+                                  const updated = [...supplierParts];
+                                  updated[idx] = { ...updated[idx], supplier: e.target.value };
+                                  setPoNewItemForm({
+                                    ...poNewItemForm,
+                                    supplierPartNumbers: JSON.stringify(updated)
+                                  });
+                                }}
+                                className="flex-1 min-w-[8rem] px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                              >
+                                <option value="">Select supplier…</option>
+                                {suppliers.filter((s) => s.status === 'active').map((supplier) => (
+                                  <option key={supplier.id} value={supplier.name}>
+                                    {supplier.name}
+                                    {supplier.code ? ` (${supplier.code})` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                value={sp.partNumber || ''}
+                                onChange={(e) => {
+                                  const updated = [...supplierParts];
+                                  updated[idx] = { ...updated[idx], partNumber: e.target.value };
+                                  setPoNewItemForm({
+                                    ...poNewItemForm,
+                                    supplierPartNumbers: JSON.stringify(updated)
+                                  });
+                                }}
+                                className="flex-1 min-w-[8rem] px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                                placeholder="Part number"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = supplierParts.filter((_, i) => i !== idx);
+                                  setPoNewItemForm({
+                                    ...poNewItemForm,
+                                    supplierPartNumbers: JSON.stringify(updated)
+                                  });
+                                }}
+                                className="px-2 py-2 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg"
+                                title="Remove"
+                              >
+                                <i className="fas fa-times"></i>
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              let current = [];
+                              try {
+                                current =
+                                  typeof poNewItemForm.supplierPartNumbers === 'string'
+                                    ? JSON.parse(poNewItemForm.supplierPartNumbers || '[]')
+                                    : poNewItemForm.supplierPartNumbers || [];
+                              } catch {
+                                current = [];
+                              }
+                              const updated = [...current, { supplier: '', partNumber: '' }];
+                              setPoNewItemForm({
+                                ...poNewItemForm,
+                                supplierPartNumbers: JSON.stringify(updated)
+                              });
+                            }}
+                            className="w-full px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                          >
+                            <i className="fas fa-plus mr-1"></i>
+                            Add supplier part number
+                          </button>
+                        </div>
+                      );
+                    } catch {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPoNewItemForm({
+                              ...poNewItemForm,
+                              supplierPartNumbers: JSON.stringify([{ supplier: '', partNumber: '' }])
+                            })
+                          }
+                          className="w-full px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-lg border border-gray-300"
+                        >
+                          Add supplier part number
+                        </button>
+                      );
+                    }
+                  })()}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Manufacturing part number</label>
+                  <input
+                    type="text"
+                    value={poNewItemForm.manufacturingPartNumber}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, manufacturingPartNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    placeholder="e.g., MFG-PART-123"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Abcotronics part number (legacy)</label>
+                  <textarea
+                    rows={2}
+                    value={poNewItemForm.legacyPartNumber}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, legacyPartNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    placeholder="e.g., OLD-PART-123"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Image / thumbnail</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setPoNewItemForm((prev) => ({ ...prev, thumbnail: reader.result }));
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                    className="w-full text-xs"
+                  />
+                  <input
+                    type="url"
+                    placeholder="Or paste image URL (https://…)"
+                    value={poNewItemForm.thumbnail || ''}
+                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, thumbnail: e.target.value })}
+                    className="mt-2 w-full px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                  />
+                  {poNewItemForm.thumbnail &&
+                    (/^data:image\//.test(poNewItemForm.thumbnail) || /^https?:\/\//i.test(poNewItemForm.thumbnail)) && (
+                    <div className="mt-2">
+                      <img src={poNewItemForm.thumbnail} alt="" className="w-16 h-16 object-cover rounded border" />
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
-                    <select
-                      value={poNewItemForm.category}
-                      onChange={(e) => setPoNewItemForm({ ...poNewItemForm, category: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    >
-                      <option value="">Select…</option>
-                      {categories.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        value={poNewItemForm.category}
+                        onChange={(e) => setPoNewItemForm({ ...poNewItemForm, category: e.target.value })}
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-xs"
+                      >
+                        {categories.length === 0 ? (
+                          <option value="">No categories yet — use + to add</option>
+                        ) : (
+                          <>
+                            <option value="">Select a category…</option>
+                            {poNewItemForm.category && !categories.includes(poNewItemForm.category) && (
+                              <option value={poNewItemForm.category}>
+                                {poNewItemForm.category.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}{' '}
+                                (existing)
+                              </option>
+                            )}
+                            {categories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                              </option>
+                            ))}
+                          </>
+                        )}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setPoNewItemShowCategoryInput(!poNewItemShowCategoryInput)}
+                        className="flex-shrink-0 px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        title="Add category"
+                      >
+                        <i className="fas fa-plus"></i>
+                      </button>
+                    </div>
+                    {poNewItemShowCategoryInput && (
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        <input
+                          type="text"
+                          value={poNewItemNewCategoryName}
+                          onChange={(e) => setPoNewItemNewCategoryName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handlePoNewItemAddCategory()}
+                          className="flex-1 min-w-[10rem] px-3 py-1.5 text-xs border border-gray-300 rounded-lg"
+                          placeholder="New category name…"
+                        />
+                        <button
+                          type="button"
+                          onClick={handlePoNewItemAddCategory}
+                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPoNewItemShowCategoryInput(false);
+                            setPoNewItemNewCategoryName('');
+                          }}
+                          className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Box number</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={poNewItemForm.boxNumber || ''}
+                        onChange={(e) => setPoNewItemForm({ ...poNewItemForm, boxNumber: e.target.value })}
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-xs"
+                      >
+                        {boxNumbers.length === 0 ? (
+                          <option value="">No box numbers yet — use + to add</option>
+                        ) : (
+                          <>
+                            <option value="">Select a box number…</option>
+                            {poNewItemForm.boxNumber && !boxNumbers.includes(poNewItemForm.boxNumber) && (
+                              <option value={poNewItemForm.boxNumber}>{poNewItemForm.boxNumber} (existing)</option>
+                            )}
+                            {boxNumbers.map((box) => (
+                              <option key={box} value={box}>
+                                {box}
+                              </option>
+                            ))}
+                          </>
+                        )}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setPoNewItemShowBoxInput(!poNewItemShowBoxInput)}
+                        className="flex-shrink-0 px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        title="Add box number"
+                      >
+                        <i className="fas fa-plus"></i>
+                      </button>
+                    </div>
+                    {poNewItemShowBoxInput && (
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        <input
+                          type="text"
+                          value={poNewItemNewBoxNumber}
+                          onChange={(e) => setPoNewItemNewBoxNumber(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handlePoNewItemAddBoxNumber()}
+                          className="flex-1 min-w-[10rem] px-3 py-1.5 text-xs border border-gray-300 rounded-lg"
+                          placeholder="New box number…"
+                        />
+                        <button
+                          type="button"
+                          onClick={handlePoNewItemAddBoxNumber}
+                          className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPoNewItemShowBoxInput(false);
+                            setPoNewItemNewBoxNumber('');
+                          }}
+                          className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Type *</label>
                     <select
                       value={poNewItemForm.type}
                       onChange={(e) => setPoNewItemForm({ ...poNewItemForm, type: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs"
                     >
-                      <option value="component">component</option>
-                      <option value="raw_material">raw_material</option>
-                      <option value="finished_good">finished_good</option>
-                      <option value="work_in_progress">work_in_progress</option>
+                      <option value="component">Component</option>
+                      <option value="final_product">Final product</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Unit *</label>
+                    <select
+                      value={poNewItemForm.unit || 'pcs'}
+                      onChange={(e) => setPoNewItemForm({ ...poNewItemForm, unit: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs"
+                    >
+                      <option value="pcs">Pieces (pcs)</option>
+                      <option value="units">Units</option>
+                      <option value="kg">Kilograms (kg)</option>
+                      <option value="m">Meters (m)</option>
+                      <option value="l">Liters (l)</option>
+                      <option value="box">Box</option>
+                      <option value="set">Set</option>
                     </select>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Unit *</label>
-                  <input
-                    type="text"
-                    value={poNewItemForm.unit}
-                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, unit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
-                </div>
+                {poNewItemForm.type === 'final_product' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">In-production units</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={poNewItemForm.inProductionQuantity}
+                        onChange={(e) => setPoNewItemForm({ ...poNewItemForm, inProductionQuantity: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Completed units</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={poNewItemForm.completedQuantity}
+                        onChange={(e) => setPoNewItemForm({ ...poNewItemForm, completedQuantity: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Reorder point</label>
@@ -10430,7 +10864,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Default unit cost</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Default unit cost (R)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -10441,39 +10875,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Supplier</label>
-                  <input
-                    type="text"
-                    value={poNewItemForm.supplier}
+                  <select
+                    value={poNewItemForm.supplier || ''}
                     onChange={(e) => setPoNewItemForm({ ...poNewItemForm, supplier: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Box #</label>
-                  <input
-                    type="text"
-                    value={poNewItemForm.boxNumber}
-                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, boxNumber: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Mfg part #</label>
-                  <input
-                    type="text"
-                    value={poNewItemForm.manufacturingPartNumber}
-                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, manufacturingPartNumber: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Legacy part #</label>
-                  <input
-                    type="text"
-                    value={poNewItemForm.legacyPartNumber}
-                    onChange={(e) => setPoNewItemForm({ ...poNewItemForm, legacyPartNumber: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select supplier…</option>
+                    {suppliers.filter((s) => s.status === 'active').map((supplier) => (
+                      <option key={supplier.id} value={supplier.name}>
+                        {supplier.name}
+                        {supplier.code ? ` (${supplier.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
@@ -12068,7 +12482,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
                 { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
                 { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' },
-                ...(isAdmin ? [{ id: 'activity', label: 'Activity', icon: 'fa-history' }] : [])
+                ...(isAdmin
+                  ? [
+                      { id: 'stock-count', label: 'Stock count', icon: 'fa-clipboard-check' },
+                      { id: 'activity', label: 'Activity', icon: 'fa-history' }
+                    ]
+                  : [])
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -12115,6 +12534,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 onInventoryUpdate={(updatedInventory) => setInventory(updatedInventory)}
               />
             )}
+            {activeTab === 'stock-count' &&
+              isAdmin &&
+              (window.StockCountView
+                ? createElement(window.StockCountView, {
+                    isDark,
+                    onApplied: () => {
+                      void reloadInventoryForLocation({ forceRefresh: true });
+                      void handleRefreshMovements();
+                    }
+                  })
+                : (
+                    <div className="p-4 text-gray-500">Loading stock count…</div>
+                  ))}
             {activeTab === 'activity' && <ManufacturingActivityView />}
           </div>
         </>

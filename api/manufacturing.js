@@ -7,6 +7,8 @@ import { withLogging } from './_lib/logger.js'
 import { isAdminRole } from './_lib/authRoles.js'
 import { isSuperAdminUser } from './_lib/adminRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
+import { parseJsonBody } from './_lib/body.js'
+import XLSX from 'xlsx'
 
 const INVENTORY_TEMPLATE_FIELDS = {
   sku: true,
@@ -23,6 +25,7 @@ const INVENTORY_TEMPLATE_FIELDS = {
   manufacturingPartNumber: true,
   legacyPartNumber: true,
   boxNumber: true,
+  needsCatalogReview: true,
   ownerId: true
 }
 
@@ -103,6 +106,227 @@ async function resolveAdjustmentLocationIdTx(tx, { fromLocationId, toLocationId,
 
   const anyLoc = await tx.stockLocation.findFirst({ orderBy: { code: 'asc' } })
   return anyLoc?.id || null
+}
+
+function normalizeStockCountName(val) {
+  return String(val || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function parseStockCountDecimal(val) {
+  if (val == null || val === '') return null
+  if (typeof val === 'number' && !Number.isNaN(val)) return val
+  let s = String(val).trim().replace(/\s/g, '')
+  if (!s) return null
+  if (!/\.\d/.test(s) && /,\d+$/.test(s)) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else {
+    s = s.replace(/,/g, '')
+  }
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : null
+}
+
+function sanitizeExcelSheetName(name, maxLen = 31) {
+  const bad = /[:\\/?*\[\]]/g
+  let s = String(name || 'Sheet').replace(bad, '-').trim()
+  if (!s) s = 'Sheet'
+  return s.length > maxLen ? s.slice(0, maxLen) : s
+}
+
+async function allocateStockCountSkuTx(tx) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`.toUpperCase()
+    const sku = `SC-${suffix}`.slice(0, 80)
+    const exists = await tx.inventoryItem.findFirst({ where: { sku }, select: { id: true } })
+    if (!exists) return sku
+  }
+  throw new Error('Could not allocate a unique stock-count SKU')
+}
+
+async function nextMovementSeqStartTx(tx) {
+  const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+  if (!lastMovement?.movementId?.startsWith('MOV')) return 1
+  const n = parseInt(lastMovement.movementId.replace('MOV', ''), 10)
+  return Number.isFinite(n) ? n + 1 : 1
+}
+
+/**
+ * Apply one adjustment at a location: StockMovement row, LocationInventory delta, InventoryItem aggregate.
+ * Mirrors POST stock-movements adjustment branch for use by stock-count import.
+ */
+async function applyStockCountAdjustmentTx(tx, params) {
+  const {
+    req,
+    movementSeqRef,
+    sku,
+    itemName,
+    quantityDelta,
+    locationId,
+    reference,
+    notes,
+    unitCost = 0,
+    reorderPoint = 0,
+    unit = 'pcs',
+    category = 'components',
+    itemType = 'raw_material',
+    needsCatalogReview = false,
+    importDate = null
+  } = params
+
+  if (!locationId) throw new Error('locationId required')
+  if (!sku || !String(sku).trim()) throw new Error('sku required')
+  if (quantityDelta === 0) return { movement: null, item: null }
+
+  const movementId = `MOV${String(movementSeqRef.n++).padStart(4, '0')}`
+  const qty = quantityDelta
+  const movDate = importDate || new Date()
+
+  async function upsertLocationInventoryAdj(locId, skuStr, nameStr, quantityD, uc, rp) {
+    let li = await tx.locationInventory.findUnique({
+      where: { locationId_sku: { locationId: locId, sku: skuStr } }
+    })
+    if (!li) {
+      li = await tx.locationInventory.create({
+        data: {
+          locationId: locId,
+          sku: skuStr,
+          itemName: nameStr,
+          quantity: 0,
+          unitCost: uc || 0,
+          reorderPoint: rp || 0,
+          status: 'out_of_stock'
+        }
+      })
+    }
+    const newQty = (li.quantity || 0) + quantityD
+    const st = getStatusFromQuantity(newQty, li.reorderPoint || rp || 0)
+    return tx.locationInventory.update({
+      where: { id: li.id },
+      data: {
+        quantity: newQty,
+        unitCost: uc !== undefined ? uc : li.unitCost,
+        reorderPoint: rp !== undefined ? rp : li.reorderPoint,
+        status: st,
+        itemName: nameStr || li.itemName,
+        lastRestocked: quantityD > 0 ? movDate : li.lastRestocked
+      }
+    })
+  }
+
+  const movement = await tx.stockMovement.create({
+    data: {
+      movementId,
+      date: movDate,
+      type: 'adjustment',
+      itemName: String(itemName || '').trim(),
+      sku: String(sku).trim(),
+      quantity: qty,
+      fromLocation: locationId,
+      toLocation: '',
+      reference: String(reference || '').trim().slice(0, 500),
+      performedBy: (req.user?.name || 'System').trim(),
+      notes: String(notes || '').trim().slice(0, 2000),
+      ownerId: null
+    }
+  })
+
+  let item = await findCanonicalInventoryItemBySkuTx(tx, sku)
+  let newQuantity = item?.quantity || 0
+
+  if (!item) {
+    if (qty < 0) {
+      throw new Error(`Cannot adjust non-existent item ${sku} with negative quantity`)
+    }
+    const uc = parseFloat(unitCost) || 0
+    const rp = parseFloat(reorderPoint) || 0
+    const totalValue = qty * uc
+    const createData = {
+      sku: String(sku).trim(),
+      name: String(itemName || sku).trim(),
+      thumbnail: '',
+      category,
+      type: itemType,
+      quantity: qty,
+      unit: unit || 'pcs',
+      reorderPoint: rp,
+      reorderQty: 0,
+      unitCost: uc,
+      totalValue,
+      supplier: '',
+      status: qty > rp ? 'in_stock' : qty > 0 ? 'low_stock' : 'out_of_stock',
+      lastRestocked: movDate,
+      ownerId: null,
+      needsCatalogReview: Boolean(needsCatalogReview),
+      locationId
+    }
+    try {
+      item = await tx.inventoryItem.create({
+        data: {
+          ...createData,
+          supplierPartNumbers: '[]',
+          manufacturingPartNumber: '',
+          legacyPartNumber: ''
+        }
+      })
+    } catch (createError) {
+      if (
+        createError.message &&
+        (createError.message.includes('supplierPartNumbers') ||
+          createError.message.includes('manufacturingPartNumber') ||
+          createError.message.includes('legacyPartNumber') ||
+          createError.message.includes('needsCatalogReview'))
+      ) {
+        const { needsCatalogReview: _n, ...fallback } = createData
+        try {
+          item = await tx.inventoryItem.create({
+            data: {
+              ...fallback,
+              supplierPartNumbers: '[]',
+              manufacturingPartNumber: '',
+              legacyPartNumber: ''
+            }
+          })
+        } catch {
+          item = await tx.inventoryItem.create({ data: fallback })
+        }
+      } else {
+        throw createError
+      }
+    }
+  } else {
+    newQuantity = (item.quantity || 0) + qty
+    const totalValue = newQuantity * (item.unitCost || 0)
+    const rp = item.reorderPoint || 0
+    const status = newQuantity > rp ? 'in_stock' : newQuantity > 0 ? 'low_stock' : 'out_of_stock'
+    item = await tx.inventoryItem.update({
+      where: { id: item.id },
+      data: { quantity: newQuantity, totalValue, status }
+    })
+  }
+
+  await upsertLocationInventoryAdj(locationId, String(sku).trim(), String(itemName || sku).trim(), qty, parseFloat(unitCost) || undefined, parseFloat(reorderPoint) || undefined)
+
+  const totalAtLocations = await tx.locationInventory.aggregate({
+    _sum: { quantity: true },
+    where: { sku: String(sku).trim() }
+  })
+  const aggQty = totalAtLocations._sum.quantity || 0
+
+  if (item) {
+    item = await tx.inventoryItem.update({
+      where: { id: item.id },
+      data: {
+        quantity: aggQty,
+        totalValue: aggQty * (item.unitCost || 0),
+        status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : aggQty > 0 ? 'low_stock' : 'out_of_stock'
+      }
+    })
+  }
+
+  return { movement, item }
 }
 
 const buildInventoryClone = (baseItem, location, overrides = {}) => ({
@@ -1080,6 +1304,395 @@ async function handler(req, res) {
     }
   }
 
+  // STOCK COUNT (admin): Excel export / import
+  if (resourceType === 'stock-count') {
+    if (!isAdminRole(req.user?.role)) {
+      return forbidden(res, 'Only administrators can use stock count export/import.')
+    }
+
+    if (req.method === 'GET' && id === 'export') {
+      try {
+        const locations = await prisma.stockLocation.findMany({
+          where: { status: 'active' },
+          orderBy: [{ code: 'asc' }, { name: 'asc' }]
+        })
+        const workbook = XLSX.utils.book_new()
+        const headers = [
+          'LocationId',
+          'LocationCode',
+          'LocationName',
+          'SKU',
+          'ItemName',
+          'SystemQty',
+          'Unit',
+          'UnitCost',
+          'ReorderPoint',
+          'Status',
+          'LocationInventoryId',
+          'CountedQty'
+        ]
+
+        for (const loc of locations) {
+          const rows = await prisma.locationInventory.findMany({
+            where: { locationId: loc.id },
+            orderBy: { itemName: 'asc' }
+          })
+          const skuList = [...new Set(rows.map((r) => r.sku).filter(Boolean))]
+          const templates =
+            skuList.length > 0
+              ? await prisma.inventoryItem.findMany({
+                  where: { sku: { in: skuList } },
+                  orderBy: { updatedAt: 'desc' }
+                })
+              : []
+          const templateBySku = new Map()
+          for (const t of templates) {
+            if (!templateBySku.has(t.sku)) templateBySku.set(t.sku, t)
+          }
+
+          const aoa = [headers]
+          for (const rec of rows) {
+            const t = templateBySku.get(rec.sku) || {}
+            const qty = rec.quantity ?? 0
+            const rp = rec.reorderPoint ?? t.reorderPoint ?? 0
+            const uc = rec.unitCost ?? t.unitCost ?? 0
+            const st = rec.status || getStatusFromQuantity(qty, rp)
+            aoa.push([
+              loc.id,
+              loc.code,
+              loc.name,
+              rec.sku,
+              t.name || rec.itemName || rec.sku,
+              qty,
+              t.unit || 'pcs',
+              uc,
+              rp,
+              st,
+              rec.id,
+              ''
+            ])
+          }
+
+          const sheet = XLSX.utils.aoa_to_sheet(aoa)
+          const sheetName = sanitizeExcelSheetName(`${loc.code}-${loc.name}`)
+          XLSX.utils.book_append_sheet(workbook, sheet, sheetName)
+        }
+
+        const buf = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+        const fname = `stock-count-template-${new Date().toISOString().slice(0, 10)}.xlsx`
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
+        return res.status(200).send(Buffer.from(buf))
+      } catch (error) {
+        console.error('❌ Stock count export failed:', error)
+        return serverError(res, 'Failed to export stock count template', error.message)
+      }
+    }
+
+    if (req.method === 'POST' && id === 'import') {
+      const MAX_BYTES = 50 * 1024 * 1024
+      try {
+        const body = await parseJsonBody(req)
+        const dryRun = body.dryRun === true
+        const forceCreateDuplicate = body.forceCreateDuplicate === true
+        const file = body.file
+        if (!file?.dataUrl || typeof file.dataUrl !== 'string' || !file.dataUrl.startsWith('data:')) {
+          return badRequest(res, 'file.dataUrl (data URL) is required')
+        }
+        const match = file.dataUrl.match(/^data:(.*?);base64,(.*)$/)
+        if (!match) {
+          return badRequest(res, 'Invalid file dataUrl format')
+        }
+        const base64 = match[2]
+        const buffer = Buffer.from(base64, 'base64')
+        if (buffer.length > MAX_BYTES) {
+          return badRequest(res, 'File too large (max 50MB)')
+        }
+
+        const workbook = XLSX.read(buffer, { type: 'buffer' })
+        const normHeader = (h) => String(h ?? '').trim().toLowerCase().replace(/\s+/g, '')
+
+        const headerAliases = {
+          locationid: 'locationId',
+          locationcode: 'locationCode',
+          locationname: 'locationName',
+          sku: 'sku',
+          itemname: 'itemName',
+          partname: 'itemName',
+          systemqty: 'systemQty',
+          quantity: 'systemQty',
+          unit: 'unit',
+          unitcost: 'unitCost',
+          reorderpoint: 'reorderPoint',
+          status: 'status',
+          locationinventoryid: 'locationInventoryId',
+          countedqty: 'countedQty',
+          qtycounted: 'countedQty'
+        }
+
+        function mapHeaderRow(row) {
+          const col = {}
+          row.forEach((cell, i) => {
+            const raw = normHeader(cell)
+            const key = headerAliases[raw] || raw
+            if (key) col[key] = i
+          })
+          return col
+        }
+
+        const locations = await prisma.stockLocation.findMany({
+          where: { status: 'active' },
+          select: { id: true, code: true, name: true }
+        })
+        const validLocIds = new Set(locations.map((l) => l.id))
+
+        const allItems = await prisma.inventoryItem.findMany({
+          select: { sku: true, name: true },
+          orderBy: { updatedAt: 'desc' }
+        })
+        const nameToSkus = new Map()
+        for (const it of allItems) {
+          const k = normalizeStockCountName(it.name)
+          if (!k) continue
+          if (!nameToSkus.has(k)) nameToSkus.set(k, [])
+          nameToSkus.get(k).push({ sku: it.sku, name: it.name })
+        }
+
+        const parsedRows = []
+        const errors = []
+
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName]
+          const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+          if (!aoa.length) continue
+          const col = mapHeaderRow(aoa[0])
+          if (col.locationId === undefined) {
+            errors.push({ sheet: sheetName, error: 'Missing LocationId column' })
+            continue
+          }
+
+          for (let r = 1; r < aoa.length; r++) {
+            const line = aoa[r]
+            if (!line || !line.length) continue
+            const locationId = String(line[col.locationId] ?? '').trim()
+            if (!locationId) continue
+            const countedRaw = col.countedQty !== undefined ? line[col.countedQty] : ''
+            const counted = parseStockCountDecimal(countedRaw)
+            if (countedRaw === '' || countedRaw === null || counted === null || counted === undefined) {
+              continue
+            }
+
+            let sku = col.sku !== undefined ? String(line[col.sku] ?? '').trim() : ''
+            const itemName =
+              col.itemName !== undefined ? String(line[col.itemName] ?? '').trim() : ''
+
+            if (!sku && !itemName) {
+              errors.push({ sheet: sheetName, row: r + 1, error: 'ItemName required when SKU is empty' })
+              continue
+            }
+
+            const systemQtyFile =
+              col.systemQty !== undefined ? parseStockCountDecimal(line[col.systemQty]) : null
+
+            const unit = col.unit !== undefined ? String(line[col.unit] ?? '').trim() || 'pcs' : 'pcs'
+            const unitCost =
+              col.unitCost !== undefined ? parseStockCountDecimal(line[col.unitCost]) : null
+            const reorderPointVal =
+              col.reorderPoint !== undefined ? parseStockCountDecimal(line[col.reorderPoint]) : null
+
+            if (!validLocIds.has(locationId)) {
+              errors.push({ sheet: sheetName, row: r + 1, error: `Unknown LocationId ${locationId}` })
+              continue
+            }
+
+            const isNewLine = !sku
+            parsedRows.push({
+              sheet: sheetName,
+              rowNum: r + 1,
+              locationId,
+              sku: sku || null,
+              itemName: itemName || sku,
+              countedQty: counted,
+              systemQtyFile: systemQtyFile ?? null,
+              unit,
+              unitCost: unitCost ?? 0,
+              reorderPoint: reorderPointVal ?? 0,
+              isNewLine
+            })
+          }
+        }
+
+        const duplicateCandidates = []
+        const fileInternalDuplicates = []
+        const newLineKeys = new Map()
+
+        for (const pr of parsedRows) {
+          if (!pr.isNewLine) continue
+          const nk = `${pr.locationId}|${normalizeStockCountName(pr.itemName)}`
+          if (newLineKeys.has(nk)) {
+            fileInternalDuplicates.push({
+              locationId: pr.locationId,
+              itemName: pr.itemName,
+              rows: [newLineKeys.get(nk), pr.rowNum]
+            })
+          } else {
+            newLineKeys.set(nk, pr.rowNum)
+          }
+
+          const nameKey = normalizeStockCountName(pr.itemName)
+          const matches = nameKey ? nameToSkus.get(nameKey) : null
+          if (matches && matches.length) {
+            duplicateCandidates.push({
+              type: 'existing_name',
+              locationId: pr.locationId,
+              itemName: pr.itemName,
+              existing: matches
+            })
+          }
+        }
+
+        if (dryRun) {
+          const preview = []
+          for (const pr of parsedRows) {
+            if (pr.isNewLine) {
+              preview.push({
+                ...pr,
+                proposedSku: '(allocated on apply)',
+                delta: pr.countedQty
+              })
+            } else {
+              const li = await prisma.locationInventory.findUnique({
+                where: { locationId_sku: { locationId: pr.locationId, sku: pr.sku } }
+              })
+              const current = li?.quantity ?? 0
+              const delta = pr.countedQty - current
+              preview.push({
+                ...pr,
+                currentQty: current,
+                delta,
+                staleFile:
+                  pr.systemQtyFile !== null && Math.abs(pr.systemQtyFile - current) > 0.0001
+              })
+            }
+          }
+          const dryPayload = {
+            dryRun: true,
+            blocked: false,
+            duplicateCandidates,
+            fileInternalDuplicates,
+            errors,
+            preview,
+            movementsWouldCreate: preview.filter((p) => Math.abs(p.delta || 0) > 0.0001).length
+          }
+          // Dry run performs no writes; use raw JSON (not ok()) so lint:audit does not require a persistence audit entry.
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ data: dryPayload }))
+          return
+        }
+
+        if (!forceCreateDuplicate && duplicateCandidates.length) {
+          return badRequest(
+            res,
+            'Possible duplicate catalog names. Run dry run to review duplicateCandidates, or pass forceCreateDuplicate: true.'
+          )
+        }
+
+        if (fileInternalDuplicates.length && !forceCreateDuplicate) {
+          return badRequest(
+            res,
+            'Duplicate new lines in file (same location + name). Fix the sheet or pass forceCreateDuplicate: true.'
+          )
+        }
+
+        const importRef = `Stock count import ${new Date().toISOString().slice(0, 10)}`
+        const batchId = `sc-${Date.now()}`
+
+        const result = await prisma.$transaction(async (tx) => {
+          const movementSeqRef = { n: await nextMovementSeqStartTx(tx) }
+          let movementsCreated = 0
+          let skipped = 0
+          const applied = []
+          const localNameKeys = new Set()
+
+          for (const pr of parsedRows) {
+            if (pr.isNewLine) {
+              const nk = `${pr.locationId}|${normalizeStockCountName(pr.itemName)}`
+              if (localNameKeys.has(nk)) {
+                skipped++
+                continue
+              }
+              localNameKeys.add(nk)
+            }
+
+            let sku = pr.sku
+            if (pr.isNewLine) {
+              sku = await allocateStockCountSkuTx(tx)
+            }
+
+            const li = await tx.locationInventory.findUnique({
+              where: { locationId_sku: { locationId: pr.locationId, sku } }
+            })
+            const currentQty = li?.quantity ?? 0
+            const delta = pr.countedQty - currentQty
+            if (Math.abs(delta) < 0.0001) {
+              skipped++
+              continue
+            }
+
+            const { movement } = await applyStockCountAdjustmentTx(tx, {
+              req,
+              movementSeqRef,
+              sku,
+              itemName: pr.itemName,
+              quantityDelta: delta,
+              locationId: pr.locationId,
+              reference: importRef,
+              notes: `${importRef} sheet=${pr.sheet} row=${pr.rowNum}${pr.isNewLine ? ` autoSku=${sku}` : ''}`,
+              unitCost: pr.unitCost,
+              reorderPoint: pr.reorderPoint,
+              unit: pr.unit,
+              needsCatalogReview: pr.isNewLine,
+              importDate: new Date()
+            })
+            if (movement) {
+              movementsCreated++
+              applied.push({
+                sku,
+                delta,
+                movementId: movement.movementId,
+                isNewLine: pr.isNewLine
+              })
+            }
+          }
+
+          return { movementsCreated, skipped, applied }
+        })
+
+        auditManufacturing('create', 'stock-count-import', batchId, {
+          summary: `Stock count import ${result.movementsCreated} movements, ${result.skipped} skipped`,
+          movementsCreated: result.movementsCreated,
+          skipped: result.skipped,
+          appliedCount: result.applied.length
+        })
+        return ok(res, {
+          batchId,
+          movementsCreated: result.movementsCreated,
+          skipped: result.skipped,
+          applied: result.applied,
+          duplicateCandidates,
+          fileInternalDuplicates,
+          errors
+        })
+      } catch (error) {
+        console.error('❌ Stock count import failed:', error)
+        return serverError(res, error.message || 'Stock count import failed', error.message)
+      }
+    }
+
+    return badRequest(res, 'Use GET .../stock-count/export or POST .../stock-count/import')
+  }
+
   // INVENTORY ITEMS
   if (resourceType === 'inventory') {
     // LIST (GET /api/manufacturing/inventory)
@@ -1648,6 +2261,23 @@ async function handler(req, res) {
             console.warn('⚠️ boxNumber field not available:', e.message)
           }
         }
+
+        if (body.needsCatalogReview !== undefined) {
+          updateData.needsCatalogReview = Boolean(body.needsCatalogReview)
+        }
+        if (existing.needsCatalogReview && body.needsCatalogReview !== true) {
+          const rich =
+            (body.supplier !== undefined && String(body.supplier).trim() !== '') ||
+            (body.legacyPartNumber !== undefined && String(body.legacyPartNumber).trim() !== '') ||
+            (body.manufacturingPartNumber !== undefined && String(body.manufacturingPartNumber).trim() !== '') ||
+            (body.boxNumber !== undefined && String(body.boxNumber).trim() !== '') ||
+            body.supplierPartNumbers !== undefined ||
+            (body.category !== undefined && body.category !== existing.category) ||
+            (body.type !== undefined && body.type !== existing.type)
+          if (rich) {
+            updateData.needsCatalogReview = false
+          }
+        }
         
         // Status will be auto-calculated based on quantity and reorder point
         if (body.lastRestocked !== undefined) updateData.lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : null
@@ -1689,13 +2319,14 @@ async function handler(req, res) {
           })
         } catch (updateError) {
           // If error is about missing columns, retry without new fields
-          if (updateError.message && (updateError.message.includes('supplierPartNumbers') || updateError.message.includes('manufacturingPartNumber') || updateError.message.includes('legacyPartNumber') || updateError.message.includes('boxNumber'))) {
+          if (updateError.message && (updateError.message.includes('supplierPartNumbers') || updateError.message.includes('manufacturingPartNumber') || updateError.message.includes('legacyPartNumber') || updateError.message.includes('boxNumber') || updateError.message.includes('needsCatalogReview'))) {
             console.warn('⚠️ New inventory columns not available yet, updating without them');
             const safeUpdateData = { ...updateData };
             delete safeUpdateData.supplierPartNumbers;
             delete safeUpdateData.manufacturingPartNumber;
             delete safeUpdateData.legacyPartNumber;
             delete safeUpdateData.boxNumber;
+            delete safeUpdateData.needsCatalogReview;
             item = await prisma.inventoryItem.update({
               where: { id },
               data: safeUpdateData
