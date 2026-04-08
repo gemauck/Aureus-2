@@ -6,33 +6,149 @@
 /** Keep job card notes reasonable; TEXT column is unbounded but UI and emails suffer if huge. */
 const MAX_ISSUE_NOTES_APPEND_CHARS = 120_000
 
+function humanizeLabel(key) {
+  return String(key)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 /**
- * Append a full JSON dump of feed + API detail for "Additional notes" (user-requested audit trail).
+ * Plain-text appendix for "Additional notes" (readable; not JSON).
+ * Full raw payload remains in safetyCultureSnapshotJson.
  */
 export function buildSafetyCultureIssueNotesAppendix(issueId, feed, detailData) {
-  const payload = {
-    safetyCultureIssueId: issueId,
-    exportedAt: new Date().toISOString(),
-    feed: feed ?? null,
-    detail: detailData ?? null
+  const lines = []
+  const push = (s) => lines.push(s)
+  const blank = () => {
+    if (lines.length && lines[lines.length - 1] !== '') push('')
   }
-  let text = ''
-  try {
-    text = JSON.stringify(payload, null, 2)
-  } catch {
-    try {
-      text = JSON.stringify({ safetyCultureIssueId: issueId, note: 'Payload not JSON-serializable' })
-    } catch {
-      text = `{ "safetyCultureIssueId": "${String(issueId)}" }`
+  const section = (title) => {
+    blank()
+    push('────────────────────────────────────────')
+    push(title)
+    push('────────────────────────────────────────')
+  }
+  const pair = (label, val) => {
+    if (val == null || val === '') return
+    if (typeof val === 'object') return
+    const s = String(val).trim()
+    if (!s) return
+    push(`${label}: ${s}`)
+  }
+
+  const f = feed && typeof feed === 'object' && !Array.isArray(feed) ? feed : {}
+  const d = detailData && typeof detailData === 'object' && !Array.isArray(detailData) ? detailData : {}
+
+  section('SafetyCulture issue — full record')
+  pair('Issue ID', issueId)
+  pair('Copied into ERP at', new Date().toISOString())
+
+  section('Summary (from feed / list)')
+  pair('Title', f.title || f.name)
+  pair('Description', f.description)
+  pair('Status', f.status)
+  pair('Priority', f.priority)
+  pair('Category', f.category_label)
+  pair('Site name', f.site_name)
+  pair('Site ID', f.site_id != null ? String(f.site_id) : '')
+  pair('Location', f.location_name || f.location)
+  pair('Client / organisation', f.client_name || f.customer_name)
+  pair('Unique ID', f.unique_id)
+  pair('Due', f.due_at)
+  pair('Inspection', f.inspection_name)
+  pair('Assignee (feed)', f.assignee_name || f.assigneeName)
+  pair('Occurred at', f.occurred_at)
+  pair('Created (feed)', f.created_at || f.createdAt)
+  pair('Modified (feed)', f.modified_at || f.updated_at)
+  pair('Report link', f.url || f.web_url || f.link)
+
+  const task = d.task && typeof d.task === 'object' ? d.task : {}
+  const taskCreator = task.creator && typeof task.creator === 'object' ? task.creator : {}
+  const dCreator = d.creator && typeof d.creator === 'object' ? d.creator : {}
+  const assignee = d.assignee && typeof d.assignee === 'object' ? d.assignee : {}
+  const site = d.site && typeof d.site === 'object' ? d.site : {}
+  const loc = d.location && typeof d.location === 'object' ? d.location : {}
+  const cat = d.category && typeof d.category === 'object' ? d.category : {}
+
+  const creatorName =
+    [taskCreator.firstname, taskCreator.lastname].filter(Boolean).join(' ').trim() ||
+    taskCreator.name ||
+    taskCreator.display_name ||
+    [dCreator.firstname, dCreator.lastname].filter(Boolean).join(' ').trim() ||
+    dCreator.name ||
+    dCreator.display_name ||
+    ''
+
+  section('Task (from API detail)')
+  pair('Title', task.title)
+  pair('Description', task.description != null ? task.description : task.DESCRIPTION)
+  pair('Task ID', task.task_id || task.id)
+  pair('Created', task.created_at || task.createdAt)
+  pair('Updated', task.updated_at || task.modified_at)
+
+  section('People')
+  pair('Creator name', creatorName || null)
+  pair('Creator user ID', taskCreator.user_id || dCreator.user_id || dCreator.id)
+  pair('Assignee', assignee.name || assignee.display_name || d.assignee_name)
+
+  section('Site and location (from API detail)')
+  pair('Site name', site.name)
+  pair('Site ID', site.id != null ? String(site.id) : '')
+  pair('Location name', loc.name)
+  pair('Address line', loc.address || loc.formatted_address)
+  pair('City / region / country', [loc.city, loc.region, loc.country].filter(Boolean).join(', ') || '')
+  pair('Coordinates', loc.latitude != null && loc.longitude != null ? `${loc.latitude}, ${loc.longitude}` : '')
+
+  section('Issue fields (from API detail)')
+  pair('Title', d.title && d.title !== task.title ? d.title : null)
+  pair('Description', d.description && d.description !== task.description ? d.description : null)
+  pair('Status', d.status)
+  pair('Priority', d.priority)
+  pair('Category', d.category_label || cat.label || cat.name)
+  pair('Category ID', cat.id)
+  pair('Unique ID', d.unique_id)
+
+  const skipKeys = new Set([
+    'task',
+    'site',
+    'location',
+    'category',
+    'creator',
+    'assignee',
+    'media',
+    'medias',
+    'images',
+    'attachments',
+    'photos',
+    'files',
+    'media_items',
+    'evidence'
+  ])
+  const extra = []
+  for (const [k, v] of Object.entries(d)) {
+    if (skipKeys.has(k)) continue
+    if (v == null || v === '') continue
+    if (typeof v === 'object') continue
+    extra.push([humanizeLabel(k), String(v).trim()])
+  }
+  if (extra.length) {
+    section('Other details from API')
+    for (const [lbl, val] of extra) {
+      if (val) pair(lbl, val)
     }
   }
+
+  blank()
+  push('Files and images attached to this issue appear under “Photos & videos” above.')
+  push('For the complete raw API payload, open “Safety Culture — imported snapshot” (JSON) on this job card.')
+
+  let text = lines.join('\n').trimEnd()
   if (text.length > MAX_ISSUE_NOTES_APPEND_CHARS) {
-    const over = text.length - MAX_ISSUE_NOTES_APPEND_CHARS
     text =
       text.slice(0, MAX_ISSUE_NOTES_APPEND_CHARS) +
-      `\n\n[…truncated: ${over} more characters; see safetyCultureSnapshotJson on the job card]`
+      '\n\n[…truncated — open the Safety Culture snapshot on this job card for the full raw data.]'
   }
-  return `\n\n--- Full SafetyCulture issue record (JSON) ---\n${text}`
+  return `\n\n${text}`
 }
 
 const MEDIA_ARRAY_KEYS = new Set([
