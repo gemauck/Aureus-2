@@ -9312,6 +9312,32 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     Confirm goods receipt
                   </button>
                 )}
+                {selectedItem && poCanAmend && !poEditMode && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        !confirm(
+                          'Cancel this purchase order? It will be marked cancelled and cannot be received afterward.'
+                        )
+                      ) {
+                        return;
+                      }
+                      try {
+                        const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, {
+                          status: 'cancelled'
+                        });
+                        if (response?.data?.purchaseOrder) mergePoIntoLists(response.data.purchaseOrder);
+                      } catch (e) {
+                        alert(e?.message || 'Failed to cancel purchase order');
+                      }
+                    }}
+                    className="px-3 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50"
+                  >
+                    <i className="fas fa-ban mr-1"></i>
+                    Cancel order
+                  </button>
+                )}
               </div>
               <button
                 type="button"

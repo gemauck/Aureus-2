@@ -13,6 +13,7 @@ const S_DRAFT = 'draft'
 const S_FINAL = 'final'
 const S_SENT = 'sent'
 const S_GOODS_RECEIVED = 'goods_received'
+const S_CANCELLED = 'cancelled'
 
 /** South African standard VAT rate for purchase order totals (line amounts are ex VAT). */
 const PO_VAT_RATE = 0.15
@@ -143,6 +144,10 @@ function amendmentChangesRequireReason(oldStatus, changes) {
 
 function allowedStatusStep(from, to) {
   if (from === to) return true
+  if (from === S_CANCELLED) return false
+  if (to === S_CANCELLED) {
+    return from === S_DRAFT || from === S_FINAL || from === S_SENT
+  }
   if (from === S_DRAFT && to === S_FINAL) return true
   if (from === S_FINAL && to === S_SENT) return true
   if (from === S_SENT && to === S_GOODS_RECEIVED) return true
@@ -596,17 +601,25 @@ async function handler(req, res) {
         const oldStatus = existingOrder.status
         const admin = isAdminUser(req.user)
 
-        if (oldStatus === S_GOODS_RECEIVED) {
+        if (oldStatus === S_GOODS_RECEIVED || oldStatus === S_CANCELLED) {
           const allowedTerminal = ['internalNotes']
           const attempted = Object.keys(body).filter((k) => body[k] !== undefined && k !== 'status')
           const bad = attempted.filter((k) => !allowedTerminal.includes(k))
           if (!admin && bad.length > 0) {
-            return forbidden(res, 'This purchase order is complete and cannot be edited')
+            const msg =
+              oldStatus === S_CANCELLED
+                ? 'This purchase order is cancelled and cannot be edited'
+                : 'This purchase order is complete and cannot be edited'
+            return forbidden(res, msg)
           }
           if (admin) {
             const onlyNotes = attempted.every((k) => allowedTerminal.includes(k))
             if (!onlyNotes) {
-              return badRequest(res, 'Only internal notes can be updated after goods are received')
+              const msg =
+                oldStatus === S_CANCELLED
+                  ? 'Only internal notes can be updated on a cancelled purchase order'
+                  : 'Only internal notes can be updated after goods are received'
+              return badRequest(res, msg)
             }
           }
         }
@@ -634,7 +647,7 @@ async function handler(req, res) {
           if (!allowedStatusStep(oldStatus, newStatus)) {
             return badRequest(
               res,
-              `Invalid status transition: ${oldStatus} → ${newStatus}. Use draft → final → sent → goods_received.`
+              `Invalid status transition: ${oldStatus} → ${newStatus}. Use draft → final → sent → goods_received, or cancel from draft, final, or sent (not after goods received).`
             )
           }
         }
@@ -676,6 +689,18 @@ async function handler(req, res) {
 
         if (newStatus === S_SENT && oldStatus === S_FINAL) {
           updateData.sentAt = body.sentAt ? new Date(body.sentAt) : new Date()
+        }
+
+        if (newStatus === S_CANCELLED && oldStatus !== S_CANCELLED) {
+          const disallowedWithCancel = Object.keys(updateData).filter(
+            (k) => k !== 'status' && k !== 'internalNotes'
+          )
+          if (disallowedWithCancel.length > 0) {
+            return badRequest(
+              res,
+              'To cancel, send only status "cancelled" (you may also update internalNotes in the same request).'
+            )
+          }
         }
 
         const transitioningToReceived = newStatus === S_GOODS_RECEIVED && oldStatus === S_SENT
