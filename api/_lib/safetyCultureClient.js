@@ -6,6 +6,28 @@
 
 const BASE_URL = 'https://api.safetyculture.io'
 
+/** Feed APIs typically cap page size (docs use 20–100); larger values can error. */
+function clampFeedPageLimit(limit) {
+  const n = typeof limit === 'number' ? limit : parseInt(limit, 10)
+  if (!Number.isFinite(n)) return 100
+  return Math.max(1, Math.min(n, 100))
+}
+
+/**
+ * Normalise feed payload to a row array (SafetyCulture usually returns `{ data, metadata }`).
+ * @param {object} result
+ * @returns {any[]}
+ */
+export function normaliseFeedData(result) {
+  if (!result || result.error) return []
+  if (Array.isArray(result.data)) return result.data
+  if (Array.isArray(result.issues)) return result.issues
+  if (Array.isArray(result.inspections)) return result.inspections
+  if (Array.isArray(result.items)) return result.items
+  if (Array.isArray(result)) return result
+  return []
+}
+
 /**
  * Make a request to the Safety Culture API
  * @param {string} path - API path (e.g. /feed/inspections)
@@ -78,10 +100,7 @@ export async function fetchInspections(params = {}) {
   if (params.modified_after) {
     q.set('modified_after', params.modified_after)
   }
-  if (params.limit != null) q.set('limit', String(params.limit))
-  // Ask feed API for newest items first so page 1 is the latest data.
-  q.set('order', params.order || 'desc')
-  q.set('sort', params.sort || 'modified_at')
+  if (params.limit != null) q.set('limit', String(clampFeedPageLimit(params.limit)))
   if (params.completed) q.set('completed', params.completed) // e.g. true, false, both
   if (params.archived) q.set('archived', params.archived)   // e.g. true, false, both
 
@@ -116,10 +135,7 @@ export async function fetchGroups() {
 export async function fetchIssues(params = {}) {
   const q = new URLSearchParams()
   if (params.modified_after) q.set('modified_after', params.modified_after)
-  if (params.limit != null) q.set('limit', String(params.limit))
-  // Ask feed API for newest items first so page 1 is the latest data.
-  q.set('order', params.order || 'desc')
-  q.set('sort', params.sort || 'modified_at')
+  if (params.limit != null) q.set('limit', String(clampFeedPageLimit(params.limit)))
 
   const path = `/feed/issues${q.toString() ? `?${q.toString()}` : ''}`
   return safetyCultureRequest(path)

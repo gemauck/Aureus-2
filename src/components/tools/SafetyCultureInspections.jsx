@@ -3,6 +3,15 @@ const { useState, useEffect, useMemo } = React;
 
 const API_BASE = window.location.origin + '/api';
 const PAGE_SIZE = 20;
+/** Non-OK API responses use `{ error: { message, code } }` — surface instead of empty lists. */
+const apiErrorFromResponse = (res, json) => {
+    if (res.ok) return null;
+    const err = json?.error;
+    if (typeof err === 'string') return err;
+    if (err && typeof err === 'object' && err.message) return String(err.message);
+    return json?.message ? String(json.message) : `Request failed (${res.status})`;
+};
+
 const mergeUniqueById = (existing, incoming) => {
     const seen = new Set((existing || []).map((item) => String(item?.id || '')));
     const next = [...(existing || [])];
@@ -72,6 +81,12 @@ const SafetyCultureInspections = () => {
                     headers: getHeaders()
                 });
                 const inspJson = await inspRes.json().catch(() => ({}));
+                const apiErr = apiErrorFromResponse(inspRes, inspJson);
+                if (apiErr) {
+                    setError(apiErr);
+                    setInspections([]);
+                    return;
+                }
                 const inspData = inspJson?.data ?? inspJson;
                 setInspections(inspData.inspections ?? []);
                 setMetadata(inspData.metadata ?? { next_page: null, remaining_records: 0 });
@@ -144,9 +159,17 @@ const SafetyCultureInspections = () => {
 
     const loadIssues = async () => {
         setIssuesLoading(true);
+        setError(null);
         try {
             const res = await fetch(`${API_BASE}/safety-culture/issues?limit=500`, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
+            const apiErr = apiErrorFromResponse(res, json);
+            if (apiErr) {
+                setError(apiErr);
+                setIssues([]);
+                setIssuesMetadata({ next_page: null, remaining_records: 0 });
+                return;
+            }
             const data = json?.data ?? json;
             setIssues(data.issues ?? []);
             setIssuesMetadata(data.metadata ?? { next_page: null, remaining_records: 0 });

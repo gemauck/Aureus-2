@@ -11,7 +11,8 @@ import {
   enrichFeedItems,
   fetchIssueDetails,
   fetchIssues,
-  fetchIssuesNextPage
+  fetchIssuesNextPage,
+  normaliseFeedData
 } from '../_lib/safetyCultureClient.js'
 
 function toTs(value) {
@@ -56,7 +57,7 @@ async function handler(req, res) {
     return serverError(res, result.error, result.details)
   }
 
-  let feedItems = result.data ?? []
+  let feedItems = normaliseFeedData(result)
   let metadata = result.metadata ?? { next_page: null, remaining_records: 0 }
 
   // Safety Culture feed pagination can return older pages first.
@@ -73,7 +74,7 @@ async function handler(req, res) {
       if (pageResult?.error) {
         break
       }
-      feedItems = feedItems.concat(pageResult?.data ?? [])
+      feedItems = feedItems.concat(normaliseFeedData(pageResult))
       metadata = pageResult?.metadata ?? { next_page: null, remaining_records: 0 }
       cursor = metadata?.next_page || null
       pagesRead += 1
