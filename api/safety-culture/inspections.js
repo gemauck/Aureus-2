@@ -42,6 +42,7 @@ async function handler(req, res) {
   const url = new URL(req.url || '', 'http://localhost')
   const modifiedAfter = url.searchParams.get('modified_after')
   const limit = url.searchParams.get('limit')
+  const requestedLimit = Math.max(1, Math.min(parseInt(limit || '50', 10) || 50, 200))
   const completed = url.searchParams.get('completed') || 'both'
   const archived = url.searchParams.get('archived') || 'both'
   const nextPage = url.searchParams.get('next_page')
@@ -52,7 +53,7 @@ async function handler(req, res) {
   } else {
     result = await fetchInspections({
       modified_after: modifiedAfter || undefined,
-      limit: limit ? parseInt(limit, 10) : 50,
+      limit: requestedLimit,
       completed: completed === 'true' ? true : completed === 'false' ? false : 'both',
       archived: archived === 'true' ? true : archived === 'false' ? false : 'both'
     })
@@ -62,9 +63,33 @@ async function handler(req, res) {
     return serverError(res, result.error, result.details)
   }
 
-  const feedItems = result.data ?? []
+  let feedItems = result.data ?? []
+  let metadata = result.metadata ?? { next_page: null, remaining_records: 0 }
+
+  // Safety Culture feed pagination can return older pages first.
+  // For first-page requests, collect additional pages server-side and then return newest items.
+  if (!nextPage) {
+    const MAX_PAGES = 30
+    const MAX_ITEMS = 3000
+    let pagesRead = 0
+    let cursor = metadata?.next_page || null
+
+    while (cursor && pagesRead < MAX_PAGES && feedItems.length < MAX_ITEMS) {
+      const pageResult = await fetchInspectionsNextPage(cursor)
+      if (pageResult?.error) {
+        break
+      }
+      feedItems = feedItems.concat(pageResult?.data ?? [])
+      metadata = pageResult?.metadata ?? { next_page: null, remaining_records: 0 }
+      cursor = metadata?.next_page || null
+      pagesRead += 1
+    }
+  }
+
+  const sortedFeedItems = [...feedItems].sort((a, b) => latestInspectionTs(b) - latestInspectionTs(a))
+  const latestItems = nextPage ? sortedFeedItems : sortedFeedItems.slice(0, requestedLimit)
   const enriched = await enrichFeedItems(
-    feedItems,
+    latestItems,
     (item) => item?.id,
     fetchInspectionDetails,
     { concurrency: 5 }
@@ -74,7 +99,7 @@ async function handler(req, res) {
 
   return ok(res, {
     inspections: sorted,
-    metadata: result.metadata ?? { next_page: null, remaining_records: 0 }
+    metadata: nextPage ? (result.metadata ?? { next_page: null, remaining_records: 0 }) : { next_page: null, remaining_records: 0 }
   })
 }
 
