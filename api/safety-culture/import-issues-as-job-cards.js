@@ -21,6 +21,7 @@ import {
   buildSafetyCultureIssueNotesAppendix,
   overlayIssueJobCardFieldsFromDetail
 } from '../_lib/safetyCultureIssueJobCard.js'
+import { resolveSafetyCultureIssueTechnicianUser } from '../_lib/safetyCultureIssueTechnicianMatch.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -149,14 +150,28 @@ async function handler(req, res) {
           )
           const otherCommentsBase = `Imported from Safety Culture issue.${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim()
 
+          const scAgentDisplay =
+            enriched.assignee_name ||
+            enriched.assigneeName ||
+            enriched.creator_user_name ||
+            ''
+          let technicianUser = null
+          try {
+            technicianUser = await resolveSafetyCultureIssueTechnicianUser(prisma, detailData)
+          } catch (e) {
+            console.warn('SafetyCulture technician match skipped:', e?.message || e)
+          }
+          const ownerIdForCard = technicianUser
+            ? technicianUser.user.id
+            : req.user?.sub || null
+          const agentNameForCard = technicianUser
+            ? String(technicianUser.user.name || '').trim() || scAgentDisplay
+            : scAgentDisplay
+
           await prisma.jobCard.create({
             data: {
               jobCardNumber,
-              agentName:
-                enriched.assignee_name ||
-                enriched.assigneeName ||
-                enriched.creator_user_name ||
-                '',
+              agentName: agentNameForCard,
               otherTechnicians: '[]',
               clientId: null,
               clientName:
@@ -215,7 +230,7 @@ async function handler(req, res) {
                   : 'draft',
               safetyCultureIssueId: issueId,
               safetyCultureSnapshotJson: snapshotJson,
-              ownerId: req.user?.sub || null
+              ownerId: ownerIdForCard
             }
           })
           results.imported++

@@ -13,6 +13,59 @@ function humanizeLabel(key) {
 }
 
 /**
+ * Creator / assignee fields from issue API detail (same semantics as the "People" notes section).
+ * @param {object|null|undefined} detailData
+ * @returns {{ creatorName: string, creatorUserId: string, creatorEmail: string, assigneeName: string }}
+ */
+export function extractIssuePeopleFromDetail(detailData) {
+  const d =
+    detailData && typeof detailData === 'object' && !Array.isArray(detailData) ? detailData : {}
+  const task = d.task && typeof d.task === 'object' ? d.task : {}
+  const taskCreator = task.creator && typeof task.creator === 'object' ? task.creator : {}
+  const dCreator = d.creator && typeof d.creator === 'object' ? d.creator : {}
+  const assignee = d.assignee && typeof d.assignee === 'object' ? d.assignee : {}
+
+  const creatorName = (
+    [taskCreator.firstname, taskCreator.lastname].filter(Boolean).join(' ').trim() ||
+    taskCreator.name ||
+    taskCreator.display_name ||
+    [dCreator.firstname, dCreator.lastname].filter(Boolean).join(' ').trim() ||
+    dCreator.name ||
+    dCreator.display_name ||
+    ''
+  ).trim()
+
+  const creatorUserIdRaw =
+    taskCreator.user_id ||
+    taskCreator.userId ||
+    dCreator.user_id ||
+    dCreator.userId ||
+    dCreator.id
+  const creatorUserId =
+    creatorUserIdRaw != null && creatorUserIdRaw !== '' ? String(creatorUserIdRaw) : ''
+
+  const rawEmail =
+    taskCreator.email ||
+    taskCreator.email_address ||
+    taskCreator.Email ||
+    dCreator.email ||
+    dCreator.email_address ||
+    dCreator.Email ||
+    ''
+  const creatorEmail = String(rawEmail || '').trim()
+
+  const assigneeName = (
+    assignee.name ||
+    assignee.display_name ||
+    assignee.full_name ||
+    d.assignee_name ||
+    ''
+  ).trim()
+
+  return { creatorName, creatorUserId, creatorEmail, assigneeName }
+}
+
+/**
  * Plain-text appendix for "Additional notes" (readable; not JSON).
  * Full raw payload remains in safetyCultureSnapshotJson.
  */
@@ -63,21 +116,10 @@ export function buildSafetyCultureIssueNotesAppendix(issueId, feed, detailData) 
   pair('Report link', f.url || f.web_url || f.link)
 
   const task = d.task && typeof d.task === 'object' ? d.task : {}
-  const taskCreator = task.creator && typeof task.creator === 'object' ? task.creator : {}
-  const dCreator = d.creator && typeof d.creator === 'object' ? d.creator : {}
-  const assignee = d.assignee && typeof d.assignee === 'object' ? d.assignee : {}
   const site = d.site && typeof d.site === 'object' ? d.site : {}
   const loc = d.location && typeof d.location === 'object' ? d.location : {}
   const cat = d.category && typeof d.category === 'object' ? d.category : {}
-
-  const creatorName =
-    [taskCreator.firstname, taskCreator.lastname].filter(Boolean).join(' ').trim() ||
-    taskCreator.name ||
-    taskCreator.display_name ||
-    [dCreator.firstname, dCreator.lastname].filter(Boolean).join(' ').trim() ||
-    dCreator.name ||
-    dCreator.display_name ||
-    ''
+  const people = extractIssuePeopleFromDetail(detailData)
 
   section('Task (from API detail)')
   pair('Title', task.title)
@@ -87,9 +129,9 @@ export function buildSafetyCultureIssueNotesAppendix(issueId, feed, detailData) 
   pair('Updated', task.updated_at || task.modified_at)
 
   section('People')
-  pair('Creator name', creatorName || null)
-  pair('Creator user ID', taskCreator.user_id || dCreator.user_id || dCreator.id)
-  pair('Assignee', assignee.name || assignee.display_name || d.assignee_name)
+  pair('Creator name', people.creatorName || null)
+  pair('Creator user ID', people.creatorUserId || null)
+  pair('Assignee', people.assigneeName || null)
 
   section('Site and location (from API detail)')
   pair('Site name', site.name)

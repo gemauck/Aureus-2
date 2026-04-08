@@ -30,6 +30,7 @@ import {
   buildSafetyCultureIssueNotesAppendix,
   overlayIssueJobCardFieldsFromDetail
 } from '../api/_lib/safetyCultureIssueJobCard.js'
+import { resolveSafetyCultureIssueTechnicianUser } from '../api/_lib/safetyCultureIssueTechnicianMatch.js'
 
 /**
  * Map incident/detail API payload (mixed snake_case / camelCase / nested) to feed-like row.
@@ -361,12 +362,33 @@ async function main() {
         ? new Date()
         : null
 
+  const scAgentDisplay =
+    enriched.assignee_name ||
+    enriched.assigneeName ||
+    enriched.creator_user_name ||
+    ''
+  let technicianUser = null
+  try {
+    technicianUser = await resolveSafetyCultureIssueTechnicianUser(prisma, detailData)
+  } catch (e) {
+    console.warn('SafetyCulture technician match skipped:', e?.message || e)
+  }
+  const ownerIdForCard = technicianUser ? technicianUser.user.id : null
+  const agentNameForCard = technicianUser
+    ? String(technicianUser.user.name || '').trim() || scAgentDisplay
+    : scAgentDisplay
+  if (technicianUser) {
+    console.log(
+      'Matched ERP technician:',
+      technicianUser.user.email,
+      'via',
+      technicianUser.via
+    )
+  }
+
   const sharedFields = {
-    agentName:
-      enriched.assignee_name ||
-      enriched.assigneeName ||
-      enriched.creator_user_name ||
-      '',
+    agentName: agentNameForCard,
+    ownerId: ownerIdForCard,
     clientName:
       enriched.client_name ||
       enriched.site_name ||
@@ -435,8 +457,7 @@ async function main() {
           jobCardNumber,
           ...sharedFields,
           otherTechnicians: '[]',
-          clientId: null,
-          ownerId: null
+          clientId: null
         }
       })
 
