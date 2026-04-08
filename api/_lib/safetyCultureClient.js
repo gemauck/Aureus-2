@@ -277,3 +277,21 @@ export async function enrichFeedItems(items, getItemId, fetchDetails, options = 
     }
   }, concurrency)
 }
+
+/**
+ * Enrich only the first N rows (detail API per row is slow; gateways often timeout on large lists).
+ * @param {Array<object>} items
+ * @param {(item: object) => string | undefined | null} getItemId
+ * @param {(id: string) => Promise<{ data?: any; error?: string; details?: any }>} fetchDetails
+ * @param {{ cap?: number, concurrency?: number }} options
+ */
+export async function enrichFeedItemsCapped(items, getItemId, fetchDetails, options = {}) {
+  const list = Array.isArray(items) ? items : []
+  const cap = Math.max(0, Math.min(Number(options.cap) || 50, 200))
+  const concurrency = options.concurrency ?? 8
+  if (list.length === 0) return []
+  const head = list.slice(0, cap)
+  const tail = list.slice(cap)
+  const enrichedHead = await enrichFeedItems(head, getItemId, fetchDetails, { concurrency })
+  return [...enrichedHead, ...tail]
+}

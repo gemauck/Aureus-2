@@ -77,7 +77,7 @@ const SafetyCultureInspections = () => {
                     setError('Unable to connect to Safety Culture. Check your API key.');
                 }
                 // Fetch latest 100 inspections
-                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=500`, {
+                const inspRes = await fetch(`${API_BASE}/safety-culture/inspections?limit=200`, {
                     headers: getHeaders()
                 });
                 const inspJson = await inspRes.json().catch(() => ({}));
@@ -161,7 +161,7 @@ const SafetyCultureInspections = () => {
         setIssuesLoading(true);
         setError(null);
         try {
-            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=500`, { headers: getHeaders() });
+            const res = await fetch(`${API_BASE}/safety-culture/issues?limit=200`, { headers: getHeaders() });
             const json = await res.json().catch(() => ({}));
             const apiErr = apiErrorFromResponse(res, json);
             if (apiErr) {

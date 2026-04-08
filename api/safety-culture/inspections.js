@@ -8,12 +8,17 @@ import { ok, badRequest, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import {
-  enrichFeedItems,
+  enrichFeedItemsCapped,
   fetchInspectionDetails,
   fetchInspections,
   fetchInspectionsNextPage,
   normaliseFeedData
 } from '../_lib/safetyCultureClient.js'
+
+/** Keep first HTTP response under typical proxy timeouts (nginx ~60s). */
+const FEED_SCAN_MAX_PAGES = 12
+const FEED_SCAN_MAX_ROWS = 2500
+const LIST_ENRICH_CAP = 50
 
 function toTs(value) {
   if (!value) return 0
@@ -71,12 +76,10 @@ async function handler(req, res) {
   // For first-page requests, collect additional pages server-side and then return newest items.
   let feedCursorAfterScan = null
   if (!nextPage) {
-    const MAX_PAGES = 100
-    const MAX_ITEMS = 20000
     let pagesRead = 0
     let cursor = metadata?.next_page || null
 
-    while (cursor && pagesRead < MAX_PAGES && feedItems.length < MAX_ITEMS) {
+    while (cursor && pagesRead < FEED_SCAN_MAX_PAGES && feedItems.length < FEED_SCAN_MAX_ROWS) {
       const pageResult = await fetchInspectionsNextPage(cursor)
       if (pageResult?.error) {
         break
@@ -91,11 +94,11 @@ async function handler(req, res) {
 
   const sortedFeedItems = [...feedItems].sort((a, b) => latestInspectionTs(b) - latestInspectionTs(a))
   const latestItems = nextPage ? sortedFeedItems : sortedFeedItems.slice(0, requestedLimit)
-  const enriched = await enrichFeedItems(
+  const enriched = await enrichFeedItemsCapped(
     latestItems,
     (item) => item?.id,
     fetchInspectionDetails,
-    { concurrency: 5 }
+    { cap: LIST_ENRICH_CAP, concurrency: 8 }
   )
 
   const sorted = [...enriched].sort((a, b) => latestInspectionTs(b) - latestInspectionTs(a))
