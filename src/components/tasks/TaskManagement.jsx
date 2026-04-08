@@ -1,4 +1,4 @@
-const { useEffect, useMemo, useState, useCallback } = React;
+const { useEffect, useMemo, useState, useCallback, useRef } = React;
 const storage = window.storage;
 
 const STATUS_OPTIONS = [
@@ -22,8 +22,13 @@ const SORT_OPTIONS = [
   { id: 'title', label: 'Title (A–Z)' }
 ];
 
-const TASK_VIEW_MODE_KEY = 'abcotronics_task_view_mode';
+const TASK_VIEW_MODE_STORAGE_PREFIX = 'abcotronics_task_view_mode';
 const TASK_VIEW_MODES = ['kanban', 'list', 'calendar'];
+
+const getTaskViewModeStorageKeyForUser = (userId) => {
+  if (userId == null || String(userId).trim() === '') return null;
+  return `${TASK_VIEW_MODE_STORAGE_PREFIX}:user:${String(userId)}`;
+};
 
 const normalizeStatus = (value) => {
   const v = String(value || '').toLowerCase().trim();
@@ -89,6 +94,24 @@ const emptyTaskForm = {
 const TaskManagement = () => {
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
   const token = storage?.getToken?.();
+  const authHook = window.useAuth || (() => ({ user: null }));
+  const { user: authUser } = authHook();
+
+  const viewModeUserId = useMemo(() => {
+    const id = authUser?.id ?? authUser?.email;
+    if (id != null && String(id).trim() !== '') return String(id);
+    try {
+      const u = storage?.getUser?.();
+      if (u?.id != null && String(u.id).trim() !== '') return String(u.id);
+      if (u?.email) return String(u.email);
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }, [authUser?.id, authUser?.email, token]);
+
+  const viewModeUserIdRef = useRef(viewModeUserId);
+  viewModeUserIdRef.current = viewModeUserId;
 
   const [tasks, setTasks] = useState([]);
   const [lists, setLists] = useState([]);
@@ -97,14 +120,7 @@ const TaskManagement = () => {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [viewMode, setViewMode] = useState(() => {
-    try {
-      const savedMode = localStorage.getItem(TASK_VIEW_MODE_KEY);
-      return TASK_VIEW_MODES.includes(savedMode) ? savedMode : 'kanban';
-    } catch (e) {
-      return 'kanban';
-    }
-  });
+  const [viewMode, setViewMode] = useState('list');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
@@ -183,8 +199,23 @@ const TaskManagement = () => {
   }, [refresh]);
 
   useEffect(() => {
+    const key = getTaskViewModeStorageKeyForUser(viewModeUserId);
+    if (!key) return;
+    let next = 'list';
     try {
-      localStorage.setItem(TASK_VIEW_MODE_KEY, viewMode);
+      const saved = localStorage.getItem(key);
+      if (TASK_VIEW_MODES.includes(saved)) next = saved;
+    } catch (e) {
+      // ignore
+    }
+    setViewMode(next);
+  }, [viewModeUserId]);
+
+  useEffect(() => {
+    const key = getTaskViewModeStorageKeyForUser(viewModeUserIdRef.current);
+    if (!key) return;
+    try {
+      localStorage.setItem(key, viewMode);
     } catch (e) {
       // Ignore storage write failures; view preference persistence is non-critical.
     }

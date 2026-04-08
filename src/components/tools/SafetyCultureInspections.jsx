@@ -786,9 +786,56 @@ const SafetyCultureInspections = () => {
         setIssuesPage((p) => Math.min(p, issuesTotalPages));
     }, [issuesTotalPages]);
 
+    /** Merge list row with live/cached API detail so media tokens and extra fields stay current in the modal grid. */
+    const inspectionDisplayRecord = useMemo(() => {
+        if (!selectedInspection) return null;
+        const raw =
+            inspectionExtra &&
+            !inspectionExtra.error &&
+            inspectionExtra.detail &&
+            typeof inspectionExtra.detail === 'object' &&
+            !Array.isArray(inspectionExtra.detail)
+                ? inspectionExtra.detail
+                : null;
+        if (!raw) return selectedInspection;
+        return { ...selectedInspection, ...raw };
+    }, [selectedInspection, inspectionExtra]);
+
     useEffect(() => {
+        if (!selectedInspection) {
+            setInspectionExtra(null);
+            setInspectionExtraWithAnswers(false);
+            return;
+        }
+        const id = selectedInspection.id;
+        if (!id) return;
+        let cancelled = false;
+        setInspectionExtraLoading(true);
         setInspectionExtra(null);
         setInspectionExtraWithAnswers(false);
+        (async () => {
+            try {
+                const res = await fetch(
+                    `${API_BASE}/safety-culture/inspections/detail?id=${encodeURIComponent(String(id))}&live=1`,
+                    { headers: getHeaders() }
+                );
+                const json = await res.json().catch(() => ({}));
+                const apiErr = apiErrorFromResponse(res, json);
+                if (cancelled) return;
+                if (apiErr) {
+                    setInspectionExtra({ error: apiErr });
+                    return;
+                }
+                setInspectionExtra(json?.data ?? json);
+            } catch (e) {
+                if (!cancelled) setInspectionExtra({ error: e.message || 'Request failed' });
+            } finally {
+                if (!cancelled) setInspectionExtraLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [selectedInspection?.id]);
 
     const SortableTh = ({ label, sortKey, currentSort, onSort, isDark, className = '' }) => {
@@ -880,7 +927,7 @@ const SafetyCultureInspections = () => {
         setInspectionExtra(null);
         setInspectionExtraWithAnswers(!!withAnswers);
         try {
-            const q = withAnswers ? '&include_answers=1' : '';
+            const q = `${withAnswers ? '&include_answers=1' : ''}&live=1`;
             const res = await fetch(
                 `${API_BASE}/safety-culture/inspections/detail?id=${encodeURIComponent(id)}${q}`,
                 { headers: getHeaders() }
@@ -906,7 +953,7 @@ const SafetyCultureInspections = () => {
         setIssueExtra(null);
         try {
             const res = await fetch(
-                `${API_BASE}/safety-culture/issues/detail?id=${encodeURIComponent(id)}`,
+                `${API_BASE}/safety-culture/issues/detail?id=${encodeURIComponent(id)}&live=1`,
                 { headers: getHeaders() }
             );
             const json = await res.json().catch(() => ({}));
@@ -951,7 +998,7 @@ const SafetyCultureInspections = () => {
         (async () => {
             try {
                 const res = await fetch(
-                    `${API_BASE}/safety-culture/issues/detail?id=${encodeURIComponent(String(id))}`,
+                    `${API_BASE}/safety-culture/issues/detail?id=${encodeURIComponent(String(id))}&live=1`,
                     { headers: getHeaders() }
                 );
                 const json = await res.json().catch(() => ({}));
@@ -1730,7 +1777,7 @@ const SafetyCultureInspections = () => {
                             </details>
                         )}
                         <div className="p-4 space-y-3 text-sm">
-                            {Object.entries(selectedInspection)
+                            {Object.entries(inspectionDisplayRecord || selectedInspection)
                                 .filter(([key]) => key !== '_enrichment')
                                 .sort(([a], [b]) => {
                                     const order = ['id', 'name', 'template_name', 'owner_name', 'score', 'max_score', 'date_started', 'date_completed', 'modified_at'];
