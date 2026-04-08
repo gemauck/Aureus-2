@@ -5735,6 +5735,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const defLoc = defaultManufacturingStockLocation(stockLocations);
       const defId = defLoc?.id || '';
       let moveType = prefill.type || (isAdmin ? 'receipt' : 'consumption');
+      if (moveType === 'production') {
+        moveType = isAdmin ? 'receipt' : 'consumption';
+      }
       if (!isAdmin && (moveType === 'receipt' || moveType === 'adjustment')) {
         moveType = 'consumption';
       }
@@ -5746,7 +5749,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         }
       }
       if (toLocationId === undefined || toLocationId === '') {
-        if (moveType === 'receipt' || moveType === 'production') {
+        if (moveType === 'receipt') {
           toLocationId = defId;
         }
       }
@@ -8364,7 +8367,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <option value="receipt">Receipt (Incoming Stock)</option>
                     )}
                     <option value="consumption">Consumption (Outgoing Stock)</option>
-                    <option value="production">Production</option>
                     <option value="transfer">Transfer</option>
                     {isAdmin && <option value="adjustment">Adjustment</option>}
                   </select>
@@ -8432,7 +8434,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </div>
 
                 {/* Unit Cost (for receipts) */}
-                {(formData.type === 'receipt' || formData.type === 'production') && (
+                {formData.type === 'receipt' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost (R)</label>
                     <input
@@ -8473,7 +8475,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       </select>
                     </div>
                   )}
-                  {(formData.type === 'transfer' || formData.type === 'receipt' || formData.type === 'production') && (
+                  {(formData.type === 'transfer' || formData.type === 'receipt') && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">To Location *</label>
                       <select
@@ -11507,9 +11509,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }, [movements, item?.sku, selectedDetailLocationId, selectedDetailLocationCode]);
 
     const recentMovementTemplates = useMemo(() => {
-      if (!itemMovementsForDetail.length) return [];
-      const startIndex = Math.max(itemMovementsForDetail.length - 5, 0);
-      return itemMovementsForDetail.slice(startIndex).reverse();
+      const eligible = itemMovementsForDetail.filter((m) => m.type !== 'production');
+      if (!eligible.length) return [];
+      const startIndex = Math.max(eligible.length - 5, 0);
+      return eligible.slice(startIndex).reverse();
     }, [itemMovementsForDetail]);
 
     useEffect(() => {
@@ -11559,7 +11562,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         ? (template.type === 'adjustment' ? parsedQty : Math.abs(parsedQty))
         : '';
       let moveType = template?.type || (isAdmin ? 'receipt' : 'consumption');
-      if (!isAdmin && moveType === 'receipt') {
+      if (moveType === 'production') {
+        moveType = isAdmin ? 'receipt' : 'consumption';
+      }
+      if (!isAdmin && (moveType === 'receipt' || moveType === 'adjustment')) {
         moveType = 'consumption';
       }
 
@@ -12326,8 +12332,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             // Helper: normalize quantity by movement type (receipt = +, consumption/sale = -, adjustment = as-is)
             const normalizeQuantity = (movement) => {
               let qty = parseFloat(movement.quantity) || 0;
-              if (movement.type === 'receipt') qty = Math.abs(qty);
-              else if (movement.type === 'production' || movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
+              if (movement.type === 'receipt' || movement.type === 'production') qty = Math.abs(qty);
+              else if (movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
               return qty;
             };
 
