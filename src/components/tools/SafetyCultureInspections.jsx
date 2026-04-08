@@ -150,8 +150,8 @@ function renderScInspectionsList(arr) {
 const ScMediaTile = ({ item, isDark, getHeaders }) => {
     const [src, setSrc] = useState(null);
     const [err, setErr] = useState(null);
-    const id = item?.id || item?.media_id;
-    const token = item?.token;
+    const id = item?.id || item?.media_id || item?.document_id;
+    const token = item?.token || item?.download_token || item?.media_token || item?.access_token;
     const mediaType = item?.media_type || item?.mediaType || '';
     const fileName = item?.file_name || item?.filename || item?.name || 'Attachment';
 
@@ -277,8 +277,22 @@ function renderIssueDetailField(key, val, isDark, getHeaders) {
         if (block) return block;
     }
 
-    if ((k === 'media' || k === 'medias' || k === 'images') && Array.isArray(val)) {
-        return renderScMediaList(val, isDark, getHeaders);
+    const mediaArrayKeys = new Set(['media', 'medias', 'images', 'attachments', 'photos', 'files', 'media_items', 'evidence']);
+    if (mediaArrayKeys.has(k) && Array.isArray(val)) {
+        const looksLikeSignedMedia = val.some(
+            (x) => x && typeof x === 'object' && (x.token || x.download_token || x.media_token) && (x.id || x.media_id || x.document_id)
+        );
+        if (looksLikeSignedMedia || k === 'media' || k === 'medias' || k === 'images') {
+            return renderScMediaList(val, isDark, getHeaders);
+        }
+    }
+
+    if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.items)) {
+        return renderScMediaList(val.items, isDark, getHeaders);
+    }
+
+    if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.media)) {
+        return renderScMediaList(val.media, isDark, getHeaders);
     }
 
     if (k === 'items' && Array.isArray(val)) {
@@ -760,10 +774,6 @@ const SafetyCultureInspections = () => {
         setInspectionExtraWithAnswers(false);
     }, [selectedInspection?.id]);
 
-    useEffect(() => {
-        setIssueExtra(null);
-    }, [selectedIssue?.id]);
-
     const SortableTh = ({ label, sortKey, currentSort, onSort, isDark, className = '' }) => {
         const isActive = currentSort.key === sortKey;
         return (
@@ -895,6 +905,56 @@ const SafetyCultureInspections = () => {
             setIssueExtraLoading(false);
         }
     };
+
+    /** Merge list row with cached/API detail so media, inspection links, etc. appear in the modal grid. */
+    const issueDisplayRecord = useMemo(() => {
+        if (!selectedIssue) return null;
+        const raw =
+            issueExtra &&
+            !issueExtra.error &&
+            issueExtra.detail &&
+            typeof issueExtra.detail === 'object' &&
+            !Array.isArray(issueExtra.detail)
+                ? issueExtra.detail
+                : null;
+        if (!raw) return selectedIssue;
+        return { ...selectedIssue, ...raw };
+    }, [selectedIssue, issueExtra]);
+
+    useEffect(() => {
+        if (!selectedIssue) {
+            setIssueExtra(null);
+            return;
+        }
+        const id = selectedIssue.id || selectedIssue.unique_id;
+        if (!id) return;
+        let cancelled = false;
+        setIssueExtraLoading(true);
+        setIssueExtra(null);
+        (async () => {
+            try {
+                const res = await fetch(
+                    `${API_BASE}/safety-culture/issues/detail?id=${encodeURIComponent(String(id))}`,
+                    { headers: getHeaders() }
+                );
+                const json = await res.json().catch(() => ({}));
+                const apiErr = apiErrorFromResponse(res, json);
+                if (cancelled) return;
+                if (apiErr) {
+                    setIssueExtra({ error: apiErr });
+                    return;
+                }
+                setIssueExtra(json?.data ?? json);
+            } catch (e) {
+                if (!cancelled) setIssueExtra({ error: e.message || 'Request failed' });
+            } finally {
+                if (!cancelled) setIssueExtraLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedIssue?.id, selectedIssue?.unique_id]);
 
     const formatDate = (s) => {
         if (!s) return '-';
@@ -1327,7 +1387,12 @@ const SafetyCultureInspections = () => {
                     >
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 z-10 bg-inherit">
                             <h4 className="font-semibold text-gray-900 dark:text-gray-100">
-                                Issue: {selectedIssue.title || selectedIssue.name || selectedIssue.description || selectedIssue.id || selectedIssue.unique_id}
+                                Issue:{' '}
+                                {(issueDisplayRecord || selectedIssue).title ||
+                                    (issueDisplayRecord || selectedIssue).name ||
+                                    (issueDisplayRecord || selectedIssue).description ||
+                                    (issueDisplayRecord || selectedIssue).id ||
+                                    (issueDisplayRecord || selectedIssue).unique_id}
                             </h4>
                             <div className="flex items-center gap-2">
                                 <button
@@ -1370,7 +1435,13 @@ const SafetyCultureInspections = () => {
                             </details>
                         )}
                         <div className="p-4 space-y-3 text-sm">
-                            {Object.entries(selectedIssue)
+                            {issueExtraLoading ? (
+                                <div className="text-xs opacity-70 py-2 flex items-center gap-2">
+                                    <i className="fas fa-spinner fa-spin" />
+                                    Loading full issue record (photos and links come from this)…
+                                </div>
+                            ) : null}
+                            {Object.entries(issueDisplayRecord || selectedIssue)
                                 .filter(([key]) => key !== '_enrichment')
                                 .sort(([a], [b]) => {
                                     const order = [
