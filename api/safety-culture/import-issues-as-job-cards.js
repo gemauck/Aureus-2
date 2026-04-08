@@ -18,6 +18,7 @@ import { fetchIssues, fetchIssuesNextPage, fetchIssueDetails, normaliseFeedData 
 import { serializeSafetyCultureSnapshot } from '../_lib/safetyCultureSnapshot.js'
 import {
   buildIssueJobCardPhotosJson,
+  buildSafetyCultureIssueNotesAppendix,
   overlayIssueJobCardFieldsFromDetail
 } from '../_lib/safetyCultureIssueJobCard.js'
 
@@ -141,6 +142,12 @@ async function handler(req, res) {
                 : null
 
           const photosJson = buildIssueJobCardPhotosJson(issue, detailData)
+          const fullNotesAppendix = buildSafetyCultureIssueNotesAppendix(
+            issueId,
+            issue,
+            detailData
+          )
+          const otherCommentsBase = `Imported from Safety Culture issue.${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim()
 
           await prisma.jobCard.create({
             data: {
@@ -200,7 +207,7 @@ async function handler(req, res) {
                   : new Date(),
               reasonForVisit: 'Safety Culture Issue',
               diagnosis: title,
-              otherComments: `Imported from Safety Culture issue.${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim(),
+              otherComments: `${otherCommentsBase}${fullNotesAppendix}`.trim(),
               photos: photosJson,
               status:
                 statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'

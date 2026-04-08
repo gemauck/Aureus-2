@@ -3,6 +3,38 @@
  * Photos use kind "safetyCultureMedia" so JobCards.jsx can resolve via /api/safety-culture/media/sign-url.
  */
 
+/** Keep job card notes reasonable; TEXT column is unbounded but UI and emails suffer if huge. */
+const MAX_ISSUE_NOTES_APPEND_CHARS = 120_000
+
+/**
+ * Append a full JSON dump of feed + API detail for "Additional notes" (user-requested audit trail).
+ */
+export function buildSafetyCultureIssueNotesAppendix(issueId, feed, detailData) {
+  const payload = {
+    safetyCultureIssueId: issueId,
+    exportedAt: new Date().toISOString(),
+    feed: feed ?? null,
+    detail: detailData ?? null
+  }
+  let text = ''
+  try {
+    text = JSON.stringify(payload, null, 2)
+  } catch {
+    try {
+      text = JSON.stringify({ safetyCultureIssueId: issueId, note: 'Payload not JSON-serializable' })
+    } catch {
+      text = `{ "safetyCultureIssueId": "${String(issueId)}" }`
+    }
+  }
+  if (text.length > MAX_ISSUE_NOTES_APPEND_CHARS) {
+    const over = text.length - MAX_ISSUE_NOTES_APPEND_CHARS
+    text =
+      text.slice(0, MAX_ISSUE_NOTES_APPEND_CHARS) +
+      `\n\n[…truncated: ${over} more characters; see safetyCultureSnapshotJson on the job card]`
+  }
+  return `\n\n--- Full SafetyCulture issue record (JSON) ---\n${text}`
+}
+
 const MEDIA_ARRAY_KEYS = new Set([
   'media',
   'medias',

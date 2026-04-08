@@ -129,7 +129,7 @@ function partitionJobCardAttachments(photosInput) {
   return { visualItems, voicesBySection };
 }
 
-/** Lazy-load SafetyCulture binary via signed URL (same contract as Tools → SC modals). */
+/** SafetyCulture media: id + token → sign-url (browser has no direct SC access). */
 function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, idx }) {
   const [src, setSrc] = useState(null);
   const [err, setErr] = useState(null);
@@ -1728,6 +1728,7 @@ try {
   if (typeof window !== 'undefined') {
     window.JobCards = JobCards;
     window.JobCardVoiceClips = JobCardVoiceClips;
+    window.JobCardSafetyCultureThumbnail = JobCardSafetyCultureThumbnail;
     window.JobCardAttachmentUtils = {
       parseJsonArrayLoose,
       jobCardAnswerRows,

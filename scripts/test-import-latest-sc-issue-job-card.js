@@ -23,6 +23,7 @@ import {
 import { serializeSafetyCultureSnapshot } from '../api/_lib/safetyCultureSnapshot.js'
 import {
   buildIssueJobCardPhotosJson,
+  buildSafetyCultureIssueNotesAppendix,
   overlayIssueJobCardFieldsFromDetail
 } from '../api/_lib/safetyCultureIssueJobCard.js'
 
@@ -318,8 +319,7 @@ async function main() {
           : new Date(),
       reasonForVisit: 'Safety Culture Issue',
       diagnosis: title,
-      otherComments:
-        `Imported from Safety Culture issue (${testLabel}).${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim(),
+      otherComments: `${`Imported from Safety Culture issue (${testLabel}).${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim()}${buildSafetyCultureIssueNotesAppendix(issueId, issue, detailData)}`.trim(),
       photos: photosJson,
       status:
         statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
