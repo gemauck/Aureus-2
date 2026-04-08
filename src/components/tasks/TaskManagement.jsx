@@ -22,6 +22,9 @@ const SORT_OPTIONS = [
   { id: 'title', label: 'Title (A–Z)' }
 ];
 
+const TASK_VIEW_MODE_KEY = 'abcotronics_task_view_mode';
+const TASK_VIEW_MODES = ['kanban', 'list', 'calendar'];
+
 const normalizeStatus = (value) => {
   const v = String(value || '').toLowerCase().trim();
   if (v === 'inprogress' || v === 'in progress') return 'in-progress';
@@ -94,7 +97,14 @@ const TaskManagement = () => {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [viewMode, setViewMode] = useState('kanban');
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      const savedMode = localStorage.getItem(TASK_VIEW_MODE_KEY);
+      return TASK_VIEW_MODES.includes(savedMode) ? savedMode : 'kanban';
+    } catch (e) {
+      return 'kanban';
+    }
+  });
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
@@ -171,6 +181,14 @@ const TaskManagement = () => {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TASK_VIEW_MODE_KEY, viewMode);
+    } catch (e) {
+      // Ignore storage write failures; view preference persistence is non-critical.
+    }
+  }, [viewMode]);
 
   const stats = useMemo(() => {
     return tasks.reduce(
