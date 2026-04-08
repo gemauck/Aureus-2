@@ -365,7 +365,7 @@ const SafetyCultureInspections = () => {
     const [keySaving, setKeySaving] = useState(false);
     const [keySaveError, setKeySaveError] = useState(null);
     const [importIncludeSnapshot, setImportIncludeSnapshot] = useState(true);
-    const [importIncludeAnswers, setImportIncludeAnswers] = useState(false);
+    const [importIncludeAnswers, setImportIncludeAnswers] = useState(true);
     const [inspectionExtra, setInspectionExtra] = useState(null);
     const [inspectionExtraLoading, setInspectionExtraLoading] = useState(false);
     const [inspectionExtraWithAnswers, setInspectionExtraWithAnswers] = useState(false);

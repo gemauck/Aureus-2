@@ -9,8 +9,8 @@
  *   web_report_link?: 'private' | 'public',
  *   completed?: 'true' | 'false' | 'both',
  *   archived?: 'true' | 'false' | 'both',
- *   include_snapshot?: boolean (default true) — store feed + API detail (+ optional answers) on JobCard,
- *   include_answers?: boolean (default false) — include /inspections/v1/answers (can be large/slow)
+ *   include_snapshot?: boolean (default true) — store feed + API detail (+ answers by default) on JobCard,
+ *   include_answers?: boolean (default true when snapshot on) — include /inspections/v1/answers (large/slow); set false to skip
  * }
  */
 import { authRequired } from '../_lib/authRequired.js'
@@ -43,7 +43,7 @@ async function handler(req, res) {
   const completed = body.completed != null ? body.completed : 'both'
   const archived = body.archived != null ? body.archived : 'both'
   const includeSnapshot = body.include_snapshot !== false
-  const includeAnswers = body.include_answers === true
+  const includeAnswers = includeSnapshot && body.include_answers !== false
 
   try {
     const results = { imported: 0, skipped: 0, errors: [] }
