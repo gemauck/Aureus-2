@@ -5,6 +5,7 @@ import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isAdminRole } from './_lib/authRoles.js'
+import { isSuperAdminUser } from './_lib/adminRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 
 const INVENTORY_TEMPLATE_FIELDS = {
@@ -3297,6 +3298,9 @@ async function handler(req, res) {
 
     // DELETE (DELETE /api/manufacturing/production-orders/:id)
     if (req.method === 'DELETE' && id) {
+      if (!isSuperAdminUser(req.user)) {
+        return forbidden(res, 'Only a super administrator can delete production orders')
+      }
       try {
         // First, get the order to handle stock return before deletion
         const orderToDelete = await prisma.productionOrder.findUnique({ where: { id } })

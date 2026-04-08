@@ -1,8 +1,30 @@
 /** Shared admin / superadmin checks (aligned with api/teams.js). */
 
-const SUPER_ADMIN_ROLES = new Set(['superadmin', 'super-admin', 'super_admin', 'system_admin'])
-const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
-const ADMIN_PERMISSION_KEYS = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
+const SUPER_ADMIN_ROLES = new Set([
+  'superadmin',
+  'super-admin',
+  'super_admin',
+  'super_administrator',
+  'system_admin'
+])
+const ADMIN_ROLES = new Set([
+  'admin',
+  'administrator',
+  'superadmin',
+  'super-admin',
+  'super_admin',
+  'super_administrator',
+  'system_admin'
+])
+const ADMIN_PERMISSION_KEYS = new Set([
+  'admin',
+  'administrator',
+  'superadmin',
+  'super-admin',
+  'super_admin',
+  'super_administrator',
+  'system_admin'
+])
 
 function normalizePermissions(permissions) {
   if (!permissions) return []

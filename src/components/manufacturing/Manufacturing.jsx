@@ -181,6 +181,8 @@ try {
 
   const currentUser = useMemo(() => user || getCurrentUser(), [user]);
   const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(currentUser?.role);
+  const isSuperAdmin =
+    typeof window.isSuperAdminRole === 'function' && window.isSuperAdminRole(currentUser?.role);
   
   // Helper function to safely call DatabaseAPI methods
   const safeCallAPI = async (methodName, ...args) => {
@@ -4240,12 +4242,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     >
                       <i className="fas fa-edit mr-1"></i> Edit
                     </button>
-                    <button
-                      onClick={() => handleDeleteProductionOrder(order.id)}
-                      className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
-                    >
-                      <i className="fas fa-trash"></i>
-                    </button>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => handleDeleteProductionOrder(order.id)}
+                        className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
+                        title="Delete production order (super administrator only)"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -4379,13 +4384,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           >
                             <i className="fas fa-edit"></i>
                           </button>
-                          <button
-                            onClick={() => handleDeleteProductionOrder(order.id)}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            title="Delete Order"
-                          >
-                            <i className="fas fa-trash"></i>
-                          </button>
+                          {isSuperAdmin && (
+                            <button
+                              onClick={() => handleDeleteProductionOrder(order.id)}
+                              className="text-red-600 hover:text-red-800 text-sm font-medium"
+                              title="Delete order (super administrator only)"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -4987,6 +4994,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const handleDeleteProductionOrder = async (orderId) => {
+    if (!isSuperAdmin) {
+      showToast('Only a super administrator can delete production orders', 'error');
+      return;
+    }
     if (confirm('Are you sure you want to delete this production order? This action cannot be undone.')) {
       try {
         await safeCallAPI('deleteProductionOrder', orderId);
