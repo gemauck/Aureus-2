@@ -886,16 +886,20 @@ async function handler(req, res) {
       
       const parsedValue = Number.parseFloat(body.value)
       const parsedRevenue = Number.parseFloat(body.revenue)
+      const parsedProb = Number.parseInt(String(body.probability), 10)
+      const safeProbability = Number.isFinite(parsedProb) ? parsedProb : 0
+      const lastContactRaw = body.lastContact ? new Date(body.lastContact) : new Date()
+      const lastContact = Number.isNaN(lastContactRaw.getTime()) ? new Date() : lastContactRaw
       const clientData = {
         name: body.name,
         type: 'client', // Always 'client' for client creation - never allow override
         industry: body.industry || 'Other',
         revenue: parseFloat(body.revenue) || 0,
         value: Number.isFinite(parsedValue) ? parsedValue : (Number.isFinite(parsedRevenue) ? parsedRevenue : 0),
-        probability: parseInt(body.probability) ?? 0,
+        probability: safeProbability,
         engagementStage: (body.engagementStage != null && String(body.engagementStage).trim() !== '') ? String(body.engagementStage) : 'Potential',
         aidaStatus: (body.aidaStatus != null && String(body.aidaStatus).trim() !== '') ? String(body.aidaStatus) : 'Awareness',
-        lastContact: body.lastContact ? new Date(body.lastContact) : new Date(),
+        lastContact,
         address: body.address || '',
         website: body.website || '',
         notes: body.notes || '',

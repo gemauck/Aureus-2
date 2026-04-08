@@ -1,5 +1,4 @@
 import { prisma } from './prisma.js'
-import { createNotificationForUser } from '../notifications.js'
 
 /**
  * Comma-separated user IDs (cuid). When set, only these users receive client-creation alerts
@@ -121,6 +120,18 @@ export async function notifyClientCreationStakeholders(opts) {
     console.warn(
       '📧 Client creation notify: no recipients. Set CLIENT_CREATION_NOTIFY_USER_IDS or ensure User.name matches Lindi Joubert, Michelle Peel, Gareth Mauck.'
     )
+    return
+  }
+
+  let createNotificationForUser
+  try {
+    ;({ createNotificationForUser } = await import('../notifications.js'))
+  } catch (e) {
+    console.error('📧 Client creation notify: could not load notifications module:', e?.message || e)
+    return
+  }
+  if (typeof createNotificationForUser !== 'function') {
+    console.error('📧 Client creation notify: createNotificationForUser missing')
     return
   }
 
