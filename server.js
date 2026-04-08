@@ -12,8 +12,21 @@ const __dirname = dirname(__filename)
 // `dotenv/config` loads from process.cwd(); PM2 often uses a different cwd than the app folder,
 // so secrets in /var/www/.../abcotronics-erp/.env would be skipped. Always merge .env next to server.js.
 const rootEnvPath = join(__dirname, '.env')
+// Root .env often sets NODE_ENV=production for deploy parity; do not let it stomp an explicit dev run
+// (e.g. npm run dev:backend), or local startup fails (local DB guard, wrong logging, etc.).
+const nodeEnvBeforeRootFile = process.env.NODE_ENV
 if (existsSync(rootEnvPath)) {
   dotenv.config({ path: rootEnvPath, override: true })
+}
+if (
+  (nodeEnvBeforeRootFile === 'development' || nodeEnvBeforeRootFile === 'dev') &&
+  process.env.NODE_ENV !== nodeEnvBeforeRootFile
+) {
+  const nodeEnvFromRootEnv = process.env.NODE_ENV
+  process.env.NODE_ENV = nodeEnvBeforeRootFile
+  console.log(
+    `🔧 Restored NODE_ENV=${nodeEnvBeforeRootFile} (root .env set NODE_ENV=${JSON.stringify(nodeEnvFromRootEnv)} — explicit dev run wins)`
+  )
 }
 
 // Load .env.local ONLY in development (NEVER in production)
