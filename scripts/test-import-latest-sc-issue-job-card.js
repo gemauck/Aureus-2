@@ -28,64 +28,10 @@ import { serializeSafetyCultureSnapshot } from '../api/_lib/safetyCultureSnapsho
 import {
   buildIssueJobCardPhotosJson,
   buildSafetyCultureIssueNotesAppendix,
+  issueFeedRowFromIssueDetail,
   overlayIssueJobCardFieldsFromDetail
 } from '../api/_lib/safetyCultureIssueJobCard.js'
 import { resolveSafetyCultureIssueTechnicianUser } from '../api/_lib/safetyCultureIssueTechnicianMatch.js'
-
-/**
- * Map incident/detail API payload (mixed snake_case / camelCase / nested) to feed-like row.
- */
-function issueFieldsForJobCard(d, fallbackId) {
-  if (!d || typeof d !== 'object') d = {}
-  const site = d.site && typeof d.site === 'object' ? d.site : {}
-  const loc = d.location && typeof d.location === 'object' ? d.location : {}
-  const cat = d.category && typeof d.category === 'object' ? d.category : {}
-  const task = d.task && typeof d.task === 'object' ? d.task : {}
-  const asg = d.assignee && typeof d.assignee === 'object' ? d.assignee : {}
-  const cre = d.creator && typeof d.creator === 'object' ? d.creator : {}
-  const id = d.id || d.issue_id || fallbackId
-  const taskDesc = task.description || task.DESCRIPTION
-  return {
-    id,
-    title: d.title || task.title || (taskDesc ? String(taskDesc).slice(0, 500) : undefined),
-    name: d.name,
-    description: d.description || taskDesc,
-    status: d.status,
-    priority: d.priority,
-    unique_id: d.unique_id,
-    category_label: d.category_label || cat.label || cat.name,
-    inspection_name: d.inspection_name || d.inspectionName,
-    due_at: d.due_at || d.dueAt,
-    url: d.url || d.web_url || d.link,
-    web_url: d.web_url,
-    link: d.link,
-    assignee_name:
-      d.assignee_name ||
-      d.assigneeName ||
-      asg.name ||
-      asg.display_name ||
-      asg.full_name,
-    assigneeName: d.assigneeName || asg.name,
-    creator_user_name:
-      d.creator_user_name ||
-      d.creatorUserName ||
-      cre.name ||
-      cre.display_name,
-    site_name: d.site_name || d.siteName || site.name,
-    site_id: d.site_id ?? d.siteId ?? site.id,
-    location_name:
-      d.location_name ||
-      d.locationName ||
-      loc.name ||
-      [loc.city, loc.region, loc.country].filter(Boolean).join(', ') ||
-      '',
-    occurred_at: d.occurred_at || d.occurredAt,
-    created_at: d.created_at || d.createdAt,
-    createdAt: d.createdAt,
-    completed_at: d.completed_at || d.completedAt,
-    completedAt: d.completedAt
-  }
-}
 
 function issueSortTs(issue) {
   const candidates = [
@@ -180,7 +126,7 @@ async function main() {
       issue =
         snap.feed && typeof snap.feed === 'object' && Object.keys(snap.feed).length
           ? { ...snap.feed }
-          : issueFieldsForJobCard(detailObj, issueId)
+          : issueFeedRowFromIssueDetail(detailObj, issueId)
       if (!issueId) {
         console.error('Snapshot missing issue id.')
         process.exitCode = 1
@@ -232,7 +178,7 @@ async function main() {
       return
     }
 
-    issue = issueFieldsForJobCard(detailResult.data, specificId)
+    issue = issueFeedRowFromIssueDetail(detailResult.data, specificId)
     issueId = issue.id
     if (!issueId) {
       console.error('Could not resolve issue id from SafetyCulture API response.')

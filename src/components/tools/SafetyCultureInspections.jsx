@@ -177,6 +177,7 @@ const ScMediaTile = ({ item, isDark, getHeaders }) => {
             try {
                 const params = new URLSearchParams({ id: String(id), token: String(token) });
                 if (mediaType) params.set('media_type', String(mediaType));
+                if (fileName) params.set('filename', String(fileName));
                 const res = await fetch(`${API_BASE}/safety-culture/media/sign-url?${params}`, { headers: getHeaders() });
                 const json = await res.json().catch(() => ({}));
                 const u = json?.data?.url;
@@ -202,7 +203,7 @@ const ScMediaTile = ({ item, isDark, getHeaders }) => {
         return () => {
             cancelled = true;
         };
-    }, [id, token, mediaType]);
+    }, [id, token, mediaType, fileName]);
 
     const isImage =
         String(mediaType).includes('IMAGE') ||
@@ -345,6 +346,8 @@ const SafetyCultureInspections = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [importing, setImporting] = useState(false);
     const [importingIssues, setImportingIssues] = useState(false);
+    const [importingSingleIssue, setImportingSingleIssue] = useState(false);
+    const [singleIssueIdForImport, setSingleIssueIdForImport] = useState('');
     const [importResult, setImportResult] = useState(null);
     const [activeTab, setActiveTab] = useState('inspections');
     const [issues, setIssues] = useState([]);
@@ -920,6 +923,45 @@ const SafetyCultureInspections = () => {
         }
     };
 
+    const runImportSingleIssue = async () => {
+        const id = singleIssueIdForImport.trim();
+        if (!id) return;
+        setImportingSingleIssue(true);
+        setImportResult(null);
+        try {
+            const res = await fetch(`${API_BASE}/safety-culture/import-issue-as-job-card`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({
+                    issue_id: id,
+                    include_snapshot: importIncludeSnapshot
+                })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const err = json?.error;
+                const errMsg =
+                    (typeof err === 'object' && err?.message) ||
+                    (typeof err === 'string' ? err : null) ||
+                    json?.error?.details ||
+                    json?.details ||
+                    json?.message ||
+                    `Import failed (${res.status})`;
+                setImportResult({ error: String(errMsg) });
+                return;
+            }
+            const data = json?.data ?? json;
+            setImportResult(data);
+            if (data?.imported || data?.skipped) {
+                setError(null);
+            }
+        } catch (e) {
+            setImportResult({ error: String(e.message || 'Import failed') });
+        } finally {
+            setImportingSingleIssue(false);
+        }
+    };
+
     const loadInspectionFromApi = async (withAnswers, auditId) => {
         const id = auditId || selectedInspection?.id;
         if (!id) return;
@@ -1122,7 +1164,7 @@ const SafetyCultureInspections = () => {
                     <div className="flex items-center gap-3 flex-wrap">
                         <button
                             onClick={runImport}
-                            disabled={importing || importingIssues || !status?.connected}
+                            disabled={importing || importingIssues || importingSingleIssue || !status?.connected}
                             className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             {importing ? (
@@ -1139,7 +1181,7 @@ const SafetyCultureInspections = () => {
                         </button>
                         <button
                             onClick={runImportIssues}
-                            disabled={importing || importingIssues || !status?.connected}
+                            disabled={importing || importingIssues || importingSingleIssue || !status?.connected}
                             className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             {importingIssues ? (
@@ -1154,6 +1196,44 @@ const SafetyCultureInspections = () => {
                                 </>
                             )}
                         </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <input
+                                type="text"
+                                value={singleIssueIdForImport}
+                                onChange={(e) => setSingleIssueIdForImport(e.target.value)}
+                                placeholder="Issue UUID"
+                                className={`min-w-[14rem] px-2 py-1.5 rounded-lg border text-sm ${
+                                    isDark
+                                        ? 'bg-gray-900 border-gray-600 text-gray-100 placeholder:text-gray-500'
+                                        : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+                                }`}
+                                aria-label="SafetyCulture issue UUID to import"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => void runImportSingleIssue()}
+                                disabled={
+                                    importing ||
+                                    importingIssues ||
+                                    importingSingleIssue ||
+                                    !status?.connected ||
+                                    !singleIssueIdForImport.trim()
+                                }
+                                className="px-3 py-1.5 rounded-lg bg-slate-600 text-white text-sm hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {importingSingleIssue ? (
+                                    <>
+                                        <i className="fas fa-spinner fa-spin"></i>
+                                        Importing…
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-bullseye"></i>
+                                        Import one issue
+                                    </>
+                                )}
+                            </button>
+                        </div>
                         <a
                             href="https://app.safetyculture.com/"
                             target="_blank"

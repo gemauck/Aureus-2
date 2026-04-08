@@ -78,7 +78,8 @@ async function handler(req, res) {
         issueDetail: '/api/safety-culture/issues/detail?id=',
         mediaSignUrl: '/api/safety-culture/media/sign-url?id=&token=',
         groups: '/api/safety-culture/groups',
-        sync: 'POST /api/safety-culture/sync'
+        sync: 'POST /api/safety-culture/sync',
+        importIssueAsJobCard: 'POST /api/safety-culture/import-issue-as-job-card'
       },
       docs: 'https://developer.safetyculture.com/',
       ...(localCache && { localCache }),

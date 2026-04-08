@@ -15,13 +15,7 @@ import { withLogging } from '../_lib/logger.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { prisma } from '../_lib/prisma.js'
 import { fetchIssues, fetchIssuesNextPage, fetchIssueDetails, normaliseFeedData } from '../_lib/safetyCultureClient.js'
-import { serializeSafetyCultureSnapshot } from '../_lib/safetyCultureSnapshot.js'
-import {
-  buildIssueJobCardPhotosJson,
-  buildSafetyCultureIssueNotesAppendix,
-  overlayIssueJobCardFieldsFromDetail
-} from '../_lib/safetyCultureIssueJobCard.js'
-import { resolveSafetyCultureIssueTechnicianUser } from '../_lib/safetyCultureIssueTechnicianMatch.js'
+import { createJobCardFromSafetyCultureIssueImport } from '../_lib/safetyCultureImportSingleIssueJobCard.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -87,151 +81,16 @@ async function handler(req, res) {
 
         try {
           const detailResult = await fetchIssueDetails(issueId)
-
-          const detailData =
-            detailResult && !detailResult.error ? detailResult.data ?? null : null
-          const enriched = overlayIssueJobCardFieldsFromDetail({ ...issue }, detailData)
-
-          const snapshotJson = includeSnapshot
-            ? serializeSafetyCultureSnapshot({
-                version: 1,
-                source: 'issue',
-                id: issueId,
-                capturedAt: new Date().toISOString(),
-                feed: issue,
-                detail: detailResult?.error
-                  ? { error: detailResult.error, details: detailResult.details }
-                  : (detailResult?.data ?? detailResult ?? null)
-              })
-            : null
-
           const jobCardNumber = `JC${String(nextNum++).padStart(4, '0')}`
-          const title =
-            enriched.title ||
-            enriched.name ||
-            enriched.description ||
-            issueId
-          const issueLink =
-            enriched.url || enriched.web_url || enriched.link ||
-            issue.url || issue.web_url || issue.link
-          const linkText = issueLink ? `\nSafety Culture issue: ${issueLink}` : ''
-          const meta = []
-          const st = enriched.status ?? issue.status
-          const pr = enriched.priority ?? issue.priority
-          const uid = enriched.unique_id ?? issue.unique_id
-          const cat = enriched.category_label ?? issue.category_label
-          const insp = enriched.inspection_name ?? issue.inspection_name
-          const due = enriched.due_at ?? issue.due_at
-          if (st) meta.push(`Status: ${st}`)
-          if (pr) meta.push(`Priority: ${pr}`)
-          if (uid) meta.push(`Unique ID: ${uid}`)
-          if (cat) meta.push(`Category: ${cat}`)
-          if (insp) meta.push(`Inspection: ${insp}`)
-          if (due) meta.push(`Due: ${due}`)
 
-          const statusLow = (st || '').toLowerCase()
-          const completedAt =
-            enriched.completed_at || enriched.completedAt || issue.completed_at || issue.completedAt
-              ? new Date(
-                  enriched.completed_at ||
-                    enriched.completedAt ||
-                    issue.completed_at ||
-                    issue.completedAt
-                )
-              : statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
-                ? new Date()
-                : null
-
-          const photosJson = buildIssueJobCardPhotosJson(issue, detailData)
-          const fullNotesAppendix = buildSafetyCultureIssueNotesAppendix(
-            issueId,
+          await createJobCardFromSafetyCultureIssueImport({
+            prisma,
             issue,
-            detailData
-          )
-          const otherCommentsBase = `Imported from Safety Culture issue.${linkText}${meta.length ? '\n' + meta.join(', ') : ''}`.trim()
-
-          const scAgentDisplay =
-            enriched.assignee_name ||
-            enriched.assigneeName ||
-            enriched.creator_user_name ||
-            ''
-          let technicianUser = null
-          try {
-            technicianUser = await resolveSafetyCultureIssueTechnicianUser(prisma, detailData)
-          } catch (e) {
-            console.warn('SafetyCulture technician match skipped:', e?.message || e)
-          }
-          const ownerIdForCard = technicianUser
-            ? technicianUser.user.id
-            : req.user?.sub || null
-          const agentNameForCard = technicianUser
-            ? String(technicianUser.user.name || '').trim() || scAgentDisplay
-            : scAgentDisplay
-
-          await prisma.jobCard.create({
-            data: {
-              jobCardNumber,
-              agentName: agentNameForCard,
-              otherTechnicians: '[]',
-              clientId: null,
-              clientName:
-                enriched.client_name ||
-                enriched.site_name ||
-                issue.site_name ||
-                '',
-              siteId:
-                enriched.site_id != null
-                  ? String(enriched.site_id)
-                  : issue.site_id != null
-                    ? String(issue.site_id)
-                    : '',
-              siteName: enriched.site_name || issue.site_name || '',
-              location: enriched.location_name || issue.location_name || '',
-              locationLatitude:
-                enriched.latitude != null && enriched.latitude !== ''
-                  ? String(enriched.latitude)
-                  : issue.latitude != null && issue.latitude !== ''
-                    ? String(issue.latitude)
-                    : '',
-              locationLongitude:
-                enriched.longitude != null && enriched.longitude !== ''
-                  ? String(enriched.longitude)
-                  : issue.longitude != null && issue.longitude !== ''
-                    ? String(issue.longitude)
-                    : '',
-              timeOfArrival:
-                enriched.occurred_at || issue.occurred_at
-                  ? new Date(enriched.occurred_at || issue.occurred_at)
-                  : enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
-                    ? new Date(
-                        enriched.created_at ||
-                          enriched.createdAt ||
-                          issue.created_at ||
-                          issue.createdAt
-                      )
-                    : null,
-              completedAt,
-              submittedAt:
-                enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
-                  ? new Date(
-                      enriched.created_at ||
-                        enriched.createdAt ||
-                        issue.created_at ||
-                        issue.createdAt
-                    )
-                  : new Date(),
-              reasonForVisit: 'Safety Culture Issue',
-              diagnosis: title,
-              otherComments: `${otherCommentsBase}${fullNotesAppendix}`.trim(),
-              photos: photosJson,
-              status:
-                statusLow === 'closed' || statusLow === 'complete' || statusLow === 'completed'
-                  ? 'completed'
-                  : 'draft',
-              safetyCultureIssueId: issueId,
-              safetyCultureSnapshotJson: snapshotJson,
-              ownerId: ownerIdForCard
-            }
+            issueId,
+            detailResult,
+            includeSnapshot,
+            reqUser: req.user,
+            jobCardNumber
           })
           results.imported++
         } catch (err) {
