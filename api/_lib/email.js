@@ -674,7 +674,9 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         clientDescription, 
         projectDescription, 
         commentText, 
-        commentLink, 
+        commentLink,
+        /** When set, used for the action button and plain-text link line (e.g. "View client") */
+        commentLinkLabel,
         taskTitle,
         taskDescription,
         taskStatus,
@@ -864,8 +866,8 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     let projectInfoHtml = '';
     if (isProjectRelated) {
         // Determine link text based on context
-        let linkText = 'View in Project';
-        if (taskTitle) {
+        let linkText = commentLinkLabel || 'View in Project';
+        if (!commentLinkLabel && taskTitle) {
             linkText = 'View Task';
         }
         
@@ -1074,7 +1076,8 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                     text += `Project Description: ${projectDescription.replace(/<[^>]*>/g, '')}\n\n`;
                 }
                 if (fullCommentLink) {
-                    text += `View in Project: ${fullCommentLink}\n`;
+                    const linkLabel = commentLinkLabel || (taskTitle ? 'View Task' : 'View in Project');
+                    text += `${linkLabel}: ${fullCommentLink}\n`;
                 }
             }
             

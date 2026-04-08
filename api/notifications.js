@@ -182,7 +182,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 metadataForEmail = typeof metadata === 'object' && metadata !== null ? metadata : {};
             }
             const metadataObj = metadataForEmail;
-            if (metadataObj && (type === 'comment' || type === 'mention' || type === 'task')) {
+            if (metadataObj && (type === 'comment' || type === 'mention' || type === 'task' || (type === 'system' && (metadataObj.clientId || metadataObj.leadId)))) {
                 commentText = metadataObj.commentText || metadataObj.fullComment || null;
                 // For mention emails, ensure the comment shown matches the notification: use the quoted preview from message if present.
                 // This fixes cases where metadata comment was missing or wrong (e.g. stale/cached), so the email always shows the comment that triggered the mention.
@@ -281,11 +281,24 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 const prev = commentText.length > 200 ? commentText.slice(0, 200) + '...' : commentText;
                 enhancedMessage += `<div style="background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:15px;margin:20px 0;"><h4 style="color:#333;margin:0 0 10px;font-size:14px;">💬 Comment</h4><p style="color:#555;margin:0;line-height:1.6;white-space:pre-wrap;">${escapeHtml(prev)}</p></div>`;
             }
+            let commentLinkLabel = null;
+            if (type === 'system' && metadataObj && (metadataObj.clientId || metadataObj.leadId)) {
+                commentLinkLabel = 'View client';
+                const ctx = (clientName || projectName || taskTitle)
+                    ? `<div style="background:#e7f3ff;border-left:4px solid #007bff;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📋 Context</h3>`
+                        + (clientName ? `<p style="color:#555;margin:5px 0;"><strong>Client:</strong> ${escapeHtml(clientName)}</p>` : '')
+                        + (projectName ? `<p style="color:#555;margin:5px 0;"><strong>Project:</strong> ${escapeHtml(projectName)}</p>` : '')
+                        + (taskTitle ? `<p style="color:#555;margin:5px 0;"><strong>Task:</strong> ${escapeHtml(taskTitle)}</p>` : '')
+                        + '</div>'
+                    : '';
+                enhancedMessage = ctx + `<p style="color:#555;line-height:1.6;white-space:pre-wrap;">${escapeHtml(String(message || ''))}</p>`;
+            }
             // So plain-text part does not duplicate Context/Comment (which are already in enhancedMessage)
             const messageAlreadyContainsContext = enhancedMessage !== message;
+            const systemClientDeepLink = type === 'system' && metadataObj && (metadataObj.clientId || metadataObj.leadId) && (commentLink || validLink || link);
             await sendNotificationEmail(targetUser.email, enhancedSubject, enhancedMessage, {
-                projectName, clientName, commentText, commentLink, taskTitle,
-                isProjectRelated: !!(metadataObj && (type === 'comment' || type === 'mention' || type === 'task')),
+                projectName, clientName, commentText, commentLink, commentLinkLabel, taskTitle,
+                isProjectRelated: !!(metadataObj && (type === 'comment' || type === 'mention' || type === 'task')) || systemClientDeepLink,
                 skipNotificationCreation: true,
                 messageAlreadyContainsContext
             });
