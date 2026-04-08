@@ -432,7 +432,7 @@ const NotificationCenter = () => {
             
             {/* Dropdown Panel */}
             {isOpen && (
-                <div className={`absolute right-0 mt-2 w-80 ${isDark ? 'bg-gray-800/98 border-gray-700' : 'bg-white/98 border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50 backdrop-blur-md`}>
+                <div className={`absolute right-0 mt-2 w-80 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
                     {/* Header */}
                     <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h3 className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
@@ -483,7 +483,7 @@ const NotificationCenter = () => {
                                             }
                                         }}
                                         className={`border-b ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'} cursor-pointer transition-colors ${
-                                            !notification.read && (isDark ? 'bg-gray-750' : 'bg-blue-50/90')
+                                            !notification.read && (isDark ? 'bg-gray-750' : 'bg-blue-50')
                                         }`}
                                         style={{ userSelect: 'none' }}
                                         role="button"
