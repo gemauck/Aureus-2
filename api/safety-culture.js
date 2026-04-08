@@ -55,6 +55,7 @@ async function handler(req, res) {
         inspectionDetail: '/api/safety-culture/inspections/detail?id=',
         issues: '/api/safety-culture/issues',
         issueDetail: '/api/safety-culture/issues/detail?id=',
+        mediaSignUrl: '/api/safety-culture/media/sign-url?id=&token=',
         groups: '/api/safety-culture/groups'
       },
       docs: 'https://developer.safetyculture.com/',

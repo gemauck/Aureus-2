@@ -41,6 +41,266 @@ const isScKeyAdminUser = () => {
     return SC_ADMIN_ROLES.has(role);
 };
 
+function formatScLocationLines(o) {
+    if (!o || typeof o !== 'object') return [];
+    const lines = [];
+    if (o.name) lines.push(String(o.name));
+    const region = [o.locality, o.administrative_area, o.region, o.country].filter(Boolean);
+    if (region.length) lines.push(region.join(', '));
+    if (o.address && typeof o.address === 'string') lines.push(o.address);
+    if (o.formatted_address) lines.push(String(o.formatted_address));
+    if (o.postal_code) lines.push(`Postal code: ${o.postal_code}`);
+    if (o.latitude != null && o.longitude != null) {
+        lines.push(`Map: ${o.latitude}, ${o.longitude}`);
+    }
+    return lines;
+}
+
+function renderScTaskBlock(o) {
+    if (!o || typeof o !== 'object') return null;
+    const name = [o.firstname || o.first_name, o.lastname || o.last_name].filter(Boolean).join(' ');
+    const desc = o.description || o.summary || o.title || '';
+    return (
+        <div className="space-y-1">
+            {name ? (
+                <div>
+                    <span className="opacity-70 text-xs uppercase tracking-wide">Assignee</span>
+                    <div className="font-medium">{name}</div>
+                </div>
+            ) : null}
+            {desc ? (
+                <div>
+                    <span className="opacity-70 text-xs uppercase tracking-wide">Description</span>
+                    <div className="whitespace-pre-wrap mt-0.5">{desc}</div>
+                </div>
+            ) : null}
+            {o.task_id ? <div className="text-xs opacity-60">Task ID: {o.task_id}</div> : null}
+        </div>
+    );
+}
+
+function renderScCategoryBlock(o) {
+    if (!o || typeof o !== 'object') return null;
+    const label = o.label || o.category_label || o.name;
+    const desc = o.description || o.category_description;
+    if (!label && !desc) return null;
+    return (
+        <div className="space-y-1">
+            {label ? <div className="font-medium">{label}</div> : null}
+            {desc ? <div className="text-sm opacity-90 whitespace-pre-wrap">{desc}</div> : null}
+            {o.id ? <div className="text-xs opacity-60">ID: {o.id}</div> : null}
+        </div>
+    );
+}
+
+function renderScItemsList(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) {
+        return <span className="opacity-70">None</span>;
+    }
+    return (
+        <ol className="list-decimal list-inside space-y-2 text-sm">
+            {arr.map((item, idx) => {
+                if (!item || typeof item !== 'object') {
+                    return <li key={idx}>{String(item)}</li>;
+                }
+                const type = (item.type || item.item_type || '').toString().replace(/^ITEM_TYPE_/, '') || 'Field';
+                const q = item.question_data || item.question || {};
+                const label = q.label || q.title || item.name || item.label || `Item ${idx + 1}`;
+                const text =
+                    item.text ||
+                    item.text_value ||
+                    item.string_value ||
+                    item.answer?.text ||
+                    item.answer?.value ||
+                    (item.value != null && typeof item.value === 'string' ? item.value : '');
+                return (
+                    <li key={item.id || idx} className="pl-1">
+                        <span className="font-medium">{label}</span>
+                        <span className="text-xs opacity-70 ml-1">({type})</span>
+                        {text ? <div className="whitespace-pre-wrap mt-0.5 pl-0 opacity-95">{text}</div> : null}
+                    </li>
+                );
+            })}
+        </ol>
+    );
+}
+
+function renderScInspectionsList(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) {
+        return <span className="opacity-70">None linked</span>;
+    }
+    return (
+        <ul className="list-disc list-inside space-y-1 text-sm">
+            {arr.map((insp, idx) => {
+                if (!insp || typeof insp !== 'object') return <li key={idx}>{String(insp)}</li>;
+                const title = insp.title || insp.name || insp.template_title || insp.id;
+                return (
+                    <li key={insp.id || idx}>
+                        <span className="font-medium">{title}</span>
+                        {insp.status ? <span className="text-xs opacity-70 ml-2">{insp.status}</span> : null}
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
+const ScMediaTile = ({ item, isDark, getHeaders }) => {
+    const [src, setSrc] = useState(null);
+    const [err, setErr] = useState(null);
+    const id = item?.id || item?.media_id;
+    const token = item?.token;
+    const mediaType = item?.media_type || item?.mediaType || '';
+    const fileName = item?.file_name || item?.filename || item?.name || 'Attachment';
+
+    useEffect(() => {
+        if (!id || !token) {
+            setErr('Missing media id or token');
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                const params = new URLSearchParams({ id: String(id), token: String(token) });
+                if (mediaType) params.set('media_type', String(mediaType));
+                const res = await fetch(`${API_BASE}/safety-culture/media/sign-url?${params}`, { headers: getHeaders() });
+                const json = await res.json().catch(() => ({}));
+                const u = json?.data?.url;
+                if (!res.ok || !u) {
+                    const msg =
+                        (typeof json?.error === 'object' && json?.error?.message) ||
+                        json?.error ||
+                        json?.message ||
+                        `Could not load media (${res.status})`;
+                    if (!cancelled) setErr(String(msg));
+                    return;
+                }
+                if (!cancelled) setSrc(u);
+            } catch (e) {
+                if (!cancelled) setErr(e.message || 'Request failed');
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [id, token, mediaType]);
+
+    const isImage =
+        String(mediaType).includes('IMAGE') ||
+        /\.(jpe?g|png|gif|webp)$/i.test(fileName);
+
+    const cardClass = isDark ? 'border-gray-600 bg-gray-900/50' : 'border-gray-200 bg-gray-50';
+
+    return (
+        <div className={`rounded-lg border p-2 max-w-xs ${cardClass}`}>
+            <div className="text-xs font-medium truncate mb-1" title={fileName}>
+                {fileName}
+            </div>
+            {err ? <div className="text-xs text-red-500 dark:text-red-400">{err}</div> : null}
+            {!err && !src ? (
+                <div className="text-xs opacity-60 py-4 flex items-center gap-2">
+                    <i className="fas fa-spinner fa-spin" />
+                    Loading…
+                </div>
+            ) : null}
+            {src && isImage ? (
+                <a href={src} target="_blank" rel="noopener noreferrer" className="block">
+                    <img src={src} alt="" className="max-w-full max-h-56 rounded object-contain mx-auto" />
+                </a>
+            ) : null}
+            {src && !isImage ? (
+                <a href={src} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline break-all">
+                    Open / download file
+                </a>
+            ) : null}
+        </div>
+    );
+};
+
+function renderScMediaList(items, isDark, getHeaders) {
+    if (!Array.isArray(items) || items.length === 0) {
+        return <span className="opacity-70">None</span>;
+    }
+    return (
+        <div className="flex flex-wrap gap-3">
+            {items.map((item, idx) => (
+                <ScMediaTile key={item?.id || item?.media_id || idx} item={item} isDark={isDark} getHeaders={getHeaders} />
+            ))}
+        </div>
+    );
+}
+
+function renderIssueDetailField(key, val, isDark, getHeaders) {
+    if (val == null) return '-';
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    if (typeof val !== 'object') return String(val);
+    const k = key.toLowerCase();
+
+    if (k === 'location' && !Array.isArray(val)) {
+        const lines = formatScLocationLines(val);
+        if (lines.length) {
+            return (
+                <div className="space-y-0.5">
+                    {lines.map((t, i) => (
+                        <div key={i}>{t}</div>
+                    ))}
+                </div>
+            );
+        }
+    }
+
+    if ((k === 'task' || k === 'tasks') && Array.isArray(val)) {
+        if (val.length === 0) return <span className="opacity-70">None</span>;
+        return (
+            <div className="space-y-3">
+                {val.map((t, i) => (
+                    <div
+                        key={t?.task_id || t?.id || i}
+                        className="border-l-2 pl-2 border-gray-300 dark:border-gray-600"
+                    >
+                        {renderScTaskBlock(t)}
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if ((k === 'task' || k === 'tasks') && !Array.isArray(val)) {
+        const block = renderScTaskBlock(val);
+        if (block) return block;
+    }
+
+    if ((k === 'category' || k === 'categories') && !Array.isArray(val)) {
+        const block = renderScCategoryBlock(val);
+        if (block) return block;
+    }
+
+    if ((k === 'media' || k === 'medias' || k === 'images') && Array.isArray(val)) {
+        return renderScMediaList(val, isDark, getHeaders);
+    }
+
+    if (k === 'items' && Array.isArray(val)) {
+        return renderScItemsList(val);
+    }
+
+    if (k === 'inspections' && Array.isArray(val)) {
+        return renderScInspectionsList(val);
+    }
+
+    if (Array.isArray(val) && val.length > 0 && val.every((x) => x != null && typeof x !== 'object')) {
+        return val.join(', ');
+    }
+
+    return (
+        <details className="group">
+            <summary className="cursor-pointer text-xs text-blue-600 dark:text-blue-400">Raw data</summary>
+            <pre className="mt-2 text-xs overflow-auto max-h-40 p-2 rounded bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100">
+                {JSON.stringify(val, null, 2)}
+            </pre>
+        </details>
+    );
+}
+
 const SafetyCultureInspections = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
     const [status, setStatus] = useState(null);
@@ -536,13 +796,6 @@ const SafetyCultureInspections = () => {
         }
     };
 
-    const renderIssueDetailValue = (val) => {
-        if (val == null) return '-';
-        if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-        if (typeof val === 'object') return <pre className="text-xs overflow-auto max-h-32 p-2 bg-gray-100 dark:bg-gray-700 rounded">{JSON.stringify(val, null, 2)}</pre>;
-        return String(val);
-    };
-
     const formatDate = (s) => {
         if (!s) return '-';
         try {
@@ -966,8 +1219,37 @@ const SafetyCultureInspections = () => {
                         )}
                         <div className="p-4 space-y-3 text-sm">
                             {Object.entries(selectedIssue)
+                                .filter(([key]) => key !== '_enrichment')
                                 .sort(([a], [b]) => {
-                                    const order = ['id', 'title', 'name', 'description', 'status', 'priority', 'created_at', 'createdAt', 'due_date', 'dueDate', 'assignee_name', 'assigneeName', 'modified_at', 'modifiedAt'];
+                                    const order = [
+                                        'id',
+                                        'title',
+                                        'name',
+                                        'description',
+                                        'status',
+                                        'priority',
+                                        'location',
+                                        'location_name',
+                                        'site_name',
+                                        'site_id',
+                                        'task',
+                                        'category',
+                                        'category_label',
+                                        'media',
+                                        'items',
+                                        'inspections',
+                                        'unique_id',
+                                        'created_at',
+                                        'createdAt',
+                                        'due_at',
+                                        'due_date',
+                                        'dueDate',
+                                        'assignee_name',
+                                        'assigneeName',
+                                        'creator_user_name',
+                                        'modified_at',
+                                        'modifiedAt'
+                                    ];
                                     const ai = order.indexOf(a);
                                     const bi = order.indexOf(b);
                                     if (ai >= 0 && bi >= 0) return ai - bi;
@@ -977,14 +1259,19 @@ const SafetyCultureInspections = () => {
                                 })
                                 .map(([key, val]) => (
                                 <div key={key} className="flex gap-3">
-                                    <span className={`font-medium min-w-[140px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    <span className={`font-medium min-w-[140px] shrink-0 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                         {key.replace(/_/g, ' ')}
                                     </span>
-                                    <span className={`flex-1 break-words ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                        {renderIssueDetailValue(val)}
+                                    <span className={`flex-1 break-words min-w-0 ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {renderIssueDetailField(key, val, isDark, getHeaders)}
                                     </span>
                                 </div>
                             ))}
+                            {selectedIssue._enrichment && !selectedIssue._enrichment.ok ? (
+                                <div className={`text-xs pt-2 border-t ${isDark ? 'border-gray-600 text-amber-400' : 'border-gray-200 text-amber-800'}`}>
+                                    Detail merge: {selectedIssue._enrichment.error || selectedIssue._enrichment.reason || 'partial'}
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -1201,6 +1488,7 @@ const SafetyCultureInspections = () => {
                         )}
                         <div className="p-4 space-y-3 text-sm">
                             {Object.entries(selectedInspection)
+                                .filter(([key]) => key !== '_enrichment')
                                 .sort(([a], [b]) => {
                                     const order = ['id', 'name', 'template_name', 'owner_name', 'score', 'max_score', 'date_started', 'date_completed', 'modified_at'];
                                     const ai = order.indexOf(a);
@@ -1212,11 +1500,11 @@ const SafetyCultureInspections = () => {
                                 })
                                 .map(([key, val]) => (
                                 <div key={key} className="flex gap-3">
-                                    <span className={`font-medium min-w-[140px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    <span className={`font-medium min-w-[140px] shrink-0 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                         {key.replace(/_/g, ' ')}
                                     </span>
-                                    <span className={`flex-1 break-words ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                        {renderIssueDetailValue(val)}
+                                    <span className={`flex-1 break-words min-w-0 ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {renderIssueDetailField(key, val, isDark, getHeaders)}
                                     </span>
                                 </div>
                             ))}
