@@ -78,13 +78,13 @@ async function upsertInspectionsBatch(items) {
   const CHUNK = 15
   for (let i = 0; i < valid.length; i += CHUNK) {
     const slice = valid.slice(i, i + CHUNK)
-    await prisma.$transaction(
-      slice.map((item) => {
+    await prisma.$transaction(async (tx) => {
+      for (const item of slice) {
         const ext = String(item.id).trim()
         const modifiedAt = inspectionModifiedAt(item)
         const templateId = extractTemplateId(item)
         const payloadJson = sanitizePayloadForPrismaJson(item)
-        return prisma.safetyCultureCachedInspection.upsert({
+        await tx.safetyCultureCachedInspection.upsert({
           where: { externalId: ext },
           create: {
             externalId: ext,
@@ -98,8 +98,8 @@ async function upsertInspectionsBatch(items) {
             templateId
           }
         })
-      })
-    )
+      }
+    })
   }
 }
 
@@ -108,12 +108,12 @@ async function upsertIssuesBatch(items) {
   const CHUNK = 15
   for (let i = 0; i < valid.length; i += CHUNK) {
     const slice = valid.slice(i, i + CHUNK)
-    await prisma.$transaction(
-      slice.map((item) => {
+    await prisma.$transaction(async (tx) => {
+      for (const item of slice) {
         const ext = String(item?.id ?? item?.unique_id ?? '').trim()
         const modifiedAt = issueModifiedAt(item)
         const payloadJson = sanitizePayloadForPrismaJson(item)
-        return prisma.safetyCultureCachedIssue.upsert({
+        await tx.safetyCultureCachedIssue.upsert({
           where: { externalId: ext },
           create: {
             externalId: ext,
@@ -125,8 +125,8 @@ async function upsertIssuesBatch(items) {
             modifiedAt
           }
         })
-      })
-    )
+      }
+    })
   }
 }
 
