@@ -892,6 +892,17 @@ const JobCardFormPublic = () => {
     [stockLocations]
   );
 
+  const lockedStockLocationId = useMemo(() => {
+    const firstStockLine = Array.isArray(formData.stockUsed) ? formData.stockUsed[0] : null;
+    return firstStockLine?.locationId ? String(firstStockLine.locationId) : '';
+  }, [formData.stockUsed]);
+
+  useEffect(() => {
+    if (!lockedStockLocationId) return;
+    if (String(newStockItem.locationId || '') === lockedStockLocationId) return;
+    setNewStockItem((prev) => ({ ...prev, locationId: lockedStockLocationId, sku: '' }));
+  }, [lockedStockLocationId, newStockItem.locationId]);
+
   useEffect(() => {
     const locId = newStockItem.locationId;
     if (!locId) {
@@ -1942,8 +1953,18 @@ const JobCardFormPublic = () => {
   };
 
   const handleAddStockItem = () => {
-    if (!newStockItem.locationId) {
+    const selectedLocationId = String(newStockItem.locationId || '');
+    const enforcedLocationId = lockedStockLocationId || selectedLocationId;
+    if (!enforcedLocationId) {
       alert('Please select the stock location first.');
+      return;
+    }
+    if (
+      lockedStockLocationId &&
+      selectedLocationId &&
+      selectedLocationId !== lockedStockLocationId
+    ) {
+      alert('You can only use stock from one location per job card.');
       return;
     }
     if (!newStockItem.sku || newStockItem.quantity <= 0) {
@@ -1965,8 +1986,8 @@ const JobCardFormPublic = () => {
       sku: inventoryItem.sku || inventoryItem.id,
       itemName: inventoryItem.name || '',
       quantity: parseFloat(newStockItem.quantity),
-      locationId: newStockItem.locationId,
-      locationName: stockLocations.find(loc => loc.id === newStockItem.locationId)?.name || '',
+      locationId: enforcedLocationId,
+      locationName: stockLocations.find(loc => String(loc.id) === enforcedLocationId)?.name || '',
       unitCost: inventoryItem.unitCost || 0
     };
 
@@ -1974,7 +1995,7 @@ const JobCardFormPublic = () => {
       ...prev,
       stockUsed: [...prev.stockUsed, stockItem]
     }));
-    setNewStockItem((prev) => ({ sku: '', quantity: 0, locationId: prev.locationId }));
+    setNewStockItem((prev) => ({ sku: '', quantity: 0, locationId: enforcedLocationId }));
   };
 
   const handleRemoveStockItem = (itemId) => {
@@ -3453,10 +3474,14 @@ const JobCardFormPublic = () => {
                 <SearchableSelect
                   id="stock-location"
                   aria-label="Stock location"
-                  value={newStockItem.locationId}
-                  onChange={(v) => setNewStockItem((prev) => ({ ...prev, locationId: v, sku: '' }))}
+                  value={lockedStockLocationId || newStockItem.locationId}
+                  onChange={(v) => {
+                    if (lockedStockLocationId) return;
+                    setNewStockItem((prev) => ({ ...prev, locationId: v, sku: '' }));
+                  }}
                   options={stockLocationOptions}
                   placeholder="Select stock location first…"
+                  disabled={Boolean(lockedStockLocationId)}
                   required
                 />
               </div>
@@ -3501,6 +3526,11 @@ const JobCardFormPublic = () => {
             {newStockItem.locationId && stockSkuOptions.length === 0 && (
               <p className="text-xs text-gray-500 mb-3">
                 No on-hand stock at this location{!isOnline ? ' (offline — connect to refresh, or stock may be empty).' : '.'}
+              </p>
+            )}
+            {lockedStockLocationId && (
+              <p className="text-xs text-gray-500 mb-3">
+                Stock location is locked for this job card after the first stock line is added.
               </p>
             )}
             {formData.stockUsed.length > 0 && (
