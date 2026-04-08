@@ -96,7 +96,7 @@ async function handler(req, res) {
   const latestItems = nextPage ? sortedFeedItems : sortedFeedItems.slice(0, requestedLimit)
   const enriched = await enrichFeedItemsCapped(
     latestItems,
-    (item) => item?.id,
+    (item) => item?.id || item?.unique_id,
     fetchIssueDetails,
     { cap: enrichCap, concurrency: 8 }
   )

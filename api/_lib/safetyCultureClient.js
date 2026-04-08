@@ -31,6 +31,29 @@ export function normaliseFeedData(result) {
 }
 
 /**
+ * Some SafetyCulture endpoints return HTTP 200 with an application-level failure (e.g. `{ ret: false }`).
+ * Without this check, enrich would spread garbage fields like `extra_details` onto feed rows.
+ */
+export function isSafetyCultureFailurePayload(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false
+  if (body.ret === false) return true
+  if (body.success === false) return true
+  if (body.ok === false) return true
+  return false
+}
+
+/**
+ * Normalize Get Issue (`/tasks/v1/incident/{id}`) and legacy responses to a single incident object.
+ */
+export function normalizeIssueDetailPayload(body) {
+  if (!body || typeof body !== 'object') return null
+  if (body.incident && typeof body.incident === 'object') return body.incident
+  if (body.data && typeof body.data === 'object' && !Array.isArray(body.data)) return body.data
+  if (body.id || body.title || body.unique_id) return body
+  return null
+}
+
+/**
  * Make a request to the Safety Culture API
  * @param {string} path - API path (e.g. /feed/inspections)
  * @param {object} options - fetch options
@@ -280,8 +303,19 @@ export async function fetchInspectionDetails(auditId) {
   let lastError = null
   for (const path of candidates) {
     const result = await safetyCultureRequest(path)
-    if (!result?.error) return result
-    lastError = { path, error: result.error, details: result.details, status: result.status }
+    if (result?.error) {
+      lastError = { path, error: result.error, details: result.details, status: result.status }
+      continue
+    }
+    if (isSafetyCultureFailurePayload(result)) {
+      lastError = {
+        path,
+        error: typeof result.error === 'string' ? result.error : 'SafetyCulture returned a failure payload',
+        details: result
+      }
+      continue
+    }
+    return result
   }
   return {
     error: 'Unable to fetch inspection details',
@@ -297,8 +331,11 @@ export async function fetchInspectionDetails(auditId) {
  */
 export async function fetchIssueDetails(issueId) {
   if (!issueId) return { error: 'Missing issue id' }
-  const id = encodeURIComponent(String(issueId))
+  const rawId = String(issueId).trim()
+  const id = encodeURIComponent(rawId)
+  /** Official: https://developer.safetyculture.com/reference/incidentsservice_getincidentbyid (UUID or e.g. IS-3017) */
   const candidates = [
+    `/tasks/v1/incident/${id}`,
     `/issues/${id}`,
     `/incidents/${id}`,
     `/feed/issues/${id}`
@@ -306,12 +343,27 @@ export async function fetchIssueDetails(issueId) {
   let lastError = null
   for (const path of candidates) {
     const result = await safetyCultureRequest(path)
-    if (!result?.error) return result
-    lastError = { path, error: result.error, details: result.details, status: result.status }
+    if (result?.error) {
+      lastError = { path, error: result.error, details: result.details, status: result.status }
+      continue
+    }
+    if (isSafetyCultureFailurePayload(result)) {
+      const msg =
+        typeof result.error === 'string'
+          ? result.error
+          : 'SafetyCulture returned a failure payload (e.g. ret: false)'
+      lastError = { path, error: msg, details: result }
+      continue
+    }
+    const data = normalizeIssueDetailPayload(result)
+    if (data) {
+      return { data }
+    }
+    lastError = { path, error: 'Unrecognized issue detail response', details: result }
   }
   return {
     error: 'Unable to fetch issue details',
-    details: { issueId, lastError }
+    details: { issueId: rawId, lastError }
   }
 }
 
