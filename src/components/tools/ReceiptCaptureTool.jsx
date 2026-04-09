@@ -400,6 +400,9 @@ function ReceiptCaptureTool() {
           Export CSV
         </button>
       </div>
+      <p className={`text-[11px] leading-snug ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+        Slips may show card or bank details. Only upload what you need for expenses; follow your company retention policy.
+      </p>
 
       {msg ? (
         <p className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>{msg}</p>
