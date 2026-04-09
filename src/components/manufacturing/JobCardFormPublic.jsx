@@ -8,6 +8,13 @@ const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
 const JOB_CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 
+/** Work-step fields that can each carry photos/videos (stored on JobCard.photos as { kind: 'sectionMedia', section, url, name }). */
+const SECTION_WORK_MEDIA_KEYS = ['diagnosis', 'actionsTaken', 'futureWorkRequired'];
+
+function emptySectionWorkMedia() {
+  return { diagnosis: [], actionsTaken: [], futureWorkRequired: [] };
+}
+
 /** Ids of job cards created/updated via the public API on this browser — used for GET /api/public/jobcards?ids= */
 const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
 const MAX_PUBLIC_PRIOR_IDS = 200;
@@ -104,6 +111,45 @@ function parseProjectAssociationFromComments(rawComments) {
   }
   return { projectId: '', projectName: raw };
 }
+
+/** Inline photo/video strip for Diagnosis / Actions / Future work sections on the work step. */
+const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove }) => {
+  const inputId = `section-work-media-${sectionKey}`;
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100">
+      <p className="text-xs font-medium text-gray-600 mb-2">Photos &amp; video for this section (optional)</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="file"
+          id={inputId}
+          className="hidden"
+          accept="image/*,video/*"
+          multiple
+          onChange={(e) => onUpload(sectionKey, e)}
+        />
+        <label
+          htmlFor={inputId}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer touch-manipulation"
+        >
+          <i className="fas fa-camera text-gray-500" />
+          <span>Add photo or video</span>
+        </label>
+      </div>
+      {items && items.length > 0 ? (
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {items.map((photo, idx) => (
+            <JobCardWizardAttachmentPreview
+              key={`${sectionKey}-m-${idx}`}
+              url={photo.url}
+              index={idx}
+              onRemove={(i) => onRemove(sectionKey, i)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 const JobCardWizardAttachmentPreview = ({ url, index, onRemove }) => {
   const isVideo = jobCardMediaIsVideoDataUrl(url);
@@ -670,6 +716,8 @@ const JobCardFormPublic = () => {
 
   const [technicianInput, setTechnicianInput] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]);
+  /** Per-section photos/videos on work step (Diagnosis, Actions, Future work). */
+  const [sectionWorkMedia, setSectionWorkMedia] = useState(() => emptySectionWorkMedia());
   const [availableSites, setAvailableSites] = useState([]);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [inventory, setInventory] = useState([]);
@@ -971,6 +1019,15 @@ const JobCardFormPublic = () => {
     () => (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0),
     [formData.materialsBought]
   );
+
+  /** General gallery (work + sign-off) plus per-section work-step attachments. */
+  const totalPhotoVideoCount = useMemo(() => {
+    const sectionCount = SECTION_WORK_MEDIA_KEYS.reduce(
+      (n, k) => n + (sectionWorkMedia[k]?.length || 0),
+      0
+    );
+    return selectedPhotos.length + sectionCount;
+  }, [selectedPhotos, sectionWorkMedia]);
 
   const shareUrl = useMemo(() => {
     if (typeof window === 'undefined') {
@@ -1952,6 +2009,46 @@ const JobCardFormPublic = () => {
     setFormData(prev => ({ ...prev, photos: newPhotos.map(photo => typeof photo === 'string' ? photo : photo.url) }));
   };
 
+  const handleSectionWorkMediaUpload = (section, event) => {
+    const files = Array.from(event.target.files || []);
+    const input = event.target;
+    if (files.length === 0) return;
+
+    files.forEach(file => {
+      if (!jobCardFileLooksImageOrVideo(file)) {
+        alert('Please choose an image or video file.');
+        return;
+      }
+      const isVid = jobCardFileIsVideo(file);
+      const maxBytes = isVid ? JOB_CARD_VIDEO_MAX_BYTES : JOB_CARD_IMAGE_MAX_BYTES;
+      if (file.size > maxBytes) {
+        alert(
+          isVid
+            ? `Each video must be ${JOB_CARD_VIDEO_MAX_BYTES / 1024 / 1024}MB or smaller.`
+            : `Each image must be ${JOB_CARD_IMAGE_MAX_BYTES / 1024 / 1024}MB or smaller.`
+        );
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result;
+        setSectionWorkMedia(prev => ({
+          ...prev,
+          [section]: [...(prev[section] || []), { name: file.name, url: dataUrl, size: file.size }]
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+    input.value = '';
+  };
+
+  const handleRemoveSectionWorkMedia = (section, index) => {
+    setSectionWorkMedia(prev => ({
+      ...prev,
+      [section]: (prev[section] || []).filter((_, i) => i !== index)
+    }));
+  };
+
   const handleAddStockItem = () => {
     const selectedLocationId = String(newStockItem.locationId || '');
     const enforcedLocationId = lockedStockLocationId || selectedLocationId;
@@ -2270,6 +2367,7 @@ const JobCardFormPublic = () => {
         customerSignature: ''
       });
       setSelectedPhotos([]);
+      setSectionWorkMedia(emptySectionWorkMedia());
       setTechnicianInput('');
       setNewStockItem({ sku: '', quantity: 0, locationId: '' });
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
@@ -2361,10 +2459,30 @@ const JobCardFormPublic = () => {
     const voiceEntries = photosRaw.filter(
       p => p && typeof p === 'object' && p.kind === 'voice'
     );
+    const sectionMediaEntries = photosRaw.filter(
+      p => p && typeof p === 'object' && p.kind === 'sectionMedia'
+    );
     const imageUrls = photosRaw
-      .filter(p => !p || typeof p !== 'object' || p.kind !== 'voice')
+      .filter(p => {
+        if (typeof p === 'string') return true;
+        if (!p || typeof p !== 'object') return false;
+        if (p.kind === 'voice' || p.kind === 'sectionMedia') return false;
+        return true;
+      })
       .map(p => (typeof p === 'string' ? p : p && p.url))
       .filter(Boolean);
+
+    const restoredSectionMedia = emptySectionWorkMedia();
+    sectionMediaEntries.forEach(item => {
+      const sec = item.section;
+      if (restoredSectionMedia[sec] != null) {
+        restoredSectionMedia[sec].push({
+          name: item.name || `Attachment ${restoredSectionMedia[sec].length + 1}`,
+          url: item.url
+        });
+      }
+    });
+    setSectionWorkMedia(restoredSectionMedia);
 
     setVoiceAttachments(
       voiceEntries.map((v, i) => ({
@@ -2497,7 +2615,15 @@ const JobCardFormPublic = () => {
         url: v.dataUrl,
         mimeType: v.mimeType || 'audio/webm'
       }));
-      jobCardData.photos = [...(formData.photos || []), ...voicePhotoEntries];
+      const sectionPhotoEntries = SECTION_WORK_MEDIA_KEYS.flatMap(sec =>
+        (sectionWorkMedia[sec] || []).map(item => ({
+          kind: 'sectionMedia',
+          section: sec,
+          url: item.url,
+          name: item.name || ''
+        }))
+      );
+      jobCardData.photos = [...(formData.photos || []), ...sectionPhotoEntries, ...voicePhotoEntries];
 
       // Wizard submit: persist as submitted so ERP Job Cards filters (e.g. Submitted) match.
       jobCardData.status = 'submitted';
@@ -3099,6 +3225,12 @@ const JobCardFormPublic = () => {
               onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'diagnosis')}
             />
+            <WorkSectionMediaAttachments
+              sectionKey="diagnosis"
+              items={sectionWorkMedia.diagnosis}
+              onUpload={handleSectionWorkMediaUpload}
+              onRemove={handleRemoveSectionWorkMedia}
+            />
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -3135,6 +3267,12 @@ const JobCardFormPublic = () => {
               onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'actionsTaken')}
             />
+            <WorkSectionMediaAttachments
+              sectionKey="actionsTaken"
+              items={sectionWorkMedia.actionsTaken}
+              onUpload={handleSectionWorkMediaUpload}
+              onRemove={handleRemoveSectionWorkMedia}
+            />
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -3159,6 +3297,12 @@ const JobCardFormPublic = () => {
               onVoiceSaved={addVoiceClip}
               onVoiceClipUpdate={updateVoiceClip}
               voiceClips={voiceAttachments.filter(c => c.section === 'futureWorkRequired')}
+            />
+            <WorkSectionMediaAttachments
+              sectionKey="futureWorkRequired"
+              items={sectionWorkMedia.futureWorkRequired}
+              onUpload={handleSectionWorkMediaUpload}
+              onRemove={handleRemoveSectionWorkMedia}
             />
           </div>
           <div>
@@ -3202,9 +3346,9 @@ const JobCardFormPublic = () => {
             <h2 className="text-lg font-semibold text-gray-900">Photos & video</h2>
             <p className="text-sm text-gray-500 mt-1">Add photos or short videos of the site, fault, or work completed (optional).</p>
           </div>
-          {selectedPhotos.length > 0 && (
+          {totalPhotoVideoCount > 0 && (
             <span className="text-sm font-medium text-blue-600">
-              {selectedPhotos.length} attachment{selectedPhotos.length === 1 ? '' : 's'}
+              {totalPhotoVideoCount} attachment{totalPhotoVideoCount === 1 ? '' : 's'}
             </span>
           )}
         </header>
@@ -3666,9 +3810,9 @@ const JobCardFormPublic = () => {
             <h2 className="text-lg font-semibold text-gray-900">Attachments</h2>
             <p className="text-sm text-gray-500 mt-1">Capture supporting photos or videos from site.</p>
           </div>
-          {selectedPhotos.length > 0 && (
+          {totalPhotoVideoCount > 0 && (
             <span className="text-sm font-medium text-blue-600">
-              {selectedPhotos.length} attachment{selectedPhotos.length === 1 ? '' : 's'}
+              {totalPhotoVideoCount} attachment{totalPhotoVideoCount === 1 ? '' : 's'}
             </span>
           )}
         </header>
@@ -3870,7 +4014,7 @@ const JobCardFormPublic = () => {
           <SummaryRow label="Materials Cost" value={totalMaterialCost > 0 ? `R ${totalMaterialCost.toFixed(2)}` : ''} />
           <SummaryRow label="Future Work" value={formData.futureWorkRequired || ''} />
           <SummaryRow label="Follow-up Schedule" value={formData.futureWorkScheduledAt ? new Date(formData.futureWorkScheduledAt).toLocaleString() : ''} />
-          <SummaryRow label="Photos / video" value={selectedPhotos.length > 0 ? `${selectedPhotos.length}` : ''} />
+          <SummaryRow label="Photos / video" value={totalPhotoVideoCount > 0 ? `${totalPhotoVideoCount}` : ''} />
           <SummaryRow label="Customer Signature" value={hasSignature ? 'Captured' : 'Pending'} />
         </div>
       </section>
