@@ -5,7 +5,7 @@ console.log('🔵 Manufacturing.jsx: Script started loading...');
 // If React isn't ready yet, we fall back to an empty object so the script
 // doesn't crash before we can register a fallback component.
 const ReactGlobal = window.React || {};
-const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, createElement, Fragment } = ReactGlobal;
+const { useState, useEffect, useCallback, useMemo, useRef, createElement, Fragment } = ReactGlobal;
 // Safely access useAuth - don't destructure if undefined
 const useAuth = window.useAuth || (() => {
   console.error('❌ Manufacturing: useAuth is not available');
@@ -2922,7 +2922,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setInventoryFixedBarRect({ left: r.left, width: r.width });
   }, [activeTab]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (activeTab !== 'inventory') return;
     updateInventoryFixedBarLayout();
     const main = document.querySelector('main');
@@ -2958,7 +2958,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   }, []);
 
   useEffect(() => {
-    if (activeTab !== 'inventory') return;
+    if (activeTab !== 'inventory') {
+      setInventoryTableHasHOverflow(false);
+      return;
+    }
     const mainEl = inventoryTableScrollRef.current;
     const inner = inventoryFixedHScrollInnerRef.current;
     if (!mainEl || !inner) return;
@@ -2997,7 +3000,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     return (
       <>
-      <div className="erp-module-root space-y-4 min-w-0 pb-10 lg:pb-14">
+      <div className={`erp-module-root space-y-4 min-w-0 ${inventoryTableHasHOverflow ? 'pb-10 lg:pb-14' : ''}`}>
         {showCatalogReviewOnly && (
           <div
             className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 rounded-xl border ${
@@ -3399,7 +3402,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           <div
             ref={inventoryTableScrollRef}
             onScroll={onInventoryTableHScroll}
-            className="overflow-x-auto rounded-t-lg scrollbar-hide lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:h-0"
+            className="overflow-x-auto rounded-t-lg scrollbar-hide"
           >
             <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -4021,7 +4024,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
       {inventoryTableHasHOverflow && inventoryFixedBarRect.width > 0 && (
         <div
-          className={`pointer-events-auto hidden lg:flex fixed z-[35] overflow-x-auto border-t shadow-[0_-2px_10px_rgba(0,0,0,0.06)] ${
+          className={`pointer-events-auto hidden lg:block fixed z-[35] overflow-x-auto border-t shadow-[0_-2px_10px_rgba(0,0,0,0.06)] ${
             isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-200'
           }`}
           style={{
@@ -4032,9 +4035,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           }}
           ref={inventoryFixedHScrollRef}
           onScroll={onInventoryFixedHScroll}
-          role="scrollbar"
+          role="region"
           aria-label="Scroll inventory table horizontally"
-          aria-hidden={false}
         >
           <div ref={inventoryFixedHScrollInnerRef} className="h-3 shrink-0" style={{ width: '1px' }} />
         </div>
