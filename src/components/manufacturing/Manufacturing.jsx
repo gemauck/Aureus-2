@@ -49,6 +49,8 @@ function dedupeInventoryRowsBySku(items) {
   return out;
 }
 
+const INVENTORY_LIST_PAGE_SIZE = 20;
+
 /** ZA VAT rate for PO totals (line unit prices are ex VAT). */
 const PO_VAT_RATE = 0.15;
 
@@ -318,6 +320,11 @@ try {
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
+  const [inventoryListPage, setInventoryListPage] = useState(1);
+  const inventoryTableHScrollRef = useRef(null);
+  const inventoryStickyHScrollRef = useRef(null);
+  const inventoryStickyHScrollInnerRef = useRef(null);
+  const inventoryHScrollSyncingRef = useRef(false);
   const reloadInventoryForLocation = useCallback(async (options = {}) => {
     if (options.skipIfTyping && isUserTypingRef.current) {
       return;
@@ -2785,27 +2792,22 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setShowModal(true);
   }, [selectedLocationId, stockLocations]);
 
-  const renderInventoryView = () => {
-    // Get unique categories from inventory items
-    const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
-    
-    // Filter logic with column-specific filters
-    let filteredInventory = inventory.filter(item => {
+  const filteredInventoryList = useMemo(() => {
+    let filtered = inventory.filter(item => {
       const name = (item.name || '').toString().toLowerCase();
       const sku = (item.sku || '').toString().toLowerCase();
       const category = (item.category || '').toString();
       const matchesSearch = name.includes(searchTerm.toLowerCase()) || sku.includes(searchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'all' || category === filterCategory;
-      
-      // Column-specific filters
+
       const matchesSKU = !columnFilters.sku || (item.sku || '').toString().toLowerCase().includes(columnFilters.sku.toLowerCase());
       const matchesName = !columnFilters.name || name.includes(columnFilters.name.toLowerCase());
       const matchesSupplierPart = !columnFilters.supplierPart || (() => {
         try {
-          const supplierParts = typeof item.supplierPartNumbers === 'string' 
-            ? JSON.parse(item.supplierPartNumbers || '[]') 
+          const supplierParts = typeof item.supplierPartNumbers === 'string'
+            ? JSON.parse(item.supplierPartNumbers || '[]')
             : (item.supplierPartNumbers || []);
-          return supplierParts.some(sp => 
+          return supplierParts.some(sp =>
             (sp.supplier || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase()) ||
             (sp.partNumber || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase())
           );
@@ -2822,15 +2824,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
       const matchesCatalogReview = !showCatalogReviewOnly || item.needsCatalogReview;
 
-      return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart && 
+      return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart &&
              matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesBoxNumber && matchesType && matchesStatus && matchesLocation && matchesCatalogReview;
     });
 
-    // Sorting logic
     if (sortConfig.key) {
-      filteredInventory = [...filteredInventory].sort((a, b) => {
+      filtered = [...filtered].sort((a, b) => {
         let aVal, bVal;
-        
+
         switch (sortConfig.key) {
           case 'sku':
             aVal = (a.sku || '').toString().toLowerCase();
@@ -2879,16 +2880,79 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           default:
             return 0;
         }
-        
+
         if (typeof aVal === 'string') {
-          return sortConfig.direction === 'asc' 
+          return sortConfig.direction === 'asc'
             ? aVal.localeCompare(bVal)
             : bVal.localeCompare(aVal);
-        } else {
-          return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
         }
+        return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
       });
     }
+
+    return filtered;
+  }, [inventory, searchTerm, filterCategory, columnFilters, sortConfig, showCatalogReviewOnly]);
+
+  useEffect(() => {
+    setInventoryListPage(1);
+  }, [searchTerm, filterCategory, showCatalogReviewOnly, selectedLocationId, sortConfig.key, sortConfig.direction, columnFilters]);
+
+  useEffect(() => {
+    const total = filteredInventoryList.length;
+    const totalPages = Math.max(1, Math.ceil(total / INVENTORY_LIST_PAGE_SIZE));
+    if (inventoryListPage > totalPages) {
+      setInventoryListPage(totalPages);
+    }
+  }, [filteredInventoryList.length, inventoryListPage]);
+
+  const onInventoryMainHScroll = useCallback(() => {
+    if (inventoryHScrollSyncingRef.current) return;
+    inventoryHScrollSyncingRef.current = true;
+    const main = inventoryTableHScrollRef.current;
+    const sticky = inventoryStickyHScrollRef.current;
+    if (main && sticky) sticky.scrollLeft = main.scrollLeft;
+    requestAnimationFrame(() => { inventoryHScrollSyncingRef.current = false; });
+  }, []);
+
+  const onInventoryStickyHScroll = useCallback(() => {
+    if (inventoryHScrollSyncingRef.current) return;
+    inventoryHScrollSyncingRef.current = true;
+    const main = inventoryTableHScrollRef.current;
+    const sticky = inventoryStickyHScrollRef.current;
+    if (main && sticky) main.scrollLeft = sticky.scrollLeft;
+    requestAnimationFrame(() => { inventoryHScrollSyncingRef.current = false; });
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'inventory') return;
+    const main = inventoryTableHScrollRef.current;
+    const inner = inventoryStickyHScrollInnerRef.current;
+    if (!main || !inner) return;
+    const syncInnerWidth = () => {
+      inner.style.width = `${main.scrollWidth}px`;
+    };
+    syncInnerWidth();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncInnerWidth) : null;
+    if (ro) ro.observe(main);
+    return () => { if (ro) ro.disconnect(); };
+  }, [activeTab, inventoryListPage, filteredInventoryList.length, inventory.length]);
+
+  useEffect(() => {
+    if (activeTab !== 'inventory') return;
+    if (inventoryTableHScrollRef.current) inventoryTableHScrollRef.current.scrollLeft = 0;
+    if (inventoryStickyHScrollRef.current) inventoryStickyHScrollRef.current.scrollLeft = 0;
+  }, [activeTab, inventoryListPage]);
+
+  const renderInventoryView = () => {
+    // Get unique categories from inventory items
+    const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
+
+    const filteredInventory = filteredInventoryList;
+    const invFilteredTotal = filteredInventory.length;
+    const invTotalPages = Math.max(1, Math.ceil(invFilteredTotal / INVENTORY_LIST_PAGE_SIZE));
+    const invSafePage = Math.min(Math.max(1, inventoryListPage), invTotalPages);
+    const invPageStart = (invSafePage - 1) * INVENTORY_LIST_PAGE_SIZE;
+    const paginatedInventory = filteredInventory.slice(invPageStart, invPageStart + INVENTORY_LIST_PAGE_SIZE);
 
     // Get sort icon for column
     const getSortIcon = (columnKey) => {
@@ -3005,7 +3069,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 ))}
               </select>
               <div className={`text-xs whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Showing {filteredInventory.length} of {inventory.length}
+                {invFilteredTotal === 0
+                  ? `Showing 0 of ${inventory.length} in catalog`
+                  : `Showing ${invPageStart + 1}–${Math.min(invPageStart + INVENTORY_LIST_PAGE_SIZE, invFilteredTotal)} of ${invFilteredTotal} (${inventory.length} in catalog)`}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -3102,7 +3168,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No inventory items found</p>
             </div>
           ) : (
-            filteredInventory.map(item => {
+            paginatedInventory.map(item => {
               const supplierParts = (() => {
                 try {
                   return (item.supplierPartNumbers !== undefined && item.supplierPartNumbers !== null)
@@ -3293,8 +3359,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         </div>
 
         {/* Desktop Table View - Shows on desktop */}
-        <div className="table-responsive bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className={`table-responsive rounded-lg border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+          <div
+            ref={inventoryTableHScrollRef}
+            onScroll={onInventoryMainHScroll}
+            className="overflow-x-auto rounded-t-lg"
+          >
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 {/* Header Row */}
@@ -3693,7 +3763,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredInventory.map(item => {
+                {paginatedInventory.map(item => {
                   const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
                   return (
                     <tr 
@@ -3852,7 +3922,74 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </tbody>
             </table>
           </div>
+          <div
+            className={`sticky bottom-0 z-20 overflow-x-auto border-t ${isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-200'} shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.06)]`}
+            ref={inventoryStickyHScrollRef}
+            onScroll={onInventoryStickyHScroll}
+            role="presentation"
+            aria-hidden="true"
+          >
+            <div ref={inventoryStickyHScrollInnerRef} className="h-px" style={{ width: '1px' }} />
+          </div>
         </div>
+
+        {invFilteredTotal > INVENTORY_LIST_PAGE_SIZE && (
+          <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            <span className="text-xs">
+              Page {invSafePage} of {invTotalPages} ({INVENTORY_LIST_PAGE_SIZE} per page)
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInventoryListPage(1)}
+                disabled={invSafePage <= 1}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  invSafePage <= 1
+                    ? isDark ? 'border-gray-700 text-gray-600 cursor-not-allowed' : 'border-gray-200 text-gray-400 cursor-not-allowed'
+                    : isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                First
+              </button>
+              <button
+                type="button"
+                onClick={() => setInventoryListPage(p => Math.max(1, p - 1))}
+                disabled={invSafePage <= 1}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  invSafePage <= 1
+                    ? isDark ? 'border-gray-700 text-gray-600 cursor-not-allowed' : 'border-gray-200 text-gray-400 cursor-not-allowed'
+                    : isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => setInventoryListPage(p => Math.min(invTotalPages, p + 1))}
+                disabled={invSafePage >= invTotalPages}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  invSafePage >= invTotalPages
+                    ? isDark ? 'border-gray-700 text-gray-600 cursor-not-allowed' : 'border-gray-200 text-gray-400 cursor-not-allowed'
+                    : isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Next
+              </button>
+              <button
+                type="button"
+                onClick={() => setInventoryListPage(invTotalPages)}
+                disabled={invSafePage >= invTotalPages}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  invSafePage >= invTotalPages
+                    ? isDark ? 'border-gray-700 text-gray-600 cursor-not-allowed' : 'border-gray-200 text-gray-400 cursor-not-allowed'
+                    : isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
