@@ -321,10 +321,7 @@ try {
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
   const [inventoryListPage, setInventoryListPage] = useState(1);
-  const inventoryTableHScrollRef = useRef(null);
-  const inventoryStickyHScrollRef = useRef(null);
-  const inventoryStickyHScrollInnerRef = useRef(null);
-  const inventoryHScrollSyncingRef = useRef(false);
+  const inventoryTableScrollRef = useRef(null);
   const reloadInventoryForLocation = useCallback(async (options = {}) => {
     if (options.skipIfTyping && isUserTypingRef.current) {
       return;
@@ -2905,42 +2902,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
   }, [filteredInventoryList.length, inventoryListPage]);
 
-  const onInventoryMainHScroll = useCallback(() => {
-    if (inventoryHScrollSyncingRef.current) return;
-    inventoryHScrollSyncingRef.current = true;
-    const main = inventoryTableHScrollRef.current;
-    const sticky = inventoryStickyHScrollRef.current;
-    if (main && sticky) sticky.scrollLeft = main.scrollLeft;
-    requestAnimationFrame(() => { inventoryHScrollSyncingRef.current = false; });
-  }, []);
-
-  const onInventoryStickyHScroll = useCallback(() => {
-    if (inventoryHScrollSyncingRef.current) return;
-    inventoryHScrollSyncingRef.current = true;
-    const main = inventoryTableHScrollRef.current;
-    const sticky = inventoryStickyHScrollRef.current;
-    if (main && sticky) main.scrollLeft = sticky.scrollLeft;
-    requestAnimationFrame(() => { inventoryHScrollSyncingRef.current = false; });
-  }, []);
-
   useEffect(() => {
     if (activeTab !== 'inventory') return;
-    const main = inventoryTableHScrollRef.current;
-    const inner = inventoryStickyHScrollInnerRef.current;
-    if (!main || !inner) return;
-    const syncInnerWidth = () => {
-      inner.style.width = `${main.scrollWidth}px`;
-    };
-    syncInnerWidth();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncInnerWidth) : null;
-    if (ro) ro.observe(main);
-    return () => { if (ro) ro.disconnect(); };
-  }, [activeTab, inventoryListPage, filteredInventoryList.length, inventory.length]);
-
-  useEffect(() => {
-    if (activeTab !== 'inventory') return;
-    if (inventoryTableHScrollRef.current) inventoryTableHScrollRef.current.scrollLeft = 0;
-    if (inventoryStickyHScrollRef.current) inventoryStickyHScrollRef.current.scrollLeft = 0;
+    const el = inventoryTableScrollRef.current;
+    if (el) el.scrollLeft = 0;
   }, [activeTab, inventoryListPage]);
 
   const renderInventoryView = () => {
@@ -3358,14 +3323,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           )}
         </div>
 
-        {/* Desktop Table View - Shows on desktop */}
-        <div className={`table-responsive rounded-lg border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+        {/* Desktop Table View — bounded height so overflow-auto keeps H/V scrollbars on this panel (not below full page). */}
+        <div
+          className={`table-responsive flex flex-col min-h-0 max-h-[min(75vh,calc(100vh-15rem))] overflow-hidden rounded-lg border ${
+            isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
+          }`}
+        >
           <div
-            ref={inventoryTableHScrollRef}
-            onScroll={onInventoryMainHScroll}
-            className="overflow-x-auto rounded-t-lg"
+            ref={inventoryTableScrollRef}
+            className="min-h-0 flex-1 overflow-auto overscroll-x-contain rounded-t-lg"
           >
-            <table className="w-full">
+            <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-200">
                 {/* Header Row */}
                 <tr>
@@ -3921,15 +3889,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 })}
               </tbody>
             </table>
-          </div>
-          <div
-            className={`sticky bottom-0 z-20 overflow-x-auto border-t ${isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-200'} shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.06)]`}
-            ref={inventoryStickyHScrollRef}
-            onScroll={onInventoryStickyHScroll}
-            role="presentation"
-            aria-hidden="true"
-          >
-            <div ref={inventoryStickyHScrollInnerRef} className="h-px" style={{ width: '1px' }} />
           </div>
         </div>
 

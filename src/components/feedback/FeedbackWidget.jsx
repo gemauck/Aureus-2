@@ -323,9 +323,12 @@ const FeedbackWidget = () => {
 
     // Detect mobile
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-    
     return (
-        <div className={`fixed ${isMobile ? 'left-4 right-4' : 'right-4'} bottom-4 z-50`}>
+        <div
+            className={`fixed z-50 ${
+                isMobile ? 'left-4 right-4 bottom-4' : 'right-6 bottom-20'
+            }`}
+        >
             {!open ? (
                 <button
                     onClick={() => setOpen(true)}
