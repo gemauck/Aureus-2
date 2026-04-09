@@ -6,7 +6,7 @@ const { useState } = React;
 const VALID_PAGES = ['dashboard', 'erp-calendar', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 /** Full-page routes rendered by App.jsx instead of the sidebar shell — must not coerce to dashboard */
-const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument'];
+const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument', 'expense-capture', 'expense'];
 
 /** Greenfield ERP Calendar: sidebar + route only for this account (must match api/_lib/erpCalendarAccess.js). */
 const ERP_CALENDAR_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';

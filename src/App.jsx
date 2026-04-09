@@ -24,6 +24,32 @@ function isPoFromDocumentRoute() {
     return false;
 }
 
+/** Authenticated full-screen Expense Capture (like /job-card URL simplicity, no ERP sidebar). */
+function isExpenseCaptureStandaloneRoute() {
+    const raw = (window.location.pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+    if (raw === '/expense-capture' || raw === '/expense') {
+        return true;
+    }
+    const hash = window.location.hash || '';
+    if (hash.startsWith('#/')) {
+        const first = hash
+            .substring(2)
+            .split('?')[0]
+            .split('/')
+            .filter(Boolean)[0];
+        if (first === 'expense-capture' || first === 'expense') {
+            return true;
+        }
+    }
+    try {
+        if (window.RouteState && typeof window.RouteState.getRoute === 'function') {
+            const p = String(window.RouteState.getRoute()?.page || '').toLowerCase();
+            return p === 'expense-capture' || p === 'expense';
+        }
+    } catch (e) {}
+    return false;
+}
+
 const AppContent = () => {
     // CRITICAL: ALL hooks must be called at the top, in the same order, before ANY conditional returns
     // This is required by React's rules of hooks - hooks cannot be called conditionally
@@ -43,10 +69,18 @@ const AppContent = () => {
     // Re-read URL when RouteState navigates (pushState does not fire popstate)
     const [routeTick, setRouteTick] = window.React.useState(0);
     const [poStandaloneReady, setPoStandaloneReady] = window.React.useState(!!window.PurchaseOrderFromDocumentStandalone);
+    const [expenseStandaloneReady, setExpenseStandaloneReady] = window.React.useState(
+        !!(window.ExpenseCaptureStandalone && (window.ExpenseCaptureTool || window.ReceiptCaptureTool))
+    );
 
     const isPoFromDocumentPage = (() => {
         void routeTick;
         return isPoFromDocumentRoute();
+    })();
+
+    const isExpenseCaptureStandalonePage = (() => {
+        void routeTick;
+        return isExpenseCaptureStandaloneRoute();
     })();
     
     // Get auth state - always call this hook
@@ -115,10 +149,21 @@ const AppContent = () => {
             }
             return;
         }
+        if (isExpenseCaptureStandalonePage) {
+            const path = (window.location.pathname || '').toLowerCase().includes('/expense-capture')
+                ? '/expense-capture'
+                : '/expense';
+            if (manager?.setPublicTitle) {
+                manager.setPublicTitle(path);
+            } else {
+                setDirectTitle('Expense Capture - Abcotronics ERP');
+            }
+            return;
+        }
         if (!user) {
             setDirectTitle('Login - Abcotronics ERP');
         }
-    }, [isInvitationPage, isResetPage, isPublicJobCardPage, isPoFromDocumentPage, user]);
+    }, [isInvitationPage, isResetPage, isPublicJobCardPage, isPoFromDocumentPage, isExpenseCaptureStandalonePage, user]);
     
     // Call ALL useEffect hooks (must be in same order every render)
     // Safety: after 30s force out of loading so site never stays stuck on "Loading..."
@@ -184,6 +229,59 @@ const AppContent = () => {
             clearTimeout(timeoutId);
         };
     }, [isPoFromDocumentPage]);
+
+    window.React.useEffect(() => {
+        if (!isExpenseCaptureStandalonePage) return;
+        const ready = () =>
+            window.ExpenseCaptureStandalone &&
+            (window.ExpenseCaptureTool || window.ReceiptCaptureTool);
+        if (ready()) {
+            setExpenseStandaloneReady(true);
+            return;
+        }
+        const checkInterval = setInterval(() => {
+            if (ready()) {
+                setExpenseStandaloneReady(true);
+                clearInterval(checkInterval);
+            }
+        }, 100);
+        // If lazy-loader is slow or failed, load compiled scripts directly (same paths as lazy-load-components)
+        const tryDirectScriptLoad = () => {
+            if (ready() || window.__expenseCaptureDirectLoadAttempted) return;
+            window.__expenseCaptureDirectLoadAttempted = true;
+            const v = window.BUILD_VERSION || String(Date.now());
+            const base = '/dist/src/components/tools/';
+            const appendScript = (file, onDone) => {
+                const existing = document.querySelector(`script[data-expense-capture="${file}"]`);
+                if (existing) {
+                    if (onDone) setTimeout(onDone, 0);
+                    return;
+                }
+                const s = document.createElement('script');
+                s.async = true;
+                s.dataset.expenseCapture = file;
+                s.src = `${base}${file}.js?v=${encodeURIComponent(v)}`;
+                s.onload = () => onDone && onDone();
+                s.onerror = () => onDone && onDone();
+                document.head.appendChild(s);
+            };
+            if (!window.ExpenseCaptureTool && !window.ReceiptCaptureTool) {
+                appendScript('ExpenseCaptureTool', () => {
+                    if (ready()) setExpenseStandaloneReady(true);
+                    else appendScript('ExpenseCaptureStandalone', () => setExpenseStandaloneReady(true));
+                });
+            } else {
+                appendScript('ExpenseCaptureStandalone', () => setExpenseStandaloneReady(true));
+            }
+        };
+        const fallbackTimer = setTimeout(tryDirectScriptLoad, 1800);
+        const timeoutId = setTimeout(() => clearInterval(checkInterval), 25000);
+        return () => {
+            clearInterval(checkInterval);
+            clearTimeout(fallbackTimer);
+            clearTimeout(timeoutId);
+        };
+    }, [isExpenseCaptureStandalonePage, user]);
     
     // LoginPage loading effect
     window.React.useEffect(() => {
@@ -277,8 +375,9 @@ const AppContent = () => {
     // Show loading screen during auth check OR initial data load (only if user exists)
     // DataContext handles no-user case by setting initialLoadComplete=true immediately
     // loadingEscape: after 30s we stop showing loading so the site never stays stuck
-    // Direct PO-from-document link: do not wait for full workspace preload (standalone page loads its own data).
-    const skipFullWorkspacePreload = isPoFromDocumentPage && user;
+    // Direct PO-from-document / expense-capture link: do not wait for full workspace preload.
+    const skipFullWorkspacePreload =
+        user && (isPoFromDocumentPage || isExpenseCaptureStandalonePage);
     if (!loadingEscape && (authLoading || (user && !initialLoadComplete && !skipFullWorkspacePreload))) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -363,6 +462,20 @@ const AppContent = () => {
                 <div className="text-center px-4">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                     <p className="text-gray-600 dark:text-gray-400 text-sm">Loading PO from document…</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (isExpenseCaptureStandalonePage) {
+        if (expenseStandaloneReady && window.ExpenseCaptureStandalone) {
+            return <window.ExpenseCaptureStandalone />;
+        }
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center px-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">Loading Expense Capture…</p>
                 </div>
             </div>
         );

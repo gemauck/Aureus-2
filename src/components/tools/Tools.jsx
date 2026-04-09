@@ -1,5 +1,22 @@
 // Use React from window
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
+
+/** Tool id from /tools/{id}, #/tools/{id}, or /tools?tool={id} when RouteState page is tools */
+function parseToolIdFromLocation() {
+    try {
+        const rs = window.RouteState?.getRoute?.();
+        if (!rs || rs.page !== 'tools') return null;
+        const seg = rs.segments && rs.segments[0];
+        if (seg) return decodeURIComponent(String(seg).trim());
+        const q =
+            rs.search && typeof rs.search.get === 'function'
+                ? rs.search.get('tool')
+                : new URLSearchParams(window.location.search || '').get('tool');
+        return q ? String(q).trim() : null;
+    } catch {
+        return null;
+    }
+}
 
 const Tools = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
@@ -16,6 +33,47 @@ const Tools = () => {
         ExpenseCaptureTool: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
+    const prevUrlToolIdRef = useRef(undefined);
+
+    // Deep link: open a tool from /tools/{toolId} or /tools?tool={toolId}; clear when URL segment removed (e.g. browser back)
+    useEffect(() => {
+        const syncFromUrl = () => {
+            const toolId = parseToolIdFromLocation();
+            const prev = prevUrlToolIdRef.current;
+            if (toolId) {
+                const found = tools.find((t) => t.id === toolId);
+                if (found) setCurrentTool(found);
+                prevUrlToolIdRef.current = toolId;
+                return;
+            }
+            if (prev !== undefined && prev !== null && !toolId) {
+                setCurrentTool(null);
+            }
+            prevUrlToolIdRef.current = toolId;
+        };
+        syncFromUrl();
+        const unsub = window.RouteState?.subscribe?.(syncFromUrl);
+        return () => {
+            if (typeof unsub === 'function') unsub();
+        };
+    }, [tools, toolsVersion]);
+
+    const goBackToToolsList = () => {
+        setCurrentTool(null);
+        prevUrlToolIdRef.current = null;
+        try {
+            window.RouteState?.navigate?.({
+                page: 'tools',
+                segments: [],
+                search: '',
+                preserveSearch: false,
+                preserveHash: true,
+                replace: true
+            });
+        } catch {
+            /* ignore */
+        }
+    };
 
     // Wait for tool components to load from window
     useEffect(() => {
@@ -219,7 +277,21 @@ const Tools = () => {
                             return (
                             <button
                                 key={tool.id}
-                                onClick={() => hasComponent && !tool.comingSoon && setCurrentTool(tool)}
+                                onClick={() => {
+                                    if (!hasComponent || tool.comingSoon) return;
+                                    setCurrentTool(tool);
+                                    try {
+                                        window.RouteState?.navigate?.({
+                                            page: 'tools',
+                                            segments: [tool.id],
+                                            preserveSearch: false,
+                                            preserveHash: true,
+                                            replace: false
+                                        });
+                                    } catch {
+                                        /* ignore */
+                                    }
+                                }}
                                 disabled={tool.comingSoon || !hasComponent}
                                 className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 text-left transition-all hover:shadow-md ${
                                     tool.comingSoon || !hasComponent
@@ -291,7 +363,7 @@ const Tools = () => {
                 <div className="max-w-6xl mx-auto">
                     <div className="mb-3 flex items-center">
                         <button
-                            onClick={() => setCurrentTool(null)}
+                            onClick={goBackToToolsList}
                             className="text-xs text-gray-600 hover:text-gray-900 flex items-center"
                         >
                             <i className="fas fa-arrow-left mr-1.5 text-[10px]"></i>
@@ -315,7 +387,7 @@ const Tools = () => {
             <div className="max-w-6xl mx-auto">
                 <div className="mb-3 flex items-center">
                     <button
-                        onClick={() => setCurrentTool(null)}
+                        onClick={goBackToToolsList}
                         className="text-xs text-gray-600 hover:text-gray-900 flex items-center"
                     >
                         <i className="fas fa-arrow-left mr-1.5 text-[10px]"></i>

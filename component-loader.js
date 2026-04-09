@@ -208,6 +208,7 @@
         'components/tools/UnitConverter.jsx',
         'components/tools/DieselRefundEvidenceEvaluator.jsx',
         'components/tools/ExpenseCaptureTool.jsx',
+        'components/tools/ExpenseCaptureStandalone.jsx',
         'components/tools/DocumentParser.jsx',
         'components/tools/SafetyCultureInspections.jsx',
         'components/tools/DocumentSorter.jsx',

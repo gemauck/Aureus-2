@@ -30,6 +30,7 @@
         'manufacturing': '/manufacturing',
         'service-maintenance': '/service-maintenance',
         'tools': '/tools',
+        'expense-capture': '/expense-capture',
         'documents': '/documents',
         'reports': '/reports',
         'settings': '/settings',

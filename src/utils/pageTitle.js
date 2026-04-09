@@ -31,7 +31,12 @@
         '/job-card': 'Job Card',
         '/jobcard': 'Job Card',
         '/accept-invitation': 'Accept Invitation',
-        '/reset-password': 'Reset Password'
+        '/reset-password': 'Reset Password',
+        '/expense-capture': 'Expense Capture',
+        '/expense': 'Expense Capture',
+        '/po-from-document': 'PO from document',
+        '/po-document': 'PO from document',
+        '/podocument': 'PO from document'
     };
 
     const cleanEntityName = (value) => {

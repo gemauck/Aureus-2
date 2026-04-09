@@ -162,6 +162,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/tools/HandwritingToWord.jsx',
         './src/components/tools/DieselRefundEvidenceEvaluator.jsx',
         './src/components/tools/ExpenseCaptureTool.jsx',
+        './src/components/tools/ExpenseCaptureStandalone.jsx',
         './src/components/tools/DocumentParser.jsx',
         './src/components/tools/SafetyCultureInspections.jsx',
         './src/components/tools/DocumentSorter.jsx',
@@ -664,7 +665,22 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                 // Reduced max wait time from 1500ms to 500ms for faster startup
                 if (criticalLoaded || elapsed >= 500) {
                     clearInterval(checkInterval);
-                    
+
+                    const pathnameForExpense = (window.location.pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+                    const hash = window.location.hash || '';
+                    const hashFirst =
+                        hash.startsWith('#/') &&
+                        hash
+                            .substring(2)
+                            .split('?')[0]
+                            .split('/')
+                            .filter(Boolean)[0];
+                    const priorityExpense =
+                        pathnameForExpense === '/expense-capture' ||
+                        pathnameForExpense === '/expense' ||
+                        hashFirst === 'expense-capture' ||
+                        hashFirst === 'expense';
+
                     // Now start loading lazy components
                     // Increased batch size from 12 to 25 for much faster loading
                     const batchSize = 25;
@@ -782,8 +798,23 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                             }
                         });
                     }
-                    
-                    loadBatch();
+
+                    function startLazyComponentQueue() {
+                        loadBatch();
+                    }
+
+                    if (priorityExpense) {
+                        console.log('📸 Expense Capture: priority-loading tool + standalone for standalone URL');
+                        loadComponent('./src/components/tools/ExpenseCaptureTool.jsx')
+                            .then(() => loadComponent('./src/components/tools/ExpenseCaptureStandalone.jsx'))
+                            .then(() => startLazyComponentQueue())
+                            .catch((err) => {
+                                console.warn('📸 Expense Capture priority load failed, continuing main queue:', err);
+                                startLazyComponentQueue();
+                            });
+                    } else {
+                        startLazyComponentQueue();
+                    }
                 }
             }, 25); // Check every 25ms for faster detection (was 50ms)
         };
