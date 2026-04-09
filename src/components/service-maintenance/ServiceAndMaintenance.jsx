@@ -3,14 +3,14 @@ const ReactGlobal = (typeof window !== 'undefined' && window.React) || (typeof R
 const { useState, useEffect, useMemo } = ReactGlobal;
 
 /** Same as manufacturing JobCards: SC binary via sign-url (no ES imports — build is non-bundled IIFE). */
-function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filename, idx, isDark }) {
+function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filename, idx, isDark, issueId }) {
   const [retryTick, setRetryTick] = useState(0);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
     setErr(null);
     setRetryTick(0);
-  }, [mediaId, token, mediaType, filename]);
+  }, [mediaId, token, mediaType, filename, issueId]);
 
   const isVideo =
     String(mediaType).includes('VIDEO') ||
@@ -18,6 +18,7 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
   const mediaParams = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
   if (mediaType) mediaParams.set('media_type', String(mediaType));
   if (filename) mediaParams.set('filename', String(filename));
+  if (issueId) mediaParams.set('issue_id', String(issueId));
   if (retryTick > 0) mediaParams.set('retry', String(retryTick));
   const mediaSrc = `/api/safety-culture/media/proxy?${mediaParams.toString()}`;
   const canRender = Boolean(mediaId && token);
@@ -479,10 +480,12 @@ const ServiceAndMaintenance = () => {
   const attachmentParts = useMemo(() => {
     const part = window.JobCardAttachmentUtils?.partitionJobCardAttachments;
     if (typeof part === 'function') {
-      return part(selectedJobCard?.photos);
+      return part(selectedJobCard?.photos, {
+        issueId: selectedJobCard?.safetyCultureIssueId
+      });
     }
     return { visualItems: [], voicesBySection: {} };
-  }, [selectedJobCard?.photos]);
+  }, [selectedJobCard?.photos, selectedJobCard?.safetyCultureIssueId]);
 
   const DetailVoice =
     typeof window.JobCardVoiceClips === 'function' ? window.JobCardVoiceClips : null;
@@ -1837,6 +1840,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                               token={item.token}
                               mediaType={item.mediaType}
                               filename={item.filename}
+                              issueId={item.issueId}
                               idx={idx}
                               isDark={isDark}
                             />

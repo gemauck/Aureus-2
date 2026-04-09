@@ -87,8 +87,13 @@ function labelOrphanFormVoiceKey(forms, key) {
   return fieldOnly.replace(/_/g, ' ');
 }
 
-/** Split photos array into gallery items vs voice clips (which carry `kind` + `section`). */
-function partitionJobCardAttachments(photosInput) {
+/**
+ * Split photos array into gallery items vs voice clips (which carry `kind` + `section`).
+ * @param {unknown} photosInput
+ * @param {{ issueId?: string|null }} [opts] — SafetyCulture issue id so media proxy can refresh stale tokens
+ */
+function partitionJobCardAttachments(photosInput, opts = {}) {
+  const issueId = opts.issueId != null && String(opts.issueId).trim() !== '' ? String(opts.issueId) : '';
   const photos = parseJsonArrayLoose(photosInput);
   const visualItems = [];
   const voicesBySection = {};
@@ -118,6 +123,7 @@ function partitionJobCardAttachments(photosInput) {
         token: String(p.token),
         mediaType: p.mediaType != null ? String(p.mediaType) : '',
         filename: p.filename != null ? String(p.filename) : 'media',
+        issueId,
         idx
       });
       return;
@@ -129,15 +135,15 @@ function partitionJobCardAttachments(photosInput) {
   return { visualItems, voicesBySection };
 }
 
-/** SafetyCulture media: id + token → sign-url (browser has no direct SC access). */
-function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, idx }) {
+/** SafetyCulture media: backend proxy (refreshes tokens via issue_id when stale). */
+function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, idx, issueId }) {
   const [retryTick, setRetryTick] = useState(0);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
     setErr(null);
     setRetryTick(0);
-  }, [mediaId, token, mediaType, filename]);
+  }, [mediaId, token, mediaType, filename, issueId]);
 
   const isVideo =
     String(mediaType).includes('VIDEO') ||
@@ -145,6 +151,7 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
   const mediaParams = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
   if (mediaType) mediaParams.set('media_type', String(mediaType));
   if (filename) mediaParams.set('filename', String(filename));
+  if (issueId) mediaParams.set('issue_id', String(issueId));
   if (retryTick > 0) mediaParams.set('retry', String(retryTick));
   const mediaSrc = `/api/safety-culture/media/proxy?${mediaParams.toString()}`;
   const canRender = Boolean(mediaId && token);
@@ -292,8 +299,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [detailServiceForms, setDetailServiceForms] = useState([]);
 
   const attachmentParts = useMemo(
-    () => partitionJobCardAttachments(selectedJobCard?.photos),
-    [selectedJobCard?.photos]
+    () =>
+      partitionJobCardAttachments(selectedJobCard?.photos, {
+        issueId: selectedJobCard?.safetyCultureIssueId
+      }),
+    [selectedJobCard?.photos, selectedJobCard?.safetyCultureIssueId]
   );
 
   /** Keys like `form_<instanceId>_<fieldId>` for checklist fields we can place next to answers. */
@@ -1618,6 +1628,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                               token={item.token}
                               mediaType={item.mediaType}
                               filename={item.filename}
+                              issueId={item.issueId}
                               idx={idx}
                             />
                           );

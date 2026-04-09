@@ -1,6 +1,6 @@
 /**
  * Build job card photos JSON and field overlays from SafetyCulture issue API payloads.
- * Photos use kind "safetyCultureMedia" so JobCards.jsx can resolve via /api/safety-culture/media/sign-url.
+ * Photos use kind "safetyCultureMedia" so JobCards.jsx can resolve via /api/safety-culture/media/proxy (issue_id refreshes stale tokens).
  */
 
 /** Keep job card notes reasonable; TEXT column is unbounded but UI and emails suffer if huge. */
