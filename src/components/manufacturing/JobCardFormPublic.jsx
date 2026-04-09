@@ -2565,13 +2565,26 @@ const JobCardFormPublic = () => {
       return;
     }
 
+    const normalizedStatus = ['draft', 'submitted', 'completed'].includes(formData.status)
+      ? formData.status
+      : 'draft';
+    const signatureForSave =
+      exportSignature() ||
+      (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
+    if (normalizedStatus === 'completed' && !signatureForSave) {
+      setStepError('A customer signature is required when the job status is Completed.');
+      setCurrentStep(STEP_IDS.length - 1);
+      return;
+    }
+
     setIsSubmitting(true);
     setStepError('');
     try {
       const nowIso = new Date().toISOString();
       const jobCardData = {
         ...formData,
-        customerSignature: exportSignature(),
+        customerSignature: signatureForSave,
+        customerPosition: formData.customerTitle || '',
         id: editingMeta?.localId ?? Date.now().toString(),
         createdAt: editingMeta?.createdAt ?? nowIso,
         updatedAt: nowIso,
@@ -2625,9 +2638,17 @@ const JobCardFormPublic = () => {
       );
       jobCardData.photos = [...(formData.photos || []), ...sectionPhotoEntries, ...voicePhotoEntries];
 
-      // Wizard submit: persist as submitted so ERP Job Cards filters (e.g. Submitted) match.
-      jobCardData.status = 'submitted';
-      jobCardData.submittedAt = nowIso;
+      jobCardData.status = normalizedStatus;
+      if (normalizedStatus === 'draft') {
+        jobCardData.submittedAt = null;
+        jobCardData.completedAt = null;
+      } else if (normalizedStatus === 'submitted') {
+        jobCardData.submittedAt = nowIso;
+        jobCardData.completedAt = null;
+      } else {
+        jobCardData.submittedAt = nowIso;
+        jobCardData.completedAt = nowIso;
+      }
       if (jobCardData.clientId === NO_CLIENT_ID) {
         jobCardData.clientId = null;
       }
@@ -3859,7 +3880,7 @@ const JobCardFormPublic = () => {
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Customer Acknowledgement</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Capture customer details and signature confirming completed work.
+            Capture customer details; a signature is required when you set the job status to Completed (choose status below).
           </p>
         </header>
         <div className="space-y-4">
@@ -3943,7 +3964,12 @@ const JobCardFormPublic = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Customer Signature *
+              Customer Signature
+              {formData.status === 'completed' ? (
+                <span className="text-red-500"> *</span>
+              ) : (
+                <span className="text-gray-400 font-normal"> (optional unless Completed)</span>
+              )}
             </label>
             <div
               ref={signatureWrapperRef}
@@ -4015,6 +4041,10 @@ const JobCardFormPublic = () => {
           <SummaryRow label="Future Work" value={formData.futureWorkRequired || ''} />
           <SummaryRow label="Follow-up Schedule" value={formData.futureWorkScheduledAt ? new Date(formData.futureWorkScheduledAt).toLocaleString() : ''} />
           <SummaryRow label="Photos / video" value={totalPhotoVideoCount > 0 ? `${totalPhotoVideoCount}` : ''} />
+          <SummaryRow
+            label="Job status"
+            value={jobStatusOptions.find(o => o.value === formData.status)?.label || formData.status}
+          />
           <SummaryRow label="Customer Signature" value={hasSignature ? 'Captured' : 'Pending'} />
         </div>
       </section>
@@ -4054,7 +4084,13 @@ const JobCardFormPublic = () => {
               disabled={isSubmitting}
               className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Saving...' : 'Submit Job Card'}
+              {isSubmitting
+                ? 'Saving...'
+                : formData.status === 'draft'
+                  ? 'Save as draft'
+                  : formData.status === 'completed'
+                    ? 'Save completed job card'
+                    : 'Submit job card'}
             </button>
           )}
         </div>

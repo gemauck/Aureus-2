@@ -141,13 +141,16 @@ async function handler(req, res) {
       body.otherComments !== undefined ||
       body.customerName !== undefined ||
       body.customerPosition !== undefined ||
+      body.customerTitle !== undefined ||
       body.customerFeedback !== undefined ||
       body.customerSignature !== undefined
     ) {
       otherCommentsUpdate = [
         body.otherComments != null ? String(body.otherComments) : '',
         body.customerName ? `Customer: ${body.customerName}` : '',
-        body.customerPosition ? `Position: ${body.customerPosition}` : '',
+        body.customerPosition || body.customerTitle
+          ? `Position: ${body.customerPosition || body.customerTitle}`
+          : '',
         body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
         body.customerSignature ? `Signature: [Captured]` : ''
       ]
@@ -191,12 +194,33 @@ async function handler(req, res) {
     data.totalMaterialsCost = totalMaterialsCost
     if (otherCommentsUpdate !== undefined) data.otherComments = otherCommentsUpdate
     if (photos !== undefined) data.photos = photos
-    if (body.status !== undefined) data.status = body.status
+    if (body.status !== undefined) {
+      data.status = ['draft', 'submitted', 'completed'].includes(body.status)
+        ? body.status
+        : existing.status
+    }
     if (body.submittedAt !== undefined) {
       data.submittedAt = body.submittedAt ? new Date(body.submittedAt) : null
     }
     if (body.completedAt !== undefined) {
       data.completedAt = body.completedAt ? new Date(body.completedAt) : null
+    }
+
+    const finalizedStatus =
+      body.status !== undefined && ['draft', 'submitted', 'completed'].includes(body.status)
+        ? body.status
+        : existing.status
+    if (finalizedStatus === 'completed') {
+      const hadSig =
+        typeof existing.otherComments === 'string' &&
+        existing.otherComments.includes('Signature: [Captured]')
+      if (body.customerSignature !== undefined) {
+        if (!String(body.customerSignature || '').trim()) {
+          return badRequest(res, 'Customer signature is required for completed job cards')
+        }
+      } else if (!hadSig) {
+        return badRequest(res, 'Customer signature is required for completed job cards')
+      }
     }
 
     const updated = await prisma.jobCard.update({

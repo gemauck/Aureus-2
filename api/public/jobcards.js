@@ -125,6 +125,24 @@ async function handler(req, res) {
           ? String(body.longitude)
           : ''
 
+    const allowedStatuses = ['draft', 'submitted', 'completed']
+    const status = allowedStatuses.includes(body.status) ? body.status : 'draft'
+    const now = new Date()
+    let submittedAt = null
+    let completedAt = null
+    if (status === 'submitted') {
+      submittedAt = body.submittedAt ? new Date(body.submittedAt) : now
+    } else if (status === 'completed') {
+      submittedAt = body.submittedAt ? new Date(body.submittedAt) : now
+      completedAt = body.completedAt ? new Date(body.completedAt) : now
+    }
+    const sigStr = body.customerSignature && String(body.customerSignature).trim()
+    if (status === 'completed' && !sigStr) {
+      return badRequest(res, 'Customer signature is required for completed job cards')
+    }
+
+    const positionLine = body.customerPosition || body.customerTitle || ''
+
     const buildCreateArgs = jobCardNumber => ({
       data: {
         jobCardNumber,
@@ -157,14 +175,15 @@ async function handler(req, res) {
         otherComments: [
           body.otherComments || '',
           body.customerName ? `Customer: ${body.customerName}` : '',
-          body.customerPosition ? `Position: ${body.customerPosition}` : '',
+          positionLine ? `Position: ${positionLine}` : '',
           body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
           body.customerSignature ? `Signature: [Captured]` : '',
         ]
           .filter(Boolean)
           .join('\n'),
-        status: body.status || 'draft',
-        submittedAt: body.submittedAt ? new Date(body.submittedAt) : new Date(),
+        status,
+        submittedAt,
+        completedAt,
         ownerId: null // Public form - no owner
       }
     })
