@@ -332,7 +332,11 @@ const FeedbackWidget = () => {
             {!open ? (
                 <button
                     onClick={() => setOpen(true)}
-                    className={`px-3 py-2 rounded-full shadow-lg shadow-blue-900/10 text-xs font-medium transition-all ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-white/95 backdrop-blur-sm text-primary-600 border border-gray-200/90 hover:bg-gray-50 hover:border-primary-300 hover:shadow-md'}`}
+                    className={`px-3 py-2 rounded-full text-xs font-medium transition-all shadow-lg backdrop-blur-sm ${
+                        isDark
+                            ? 'bg-emerald-900/45 text-emerald-50 border border-emerald-600/35 shadow-emerald-950/25 hover:bg-emerald-800/55 hover:border-emerald-500/40'
+                            : 'bg-emerald-100/95 text-emerald-900 border border-emerald-200/90 shadow-emerald-900/8 hover:bg-emerald-200/90 hover:border-emerald-300/80'
+                    }`}
                     title="Send feedback"
                 >
                     <i className="fas fa-comment-dots mr-1"></i>

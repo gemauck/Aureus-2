@@ -1922,6 +1922,78 @@ const DatabaseAPI = {
         return response;
     },
 
+    async getProductionOrderCaptures(query = '') {
+        const q = query && !String(query).startsWith('?') ? `?${query}` : query;
+        const raw = await this.makeRequest(`/manufacturing/production-order-captures${q}`);
+        const captures = Array.isArray(raw?.data?.captures)
+            ? raw.data.captures
+            : Array.isArray(raw?.captures)
+                ? raw.captures
+                : [];
+        return { data: { captures } };
+    },
+
+    async getProductionOrderCapture(id) {
+        return this.makeRequest(`/manufacturing/production-order-captures/${encodeURIComponent(id)}`);
+    },
+
+    async createProductionOrderCapture(payload) {
+        return this.makeRequest('/manufacturing/production-order-captures', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    async updateProductionOrderCapture(id, payload) {
+        return this.makeRequest(`/manufacturing/production-order-captures/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    async matchProductionOrderCaptureLines(payload) {
+        return this.makeRequest('/manufacturing/production-order-captures/match', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    async submitProductionOrderCapture(id) {
+        return this.makeRequest(`/manufacturing/production-order-captures/${encodeURIComponent(id)}/submit`, {
+            method: 'POST',
+            body: JSON.stringify({})
+        });
+    },
+
+    async approveProductionOrderCapture(id, payload) {
+        return this.makeRequest(`/manufacturing/production-order-captures/${encodeURIComponent(id)}/approve`, {
+            method: 'POST',
+            body: JSON.stringify(payload || {})
+        });
+    },
+
+    async rejectProductionOrderCapture(id, payload) {
+        return this.makeRequest(`/manufacturing/production-order-captures/${encodeURIComponent(id)}/reject`, {
+            method: 'POST',
+            body: JSON.stringify(payload || {})
+        });
+    },
+
+    /** OCR for quotes/invoices (OpenAI Vision). Same payload as Tools → Document parser. */
+    async parseDocumentImage(payload) {
+        return this.makeRequest('/tools/document-parser', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    async uploadDataUrlFile({ folder, name, dataUrl }) {
+        return this.makeRequest('/files', {
+            method: 'POST',
+            body: JSON.stringify({ folder: folder || 'uploads', name, dataUrl })
+        });
+    },
+
     // SALES ORDERS
     async getSalesOrders() {
         const raw = await this.makeRequest('/sales-orders');
