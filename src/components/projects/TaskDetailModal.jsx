@@ -1735,6 +1735,20 @@ const TaskDetailModal = ({
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     };
 
+    const formatAttachmentDateTime = (attachment) => {
+        if (!attachment || typeof attachment !== 'object') return '';
+        const rawDate =
+            attachment.uploadDate ||
+            attachment.uploadedAt ||
+            attachment.createdAt ||
+            attachment.date ||
+            attachment.timestamp;
+        if (!rawDate) return '';
+        const parsed = new Date(rawDate);
+        if (Number.isNaN(parsed.getTime())) return '';
+        return parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    };
+
     const getPriorityColor = (priority) => {
         switch(priority) {
             case 'High': return 'bg-red-100 text-red-800';
@@ -2774,7 +2788,9 @@ const TaskDetailModal = ({
                                             <p className="text-sm">No attachments yet</p>
                                         </div>
                                     ) : (
-                                        (Array.isArray(attachments) ? attachments : []).map(attachment => (
+                                        (Array.isArray(attachments) ? attachments : []).map(attachment => {
+                                            const attachmentDateTime = formatAttachmentDateTime(attachment);
+                                            return (
                                             <div key={attachment.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2.5 border border-gray-200">
                                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                                     <div className="w-8 h-8 bg-primary-100 rounded flex items-center justify-center flex-shrink-0">
@@ -2783,6 +2799,11 @@ const TaskDetailModal = ({
                                                     <div className="flex-1 min-w-0">
                                                         <div className="font-medium text-gray-800 text-xs truncate">{attachment.name}</div>
                                                         <div className="text-[10px] text-gray-500">{formatFileSize(attachment.size)}</div>
+                                                        {attachmentDateTime && (
+                                                            <div className="text-[10px] text-gray-500">
+                                                                Uploaded {attachmentDateTime}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1 ml-2">
@@ -2805,7 +2826,8 @@ const TaskDetailModal = ({
                                                     </button>
                                                 </div>
                                             </div>
-                                        ))
+                                        );
+                                        })
                                     )}
                                 </div>
                             </div>
