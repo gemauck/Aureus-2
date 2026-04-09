@@ -90,14 +90,21 @@
                   : movements.map(function (movement) {
                       const qty = parseFloat(movement.quantity) || 0;
                       let qtyDisplay;
-                      if (movement.type === 'receipt' || movement.type === 'production') {
+                      if (movement.type === 'receipt') {
                         qtyDisplay = '+' + Math.abs(qty);
+                      } else if (movement.type === 'production') {
+                        qtyDisplay = qty < 0 ? ('' + qty) : ('+' + Math.abs(qty));
                       } else if (movement.type === 'consumption' || movement.type === 'sale') {
                         qtyDisplay = '' + (-Math.abs(qty));
                       } else {
                         qtyDisplay = qty > 0 ? '+' + qty : '' + qty;
                       }
-                      const qtyClass = (movement.type === 'receipt' || movement.type === 'production') ? 'text-green-600' : (movement.type === 'consumption' || movement.type === 'sale') ? 'text-red-600' : 'text-gray-900';
+                      const qtyClass =
+                        movement.type === 'receipt' || (movement.type === 'production' && qty > 0)
+                          ? 'text-green-600'
+                          : movement.type === 'consumption' || movement.type === 'sale' || (movement.type === 'production' && qty < 0)
+                            ? 'text-red-600'
+                            : 'text-gray-900';
                       return React.createElement('tr', { key: movement.id, className: 'hover:bg-gray-50' },
                         React.createElement('td', { className: 'px-3 py-2 text-sm font-medium text-gray-900' }, movement.movementId || movement.id),
                         React.createElement('td', { className: 'px-3 py-2 text-sm text-gray-900' }, movement.date),

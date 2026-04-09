@@ -2602,7 +2602,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{movement.itemName}</div>
                       <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{movement.sku}</div>
                     </td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{movement.quantity > 0 ? '+' : ''}{movement.quantity}</td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                      {(() => {
+                        const q = parseFloat(movement.quantity) || 0;
+                        if (movement.type === 'receipt') return `+${Math.abs(q)}`;
+                        if (movement.type === 'production') return q < 0 ? String(q) : `+${Math.abs(q)}`;
+                        if (movement.type === 'consumption' || movement.type === 'sale') return String(-Math.abs(q));
+                        if (movement.type === 'transfer') return String(Math.abs(q));
+                        return `${q > 0 ? '+' : ''}${q}`;
+                      })()}
+                    </td>
                     <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{getLocationLabel(movement.fromLocation)} → {getLocationLabel(movement.toLocation) || 'N/A'}</td>
                     <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{movement.reference}</td>
                   </tr>
@@ -12360,8 +12369,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 }
                 return qtyAbs;
               }
-              if (movement.type === 'receipt' || movement.type === 'production') qty = Math.abs(qty);
-              else if (movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
+              if (movement.type === 'receipt') qty = Math.abs(qty);
+              else if (movement.type === 'production') {
+                // createStockMovement stores negative qty for material use (like consumption). Legacy rows may be positive.
+                const q = parseFloat(movement.quantity) || 0;
+                qty = q < 0 ? -Math.abs(q) : Math.abs(q);
+              } else if (movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
               return qty;
             };
 
