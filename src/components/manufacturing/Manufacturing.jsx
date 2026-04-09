@@ -15,7 +15,7 @@ const useAuth = window.useAuth || (() => {
 // Helper to safely get React for error fallbacks
 const getReactForError = () => window.React || ReactGlobal;
 
-const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'production-capture', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'activity'];
+const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'activity'];
 const normalizeManufacturingTab = (value = 'dashboard') => {
   const normalized = (value || 'dashboard').toLowerCase();
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
@@ -321,12 +321,7 @@ try {
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
   const [inventoryListPage, setInventoryListPage] = useState(1);
-  const [inventoryFixedBarRect, setInventoryFixedBarRect] = useState({ left: 0, width: 0 });
-  const [inventoryTableHasHOverflow, setInventoryTableHasHOverflow] = useState(false);
   const inventoryTableScrollRef = useRef(null);
-  const inventoryFixedHScrollRef = useRef(null);
-  const inventoryFixedHScrollInnerRef = useRef(null);
-  const inventoryHScrollSyncingRef = useRef(false);
   const reloadInventoryForLocation = useCallback(async (options = {}) => {
     if (options.skipIfTyping && isUserTypingRef.current) {
       return;
@@ -2911,71 +2906,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (activeTab !== 'inventory') return;
     const el = inventoryTableScrollRef.current;
     if (el) el.scrollLeft = 0;
-    if (inventoryFixedHScrollRef.current) inventoryFixedHScrollRef.current.scrollLeft = 0;
   }, [activeTab, inventoryListPage]);
-
-  const updateInventoryFixedBarLayout = useCallback(() => {
-    if (activeTab !== 'inventory') return;
-    const main = document.querySelector('main');
-    if (!main) return;
-    const r = main.getBoundingClientRect();
-    setInventoryFixedBarRect({ left: r.left, width: r.width });
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab !== 'inventory') return;
-    updateInventoryFixedBarLayout();
-    const main = document.querySelector('main');
-    const onWin = () => updateInventoryFixedBarLayout();
-    window.addEventListener('resize', onWin);
-    let ro;
-    if (main && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => updateInventoryFixedBarLayout());
-      ro.observe(main);
-    }
-    return () => {
-      window.removeEventListener('resize', onWin);
-      if (ro) ro.disconnect();
-    };
-  }, [activeTab, updateInventoryFixedBarLayout]);
-
-  const onInventoryTableHScroll = useCallback(() => {
-    if (inventoryHScrollSyncingRef.current) return;
-    inventoryHScrollSyncingRef.current = true;
-    const t = inventoryTableScrollRef.current;
-    const f = inventoryFixedHScrollRef.current;
-    if (t && f) f.scrollLeft = t.scrollLeft;
-    requestAnimationFrame(() => { inventoryHScrollSyncingRef.current = false; });
-  }, []);
-
-  const onInventoryFixedHScroll = useCallback(() => {
-    if (inventoryHScrollSyncingRef.current) return;
-    inventoryHScrollSyncingRef.current = true;
-    const t = inventoryTableScrollRef.current;
-    const f = inventoryFixedHScrollRef.current;
-    if (t && f) t.scrollLeft = f.scrollLeft;
-    requestAnimationFrame(() => { inventoryHScrollSyncingRef.current = false; });
-  }, []);
-
-  useEffect(() => {
-    if (activeTab !== 'inventory') {
-      setInventoryTableHasHOverflow(false);
-      return;
-    }
-    const mainEl = inventoryTableScrollRef.current;
-    const inner = inventoryFixedHScrollInnerRef.current;
-    if (!mainEl || !inner) return;
-    const sync = () => {
-      inner.style.width = `${mainEl.scrollWidth}px`;
-      setInventoryTableHasHOverflow(mainEl.scrollWidth > mainEl.clientWidth + 1);
-      const fixed = inventoryFixedHScrollRef.current;
-      if (fixed) fixed.scrollLeft = mainEl.scrollLeft;
-    };
-    sync();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
-    if (ro) ro.observe(mainEl);
-    return () => { if (ro) ro.disconnect(); };
-  }, [activeTab, inventoryListPage, filteredInventoryList.length]);
 
   const renderInventoryView = () => {
     // Get unique categories from inventory items
@@ -2999,8 +2930,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     };
 
     return (
-      <>
-      <div className={`erp-module-root space-y-4 min-w-0 ${inventoryTableHasHOverflow ? 'pb-10 lg:pb-14' : ''}`}>
+      <div className="erp-module-root space-y-4 min-w-0">
         {showCatalogReviewOnly && (
           <div
             className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 rounded-xl border ${
@@ -3401,8 +3331,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         >
           <div
             ref={inventoryTableScrollRef}
-            onScroll={onInventoryTableHScroll}
-            className="overflow-x-auto rounded-t-lg scrollbar-hide"
+            className="inventory-desktop-xscroll overflow-x-auto rounded-t-lg"
           >
             <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -4021,27 +3950,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </div>
         )}
       </div>
-
-      {inventoryTableHasHOverflow && inventoryFixedBarRect.width > 0 && (
-        <div
-          className={`pointer-events-auto hidden lg:block fixed z-[35] overflow-x-auto border-t shadow-[0_-2px_10px_rgba(0,0,0,0.06)] ${
-            isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-200'
-          }`}
-          style={{
-            left: inventoryFixedBarRect.left,
-            width: inventoryFixedBarRect.width,
-            bottom: 0,
-            paddingBottom: 'max(0px, env(safe-area-inset-bottom))',
-          }}
-          ref={inventoryFixedHScrollRef}
-          onScroll={onInventoryFixedHScroll}
-          role="region"
-          aria-label="Scroll inventory table horizontally"
-        >
-          <div ref={inventoryFixedHScrollInnerRef} className="h-3 shrink-0" style={{ width: '1px' }} />
-        </div>
-      )}
-      </>
     );
   };
 
@@ -4343,199 +4251,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const ProductionView = () => {
-    const [pendingCaptures, setPendingCaptures] = useState([]);
-    const [reviewCapture, setReviewCapture] = useState(null);
-    const [approvalForm, setApprovalForm] = useState({ resolvedBomId: '', quantity: 1, reviewNotes: '' });
-
-    const refreshPendingCaptures = useCallback(async () => {
-      if (!isAdmin) return;
-      try {
-        const res = await safeCallAPI('getProductionOrderCaptures', '?status=pending_review');
-        setPendingCaptures(res?.data?.captures || []);
-      } catch (e) {
-        console.warn('Manufacturing: pending captures load failed', e);
-      }
-    }, [isAdmin, safeCallAPI]);
-
-    useEffect(() => {
-      void refreshPendingCaptures();
-    }, [refreshPendingCaptures]);
-
-    const openCaptureReview = (cap) => {
-      setReviewCapture(cap);
-      setApprovalForm({
-        resolvedBomId: cap.resolvedBomId || '',
-        quantity: cap.quantity || 1,
-        reviewNotes: ''
-      });
-    };
-
-    const handleApproveCapture = async () => {
-      if (!reviewCapture) return;
-      const bom = boms.find((b) => b.id === approvalForm.resolvedBomId);
-      if (!bom) {
-        showToast('Select a valid BOM before approving.', 'error');
-        return;
-      }
-      const qty = parseInt(approvalForm.quantity, 10);
-      if (!qty || qty < 1) {
-        showToast('Enter a valid quantity.', 'error');
-        return;
-      }
-      try {
-        await safeCallAPI('approveProductionOrderCapture', reviewCapture.id, {
-          resolvedBomId: approvalForm.resolvedBomId,
-          quantity: qty,
-          productSku: bom.productSku || '',
-          productName: bom.productName || '',
-          reviewNotes: approvalForm.reviewNotes || ''
-        });
-        const ordersRes = await safeCallAPI('getProductionOrders');
-        const ordersData = ordersRes?.data?.productionOrders || [];
-        setProductionOrders(ordersData.map((order) => ({ ...order, id: order.id })));
-        safeSetItem('manufacturing_production_orders', JSON.stringify(ordersData));
-        setReviewCapture(null);
-        await refreshPendingCaptures();
-        showToast('Production order created and stock allocated.', 'success');
-      } catch (e) {
-        showToast(e?.message || 'Approve failed', 'error');
-      }
-    };
-
-    const handleRejectCapture = async () => {
-      if (!reviewCapture) return;
-      try {
-        await safeCallAPI('rejectProductionOrderCapture', reviewCapture.id, {
-          reviewNotes: approvalForm.reviewNotes || ''
-        });
-        setReviewCapture(null);
-        await refreshPendingCaptures();
-        showToast('Capture rejected.', 'success');
-      } catch (e) {
-        showToast(e?.message || 'Reject failed', 'error');
-      }
-    };
-
     return (
       <div className="space-y-3">
-        {isAdmin && pendingCaptures.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <h4 className="text-sm font-semibold text-amber-900 mb-2">Pending document requests</h4>
-            <ul className="space-y-2">
-              {pendingCaptures.map((c) => (
-                <li
-                  key={c.id}
-                  className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-950"
-                >
-                  <span className="min-w-0">
-                    <span className="font-medium">{c.productName || 'Untitled'}</span>
-                    <span className="text-amber-800/80"> · qty {c.quantity || '—'} · </span>
-                    <span className="text-amber-800/80">{c.createdByName || 'User'}</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => openCaptureReview(c)}
-                    className="px-2 py-1 text-xs bg-amber-700 text-white rounded-md hover:bg-amber-800"
-                  >
-                    Review
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {reviewCapture && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-            <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl p-4 space-y-3">
-              <div className="flex justify-between items-start gap-2">
-                <h3 className="text-lg font-semibold text-gray-900">Review document request</h3>
-                <button
-                  type="button"
-                  className="text-gray-500 hover:text-gray-800"
-                  onClick={() => setReviewCapture(null)}
-                  aria-label="Close"
-                >
-                  <i className="fas fa-times" />
-                </button>
-              </div>
-              {reviewCapture.sourceImageUrl && (
-                <img
-                  src={reviewCapture.sourceImageUrl}
-                  alt="Source document"
-                  className="w-full max-h-56 object-contain rounded border border-gray-200 bg-gray-50"
-                />
-              )}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">BOM *</label>
-                <select
-                  value={approvalForm.resolvedBomId}
-                  onChange={(e) => setApprovalForm((f) => ({ ...f, resolvedBomId: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                >
-                  <option value="">Select BOM…</option>
-                  {boms.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.productName} ({b.productSku})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Quantity *</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={approvalForm.quantity}
-                  onChange={(e) =>
-                    setApprovalForm((f) => ({ ...f, quantity: parseInt(e.target.value, 10) || 1 }))
-                  }
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes for requester</label>
-                <textarea
-                  value={approvalForm.reviewNotes}
-                  onChange={(e) => setApprovalForm((f) => ({ ...f, reviewNotes: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  placeholder="Optional — shown on reject or for audit"
-                />
-              </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => void handleRejectCapture()}
-                  className="px-3 py-2 text-sm rounded-lg border border-gray-300 text-gray-800 hover:bg-gray-50"
-                >
-                  Reject
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleApproveCapture()}
-                  className="px-3 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
-                >
-                  Approve & create order
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Controls */}
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-gray-900">Production Orders</h3>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => changeTab('production-capture')}
-                className="px-3 py-2 text-sm bg-slate-700 text-white rounded-lg hover:bg-slate-800 flex items-center gap-2"
-              >
-                <i className="fas fa-camera text-xs" />
-                New from document
-              </button>
               <button
                 type="button"
                 onClick={() => { 
@@ -12902,7 +12624,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
                 { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
                 { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
-                { id: 'production-capture', label: 'PO from document', icon: 'fa-camera' },
                 { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
                 { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
                 { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
@@ -12936,15 +12657,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             {activeTab === 'inventory' && renderInventoryView()}
             {activeTab === 'bom' && <BOMView />}
             {activeTab === 'production' && <ProductionView />}
-            {activeTab === 'production-capture' && window.ProductionOrderCapture && (
-              createElement(window.ProductionOrderCapture, {
-                isDark,
-                onComplete: () => changeTab('production', { replace: true })
-              })
-            )}
-            {activeTab === 'production-capture' && !window.ProductionOrderCapture && (
-              <div className="p-6 text-center text-gray-500">Loading document capture…</div>
-            )}
             {activeTab === 'sales' && <SalesOrdersView />}
             {activeTab === 'purchase' && <PurchaseOrdersView />}
             {activeTab === 'movements' && (window.ManufacturingMovementsView

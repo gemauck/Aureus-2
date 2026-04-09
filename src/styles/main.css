@@ -121,6 +121,15 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     background: #6b7280;
 }
 
+/* Manufacturing > Inventory desktop table: visible scrollbars (horizontal bar tall enough to see) */
+.inventory-desktop-xscroll {
+    scrollbar-width: auto;
+}
+.inventory-desktop-xscroll::-webkit-scrollbar {
+    width: 8px;
+    height: 10px;
+}
+
 /* Keyboard focus — consistent blue ring without changing click behavior */
 body.erp-app :where(a, button, input, textarea, select, [tabindex]):focus-visible {
     outline: 2px solid var(--primary-500);

@@ -892,7 +892,7 @@ app.all('/api/contacts/client/:clientId/:contactId?', async (req, res, next) => 
   }
 })
 
-// Manufacturing routes with a third path segment (e.g. production-orders/:id/consume, production-order-captures/:id/approve)
+// Manufacturing routes with a third path segment (e.g. production-orders/:id/consume)
 app.all('/api/manufacturing/:resource/:id/:action', async (req, res, next) => {
   try {
     if (process.env.NODE_ENV === 'development') {
