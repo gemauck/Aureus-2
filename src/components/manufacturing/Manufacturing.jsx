@@ -12340,9 +12340,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
           </div>
           {(() => {
-            // Helper: normalize quantity by movement type (receipt = +, consumption/sale = -, adjustment = as-is)
+            const locationMatchesDetail = (loc) =>
+              !!loc &&
+              (loc === selectedDetailLocationId ||
+                (!!selectedDetailLocationCode && loc === selectedDetailLocationCode));
+
+            // Helper: normalize quantity by movement type (receipt = +, consumption/sale = -, adjustment = as-is).
+            // Transfers store positive qty in DB; sign depends on whether this row is stock leaving or entering the selected location.
             const normalizeQuantity = (movement) => {
               let qty = parseFloat(movement.quantity) || 0;
+              if (movement.type === 'transfer') {
+                const qtyAbs = Math.abs(qty);
+                if (selectedDetailLocationId) {
+                  const fromHere = locationMatchesDetail(movement.fromLocation);
+                  const toHere = locationMatchesDetail(movement.toLocation);
+                  if (toHere && !fromHere) return qtyAbs;
+                  if (fromHere && !toHere) return -qtyAbs;
+                  if (fromHere && toHere) return 0;
+                }
+                return qtyAbs;
+              }
               if (movement.type === 'receipt' || movement.type === 'production') qty = Math.abs(qty);
               else if (movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
               return qty;
