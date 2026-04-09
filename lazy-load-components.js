@@ -161,6 +161,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/tools/PDFToWordConverter.jsx',
         './src/components/tools/HandwritingToWord.jsx',
         './src/components/tools/DieselRefundEvidenceEvaluator.jsx',
+        './src/components/tools/ReceiptCaptureTool.jsx',
         './src/components/tools/DocumentParser.jsx',
         './src/components/tools/SafetyCultureInspections.jsx',
         './src/components/tools/DocumentSorter.jsx',

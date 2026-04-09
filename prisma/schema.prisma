@@ -1542,6 +1542,61 @@ model InventoryItem {
   @@index([needsCatalogReview])
 }
 
+/// User-defined accounts for Staff Tools receipt capture (Dext-like MVP)
+model ReceiptAccount {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @default("")
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  documents ReceiptDocument[]
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
+/// User-defined cost centres for receipt allocation
+model ReceiptCostCenter {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @default("")
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  documents ReceiptDocument[]
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
+/// Captured receipts/slips with extraction and optional account/cost-centre allocation
+model ReceiptDocument {
+  id            String   @id @default(cuid())
+  userId        String
+  fileUrl       String
+  status        String   @default("draft")
+  extractedJson String   @default("{}")
+  vendor        String   @default("")
+  documentDate  String   @default("")
+  total         Float    @default(0)
+  currency      String   @default("ZAR")
+  taxAmount     Float?
+  accountId     String?
+  costCenterId  String?
+  notes         String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  account       ReceiptAccount?    @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  costCenter    ReceiptCostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
 model BOMGroup {
   id        String   @id @default(cuid())
   name      String

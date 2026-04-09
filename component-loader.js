@@ -207,6 +207,7 @@
         'components/tools/HandwritingToWord.jsx',
         'components/tools/UnitConverter.jsx',
         'components/tools/DieselRefundEvidenceEvaluator.jsx',
+        'components/tools/ReceiptCaptureTool.jsx',
         'components/tools/DocumentParser.jsx',
         'components/tools/SafetyCultureInspections.jsx',
         'components/tools/DocumentSorter.jsx',

@@ -38,6 +38,7 @@ const DatabaseAPI = {
     // Path prefix -> timeout (ms); GET /projects/:id can be slow for large projects
     _endpointTimeoutPrefix: {
         '/projects/': 90000,     // 90s - single project fetch (document sections, FMS, etc.)
+        '/receipt-extract': 120000, // vision / PDF receipt extraction can be slow
     },
 
     // Request throttling / rate limiting safeguards (relaxed for general snappiness; tighten if server returns 502)
@@ -2146,6 +2147,113 @@ const DatabaseAPI = {
             throw new Error(msg);
         }
         return { data: json.data !== undefined ? json.data : json };
+    },
+
+    /**
+     * Receipt capture (Dext-like): extract structured data from receipt/invoice image or PDF.
+     * Uses fetch with extended timeout; 503 + NO_OPENAI returns soft response.
+     */
+    async extractReceiptDocument(payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('token');
+        const controller = new AbortController();
+        const timeoutMs = this._endpointTimeout?.['/receipt-extract'] || 120000;
+        const tid = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const res = await fetch(`${this.API_BASE}/api/receipt-extract`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify(payload || {}),
+                signal: controller.signal
+            });
+            clearTimeout(tid);
+            const text = await res.text().catch(() => '');
+            let json = {};
+            try {
+                json = text ? JSON.parse(text) : {};
+            } catch {
+                json = {};
+            }
+            const errCode = json?.error?.code || json?.code;
+            if (res.status === 503 && errCode === 'NO_OPENAI') {
+                return { data: { extraction: null, noOpenAI: true } };
+            }
+            if (!res.ok) {
+                const msg =
+                    json?.error?.message ||
+                    json?.message ||
+                    (typeof json?.error === 'string' ? json.error : '') ||
+                    `Extract failed (${res.status})`;
+                throw new Error(msg);
+            }
+            return { data: json.data !== undefined ? json.data : json };
+        } catch (e) {
+            clearTimeout(tid);
+            if (e?.name === 'AbortError') {
+                throw new Error('Receipt extraction timed out. Try again or use a smaller file.');
+            }
+            throw e;
+        }
+    },
+
+    async getReceiptAccounts() {
+        return this.makeRequest('/receipt-accounts', { method: 'GET', forceRefresh: true });
+    },
+
+    async createReceiptAccount(payload) {
+        return this.makeRequest('/receipt-accounts', { method: 'POST', body: JSON.stringify(payload || {}) });
+    },
+
+    async updateReceiptAccount(id, payload) {
+        return this.makeRequest(`/receipt-accounts/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload || {})
+        });
+    },
+
+    async deleteReceiptAccount(id) {
+        return this.makeRequest(`/receipt-accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+
+    async getReceiptCostCenters() {
+        return this.makeRequest('/receipt-cost-centers', { method: 'GET', forceRefresh: true });
+    },
+
+    async createReceiptCostCenter(payload) {
+        return this.makeRequest('/receipt-cost-centers', { method: 'POST', body: JSON.stringify(payload || {}) });
+    },
+
+    async updateReceiptCostCenter(id, payload) {
+        return this.makeRequest(`/receipt-cost-centers/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload || {})
+        });
+    },
+
+    async deleteReceiptCostCenter(id) {
+        return this.makeRequest(`/receipt-cost-centers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+
+    async getReceiptDocuments(options = {}) {
+        const q = options.all ? '?all=1' : '';
+        return this.makeRequest(`/receipt-documents${q}`, { method: 'GET', forceRefresh: true });
+    },
+
+    async createReceiptDocument(payload) {
+        return this.makeRequest('/receipt-documents', { method: 'POST', body: JSON.stringify(payload || {}) });
+    },
+
+    async updateReceiptDocument(id, payload) {
+        return this.makeRequest(`/receipt-documents/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload || {})
+        });
+    },
+
+    async deleteReceiptDocument(id) {
+        return this.makeRequest(`/receipt-documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
     },
 
     async updatePurchaseOrder(id, purchaseOrderData) {

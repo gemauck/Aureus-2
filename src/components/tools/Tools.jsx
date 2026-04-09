@@ -12,7 +12,8 @@ const Tools = () => {
         DieselRefundEvidenceEvaluator: null,
         DocumentParser: null,
         SafetyCultureInspections: null,
-        DocumentSorter: null
+        DocumentSorter: null,
+        ReceiptCaptureTool: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
 
@@ -32,7 +33,8 @@ const Tools = () => {
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
-                DocumentSorter: window.DocumentSorter
+                DocumentSorter: window.DocumentSorter,
+                ReceiptCaptureTool: window.ReceiptCaptureTool
             };
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
@@ -62,7 +64,8 @@ const Tools = () => {
                     PDFToWordConverter: !!components.PDFToWordConverter,
                     HandwritingToWord: !!components.HandwritingToWord,
                     DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator,
-                    DocumentParser: !!components.DocumentParser
+                    DocumentParser: !!components.DocumentParser,
+                    ReceiptCaptureTool: !!components.ReceiptCaptureTool
                 });
                 isChecking = false;
             }
@@ -91,7 +94,8 @@ const Tools = () => {
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
-                DocumentSorter: window.DocumentSorter
+                DocumentSorter: window.DocumentSorter,
+                ReceiptCaptureTool: window.ReceiptCaptureTool
             };
             setToolComponents(prev => {
                 const hasChanged = Object.keys(components).some(key => 
@@ -116,6 +120,14 @@ const Tools = () => {
     // Build tools array with components - use useMemo to recalculate when toolComponents changes
     const tools = useMemo(() => {
         const toolsArray = [
+            {
+                id: 'receipt-capture',
+                name: 'Receipt capture',
+                description: 'Photograph or upload slips; AI extraction, allocate to accounts and cost centres, export CSV',
+                icon: 'fa-receipt',
+                color: 'emerald',
+                component: toolComponents.ReceiptCaptureTool
+            },
             {
                 id: 'document-parser',
                 name: 'Document Parser',
