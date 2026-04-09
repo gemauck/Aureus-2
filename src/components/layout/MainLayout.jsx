@@ -44,6 +44,23 @@ function formatUserRoleLabel(role) {
         .join(' ');
 }
 
+function getRouteSnapshot() {
+    if (window.RouteState?.getRoute) {
+        return window.RouteState.getRoute();
+    }
+    const pathSegments = (window.location.pathname || '/')
+        .replace(/^\//, '')
+        .split('/')
+        .filter(Boolean);
+    const page = pathSegments[0] || 'dashboard';
+    return {
+        page: page === 'crm' ? 'clients' : page,
+        segments: pathSegments.slice(1),
+        search: new URLSearchParams(window.location.search || ''),
+        hash: window.location.hash || ''
+    };
+}
+
 const MainLayout = () => {
     // Load company name from settings
     const [companyName, setCompanyName] = React.useState('Abcotronics');
@@ -137,6 +154,62 @@ const MainLayout = () => {
     };
 
     const [currentPage, setCurrentPage] = useState(getInitialPage());
+    const titleRequestRef = React.useRef(0);
+    const titleCacheRef = React.useRef(new Map());
+
+    // Ensure title helper is available (watch mode may load files lazily).
+    React.useEffect(() => {
+        if (window.PageTitleManager) {
+            return;
+        }
+        const existing = document.getElementById('page-title-manager-script');
+        if (existing) {
+            return;
+        }
+        const script = document.createElement('script');
+        script.id = 'page-title-manager-script';
+        script.defer = true;
+        script.src = '/dist/src/utils/pageTitle.js';
+        document.body.appendChild(script);
+    }, []);
+
+    const syncDocumentTitle = React.useCallback(async (options = {}) => {
+        const manager = window.PageTitleManager;
+        if (!manager) {
+            return;
+        }
+
+        const route = options.route || getRouteSnapshot();
+        const routePage = (route?.page || currentPage || 'dashboard');
+        const pageKey = String(routePage).toLowerCase();
+        const pathname = String(window.location.pathname || '').toLowerCase();
+
+        if (manager.setPublicTitle(pathname)) {
+            return;
+        }
+
+        let entityName = manager.cleanEntityName(options.entityName || '');
+        const entityId = Array.isArray(route?.segments) ? String(route.segments[0] || '') : '';
+
+        if (!entityName && entityId) {
+            const cacheKey = `${pageKey}:${entityId}`;
+            if (titleCacheRef.current.has(cacheKey)) {
+                entityName = titleCacheRef.current.get(cacheKey) || '';
+            } else {
+                const requestId = ++titleRequestRef.current;
+                const resolved = await manager.resolveEntityNameByRoute(route);
+                if (requestId !== titleRequestRef.current) {
+                    return;
+                }
+                if (resolved) {
+                    entityName = resolved;
+                    titleCacheRef.current.set(cacheKey, resolved);
+                }
+            }
+        }
+
+        manager.setPageTitle({ page: routePage, entityName });
+    }, [currentPage]);
     
     // Re-check route on mount if hash is present (for deep links from email)
     React.useEffect(() => {
@@ -382,6 +455,38 @@ const MainLayout = () => {
             }
         };
     }, []);
+
+    React.useEffect(() => {
+        const handleRouteChange = (event) => {
+            const route = event?.detail || getRouteSnapshot();
+            void syncDocumentTitle({ route });
+        };
+
+        const handleEntityNavigation = (event) => {
+            const detail = event?.detail || {};
+            const route = getRouteSnapshot();
+            const suggestedName = detail.entityName || detail.name || detail.projectName || detail.clientName || '';
+            const cleanName = window.PageTitleManager?.cleanEntityName?.(suggestedName) || '';
+            const entityId = String(detail.entityId || route?.segments?.[0] || '');
+            const pageKey = String(route?.page || currentPage || '').toLowerCase();
+            if (cleanName && entityId) {
+                titleCacheRef.current.set(`${pageKey}:${entityId}`, cleanName);
+            }
+            void syncDocumentTitle({ route, entityName: cleanName });
+        };
+
+        window.addEventListener('route:change', handleRouteChange);
+        window.addEventListener('openEntityDetail', handleEntityNavigation);
+        window.addEventListener('navigateToEntity', handleEntityNavigation);
+
+        void syncDocumentTitle({ route: getRouteSnapshot() });
+
+        return () => {
+            window.removeEventListener('route:change', handleRouteChange);
+            window.removeEventListener('openEntityDetail', handleEntityNavigation);
+            window.removeEventListener('navigateToEntity', handleEntityNavigation);
+        };
+    }, [currentPage, syncDocumentTitle]);
     
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [isMobile, setIsMobile] = useState(false);

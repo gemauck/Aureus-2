@@ -17,6 +17,7 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
       try {
         const params = new URLSearchParams({ id: String(mediaId), token: String(token) });
         if (mediaType) params.set('media_type', String(mediaType));
+        if (filename) params.set('filename', String(filename));
         const headers = {};
         const t = typeof window !== 'undefined' && window.storage?.getToken?.();
         if (t) headers.Authorization = `Bearer ${t}`;
@@ -43,7 +44,7 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
     return () => {
       cancelled = true;
     };
-  }, [mediaId, token, mediaType]);
+  }, [mediaId, token, mediaType, filename]);
 
   const isVideo =
     String(mediaType).includes('VIDEO') ||

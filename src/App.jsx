@@ -19,6 +19,43 @@ const AppContent = () => {
     const isInvitationPage = pathname === '/accept-invitation' && urlParams.get('token');
     const isResetPage = pathname === '/reset-password' && urlParams.get('token');
     const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
+
+    window.React.useEffect(() => {
+        const manager = window.PageTitleManager;
+        const setDirectTitle = (value) => {
+            if (value && document.title !== value) {
+                document.title = value;
+            }
+        };
+
+        if (isInvitationPage) {
+            if (manager?.setPublicTitle) {
+                manager.setPublicTitle('/accept-invitation');
+            } else {
+                setDirectTitle('Accept Invitation - Abcotronics ERP');
+            }
+            return;
+        }
+        if (isResetPage) {
+            if (manager?.setPublicTitle) {
+                manager.setPublicTitle('/reset-password');
+            } else {
+                setDirectTitle('Reset Password - Abcotronics ERP');
+            }
+            return;
+        }
+        if (isPublicJobCardPage) {
+            if (manager?.setPublicTitle) {
+                manager.setPublicTitle('/job-card');
+            } else {
+                setDirectTitle('Job Card - Abcotronics ERP');
+            }
+            return;
+        }
+        if (!user) {
+            setDirectTitle('Login - Abcotronics ERP');
+        }
+    }, [isInvitationPage, isResetPage, isPublicJobCardPage, user]);
     
     // Call ALL useState hooks first (must be in same order every render)
     const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
