@@ -4,51 +4,23 @@ const { useState, useEffect, useMemo } = ReactGlobal;
 
 /** Same as manufacturing JobCards: SC binary via sign-url (no ES imports — build is non-bundled IIFE). */
 function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filename, idx, isDark }) {
-  const [src, setSrc] = useState(null);
+  const [retryTick, setRetryTick] = useState(0);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
-    if (!mediaId || !token) {
-      setErr('Missing media credentials');
-      return undefined;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const params = new URLSearchParams({ id: String(mediaId), token: String(token) });
-        if (mediaType) params.set('media_type', String(mediaType));
-        if (filename) params.set('filename', String(filename));
-        const headers = {};
-        const t = typeof window !== 'undefined' && window.storage?.getToken?.();
-        if (t) headers.Authorization = `Bearer ${t}`;
-        const res = await fetch(`/api/safety-culture/media/sign-url?${params}`, { headers });
-        const json = await res.json().catch(() => ({}));
-        const u = json?.data?.url;
-        if (!res.ok || !u) {
-          const msg =
-            (typeof json?.error === 'object' && json?.error?.message) ||
-            json?.error ||
-            json?.message ||
-            `Could not load media (${res.status})`;
-          if (!cancelled) setErr(String(msg));
-          return;
-        }
-        if (!cancelled) {
-          setErr(null);
-          setSrc(u);
-        }
-      } catch (e) {
-        if (!cancelled) setErr(e?.message || 'Request failed');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setErr(null);
+    setRetryTick(0);
   }, [mediaId, token, mediaType, filename]);
 
   const isVideo =
     String(mediaType).includes('VIDEO') ||
     /\.(mp4|webm|mov|m4v)$/i.test(filename || '');
+  const mediaParams = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
+  if (mediaType) mediaParams.set('media_type', String(mediaType));
+  if (filename) mediaParams.set('filename', String(filename));
+  if (retryTick > 0) mediaParams.set('retry', String(retryTick));
+  const mediaSrc = `/api/safety-culture/media/proxy?${mediaParams.toString()}`;
+  const canRender = Boolean(mediaId && token);
 
   const border = isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-200 bg-gray-50';
   const fnColor = isDark ? 'text-gray-400' : 'text-gray-500';
@@ -62,27 +34,41 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
         {filename}
       </div>
       {err ? <div className={`px-2 pb-2 text-xs ${errColor}`}>{err}</div> : null}
-      {!err && !src ? (
+      {!err && !canRender ? (
         <div className={`flex items-center justify-center gap-2 py-8 text-xs ${loadColor}`}>
-          <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-          Loading…
+          <i className="fa-regular fa-circle-xmark" aria-hidden />
+          Missing media credentials
         </div>
       ) : null}
-      {src && isVideo ? (
+      {canRender && isVideo ? (
         <video
-          src={src}
+          src={mediaSrc}
           className="max-h-64 w-full object-contain bg-black"
           controls
           playsInline
           preload="metadata"
+          onError={() => {
+            if (retryTick < 2) {
+              setRetryTick((n) => n + 1);
+              return;
+            }
+            setErr('Could not load media');
+          }}
         />
       ) : null}
-      {src && !isVideo ? (
+      {canRender && !isVideo ? (
         <figure className={`group relative overflow-hidden ${figBg}`}>
           <img
-            src={src}
+            src={mediaSrc}
             alt={`SafetyCulture attachment ${idx + 1}`}
             className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+            onError={() => {
+              if (retryTick < 2) {
+                setRetryTick((n) => n + 1);
+                return;
+              }
+              setErr('Could not load media');
+            }}
           />
         </figure>
       ) : null}

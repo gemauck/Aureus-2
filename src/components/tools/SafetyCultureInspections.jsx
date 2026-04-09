@@ -3,7 +3,6 @@ const { useState, useEffect, useMemo } = React;
 
 const API_BASE = window.location.origin + '/api';
 const PAGE_SIZE = 20;
-const scMediaSignedUrlCache = new Map();
 /** Non-OK API responses use `{ error: { message, code } }` — surface instead of empty lists. */
 const apiErrorFromResponse = (res, json) => {
     if (res.ok) return null;
@@ -148,8 +147,8 @@ function renderScInspectionsList(arr) {
     );
 }
 
-const ScMediaTile = ({ item, isDark, getHeaders }) => {
-    const [src, setSrc] = useState(null);
+const ScMediaTile = ({ item, isDark }) => {
+    const [retryTick, setRetryTick] = useState(0);
     const [err, setErr] = useState(null);
     const id = item?.id || item?.media_id || item?.document_id;
     const token = item?.token || item?.download_token || item?.media_token || item?.access_token;
@@ -157,57 +156,19 @@ const ScMediaTile = ({ item, isDark, getHeaders }) => {
     const fileName = item?.file_name || item?.filename || item?.name || 'Attachment';
 
     useEffect(() => {
-        if (!id || !token) {
-            setErr('Missing media id or token');
-            return;
-        }
-        const cacheKey = `${id}:${token}:${mediaType || ''}`;
-        const cached = scMediaSignedUrlCache.get(cacheKey);
-        if (cached?.url) {
-            setSrc(cached.url);
-            setErr(null);
-            return;
-        }
-        if (cached?.error) {
-            setErr(cached.error);
-            return;
-        }
-        let cancelled = false;
-        (async () => {
-            try {
-                const params = new URLSearchParams({ id: String(id), token: String(token) });
-                if (mediaType) params.set('media_type', String(mediaType));
-                if (fileName) params.set('filename', String(fileName));
-                const res = await fetch(`${API_BASE}/safety-culture/media/sign-url?${params}`, { headers: getHeaders() });
-                const json = await res.json().catch(() => ({}));
-                const u = json?.data?.url;
-                if (!res.ok || !u) {
-                    const msg =
-                        (typeof json?.error === 'object' && json?.error?.message) ||
-                        json?.error ||
-                        json?.message ||
-                        `Could not load media (${res.status})`;
-                    const safeMsg = String(msg);
-                    scMediaSignedUrlCache.set(cacheKey, { error: safeMsg });
-                    if (!cancelled) setErr(safeMsg);
-                    return;
-                }
-                scMediaSignedUrlCache.set(cacheKey, { url: u });
-                if (!cancelled) setSrc(u);
-            } catch (e) {
-                const safeMsg = e.message || 'Request failed';
-                scMediaSignedUrlCache.set(cacheKey, { error: safeMsg });
-                if (!cancelled) setErr(safeMsg);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
+        setErr(null);
+        setRetryTick(0);
     }, [id, token, mediaType, fileName]);
 
     const isImage =
         String(mediaType).includes('IMAGE') ||
         /\.(jpe?g|png|gif|webp)$/i.test(fileName);
+    const canRender = Boolean(id && token);
+    const params = new URLSearchParams({ id: String(id || ''), token: String(token || '') });
+    if (mediaType) params.set('media_type', String(mediaType));
+    if (fileName) params.set('filename', String(fileName));
+    if (retryTick > 0) params.set('retry', String(retryTick));
+    const src = `${API_BASE}/safety-culture/media/proxy?${params.toString()}`;
 
     const cardClass = isDark ? 'border-gray-600 bg-gray-900/50' : 'border-gray-200 bg-gray-50';
 
@@ -217,18 +178,29 @@ const ScMediaTile = ({ item, isDark, getHeaders }) => {
                 {fileName}
             </div>
             {err ? <div className="text-xs text-red-500 dark:text-red-400">{err}</div> : null}
-            {!err && !src ? (
+            {!err && !canRender ? (
                 <div className="text-xs opacity-60 py-4 flex items-center gap-2">
-                    <i className="fas fa-spinner fa-spin" />
-                    Loading…
+                    <i className="fa-regular fa-circle-xmark" />
+                    Missing media id or token
                 </div>
             ) : null}
-            {src && isImage ? (
+            {canRender && isImage ? (
                 <a href={src} target="_blank" rel="noopener noreferrer" className="block">
-                    <img src={src} alt="" className="max-w-full max-h-56 rounded object-contain mx-auto" />
+                    <img
+                        src={src}
+                        alt=""
+                        className="max-w-full max-h-56 rounded object-contain mx-auto"
+                        onError={() => {
+                            if (retryTick < 2) {
+                                setRetryTick((n) => n + 1);
+                                return;
+                            }
+                            setErr('Could not load media');
+                        }}
+                    />
                 </a>
             ) : null}
-            {src && !isImage ? (
+            {canRender && !isImage ? (
                 <a href={src} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline break-all">
                     Open / download file
                 </a>
@@ -237,14 +209,14 @@ const ScMediaTile = ({ item, isDark, getHeaders }) => {
     );
 };
 
-function renderScMediaList(items, isDark, getHeaders) {
+function renderScMediaList(items, isDark) {
     if (!Array.isArray(items) || items.length === 0) {
         return <span className="opacity-70">None</span>;
     }
     return (
         <div className="flex flex-wrap gap-3">
             {items.map((item, idx) => (
-                <ScMediaTile key={item?.id || item?.media_id || idx} item={item} isDark={isDark} getHeaders={getHeaders} />
+                <ScMediaTile key={item?.id || item?.media_id || idx} item={item} isDark={isDark} />
             ))}
         </div>
     );
@@ -301,16 +273,16 @@ function renderIssueDetailField(key, val, isDark, getHeaders) {
             (x) => x && typeof x === 'object' && (x.token || x.download_token || x.media_token) && (x.id || x.media_id || x.document_id)
         );
         if (looksLikeSignedMedia || k === 'media' || k === 'medias' || k === 'images') {
-            return renderScMediaList(val, isDark, getHeaders);
+            return renderScMediaList(val, isDark);
         }
     }
 
     if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.items)) {
-        return renderScMediaList(val.items, isDark, getHeaders);
+        return renderScMediaList(val.items, isDark);
     }
 
     if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.media)) {
-        return renderScMediaList(val.media, isDark, getHeaders);
+        return renderScMediaList(val.media, isDark);
     }
 
     if (k === 'items' && Array.isArray(val)) {
