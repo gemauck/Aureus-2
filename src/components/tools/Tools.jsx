@@ -35,29 +35,6 @@ const Tools = () => {
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
     const prevUrlToolIdRef = useRef(undefined);
 
-    // Deep link: open a tool from /tools/{toolId} or /tools?tool={toolId}; clear when URL segment removed (e.g. browser back)
-    useEffect(() => {
-        const syncFromUrl = () => {
-            const toolId = parseToolIdFromLocation();
-            const prev = prevUrlToolIdRef.current;
-            if (toolId) {
-                const found = tools.find((t) => t.id === toolId);
-                if (found) setCurrentTool(found);
-                prevUrlToolIdRef.current = toolId;
-                return;
-            }
-            if (prev !== undefined && prev !== null && !toolId) {
-                setCurrentTool(null);
-            }
-            prevUrlToolIdRef.current = toolId;
-        };
-        syncFromUrl();
-        const unsub = window.RouteState?.subscribe?.(syncFromUrl);
-        return () => {
-            if (typeof unsub === 'function') unsub();
-        };
-    }, [tools, toolsVersion]);
-
     const goBackToToolsList = () => {
         setCurrentTool(null);
         prevUrlToolIdRef.current = null;
@@ -261,6 +238,29 @@ const Tools = () => {
         });
         return toolsArray;
     }, [toolComponents, toolsVersion]); // Include toolsVersion to force recalculation
+
+    // Deep link: open a tool from /tools/{toolId} or /tools?tool={toolId}; must run after `tools` exists (not in TDZ)
+    useEffect(() => {
+        const syncFromUrl = () => {
+            const toolId = parseToolIdFromLocation();
+            const prev = prevUrlToolIdRef.current;
+            if (toolId) {
+                const found = tools.find((t) => t.id === toolId);
+                if (found) setCurrentTool(found);
+                prevUrlToolIdRef.current = toolId;
+                return;
+            }
+            if (prev !== undefined && prev !== null && !toolId) {
+                setCurrentTool(null);
+            }
+            prevUrlToolIdRef.current = toolId;
+        };
+        syncFromUrl();
+        const unsub = window.RouteState?.subscribe?.(syncFromUrl);
+        return () => {
+            if (typeof unsub === 'function') unsub();
+        };
+    }, [tools, toolsVersion]);
 
     const renderToolContent = () => {
         if (!currentTool) {
