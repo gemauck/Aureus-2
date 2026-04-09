@@ -20,6 +20,38 @@ const AppContent = () => {
     const isResetPage = pathname === '/reset-password' && urlParams.get('token');
     const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
 
+    // Call ALL useState hooks first (must be in same order every render)
+    const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
+    const [loginPageReady, setLoginPageReady] = window.React.useState(!!window.LoginPage);
+    // Safety: after 30s, stop showing loading so user is never stuck
+    const [loadingEscape, setLoadingEscape] = window.React.useState(false);
+    
+    // Get auth state - always call this hook
+    let user = null;
+    let authLoading = true;
+    try {
+        const authState = window.useAuth();
+        user = authState?.user || null;
+        authLoading = authState?.loading !== undefined ? authState.loading : false;
+    } catch (authError) {
+        console.error('❌ AppContent: Error calling useAuth:', authError);
+        user = null;
+        authLoading = false;
+    }
+    
+    // Get data state - always call this hook
+    let initialLoadComplete = true;
+    let globalLoading = false;
+    try {
+        const dataState = window.useData();
+        initialLoadComplete = dataState?.initialLoadComplete !== undefined ? dataState.initialLoadComplete : true;
+        globalLoading = dataState?.globalLoading !== undefined ? dataState.globalLoading : false;
+    } catch (dataError) {
+        console.error('❌ AppContent: Error calling useData:', dataError);
+        initialLoadComplete = true;
+        globalLoading = false;
+    }
+
     window.React.useEffect(() => {
         const manager = window.PageTitleManager;
         const setDirectTitle = (value) => {
@@ -56,38 +88,6 @@ const AppContent = () => {
             setDirectTitle('Login - Abcotronics ERP');
         }
     }, [isInvitationPage, isResetPage, isPublicJobCardPage, user]);
-    
-    // Call ALL useState hooks first (must be in same order every render)
-    const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
-    const [loginPageReady, setLoginPageReady] = window.React.useState(!!window.LoginPage);
-    // Safety: after 30s, stop showing loading so user is never stuck
-    const [loadingEscape, setLoadingEscape] = window.React.useState(false);
-    
-    // Get auth state - always call this hook
-    let user = null;
-    let authLoading = true;
-    try {
-        const authState = window.useAuth();
-        user = authState?.user || null;
-        authLoading = authState?.loading !== undefined ? authState.loading : false;
-    } catch (authError) {
-        console.error('❌ AppContent: Error calling useAuth:', authError);
-        user = null;
-        authLoading = false;
-    }
-    
-    // Get data state - always call this hook
-    let initialLoadComplete = true;
-    let globalLoading = false;
-    try {
-        const dataState = window.useData();
-        initialLoadComplete = dataState?.initialLoadComplete !== undefined ? dataState.initialLoadComplete : true;
-        globalLoading = dataState?.globalLoading !== undefined ? dataState.globalLoading : false;
-    } catch (dataError) {
-        console.error('❌ AppContent: Error calling useData:', dataError);
-        initialLoadComplete = true;
-        globalLoading = false;
-    }
     
     // Call ALL useEffect hooks (must be in same order every render)
     // Safety: after 30s force out of loading so site never stays stuck on "Loading..."
