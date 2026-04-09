@@ -92,11 +92,19 @@ function labelOrphanFormVoiceKey(forms, key) {
  * @param {unknown} photosInput
  * @param {{ issueId?: string|null }} [opts] — SafetyCulture issue id so media proxy can refresh stale tokens
  */
+/** Public job card wizard stores per-field photos as kind sectionMedia (shown under Diagnosis / Actions / Future work). */
+const SECTION_VISUAL_KEYS = ['diagnosis', 'actionsTaken', 'futureWorkRequired'];
+
 function partitionJobCardAttachments(photosInput, opts = {}) {
   const issueId = opts.issueId != null && String(opts.issueId).trim() !== '' ? String(opts.issueId) : '';
   const photos = parseJsonArrayLoose(photosInput);
   const visualItems = [];
   const voicesBySection = {};
+  const visualItemsBySection = {
+    diagnosis: [],
+    actionsTaken: [],
+    futureWorkRequired: []
+  };
   photos.forEach((p, idx) => {
     const url = typeof p === 'string' ? p : p?.url;
     const isVoice = typeof p === 'object' && p && p.kind === 'voice';
@@ -107,6 +115,24 @@ function partitionJobCardAttachments(photosInput, opts = {}) {
           : 'otherComments';
       if (!voicesBySection[sec]) voicesBySection[sec] = [];
       voicesBySection[sec].push({ url, mimeType: p.mimeType, idx });
+      return;
+    }
+    const isSectionMedia =
+      typeof p === 'object' &&
+      p &&
+      p.kind === 'sectionMedia' &&
+      typeof p.url === 'string' &&
+      p.url;
+    if (isSectionMedia) {
+      const secRaw = p.section != null ? String(p.section).trim() : '';
+      const sec = SECTION_VISUAL_KEYS.includes(secRaw) ? secRaw : null;
+      const item = { raw: p, url: String(p.url), idx };
+      if (p.name != null && String(p.name).trim()) item.filename = String(p.name);
+      if (sec) {
+        visualItemsBySection[sec].push(item);
+      } else {
+        visualItems.push(item);
+      }
       return;
     }
     const isScMedia =
@@ -132,7 +158,7 @@ function partitionJobCardAttachments(photosInput, opts = {}) {
       visualItems.push({ raw: p, url, idx });
     }
   });
-  return { visualItems, voicesBySection };
+  return { visualItems, voicesBySection, visualItemsBySection };
 }
 
 /** SafetyCulture media: backend proxy (refreshes tokens via issue_id when stale). */
@@ -202,6 +228,53 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
           />
         </figure>
       ) : null}
+    </div>
+  );
+}
+
+/** Photos/videos saved for one narrative block (public wizard: kind sectionMedia). Shown under Diagnosis / Actions / Future work. */
+function JobCardInlineSectionMediaStrip({ items, issueId }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <div className="text-[11px] font-semibold uppercase text-slate-500 mb-2">Photos &amp; video</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {items.map((item) => {
+          const key = `sec-inline-${item.idx}`;
+          if (item.safetyCulture) {
+            return (
+              <JobCardSafetyCultureThumbnail
+                key={key}
+                mediaId={item.mediaId}
+                token={item.token}
+                mediaType={item.mediaType}
+                filename={item.filename || 'media'}
+                issueId={issueId}
+                idx={item.idx}
+              />
+            );
+          }
+          const { url } = item;
+          if (url && jobCardAttachmentUrlIsVideo(url)) {
+            return (
+              <div key={key} className="overflow-hidden rounded-xl border border-slate-700 bg-black">
+                <video
+                  src={url}
+                  className="max-h-40 w-full object-contain"
+                  controls
+                  playsInline
+                  preload="metadata"
+                />
+              </div>
+            );
+          }
+          return (
+            <figure key={key} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
+              <img src={url} alt="" className="h-28 w-full object-cover" />
+            </figure>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1164,6 +1237,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.diagnosis || 'No diagnosis captured.'}
                       </p>
+                      <JobCardInlineSectionMediaStrip
+                        items={attachmentParts.visualItemsBySection?.diagnosis}
+                        issueId={selectedJobCard.safetyCultureIssueId}
+                      />
                       <JobCardVoiceClips
                         tone="dark"
                         items={attachmentParts.voicesBySection.diagnosis}
@@ -1176,12 +1253,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.actionsTaken || 'No actions recorded.'}
                       </p>
+                      <JobCardInlineSectionMediaStrip
+                        items={attachmentParts.visualItemsBySection?.actionsTaken}
+                        issueId={selectedJobCard.safetyCultureIssueId}
+                      />
                       <JobCardVoiceClips
                         tone="dark"
                         items={attachmentParts.voicesBySection.actionsTaken}
                       />
                     </div>
-                    {(selectedJobCard.futureWorkRequired || selectedJobCard.futureWorkScheduledAt) && (
+                    {(selectedJobCard.futureWorkRequired ||
+                      selectedJobCard.futureWorkScheduledAt ||
+                      (attachmentParts.visualItemsBySection?.futureWorkRequired?.length > 0)) && (
                       <div>
                         <div className="text-[11px] font-semibold uppercase text-slate-500">
                           Future work
@@ -1194,6 +1277,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                             Scheduled: {formatDate(selectedJobCard.futureWorkScheduledAt)}
                           </p>
                         ) : null}
+                        <JobCardInlineSectionMediaStrip
+                          items={attachmentParts.visualItemsBySection?.futureWorkRequired}
+                          issueId={selectedJobCard.safetyCultureIssueId}
+                        />
                         <JobCardVoiceClips
                           tone="dark"
                           items={attachmentParts.voicesBySection.futureWorkRequired}

@@ -77,6 +77,63 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
   );
 }
 
+/** Section-scoped photos (public job card sectionMedia) — matches JobCards JobCardInlineSectionMediaStrip. */
+function JobCardInlineSectionMediaStripService({ items, isDark, issueId }) {
+  if (!items || items.length === 0) return null;
+  const isVidFn = window.JobCardAttachmentUtils?.jobCardAttachmentUrlIsVideo;
+  const labelCls = isDark ? 'text-gray-500' : 'text-gray-500';
+  return (
+    <div className="mt-3">
+      <div className={`text-[11px] font-semibold uppercase mb-2 ${labelCls}`}>Photos &amp; video</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {items.map((item) => {
+          const key = `sec-svc-${item.idx}`;
+          if (item.safetyCulture) {
+            return (
+              <JobCardSafetyCultureThumbnailService
+                key={key}
+                mediaId={item.mediaId}
+                token={item.token}
+                mediaType={item.mediaType}
+                filename={item.filename || 'media'}
+                issueId={issueId}
+                idx={item.idx}
+                isDark={isDark}
+              />
+            );
+          }
+          const { url } = item;
+          const isVid = isVidFn ? isVidFn(url) : typeof url === 'string' && /^data:video\//i.test(url);
+          if (isVid) {
+            return (
+              <div
+                key={key}
+                className={`overflow-hidden rounded-xl border ${isDark ? 'border-gray-700 bg-black' : 'border-gray-200 bg-black'}`}
+              >
+                <video
+                  src={url}
+                  className="max-h-40 w-full object-contain"
+                  controls
+                  playsInline
+                  preload="metadata"
+                />
+              </div>
+            );
+          }
+          return (
+            <figure
+              key={key}
+              className={`overflow-hidden rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
+            >
+              <img src={url} alt="" className="h-28 w-full object-cover" />
+            </figure>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const PermissionGate =
   (typeof window !== 'undefined' && window.PermissionGate) ||
   (({ children }) => children);
@@ -484,7 +541,11 @@ const ServiceAndMaintenance = () => {
         issueId: selectedJobCard?.safetyCultureIssueId
       });
     }
-    return { visualItems: [], voicesBySection: {} };
+    return {
+      visualItems: [],
+      voicesBySection: {},
+      visualItemsBySection: { diagnosis: [], actionsTaken: [], futureWorkRequired: [] }
+    };
   }, [selectedJobCard?.photos, selectedJobCard?.safetyCultureIssueId]);
 
   const DetailVoice =
@@ -1508,6 +1569,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.diagnosis || 'No diagnosis captured.'}
                       </p>
+                      <JobCardInlineSectionMediaStripService
+                        items={attachmentParts.visualItemsBySection?.diagnosis}
+                        isDark={isDark}
+                        issueId={selectedJobCard.safetyCultureIssueId}
+                      />
                       {DetailVoice ? (
                         <DetailVoice items={attachmentParts.voicesBySection.diagnosis} />
                       ) : null}
@@ -1519,6 +1585,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       <p className="mt-1 leading-relaxed">
                         {selectedJobCard.actionsTaken || 'No actions recorded.'}
                       </p>
+                      <JobCardInlineSectionMediaStripService
+                        items={attachmentParts.visualItemsBySection?.actionsTaken}
+                        isDark={isDark}
+                        issueId={selectedJobCard.safetyCultureIssueId}
+                      />
                       {DetailVoice ? (
                         <DetailVoice items={attachmentParts.voicesBySection.actionsTaken} />
                       ) : null}
@@ -1534,6 +1605,14 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         <p className={`mt-2 text-xs ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
                           Scheduled for: {formatDate(selectedJobCard.futureWorkScheduledAt)}
                         </p>
+                      ) : null}
+                      <JobCardInlineSectionMediaStripService
+                        items={attachmentParts.visualItemsBySection?.futureWorkRequired}
+                        isDark={isDark}
+                        issueId={selectedJobCard.safetyCultureIssueId}
+                      />
+                      {DetailVoice ? (
+                        <DetailVoice items={attachmentParts.voicesBySection.futureWorkRequired} />
                       ) : null}
                     </div>
                   </div>
