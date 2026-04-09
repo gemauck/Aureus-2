@@ -1,4 +1,4 @@
-// POST /api/purchase-orders/extract-from-document — authenticated PO line extraction from a quote/invoice image (OpenAI vision).
+// POST /api/purchase-orders/extract-from-document — authenticated PO line extraction from a quote/invoice image (OpenAI vision) or PDF text (pdf-parse + OpenAI).
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -10,7 +10,8 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 
 const ALLOWED_UPLOAD_FOLDER = 'po-source-documents'
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024
+const MAX_DOC_BYTES = 20 * 1024 * 1024
+const MAX_PDF_TEXT_CHARS = 100000
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..')
@@ -35,6 +36,7 @@ function resolveSafeUploadFile(publicPath) {
 
 function mimeFromPath(filePath) {
   const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.pdf') return 'application/pdf'
   if (ext === '.png') return 'image/png'
   if (ext === '.webp') return 'image/webp'
   if (ext === '.gif') return 'image/gif'
@@ -42,18 +44,35 @@ function mimeFromPath(filePath) {
   return 'image/jpeg'
 }
 
-async function loadImageForVision(body) {
+function kindFromMime(mime) {
+  const m = (mime || '').split(';')[0].trim().toLowerCase()
+  if (m === 'application/pdf') return 'pdf'
+  return 'image'
+}
+
+/**
+ * Load uploaded file from po-source-documents or base64 data URL.
+ * @returns {{ error: string } | { kind: 'image'|'pdf', buffer: Buffer, mimeType: string }}
+ */
+async function loadDocumentForExtraction(body) {
   if (body.imageBase64 && typeof body.imageBase64 === 'string') {
     const raw = body.imageBase64.replace(/^data:[^;]+;base64,/i, '')
     const buf = Buffer.from(raw, 'base64')
-    if (buf.length < 32 || buf.length > MAX_IMAGE_BYTES) {
-      return { error: 'Invalid image size (32B–20MB)' }
+    if (buf.length < 32 || buf.length > MAX_DOC_BYTES) {
+      return { error: 'Invalid file size (32B–20MB)' }
     }
-    const mime =
-      typeof body.mimeType === 'string' && /^image\//i.test(body.mimeType)
+    const mimeMatch = String(body.imageBase64).match(/^data:([^;]+);base64,/i)
+    const mime = mimeMatch
+      ? mimeMatch[1].split(';')[0].trim()
+      : typeof body.mimeType === 'string'
         ? body.mimeType.split(';')[0].trim()
         : 'image/jpeg'
-    return { buffer: buf, mimeType: mime }
+    const k = kindFromMime(mime)
+    if (k === 'pdf') return { kind: 'pdf', buffer: buf, mimeType: 'application/pdf' }
+    if (!/^image\//i.test(mime)) {
+      return { error: 'Unsupported file type (use an image or PDF)' }
+    }
+    return { kind: 'image', buffer: buf, mimeType: mime }
   }
 
   const imageUrl = body.imageUrl || body.uploadedUrl
@@ -63,14 +82,17 @@ async function loadImageForVision(body) {
 
   const filePath = resolveSafeUploadFile(imageUrl)
   if (!filePath || !fs.existsSync(filePath)) {
-    return { error: 'Invalid or missing image file (use folder po-source-documents)' }
+    return { error: 'Invalid or missing file (use folder po-source-documents)' }
   }
 
   const buf = fs.readFileSync(filePath)
-  if (buf.length < 32 || buf.length > MAX_IMAGE_BYTES) {
-    return { error: 'Image file size invalid' }
+  if (buf.length < 32 || buf.length > MAX_DOC_BYTES) {
+    return { error: 'File size invalid (max 20MB)' }
   }
-  return { buffer: buf, mimeType: mimeFromPath(filePath) }
+  const mime = mimeFromPath(filePath)
+  const k = kindFromMime(mime)
+  if (k === 'pdf') return { kind: 'pdf', buffer: buf, mimeType: 'application/pdf' }
+  return { kind: 'image', buffer: buf, mimeType: mime }
 }
 
 function normalizeExtraction(parsed) {
@@ -126,16 +148,12 @@ async function handler(req, res) {
     }
 
     const body = await parseJsonBody(req)
-    const loaded = await loadImageForVision(body)
+    const loaded = await loadDocumentForExtraction(body)
     if (loaded.error) {
       return badRequest(res, loaded.error)
     }
 
-    const { buffer, mimeType } = loaded
-    const b64 = buffer.toString('base64')
-    const dataUrl = `data:${mimeType};base64,${b64}`
-
-    const systemPrompt = `You extract purchase order line items from photos or scans of quotes, invoices, and packing lists.
+    const systemPromptBase = `You extract purchase order line items from quotes, invoices, and packing lists.
 Return ONLY valid JSON (no markdown) with this exact shape:
 {"supplierNameHint":"","currency":"ZAR","documentTypeGuess":"quote|invoice|other","lines":[{"description":"","quantity":1,"unitPrice":0,"partNumberHint":""}]}
 Rules:
@@ -147,21 +165,67 @@ Rules:
 - partNumberHint: SKU/part code if visible per line.`
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    const completion = await openai.chat.completions.create({
-      model: process.env.PO_EXTRACT_VISION_MODEL || 'gpt-4o-mini',
-      max_tokens: 4096,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Extract structured data from this document image.' },
-            { type: 'image_url', image_url: { url: dataUrl } }
-          ]
-        }
-      ]
-    })
+    const model = process.env.PO_EXTRACT_VISION_MODEL || 'gpt-4o-mini'
+
+    let completion
+    if (loaded.kind === 'pdf') {
+      let text = ''
+      try {
+        const pdfParseMod = await import('pdf-parse')
+        const pdfParse = pdfParseMod.default || pdfParseMod
+        const parsed = await pdfParse(loaded.buffer)
+        text = String(parsed?.text || '').trim()
+      } catch (parseErr) {
+        console.warn('extract-from-document: pdf-parse failed', parseErr?.message)
+        return badRequest(
+          res,
+          'Could not read this PDF. It may be encrypted or corrupt. Try another file or upload a photo of the document.'
+        )
+      }
+      if (!text || text.length < 12) {
+        return badRequest(
+          res,
+          'No extractable text in this PDF (scanned/image-only PDFs are not supported here). Upload a photo or a text-based PDF.'
+        )
+      }
+      const clipped =
+        text.length > MAX_PDF_TEXT_CHARS ? `${text.slice(0, MAX_PDF_TEXT_CHARS)}\n...[truncated]` : text
+
+      completion = await openai.chat.completions.create({
+        model: process.env.PO_EXTRACT_TEXT_MODEL || model,
+        max_tokens: 4096,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `${systemPromptBase}\nThe user message is plain text extracted from a PDF.`
+          },
+          {
+            role: 'user',
+            content: `Extract structured PO data from this document text:\n\n${clipped}`
+          }
+        ]
+      })
+    } else {
+      const b64 = loaded.buffer.toString('base64')
+      const dataUrl = `data:${loaded.mimeType};base64,${b64}`
+
+      completion = await openai.chat.completions.create({
+        model,
+        max_tokens: 4096,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPromptBase },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Extract structured data from this document image.' },
+              { type: 'image_url', image_url: { url: dataUrl } }
+            ]
+          }
+        ]
+      })
+    }
 
     const rawText = completion?.choices?.[0]?.message?.content
     if (!rawText || typeof rawText !== 'string') {
@@ -205,7 +269,7 @@ Rules:
         return serviceUnavailable(res, 'Document extraction is busy. Wait a moment and try again.', 'OPENAI_RATE_LIMIT')
       }
       if (st === 400 || st === 422) {
-        return badRequest(res, 'Could not extract from this image', detail)
+        return badRequest(res, 'Could not extract from this document', detail)
       }
       if (st >= 500) {
         return serviceUnavailable(res, 'Document extraction had a temporary error. Try again.', 'OPENAI_UPSTREAM')

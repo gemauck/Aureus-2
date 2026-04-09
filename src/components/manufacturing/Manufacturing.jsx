@@ -9123,12 +9123,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           ? `${window.location.origin}${selectedItem.sourceDocumentUrl}`
                           : selectedItem.sourceDocumentUrl}
                       </a>
-                      {/\.(jpe?g|png|gif|webp)$/i.test(String(selectedItem.sourceDocumentUrl || '')) && (
-                        <img
-                          src={selectedItem.sourceDocumentUrl}
-                          alt="Source document"
-                          className="mt-3 max-h-56 w-auto max-w-full rounded border border-gray-200 object-contain bg-gray-50"
-                        />
+                      {/\.pdf$/i.test(String(selectedItem.sourceDocumentUrl || '')) ? (
+                        <p className="text-xs text-gray-500 mt-2">PDF on file — use the link above to open.</p>
+                      ) : (
+                        /\.(jpe?g|png|gif|webp)$/i.test(String(selectedItem.sourceDocumentUrl || '')) && (
+                          <img
+                            src={selectedItem.sourceDocumentUrl}
+                            alt="Source document"
+                            className="mt-3 max-h-56 w-auto max-w-full rounded border border-gray-200 object-contain bg-gray-50"
+                          />
+                        )
                       )}
                     </div>
                   )}
@@ -9856,12 +9860,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           ? `${window.location.origin}${selectedItem.sourceDocumentUrl}`
                           : selectedItem.sourceDocumentUrl}
                       </a>
-                      {/\.(jpe?g|png|gif|webp)$/i.test(String(selectedItem.sourceDocumentUrl || '')) && (
-                        <img
-                          src={selectedItem.sourceDocumentUrl}
-                          alt="Source document"
-                          className="mt-3 max-h-56 w-auto max-w-full rounded border border-gray-200 object-contain bg-gray-50"
-                        />
+                      {/\.pdf$/i.test(String(selectedItem.sourceDocumentUrl || '')) ? (
+                        <p className="text-xs text-gray-500 mt-2">PDF on file — use the link above to open.</p>
+                      ) : (
+                        /\.(jpe?g|png|gif|webp)$/i.test(String(selectedItem.sourceDocumentUrl || '')) && (
+                          <img
+                            src={selectedItem.sourceDocumentUrl}
+                            alt="Source document"
+                            className="mt-3 max-h-56 w-auto max-w-full rounded border border-gray-200 object-contain bg-gray-50"
+                          />
+                        )
                       )}
                     </div>
                   )}

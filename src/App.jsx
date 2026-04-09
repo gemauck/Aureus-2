@@ -19,6 +19,8 @@ const AppContent = () => {
     const isInvitationPage = pathname === '/accept-invitation' && urlParams.get('token');
     const isResetPage = pathname === '/reset-password' && urlParams.get('token');
     const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
+    const isPoFromDocumentPage =
+        pathname === '/po-from-document' || pathname === '/po-document' || pathname === '/podocument';
 
     // Call ALL useState hooks first (must be in same order every render)
     const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
@@ -84,10 +86,18 @@ const AppContent = () => {
             }
             return;
         }
+        if (isPoFromDocumentPage) {
+            if (manager?.setPublicTitle) {
+                manager.setPublicTitle('/po-from-document');
+            } else {
+                setDirectTitle('PO from document - Abcotronics ERP');
+            }
+            return;
+        }
         if (!user) {
             setDirectTitle('Login - Abcotronics ERP');
         }
-    }, [isInvitationPage, isResetPage, isPublicJobCardPage, user]);
+    }, [isInvitationPage, isResetPage, isPublicJobCardPage, isPoFromDocumentPage, user]);
     
     // Call ALL useEffect hooks (must be in same order every render)
     // Safety: after 30s force out of loading so site never stays stuck on "Loading..."
@@ -215,7 +225,9 @@ const AppContent = () => {
     // Show loading screen during auth check OR initial data load (only if user exists)
     // DataContext handles no-user case by setting initialLoadComplete=true immediately
     // loadingEscape: after 30s we stop showing loading so the site never stays stuck
-    if (!loadingEscape && (authLoading || (user && !initialLoadComplete))) {
+    // Direct PO-from-document link: do not wait for full workspace preload (standalone page loads its own data).
+    const skipFullWorkspacePreload = isPoFromDocumentPage && user;
+    if (!loadingEscape && (authLoading || (user && !initialLoadComplete && !skipFullWorkspacePreload))) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                 <div className="text-center">
@@ -289,7 +301,11 @@ const AppContent = () => {
             </div>
         );
     }
-    
+
+    if (isPoFromDocumentPage && window.PurchaseOrderFromDocumentStandalone) {
+        return <window.PurchaseOrderFromDocumentStandalone />;
+    }
+
     return <window.MainLayout />;
 };
 

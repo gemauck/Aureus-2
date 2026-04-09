@@ -166,14 +166,18 @@ function PurchaseOrderFromDocumentWizard({
   const onPickFile = useCallback((event) => {
     const file = event.target.files && event.target.files[0];
     const input = event.target;
-    if (!file || !file.type.startsWith('image/')) {
-      if (file) alert('Please choose an image file.');
+    const isPdf =
+      file &&
+      (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || ''));
+    const isImage = file && file.type.startsWith('image/');
+    if (!file || (!isImage && !isPdf)) {
+      if (file) alert('Please choose an image or a PDF file.');
       input.value = '';
       return;
     }
-    const maxBytes = 12 * 1024 * 1024;
+    const maxBytes = 20 * 1024 * 1024;
     if (file.size > maxBytes) {
-      alert('Image must be 12MB or smaller.');
+      alert('File must be 20MB or smaller.');
       input.value = '';
       return;
     }
@@ -190,7 +194,7 @@ function PurchaseOrderFromDocumentWizard({
 
   const runUploadAndExtract = useCallback(async () => {
     if (!dataUrl) {
-      alert('Choose a photo or image first.');
+      alert('Choose a photo, image, or PDF first.');
       return;
     }
     setStep('processing');
@@ -429,20 +433,33 @@ function PurchaseOrderFromDocumentWizard({
       <div className="flex-1 overflow-y-auto p-4 max-w-lg mx-auto w-full pb-24">
         {step === 'capture' && (
           <div className={`rounded-xl border p-4 space-y-4 ${cardBg}`}>
-            <p className="text-sm">Photograph or upload a quote, invoice, or packing list.</p>
+            <p className="text-sm">Photograph or upload a quote, invoice, packing list, or PDF.</p>
             <div
               className={`rounded-lg border-2 border-dashed flex flex-col items-center justify-center py-10 ${
                 isDark ? 'border-gray-700' : 'border-gray-300'
               }`}
             >
               {dataUrl ? (
-                <img src={dataUrl} alt="Document preview" className="max-h-64 object-contain mb-3" />
+                dataUrl.includes('application/pdf') || /\.pdf$/i.test(previewName || '') ? (
+                  <div className="flex flex-col items-center mb-3 text-center px-4">
+                    <i className="fas fa-file-pdf text-5xl text-red-600 mb-2" aria-hidden />
+                    <p className="text-sm font-medium">PDF selected</p>
+                    <p className="text-xs opacity-70 break-all mt-1">{previewName || 'document.pdf'}</p>
+                  </div>
+                ) : (
+                  <img src={dataUrl} alt="Document preview" className="max-h-64 object-contain mb-3" />
+                )
               ) : (
                 <i className="fas fa-camera text-4xl mb-3 opacity-40" />
               )}
               <label className="cursor-pointer px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
-                Choose image
-                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickFile} />
+                Choose image or PDF
+                <input
+                  type="file"
+                  accept="image/*,.pdf,application/pdf"
+                  className="hidden"
+                  onChange={onPickFile}
+                />
               </label>
               {previewName && <p className="text-xs mt-2 opacity-70">{previewName}</p>}
             </div>
