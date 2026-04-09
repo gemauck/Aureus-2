@@ -204,6 +204,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
     const showedPropDataRef = useRef(false); // True when we showed prop data so background fetch failure doesn't clear it
     const userSelectedYearRef = useRef(false); // Track manual year selection to avoid auto-switching
+    const autoScrolledWorkingMonthRef = useRef(null); // Prevent repeated forced scroll for same project/year/layout
     
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : isComplianceReview ? `complianceReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
@@ -1251,6 +1252,64 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             cleanup();
         };
     }, [sections.length]);
+
+    // Monthly Data Review: auto-navigate horizontally to the highlighted working month column.
+    useEffect(() => {
+        if (!isMonthlyDataReview) return;
+        if (trackerLayoutMode !== 'table') return;
+        if (!project?.id || sections.length === 0) return;
+
+        const runKey = `${project.id}:${selectedYear}:table`;
+        if (autoScrolledWorkingMonthRef.current === runKey) return;
+
+        const root = scrollSyncRootRef.current;
+        if (!root) return;
+
+        let rafId = null;
+        let tries = 0;
+        const maxTries = 12;
+        const targetMonthIndex = oneMonthArrearsMonthIndex;
+
+        const scrollToWorkingMonth = () => {
+            const containers = Array.from(root.querySelectorAll('[data-scroll-sync]')).filter(el => el.isConnected);
+            if (containers.length === 0) return false;
+
+            const firstContainer = containers[0];
+            const targetHeader = firstContainer.querySelector(`[data-month-header-index="${targetMonthIndex}"]`);
+            if (!targetHeader) return false;
+
+            const targetLeft = Math.max(0, targetHeader.offsetLeft - stickyColWidthPx - 16);
+            containers.forEach((container) => {
+                container.scrollLeft = targetLeft;
+            });
+            return true;
+        };
+
+        const attempt = () => {
+            rafId = null;
+            if (scrollToWorkingMonth()) {
+                autoScrolledWorkingMonthRef.current = runKey;
+                return;
+            }
+            tries += 1;
+            if (tries < maxTries) {
+                rafId = requestAnimationFrame(attempt);
+            }
+        };
+
+        rafId = requestAnimationFrame(attempt);
+        return () => {
+            if (rafId != null) cancelAnimationFrame(rafId);
+        };
+    }, [
+        isMonthlyDataReview,
+        trackerLayoutMode,
+        project?.id,
+        sections.length,
+        selectedYear,
+        oneMonthArrearsMonthIndex,
+        stickyColWidthPx
+    ]);
     
     // Simplified save function - clear and reliable
     async function saveToDatabase(options = {}) {
@@ -7651,6 +7710,7 @@ Abcotronics`;
                                                         <th
                                                             key={month}
                                                             colSpan={2}
+                                                            data-month-header-index={idx}
                                                             className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 dark:border-gray-600 sticky top-0 z-[35] shadow-[0_1px_0_0_rgba(0,0,0,0.08)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.06)] ${
                                                                 isOneMonthArrears(selectedYear, idx)
                                                                     ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500'
@@ -7708,6 +7768,7 @@ Abcotronics`;
                                             {months.map((month, idx) => (
                                                 <th
                                                     key={month}
+                                                    data-month-header-index={idx}
                                                     className={`px-3 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-2 border-gray-200 dark:border-gray-600 ${
                                                         isOneMonthArrears(selectedYear, idx)
                                                             ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 border-sky-300 dark:border-sky-600'
