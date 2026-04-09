@@ -13,7 +13,7 @@ const Tools = () => {
         DocumentParser: null,
         SafetyCultureInspections: null,
         DocumentSorter: null,
-        ReceiptCaptureTool: null
+        ExpenseCaptureTool: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
 
@@ -34,7 +34,7 @@ const Tools = () => {
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
-                ReceiptCaptureTool: window.ReceiptCaptureTool
+                ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool
             };
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
@@ -65,7 +65,7 @@ const Tools = () => {
                     HandwritingToWord: !!components.HandwritingToWord,
                     DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator,
                     DocumentParser: !!components.DocumentParser,
-                    ReceiptCaptureTool: !!components.ReceiptCaptureTool
+                    ExpenseCaptureTool: !!components.ExpenseCaptureTool
                 });
                 isChecking = false;
             }
@@ -95,7 +95,7 @@ const Tools = () => {
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
-                ReceiptCaptureTool: window.ReceiptCaptureTool
+                ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool
             };
             setToolComponents(prev => {
                 const hasChanged = Object.keys(components).some(key => 
@@ -121,12 +121,12 @@ const Tools = () => {
     const tools = useMemo(() => {
         const toolsArray = [
             {
-                id: 'receipt-capture',
-                name: 'Receipt capture',
-                description: 'Photograph or upload slips; AI extraction, allocate to accounts and cost centres, export CSV',
-                icon: 'fa-receipt',
+                id: 'expense-capture',
+                name: 'Expense Capture',
+                description: 'Snap expense slips (app-style on mobile), AI extraction, allocate to accounts and cost centres, export CSV',
+                icon: 'fa-money-bill-wave',
                 color: 'emerald',
-                component: toolComponents.ReceiptCaptureTool
+                component: toolComponents.ExpenseCaptureTool
             },
             {
                 id: 'document-parser',

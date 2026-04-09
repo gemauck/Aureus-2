@@ -2150,7 +2150,7 @@ const DatabaseAPI = {
     },
 
     /**
-     * Receipt capture (Dext-like): extract structured data from receipt/invoice image or PDF.
+     * Expense Capture: extract structured data from receipt/invoice image or PDF.
      * Uses fetch with extended timeout; 503 + NO_OPENAI returns soft response.
      */
     async extractReceiptDocument(payload) {
