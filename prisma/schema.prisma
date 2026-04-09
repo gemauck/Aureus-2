@@ -101,6 +101,8 @@ model User {
   hrPolicyAcknowledgments    HrPolicyAcknowledgment[]
   hrLibraryDocumentsForUser   HrLibraryDocument[]           @relation("HrLibraryDocumentEmployee")
   hrLibraryDocumentsUploaded  HrLibraryDocument[]           @relation("HrLibraryDocumentUploader")
+  productionOrderCapturesCreated  ProductionOrderCapture[] @relation("ProductionOrderCaptureCreator")
+  productionOrderCapturesReviewed ProductionOrderCapture[] @relation("ProductionOrderCaptureReviewer")
 
   @@index([createdAt])
   @@index([role])
@@ -1605,11 +1607,43 @@ model ProductionOrder {
   workOrderNumber  String    @default("")
   allocationType   String    @default("stock")
   clientId         String?
+  capture          ProductionOrderCapture?
 
   @@index([status])
   @@index([bomId])
   @@index([ownerId])
   @@index([clientId])
+}
+
+/// Document photo → OCR → match → review workflow; real ProductionOrder created on approve only.
+model ProductionOrderCapture {
+  id                 String    @id @default(cuid())
+  status             String    @default("draft") // draft | pending_review | approved | rejected | cancelled
+  sourceImageUrl     String    @default("")
+  extractedPayload   Json?
+  matchedPayload     Json?
+  resolvedBomId      String    @default("")
+  productSku         String    @default("")
+  productName        String    @default("")
+  quantity           Int       @default(0)
+  clientId           String?
+  notes              String    @default("")
+  productionOrderId  String?   @unique
+  createdByUserId    String?
+  createdByName      String    @default("")
+  reviewedByUserId   String?
+  reviewedAt         DateTime?
+  reviewNotes        String    @default("")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  productionOrder ProductionOrder? @relation(fields: [productionOrderId], references: [id], onDelete: SetNull)
+  createdBy       User?            @relation("ProductionOrderCaptureCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewedBy      User?            @relation("ProductionOrderCaptureReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([createdByUserId])
 }
 
 model StockMovement {
