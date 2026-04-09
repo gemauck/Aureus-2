@@ -188,6 +188,7 @@
         
         // Manufacturing
         'components/manufacturing/locations/StockLocations.jsx',
+        'components/manufacturing/PurchaseOrderFromDocumentWizard.jsx',
         'components/manufacturing/Manufacturing.jsx',
         
         // Service and Maintenance

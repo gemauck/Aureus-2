@@ -1717,6 +1717,8 @@ model PurchaseOrder {
   shippingMethod       String         @default("")
   notes                String         @default("")
   internalNotes        String         @default("")
+  /// Uploaded scan/photo path (e.g. /uploads/po-source-documents/...) when PO was created from document capture.
+  sourceDocumentUrl    String?
   receivingLocationId  String?
   ownerId              String?
   createdAt            DateTime       @default(now())

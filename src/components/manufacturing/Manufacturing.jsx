@@ -303,6 +303,7 @@ try {
   const [poAmendmentHistory, setPoAmendmentHistory] = useState([]);
   const [poAmendmentHistoryLoading, setPoAmendmentHistoryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [poFromDocumentOpen, setPoFromDocumentOpen] = useState(false);
 
   const resetPurchaseOrderEditUi = useCallback(() => {
     setPoEditMode(false);
@@ -9109,6 +9110,29 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                   )}
 
+                  {selectedItem.sourceDocumentUrl && (
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-2">Source document</h3>
+                      <a
+                        href={selectedItem.sourceDocumentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline break-all"
+                      >
+                        {typeof window !== 'undefined'
+                          ? `${window.location.origin}${selectedItem.sourceDocumentUrl}`
+                          : selectedItem.sourceDocumentUrl}
+                      </a>
+                      {/\.(jpe?g|png|gif|webp)$/i.test(String(selectedItem.sourceDocumentUrl || '')) && (
+                        <img
+                          src={selectedItem.sourceDocumentUrl}
+                          alt="Source document"
+                          className="mt-3 max-h-56 w-auto max-w-full rounded border border-gray-200 object-contain bg-gray-50"
+                        />
+                      )}
+                    </div>
+                  )}
+
                   {(selectedItem.notes || selectedItem.internalNotes) && (
                     <div className="border-t border-gray-200 pt-4">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3">Notes</h3>
@@ -9814,6 +9838,30 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <p className="text-xs text-gray-500">Shipping Method</p>
                           <p className="text-sm text-gray-900">{selectedItem.shippingMethod}</p>
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Source document (scan) */}
+                  {selectedItem.sourceDocumentUrl && (
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-2">Source document</h3>
+                      <a
+                        href={selectedItem.sourceDocumentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline break-all"
+                      >
+                        {typeof window !== 'undefined'
+                          ? `${window.location.origin}${selectedItem.sourceDocumentUrl}`
+                          : selectedItem.sourceDocumentUrl}
+                      </a>
+                      {/\.(jpe?g|png|gif|webp)$/i.test(String(selectedItem.sourceDocumentUrl || '')) && (
+                        <img
+                          src={selectedItem.sourceDocumentUrl}
+                          alt="Source document"
+                          className="mt-3 max-h-56 w-auto max-w-full rounded border border-gray-200 object-contain bg-gray-50"
+                        />
                       )}
                     </div>
                   )}
@@ -11235,15 +11283,25 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       <div className="space-y-3">
         {/* Controls */}
         <div className="bg-white p-3 rounded-lg border border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-gray-900">Purchase Orders</h3>
-            <button
-              onClick={openAddPurchaseOrderModal}
-              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
-            >
-              <i className="fas fa-plus text-xs"></i>
-              New Purchase Order
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPoFromDocumentOpen(true)}
+                className="px-3 py-2 text-sm border border-blue-600 text-blue-700 bg-white rounded-lg hover:bg-blue-50 flex items-center gap-2 transition-colors"
+              >
+                <i className="fas fa-camera text-xs"></i>
+                PO from document
+              </button>
+              <button
+                onClick={openAddPurchaseOrderModal}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+              >
+                <i className="fas fa-plus text-xs"></i>
+                New Purchase Order
+              </button>
+            </div>
           </div>
         </div>
 
@@ -12700,6 +12758,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
       {/* Modals */}
       {showModal && renderModal()}
+
+      {poFromDocumentOpen && window.PurchaseOrderFromDocumentWizard && createElement(window.PurchaseOrderFromDocumentWizard, {
+        onClose: () => setPoFromDocumentOpen(false),
+        onCreated: (orderWithParsedItems) => {
+          const updatedOrders = [...purchaseOrders, orderWithParsedItems];
+          setPurchaseOrders(updatedOrders);
+          safeSetItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+          setPoFromDocumentOpen(false);
+          alert('Purchase order created as Draft. Finalize it, mark as Sent, then confirm goods receipt to update inventory.');
+        },
+        suppliers,
+        inventory,
+        stockLocations,
+        defaultReceivingLocationId: defaultManufacturingStockLocation(stockLocations)?.id || null,
+        safeCallAPI,
+        isDark
+      })}
       
       {/* Duplicate Warning Modal */}
       {showDuplicateWarning && duplicateWarnings.length > 0 && (

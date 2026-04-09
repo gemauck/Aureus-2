@@ -2111,6 +2111,43 @@ const DatabaseAPI = {
         return response;
     },
 
+    /**
+     * Vision extraction for PO-from-document wizard (authenticated).
+     * Uses fetch (not makeRequest) so 503 + NO_OPENAI is not treated as a database outage.
+     * Body: { imageUrl } or { imageBase64, mimeType? }
+     */
+    async extractPurchaseOrderFromDocument(payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('token');
+        const res = await fetch(`${this.API_BASE}/api/purchase-orders/extract-from-document`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify(payload || {})
+        });
+        const text = await res.text().catch(() => '');
+        let json = {};
+        try {
+            json = text ? JSON.parse(text) : {};
+        } catch {
+            json = {};
+        }
+        const errCode = json?.error?.code || json?.code;
+        if (res.status === 503 && errCode === 'NO_OPENAI') {
+            return { data: { extraction: null, noOpenAI: true } };
+        }
+        if (!res.ok) {
+            const msg =
+                json?.error?.message ||
+                json?.message ||
+                (typeof json?.error === 'string' ? json.error : '') ||
+                `Extract failed (${res.status})`;
+            throw new Error(msg);
+        }
+        return { data: json.data !== undefined ? json.data : json };
+    },
+
     async updatePurchaseOrder(id, purchaseOrderData) {
         const response = await this._callPurchaseOrdersEndpoint(id, {
             method: 'PATCH',

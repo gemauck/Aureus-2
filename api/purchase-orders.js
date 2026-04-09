@@ -37,8 +37,19 @@ const NON_ADMIN_LOCKED = new Set([
   'expectedDate',
   'priority',
   'shippingAddress',
-  'shippingMethod'
+  'shippingMethod',
+  'sourceDocumentUrl'
 ])
+
+/** Only allow stored app upload paths (mitigate arbitrary URL injection). */
+function sanitizeSourceDocumentUrl(raw) {
+  if (raw == null || raw === '') return null
+  const s = String(raw).trim()
+  if (!s || s.length > 2048) return null
+  if (!s.startsWith('/uploads/po-source-documents/')) return null
+  if (s.includes('..') || s.includes('\\')) return null
+  return s
+}
 
 function parseItemsJson(order) {
   const raw = order.items
@@ -90,6 +101,7 @@ function snapshotPurchaseOrder(order) {
     items,
     notes: order.notes || '',
     internalNotes: order.internalNotes || '',
+    sourceDocumentUrl: order.sourceDocumentUrl || '',
     receivingLocationId: order.receivingLocationId || null,
     shippingAddress: order.shippingAddress || '',
     shippingMethod: order.shippingMethod || ''
@@ -112,6 +124,7 @@ function diffPurchaseOrderSnapshots(beforeSnap, afterSnap) {
     'includeVat',
     'notes',
     'internalNotes',
+    'sourceDocumentUrl',
     'receivingLocationId',
     'shippingAddress',
     'shippingMethod'
@@ -513,6 +526,7 @@ async function handler(req, res) {
         shippingMethod: body.shippingMethod || '',
         notes: body.notes || '',
         internalNotes: body.internalNotes || '',
+        sourceDocumentUrl: sanitizeSourceDocumentUrl(body.sourceDocumentUrl),
         receivingLocationId: body.receivingLocationId || null,
         ownerId: req.user?.sub || null
       }
@@ -672,12 +686,15 @@ async function handler(req, res) {
           'shippingMethod',
           'notes',
           'internalNotes',
+          'sourceDocumentUrl',
           'receivingLocationId'
         ]
 
         for (const field of allowedFields) {
           if (body[field] !== undefined) {
-            if (field.includes('Date') && field !== 'receivingLocationId' && body[field]) {
+            if (field === 'sourceDocumentUrl') {
+              updateData[field] = sanitizeSourceDocumentUrl(body[field])
+            } else if (field.includes('Date') && field !== 'receivingLocationId' && body[field]) {
               updateData[field] = new Date(body[field])
             } else if (field === 'receivingLocationId') {
               updateData[field] = body[field] || null
