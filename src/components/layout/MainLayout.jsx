@@ -5,6 +5,8 @@ const { useState } = React;
 
 const VALID_PAGES = ['dashboard', 'erp-calendar', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
+/** Full-page routes rendered by App.jsx instead of the sidebar shell — must not coerce to dashboard */
+const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument'];
 
 /** Greenfield ERP Calendar: sidebar + route only for this account (must match api/_lib/erpCalendarAccess.js). */
 const ERP_CALENDAR_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
@@ -322,6 +324,12 @@ const MainLayout = () => {
             }
             
             if (!VALID_PAGES.includes(nextPage)) {
+                const pathSeg = String(nextPage || '').toLowerCase();
+                const pathnameNorm = (window.location.pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+                const firstSeg = pathnameNorm.replace(/^\//, '').split('/')[0] || '';
+                if (APP_SHELL_STANDALONE_PAGES.includes(pathSeg) || APP_SHELL_STANDALONE_PAGES.includes(firstSeg)) {
+                    return;
+                }
                 const pathname = (window.location.pathname || '').toLowerCase();
                 const isPublicRoute = PUBLIC_ROUTES.some(routePath => pathname.startsWith(routePath));
                 if (!isPublicRoute) {

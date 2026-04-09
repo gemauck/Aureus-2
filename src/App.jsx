@@ -9,6 +9,21 @@ const checkInvitationRoute = () => {
     return pathname === '/accept-invitation' && urlParams.get('token');
 };
 
+/** Pathname or hash route for PO-from-document standalone (App.jsx); keep in sync with RouteState URLs */
+function isPoFromDocumentRoute() {
+    const raw = (window.location.pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+    if (raw === '/po-from-document' || raw === '/po-document' || raw === '/podocument') {
+        return true;
+    }
+    try {
+        if (window.RouteState && typeof window.RouteState.getRoute === 'function') {
+            const p = String(window.RouteState.getRoute()?.page || '').toLowerCase();
+            return p === 'po-from-document' || p === 'po-document' || p === 'podocument';
+        }
+    } catch (e) {}
+    return false;
+}
+
 const AppContent = () => {
     // CRITICAL: ALL hooks must be called at the top, in the same order, before ANY conditional returns
     // This is required by React's rules of hooks - hooks cannot be called conditionally
@@ -19,14 +34,20 @@ const AppContent = () => {
     const isInvitationPage = pathname === '/accept-invitation' && urlParams.get('token');
     const isResetPage = pathname === '/reset-password' && urlParams.get('token');
     const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
-    const isPoFromDocumentPage =
-        pathname === '/po-from-document' || pathname === '/po-document' || pathname === '/podocument';
 
     // Call ALL useState hooks first (must be in same order every render)
     const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
     const [loginPageReady, setLoginPageReady] = window.React.useState(!!window.LoginPage);
     // Safety: after 30s, stop showing loading so user is never stuck
     const [loadingEscape, setLoadingEscape] = window.React.useState(false);
+    // Re-read URL when RouteState navigates (pushState does not fire popstate)
+    const [routeTick, setRouteTick] = window.React.useState(0);
+    const [poStandaloneReady, setPoStandaloneReady] = window.React.useState(!!window.PurchaseOrderFromDocumentStandalone);
+
+    const isPoFromDocumentPage = (() => {
+        void routeTick;
+        return isPoFromDocumentRoute();
+    })();
     
     // Get auth state - always call this hook
     let user = null;
@@ -132,6 +153,37 @@ const AppContent = () => {
             return () => clearInterval(checkInterval);
         }
     }, [isPublicJobCardPage, setJobCardFormLoaded]);
+
+    window.React.useEffect(() => {
+        const bump = () => setRouteTick((t) => t + 1);
+        window.addEventListener('popstate', bump);
+        window.addEventListener('hashchange', bump);
+        window.addEventListener('route:change', bump);
+        return () => {
+            window.removeEventListener('popstate', bump);
+            window.removeEventListener('hashchange', bump);
+            window.removeEventListener('route:change', bump);
+        };
+    }, []);
+
+    window.React.useEffect(() => {
+        if (!isPoFromDocumentPage) return;
+        if (window.PurchaseOrderFromDocumentStandalone) {
+            setPoStandaloneReady(true);
+            return;
+        }
+        const checkInterval = setInterval(() => {
+            if (window.PurchaseOrderFromDocumentStandalone) {
+                setPoStandaloneReady(true);
+                clearInterval(checkInterval);
+            }
+        }, 100);
+        const timeoutId = setTimeout(() => clearInterval(checkInterval), 8000);
+        return () => {
+            clearInterval(checkInterval);
+            clearTimeout(timeoutId);
+        };
+    }, [isPoFromDocumentPage]);
     
     // LoginPage loading effect
     window.React.useEffect(() => {
@@ -302,8 +354,18 @@ const AppContent = () => {
         );
     }
 
-    if (isPoFromDocumentPage && window.PurchaseOrderFromDocumentStandalone) {
-        return <window.PurchaseOrderFromDocumentStandalone />;
+    if (isPoFromDocumentPage) {
+        if (poStandaloneReady && window.PurchaseOrderFromDocumentStandalone) {
+            return <window.PurchaseOrderFromDocumentStandalone />;
+        }
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center px-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">Loading PO from document…</p>
+                </div>
+            </div>
+        );
     }
 
     return <window.MainLayout />;
