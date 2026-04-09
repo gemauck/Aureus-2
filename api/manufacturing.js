@@ -39,6 +39,209 @@ const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {
   return 'out_of_stock'
 }
 
+/** Shared BOM JSON parse for production order create + capture approve */
+function parseBomComponentsJson(str, defaultValue = []) {
+  try {
+    if (str == null || str === '') return defaultValue
+    return typeof str === 'string' ? JSON.parse(str) : str
+  } catch {
+    return defaultValue
+  }
+}
+
+/**
+ * Creates a production order with optional BOM allocation when status is 'requested'.
+ * Used by POST /production-orders and production-order-capture approve.
+ */
+async function createProductionOrderWithAllocation(prisma, body) {
+  const orderQuantity = parseInt(body.quantity, 10) || 0
+  const orderStatus = body.status || 'requested'
+
+  return prisma.$transaction(async (tx) => {
+    if (body.bomId && orderStatus === 'requested') {
+      const bom = await tx.bOM.findUnique({ where: { id: body.bomId } })
+      if (!bom) {
+        throw new Error(`BOM not found: ${body.bomId}`)
+      }
+
+      const components = parseBomComponentsJson(bom.components, [])
+      if (components.length === 0) {
+        throw new Error(`BOM ${body.bomId} has no components`)
+      }
+
+      const componentChecks = []
+      for (const component of components) {
+        if (component.sku && component.quantity) {
+          const requiredQty = parseFloat(component.quantity) * orderQuantity
+          if (requiredQty <= 0) {
+            throw new Error(`Invalid quantity for component ${component.name || component.sku}: ${requiredQty}`)
+          }
+
+          const inventoryItem = await tx.inventoryItem.findFirst({
+            where: { sku: component.sku }
+          })
+
+          if (!inventoryItem) {
+            throw new Error(`Inventory item not found for SKU: ${component.sku}`)
+          }
+
+          const availableQty = inventoryItem.quantity - (inventoryItem.allocatedQuantity || 0)
+          if (availableQty < requiredQty) {
+            throw new Error(
+              `Insufficient stock for ${component.name || component.sku}. Available: ${availableQty}, Required: ${requiredQty}`
+            )
+          }
+
+          componentChecks.push({ inventoryItem, requiredQty, component })
+        }
+      }
+
+      await Promise.all(
+        componentChecks.map(({ inventoryItem, requiredQty }) =>
+          tx.inventoryItem.update({
+            where: { id: inventoryItem.id },
+            data: {
+              allocatedQuantity: { increment: requiredQty }
+            }
+          })
+        )
+      )
+    }
+
+    const createData = {
+      bomId: body.bomId || '',
+      productSku: body.productSku,
+      productName: body.productName,
+      quantity: orderQuantity,
+      quantityProduced: parseInt(body.quantityProduced, 10) || 0,
+      status: orderStatus,
+      priority: body.priority || 'normal',
+      assignedTo: body.assignedTo || '',
+      totalCost: parseFloat(body.totalCost) || 0,
+      notes: body.notes || '',
+      workOrderNumber: body.workOrderNumber || '',
+      clientId: body.clientId || null,
+      allocationType: body.allocationType || 'stock',
+      createdBy: body.createdBy || 'System',
+      ownerId: null
+    }
+
+    if (body.startDate) createData.startDate = new Date(body.startDate)
+    if (body.targetDate) createData.targetDate = new Date(body.targetDate)
+    if (body.completedDate) createData.completedDate = new Date(body.completedDate)
+
+    return tx.productionOrder.create({ data: createData })
+  })
+}
+
+function normalizeMatchString(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+/** Simple fuzzy score 0..1 for matching document lines to catalog rows */
+function scoreLineToInventoryItem(lineRaw, item) {
+  const line = normalizeMatchString(lineRaw)
+  if (!line || line.length < 2) return 0
+  const sku = normalizeMatchString(item.sku)
+  const name = normalizeMatchString(item.name || '')
+  let score = 0
+  if (sku.length >= 2 && line.includes(sku)) score = Math.max(score, 0.92)
+  if (name.length >= 4 && line.includes(name)) score = Math.max(score, 0.88)
+  if (name.length >= 6) {
+    const slice = name.slice(0, Math.min(24, name.length))
+    if (line.includes(slice)) score = Math.max(score, 0.82)
+  }
+  const tokens = name.split(' ').filter((t) => t.length > 2)
+  if (tokens.length) {
+    const hits = tokens.filter((t) => line.includes(t)).length
+    score = Math.max(score, 0.45 + 0.45 * (hits / tokens.length))
+  }
+  return score
+}
+
+function scoreSupplierName(hintRaw, supplier) {
+  const hint = normalizeMatchString(hintRaw)
+  const name = normalizeMatchString(supplier.name || '')
+  if (!hint || !name) return 0
+  if (hint.includes(name) || name.includes(hint)) return 0.9
+  const tokens = name.split(' ').filter((t) => t.length > 3)
+  const hits = tokens.filter((t) => hint.includes(t)).length
+  return tokens.length ? 0.4 + 0.5 * (hits / tokens.length) : 0
+}
+
+async function matchDocumentLinesToCatalog(prisma, { lines, supplierHint }) {
+  const inventoryRows = await prisma.inventoryItem.findMany({
+    select: { id: true, sku: true, name: true, supplier: true, unitCost: true },
+    take: 8000,
+    orderBy: { updatedAt: 'desc' }
+  })
+  const supplierRows = await prisma.supplier.findMany({
+    where: { status: 'active' },
+    select: { id: true, name: true, code: true },
+    take: 2000
+  })
+
+  const rawLines = Array.isArray(lines) ? lines : []
+  const matchedLines = rawLines.map((raw) => {
+    const text = typeof raw === 'string' ? raw : raw?.text || raw?.line || ''
+    let bestItem = null
+    let bestScore = 0
+    for (const item of inventoryRows) {
+      const sc = scoreLineToInventoryItem(text, item)
+      if (sc > bestScore) {
+        bestScore = sc
+        bestItem = item
+      }
+    }
+    let bestSupplier = null
+    let supScore = 0
+    const hint = supplierHint || (typeof raw === 'object' && raw?.supplierHint) || ''
+    if (hint) {
+      for (const s of supplierRows) {
+        const sc = scoreSupplierName(hint, s)
+        if (sc > supScore) {
+          supScore = sc
+          bestSupplier = s
+        }
+      }
+    }
+    return {
+      rawText: text,
+      quantity: typeof raw === 'object' && raw?.quantity != null ? Number(raw.quantity) : null,
+      inventoryItemId: bestItem?.id || null,
+      sku: bestItem?.sku || null,
+      itemName: bestItem?.name || null,
+      matchScore: Number(bestScore.toFixed(3)),
+      supplierId: bestSupplier?.id || null,
+      supplierName: bestSupplier?.name || null,
+      supplierMatchScore: supScore > 0 ? Number(supScore.toFixed(3)) : null
+    }
+  })
+
+  let globalSupplier = null
+  let globalSupScore = 0
+  if (supplierHint) {
+    for (const s of supplierRows) {
+      const sc = scoreSupplierName(supplierHint, s)
+      if (sc > globalSupScore) {
+        globalSupScore = sc
+        globalSupplier = s
+      }
+    }
+  }
+
+  return {
+    matchedLines,
+    suggestedSupplier:
+      globalSupplier && globalSupScore >= 0.5
+        ? { id: globalSupplier.id, name: globalSupplier.name, score: Number(globalSupScore.toFixed(3)) }
+        : null
+  }
+}
+
 /**
  * Activity list date filter: YYYY-MM-DD is interpreted as whole UTC calendar days; other strings use Date parsing.
  */
@@ -2771,92 +2974,11 @@ async function handler(req, res) {
       }
 
       try {
-        const orderQuantity = parseInt(body.quantity) || 0
-        const orderStatus = body.status || 'requested'
-        
-        // Allocate stock if BOM is provided and status is 'requested'
-        // WRAPPED IN TRANSACTION to ensure atomicity (allocation + order creation)
-        
-        const order = await prisma.$transaction(async (tx) => {
-          // First, allocate stock if needed
-          if (body.bomId && orderStatus === 'requested') {
-            const bom = await tx.bOM.findUnique({ where: { id: body.bomId } })
-            if (!bom) {
-              throw new Error(`BOM not found: ${body.bomId}`)
-            }
-            
-            const components = parseJson(bom.components, [])
-            if (components.length === 0) {
-              throw new Error(`BOM ${body.bomId} has no components`)
-            }
-            
-            // Validate all components before allocating (fail fast)
-            const componentChecks = []
-            for (const component of components) {
-              if (component.sku && component.quantity) {
-                const requiredQty = parseFloat(component.quantity) * orderQuantity
-                if (requiredQty <= 0) {
-                  throw new Error(`Invalid quantity for component ${component.name || component.sku}: ${requiredQty}`)
-                }
-                
-                const inventoryItem = await tx.inventoryItem.findFirst({
-                  where: { sku: component.sku }
-                })
-                
-                if (!inventoryItem) {
-                  throw new Error(`Inventory item not found for SKU: ${component.sku}`)
-                }
-                
-                const availableQty = inventoryItem.quantity - (inventoryItem.allocatedQuantity || 0)
-                if (availableQty < requiredQty) {
-                  throw new Error(`Insufficient stock for ${component.name || component.sku}. Available: ${availableQty}, Required: ${requiredQty}`)
-                }
-                
-                componentChecks.push({ inventoryItem, requiredQty, component })
-              }
-            }
-            
-            // Allocate all components atomically
-            await Promise.all(
-              componentChecks.map(({ inventoryItem, requiredQty }) =>
-                tx.inventoryItem.update({
-                  where: { id: inventoryItem.id },
-                  data: {
-                    allocatedQuantity: { increment: requiredQty }
-                  }
-                })
-              )
-            )
-            
-          }
-          
-          // Create order (will rollback allocations if this fails)
-          const createData = {
-            bomId: body.bomId || '',
-            productSku: body.productSku,
-            productName: body.productName,
-            quantity: orderQuantity,
-            quantityProduced: parseInt(body.quantityProduced) || 0,
-            status: orderStatus,
-            priority: body.priority || 'normal',
-            assignedTo: body.assignedTo || '',
-            totalCost: parseFloat(body.totalCost) || 0,
-            notes: body.notes || '',
-            workOrderNumber: body.workOrderNumber || '',
-            clientId: body.clientId || null,
-            allocationType: body.allocationType || 'stock',
-            createdBy: body.createdBy || req.user?.name || 'System',
-            ownerId: null
-          };
-          
-          // Only set date fields if they're provided (let Prisma defaults handle the rest)
-          if (body.startDate) createData.startDate = new Date(body.startDate);
-          if (body.targetDate) createData.targetDate = new Date(body.targetDate);
-          if (body.completedDate) createData.completedDate = new Date(body.completedDate);
-          
-          return await tx.productionOrder.create({ data: createData })
+        const order = await createProductionOrderWithAllocation(prisma, {
+          ...body,
+          createdBy: body.createdBy || req.user?.name || 'System'
         })
-        
+
         auditManufacturing('create', 'production-orders', order.id, {
           summary: `Production order ${order.productName} x${order.quantity}`,
           workOrderNumber: order.workOrderNumber
@@ -5169,6 +5291,304 @@ async function handler(req, res) {
         return serverError(res, 'Failed to delete supplier', error.message)
       }
     }
+  }
+
+  // PRODUCTION ORDER CAPTURES (photo → OCR → match → approval before real PO)
+  if (resourceType === 'production-order-captures') {
+    const userId = req.user?.sub || req.user?.id || null
+    const userName = req.user?.name || req.user?.email || 'User'
+    const isAdmin = isAdminRole(req.user?.role)
+    const capAction = pathSegments[3]
+
+    const formatCapture = (c) => ({
+      ...c,
+      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
+      updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : c.updatedAt,
+      reviewedAt: c.reviewedAt instanceof Date ? c.reviewedAt.toISOString() : c.reviewedAt
+    })
+
+    // POST /api/manufacturing/production-order-captures/match
+    if (req.method === 'POST' && id === 'match') {
+      try {
+        const body = (await parseJsonBody(req).catch(() => ({}))) || req.body || {}
+        const lines = body.lines || []
+        const supplierHint = body.supplierHint || body.vendorName || ''
+        const result = await matchDocumentLinesToCatalog(prisma, { lines, supplierHint })
+        auditManufacturing('create', 'production-order-captures', 'match', {
+          summary: 'Matched document lines to catalog',
+          lineCount: lines.length
+        })
+        return ok(res, result)
+      } catch (error) {
+        console.error('❌ production-order-captures match error:', error)
+        return serverError(res, 'Match failed', error.message)
+      }
+    }
+
+    // POST /api/manufacturing/production-order-captures/:id/submit
+    if (req.method === 'POST' && id && capAction === 'submit') {
+      try {
+        const existing = await prisma.productionOrderCapture.findUnique({ where: { id } })
+        if (!existing) return notFound(res, 'Capture not found')
+        if (!isAdmin && existing.createdByUserId !== userId) {
+          return forbidden(res, 'You can only submit your own captures.')
+        }
+        if (existing.status !== 'draft') {
+          return badRequest(res, 'Only draft captures can be submitted for review')
+        }
+        const updated = await prisma.productionOrderCapture.update({
+          where: { id },
+          data: { status: 'pending_review' }
+        })
+        auditManufacturing('update', 'production-order-captures', id, {
+          summary: 'Submitted capture for review',
+          statusTo: 'pending_review'
+        })
+        return ok(res, { capture: formatCapture(updated) })
+      } catch (error) {
+        console.error('❌ production-order-captures submit error:', error)
+        return serverError(res, 'Submit failed', error.message)
+      }
+    }
+
+    // POST /api/manufacturing/production-order-captures/:id/approve
+    if (req.method === 'POST' && id && capAction === 'approve') {
+      if (!isAdmin) {
+        return forbidden(res, 'Only administrators can approve production order captures.')
+      }
+      try {
+        const body = (await parseJsonBody(req).catch(() => ({}))) || req.body || {}
+        const capture = await prisma.productionOrderCapture.findUnique({ where: { id } })
+        if (!capture) return notFound(res, 'Capture not found')
+        if (capture.status !== 'pending_review') {
+          return badRequest(res, 'Capture is not pending review')
+        }
+        if (capture.productionOrderId) {
+          return badRequest(res, 'Capture already linked to a production order')
+        }
+
+        const bomId = body.resolvedBomId != null ? body.resolvedBomId : capture.resolvedBomId
+        const productSku = body.productSku != null ? body.productSku : capture.productSku
+        const productName = body.productName != null ? body.productName : capture.productName
+        const quantity = parseInt(body.quantity != null ? body.quantity : capture.quantity, 10)
+
+        if (!bomId || !productSku || !productName || !quantity || quantity <= 0) {
+          return badRequest(
+            res,
+            'resolvedBomId, productSku, productName, and quantity (> 0) are required to approve'
+          )
+        }
+
+        const workOrderNumber =
+          (typeof body.workOrderNumber === 'string' && body.workOrderNumber.trim()) ||
+          `WO-DOC-${capture.id.slice(-12)}`
+
+        const order = await createProductionOrderWithAllocation(prisma, {
+          bomId,
+          productSku,
+          productName,
+          quantity,
+          status: 'requested',
+          notes: body.notes != null ? body.notes : capture.notes,
+          workOrderNumber,
+          clientId: body.clientId !== undefined ? body.clientId : capture.clientId,
+          totalCost: parseFloat(body.totalCost) || 0,
+          createdBy: capture.createdByName || userName,
+          allocationType: body.allocationType || 'stock',
+          priority: body.priority || 'normal',
+          assignedTo: body.assignedTo || ''
+        })
+
+        auditManufacturing('create', 'production-orders', order.id, {
+          summary: `Production order ${order.productName} x${order.quantity} (from capture ${id})`,
+          workOrderNumber: order.workOrderNumber,
+          fromCaptureId: id
+        })
+
+        const updated = await prisma.productionOrderCapture.update({
+          where: { id },
+          data: {
+            status: 'approved',
+            productionOrderId: order.id,
+            resolvedBomId: bomId,
+            productSku,
+            productName,
+            quantity,
+            notes: body.notes != null ? body.notes : capture.notes,
+            reviewedByUserId: userId,
+            reviewedAt: new Date(),
+            reviewNotes: typeof body.reviewNotes === 'string' ? body.reviewNotes : capture.reviewNotes
+          }
+        })
+
+        auditManufacturing('update', 'production-order-captures', id, {
+          summary: `Approved capture → production order ${order.id}`,
+          productionOrderId: order.id
+        })
+
+        return ok(res, {
+          capture: formatCapture(updated),
+          order: {
+            ...order,
+            startDate: formatDate(order.startDate),
+            targetDate: formatDate(order.targetDate),
+            completedDate: formatDate(order.completedDate),
+            createdAt: formatDate(order.createdAt),
+            updatedAt: formatDate(order.updatedAt)
+          }
+        })
+      } catch (error) {
+        console.error('❌ production-order-captures approve error:', error)
+        return serverError(res, 'Approve failed', error.message)
+      }
+    }
+
+    // POST /api/manufacturing/production-order-captures/:id/reject
+    if (req.method === 'POST' && id && capAction === 'reject') {
+      if (!isAdmin) {
+        return forbidden(res, 'Only administrators can reject production order captures.')
+      }
+      try {
+        const body = (await parseJsonBody(req).catch(() => ({}))) || req.body || {}
+        const capture = await prisma.productionOrderCapture.findUnique({ where: { id } })
+        if (!capture) return notFound(res, 'Capture not found')
+        if (capture.status !== 'pending_review') {
+          return badRequest(res, 'Only pending captures can be rejected')
+        }
+        const updated = await prisma.productionOrderCapture.update({
+          where: { id },
+          data: {
+            status: 'rejected',
+            reviewedByUserId: userId,
+            reviewedAt: new Date(),
+            reviewNotes: typeof body.reviewNotes === 'string' ? body.reviewNotes : ''
+          }
+        })
+        auditManufacturing('update', 'production-order-captures', id, {
+          summary: 'Rejected capture',
+          statusTo: 'rejected'
+        })
+        return ok(res, { capture: formatCapture(updated) })
+      } catch (error) {
+        console.error('❌ production-order-captures reject error:', error)
+        return serverError(res, 'Reject failed', error.message)
+      }
+    }
+
+    // LIST (GET /api/manufacturing/production-order-captures)
+    if (req.method === 'GET' && !id) {
+      try {
+        const statusFilter = typeof req.query?.status === 'string' ? req.query.status : ''
+        const where = {}
+        if (!isAdmin) {
+          where.createdByUserId = userId
+        }
+        if (statusFilter) {
+          where.status = statusFilter
+        }
+        const captures = await prisma.productionOrderCapture.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take: 300
+        })
+        return ok(res, { captures: captures.map(formatCapture) })
+      } catch (error) {
+        console.error('❌ Failed to list production order captures:', error)
+        return serverError(res, 'Failed to list captures', error.message)
+      }
+    }
+
+    // GET ONE (GET /api/manufacturing/production-order-captures/:id)
+    if (req.method === 'GET' && id && !capAction) {
+      try {
+        const capture = await prisma.productionOrderCapture.findUnique({ where: { id } })
+        if (!capture) return notFound(res, 'Capture not found')
+        if (!isAdmin && capture.createdByUserId !== userId) {
+          return forbidden(res, 'Not allowed to view this capture')
+        }
+        return ok(res, { capture: formatCapture(capture) })
+      } catch (error) {
+        console.error('❌ Failed to get production order capture:', error)
+        return serverError(res, 'Failed to get capture', error.message)
+      }
+    }
+
+    // CREATE (POST /api/manufacturing/production-order-captures)
+    if (req.method === 'POST' && !id) {
+      try {
+        const body = (await parseJsonBody(req).catch(() => ({}))) || req.body || {}
+        if (!body.sourceImageUrl && !body.extractedPayload) {
+          return badRequest(res, 'sourceImageUrl or extractedPayload is required')
+        }
+        const capture = await prisma.productionOrderCapture.create({
+          data: {
+            status: body.status === 'pending_review' ? 'pending_review' : 'draft',
+            sourceImageUrl: body.sourceImageUrl || '',
+            extractedPayload: body.extractedPayload ?? undefined,
+            matchedPayload: body.matchedPayload ?? undefined,
+            resolvedBomId: body.resolvedBomId || '',
+            productSku: body.productSku || '',
+            productName: body.productName || '',
+            quantity: parseInt(body.quantity, 10) || 0,
+            clientId: body.clientId || null,
+            notes: body.notes || '',
+            createdByUserId: userId,
+            createdByName: userName
+          }
+        })
+        auditManufacturing('create', 'production-order-captures', capture.id, {
+          summary: 'Created document capture',
+          status: capture.status
+        })
+        return created(res, { capture: formatCapture(capture) })
+      } catch (error) {
+        console.error('❌ Failed to create production order capture:', error)
+        return serverError(res, 'Failed to create capture', error.message)
+      }
+    }
+
+    // UPDATE (PATCH /api/manufacturing/production-order-captures/:id)
+    if (req.method === 'PATCH' && id && !capAction) {
+      try {
+        const existing = await prisma.productionOrderCapture.findUnique({ where: { id } })
+        if (!existing) return notFound(res, 'Capture not found')
+        if (!isAdmin && existing.createdByUserId !== userId) {
+          return forbidden(res, 'You can only edit your own captures.')
+        }
+        if (['approved', 'rejected', 'cancelled'].includes(existing.status)) {
+          return badRequest(res, 'This capture can no longer be edited')
+        }
+        const body = (await parseJsonBody(req).catch(() => ({}))) || req.body || {}
+        const data = {}
+        if (body.sourceImageUrl !== undefined) data.sourceImageUrl = body.sourceImageUrl
+        if (body.extractedPayload !== undefined) data.extractedPayload = body.extractedPayload
+        if (body.matchedPayload !== undefined) data.matchedPayload = body.matchedPayload
+        if (body.resolvedBomId !== undefined) data.resolvedBomId = body.resolvedBomId
+        if (body.productSku !== undefined) data.productSku = body.productSku
+        if (body.productName !== undefined) data.productName = body.productName
+        if (body.quantity !== undefined) data.quantity = parseInt(body.quantity, 10) || 0
+        if (body.clientId !== undefined) data.clientId = body.clientId || null
+        if (body.notes !== undefined) data.notes = body.notes
+        if (body.status !== undefined && ['draft', 'pending_review', 'cancelled'].includes(body.status)) {
+          data.status = body.status
+        }
+        const updated = await prisma.productionOrderCapture.update({
+          where: { id },
+          data
+        })
+        auditManufacturing('update', 'production-order-captures', id, {
+          summary: 'Updated capture',
+          fieldsUpdated: Object.keys(data)
+        })
+        return ok(res, { capture: formatCapture(updated) })
+      } catch (error) {
+        console.error('❌ Failed to update production order capture:', error)
+        if (error.code === 'P2025') return notFound(res, 'Capture not found')
+        return serverError(res, 'Failed to update capture', error.message)
+      }
+    }
+
+    return badRequest(res, 'Invalid production-order-captures request')
   }
 
   // PURCHASE ORDERS - Proxy to /api/purchase-orders endpoint

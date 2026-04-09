@@ -3323,15 +3323,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           )}
         </div>
 
-        {/* Desktop Table View — bounded height so overflow-auto keeps H/V scrollbars on this panel (not below full page). */}
+        {/* Desktop table: horizontal scroll only. With 20 rows/page the block is short, so the H-bar stays near the list; avoid max-height+overflow-auto or ~half the rows sit below an inner vertical scroll. */}
         <div
-          className={`table-responsive flex flex-col min-h-0 max-h-[min(75vh,calc(100vh-15rem))] overflow-hidden rounded-lg border ${
+          className={`table-responsive rounded-lg border ${
             isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
           }`}
         >
           <div
             ref={inventoryTableScrollRef}
-            className="min-h-0 flex-1 overflow-auto overscroll-x-contain rounded-t-lg"
+            className="overflow-x-auto rounded-t-lg"
           >
             <table className="w-full min-w-max">
               <thead className="bg-gray-50 border-b border-gray-200">

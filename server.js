@@ -892,6 +892,35 @@ app.all('/api/contacts/client/:clientId/:contactId?', async (req, res, next) => 
   }
 })
 
+// Manufacturing routes with a third path segment (e.g. production-orders/:id/consume, production-order-captures/:id/approve)
+app.all('/api/manufacturing/:resource/:id/:action', async (req, res, next) => {
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🏭 Manufacturing API (action):', {
+        method: req.method,
+        url: req.url,
+        params: req.params
+      })
+    }
+    const handler = await loadHandler(path.join(apiDir, 'manufacturing.js'))
+    if (!handler) {
+      console.error('❌ Manufacturing handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Manufacturing API error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for manufacturing endpoints (inventory, boms, production-orders, stock-movements, suppliers)
 app.all('/api/manufacturing/:resource/:id?', async (req, res, next) => {
   try {
