@@ -38,6 +38,129 @@ function dedupeInventoryRowsBySku(items) {
   return out;
 }
 
+function normalizeSearchText(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** supplierPartNumbers JSON: [{ supplier, partNumber }, ...] or legacy string entries */
+function parseSupplierPartNumbersJson(raw) {
+  try {
+    const parts = typeof raw === 'string' ? JSON.parse(raw || '[]') : (raw || []);
+    return Array.isArray(parts) ? parts : [];
+  } catch {
+    return [];
+  }
+}
+
+function partNeedleMatchesSupplierPartNumbers(item, needleRaw) {
+  const needle = normalizeSearchText(needleRaw);
+  if (!needle || needle.length < 2) return false;
+  const parts = parseSupplierPartNumbersJson(item.supplierPartNumbers);
+  for (const sp of parts) {
+    if (typeof sp === 'string') {
+      const sn = normalizeSearchText(sp);
+      if (sn && (sn === needle || sn.includes(needle) || needle.includes(sn))) return true;
+    } else if (sp && typeof sp === 'object') {
+      const pn = normalizeSearchText(sp.partNumber || '');
+      if (pn && (pn === needle || pn.includes(needle) || needle.includes(pn))) return true;
+    }
+  }
+  return false;
+}
+
+function partNeedleMatchesLegacy(item, needleRaw) {
+  const leg = String(item.legacyPartNumber || '').trim();
+  if (!leg) return false;
+  const needle = normalizeSearchText(needleRaw);
+  if (!needle || needle.length < 2) return false;
+  const l = normalizeSearchText(leg);
+  return l === needle || l.includes(needle) || needle.includes(l);
+}
+
+function partNeedleMatchesManufacturing(item, needleRaw) {
+  const mfg = String(item.manufacturingPartNumber || '').trim();
+  if (!mfg) return false;
+  const needle = normalizeSearchText(needleRaw);
+  if (!needle || needle.length < 2) return false;
+  const m = normalizeSearchText(mfg);
+  return m === needle || m.includes(needle) || needle.includes(m);
+}
+
+function tokenizeMeaningful(s) {
+  return normalizeSearchText(s)
+    .split(/[^a-z0-9]+/i)
+    .filter((t) => t.length >= 3);
+}
+
+/** Match extracted text to inventory name (description): substring or shared tokens */
+function descriptionMatchesName(extractedText, inventoryName) {
+  const d = normalizeSearchText(extractedText);
+  const n = normalizeSearchText(inventoryName);
+  if (!d || !n) return false;
+  if (d.length >= 4 && (n.includes(d) || d.includes(n))) return true;
+  const maxSlice = 40;
+  if (d.length >= 6 && n.includes(d.slice(0, Math.min(maxSlice, d.length)))) return true;
+  if (n.length >= 6 && d.includes(n.slice(0, Math.min(maxSlice, n.length)))) return true;
+  const dTok = tokenizeMeaningful(d);
+  const nSet = new Set(tokenizeMeaningful(n));
+  if (dTok.length === 0) return false;
+  let hits = 0;
+  for (const t of dTok) {
+    if (nSet.has(t)) hits++;
+  }
+  if (hits >= 2) return true;
+  if (hits === 1 && dTok.length === 1) return true;
+  return false;
+}
+
+/** Looks like a pure code (digits/delimiters only) — use for part fields, not as prose description */
+function looksLikePartCodeOnly(s) {
+  const t = String(s || '').trim();
+  if (t.length < 2) return false;
+  return /^[\d\-./\s]+$/.test(t);
+}
+
+function findInventoryForExtractedLine(invOpts, ln) {
+  const partHint = String(ln.partNumberHint || '').trim();
+  const desc = String(ln.description || '').trim();
+  const skuLower = partHint.toLowerCase();
+
+  let inv = skuLower
+    ? invOpts.find((i) => String(i.sku || '').toLowerCase() === skuLower)
+    : null;
+  if (inv) return inv;
+
+  if (partHint) {
+    inv = invOpts.find((i) => partNeedleMatchesLegacy(i, partHint));
+    if (inv) return inv;
+    inv = invOpts.find((i) => partNeedleMatchesSupplierPartNumbers(i, partHint));
+    if (inv) return inv;
+    inv = invOpts.find((i) => partNeedleMatchesManufacturing(i, partHint));
+    if (inv) return inv;
+  }
+
+  if (desc) {
+    inv = invOpts.find((i) => descriptionMatchesName(desc, i.name));
+    if (inv) return inv;
+    inv = invOpts.find((i) => partNeedleMatchesLegacy(i, desc));
+    if (inv) return inv;
+    inv = invOpts.find((i) => partNeedleMatchesSupplierPartNumbers(i, desc));
+    if (inv) return inv;
+    inv = invOpts.find((i) => partNeedleMatchesManufacturing(i, desc));
+    if (inv) return inv;
+  }
+
+  if (partHint && !looksLikePartCodeOnly(partHint)) {
+    inv = invOpts.find((i) => descriptionMatchesName(partHint, i.name));
+    if (inv) return inv;
+  }
+
+  return null;
+}
+
 function matchSupplierByHint(hint, suppliers) {
   if (!hint || !Array.isArray(suppliers)) return { id: '', name: '' };
   const n = String(hint).trim().toLowerCase();
@@ -62,15 +185,7 @@ function buildLinesFromExtraction(extraction, supplierName, inventoryList) {
   );
   const lines = extraction?.lines && Array.isArray(extraction.lines) ? extraction.lines : [];
   return lines.map((ln, idx) => {
-    const partHint = (ln.partNumberHint || '').trim().toLowerCase();
-    let inv = invOpts.find((i) => (String(i.sku || '').toLowerCase() === partHint && partHint));
-    if (!inv) {
-      inv = invOpts.find(
-        (i) =>
-          (i.name && ln.description && i.name.toLowerCase().includes(String(ln.description).toLowerCase().slice(0, 18))) ||
-          (ln.description && (i.name || '').toLowerCase().includes(String(ln.description).toLowerCase().slice(0, 24)))
-      );
-    }
+    const inv = findInventoryForExtractedLine(invOpts, ln);
     const qty = parseFloat(ln.quantity) > 0 ? parseFloat(ln.quantity) : 1;
     let unitPrice = parseFloat(ln.unitPrice);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
