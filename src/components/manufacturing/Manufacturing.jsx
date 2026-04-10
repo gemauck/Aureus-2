@@ -49,6 +49,11 @@ function dedupeInventoryRowsBySku(items) {
   return out;
 }
 
+/** Same rule as API: extended value = quantity × unit cost on the catalog row. */
+function inventoryLineTotalValue(quantity, unitCost) {
+  return (Number(quantity) || 0) * (Number(unitCost) || 0);
+}
+
 const INVENTORY_LIST_PAGE_SIZE = 20;
 
 /** ZA VAT rate for PO totals (line unit prices are ex VAT). */
@@ -2629,16 +2634,57 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     );
   };
 
-  // When inventory list is refetched (e.g. after load), keep the viewed item in sync
-  // so the detail view shows the same name/data as the API (avoids brief correct then revert).
+  const detailInventoryCanonicalId = viewingInventoryItemDetail ? getInventoryItemId(viewingInventoryItemDetail) : null;
+
+  // Merge list refetches into the open detail view (qty, locations). Do not depend on `viewingInventoryItemDetail`
+  // or we overwrite a fresh GET /inventory/:id response before the list catches up.
   useEffect(() => {
-    if (!viewingInventoryItemDetail || !inventory.length) return;
-    const viewedId = getInventoryItemId(viewingInventoryItemDetail);
+    if (!detailInventoryCanonicalId || !inventory.length) return;
+    const viewedId = detailInventoryCanonicalId;
     const fromList = inventory.find(inv => getInventoryItemId(inv) === viewedId);
-    if (fromList && fromList !== viewingInventoryItemDetail) {
-      setViewingInventoryItemDetail(fromList);
-    }
-  }, [inventory]);
+    if (!fromList) return;
+
+    setViewingInventoryItemDetail(prev => {
+      if (!prev || getInventoryItemId(prev) !== viewedId) return prev;
+      const merged = {
+        ...prev,
+        ...fromList,
+        id: prev.id,
+        inventoryItemId: prev.inventoryItemId || fromList.inventoryItemId,
+        locations: fromList.locations && fromList.locations.length ? fromList.locations : prev.locations
+      };
+      merged.totalValue = inventoryLineTotalValue(merged.quantity, merged.unitCost);
+      return merged;
+    });
+  }, [inventory, detailInventoryCanonicalId]);
+
+  // Load canonical InventoryItem from the API so detail matches the database (list rows can be merged/stale).
+  useEffect(() => {
+    if (!detailInventoryCanonicalId || typeof window.DatabaseAPI?.getInventoryItemById !== 'function') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await safeCallAPI('getInventoryItemById', detailInventoryCanonicalId);
+        const fresh = res?.data?.item;
+        if (!fresh || cancelled) return;
+        setViewingInventoryItemDetail(prev => {
+          if (!prev || getInventoryItemId(prev) !== detailInventoryCanonicalId) return prev;
+          return {
+            ...fresh,
+            locations: Array.isArray(prev.locations) && prev.locations.length ? prev.locations : fresh.locations || [],
+            id: prev.id,
+            inventoryItemId: prev.inventoryItemId || fresh.id,
+            totalValue: inventoryLineTotalValue(fresh.quantity, fresh.unitCost)
+          };
+        });
+      } catch (e) {
+        console.warn('Manufacturing: canonical inventory fetch failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detailInventoryCanonicalId]);
 
   // Reload inventory when location changes - BUT NOT if user is actively typing
   useEffect(() => {
@@ -11660,6 +11706,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     const detailLocations = Array.isArray(item.locations) ? item.locations : (item.locationId && item.location ? [{ locationId: item.locationId, locationName: item.location, locationCode: '', quantity: item.quantity || 0, status: item.status }] : []);
 
+    const catalogLineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
+
     const selectedDetailLocationCode = useMemo(() => {
       const loc = detailLocations.find(l => l.locationId === selectedDetailLocationId);
       return loc?.locationCode || loc?.locationName || '';
@@ -12389,7 +12437,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Total Value</p>
-                      <p className="text-sm font-semibold text-blue-600">{item.totalValue > 0 ? formatCurrency(item.totalValue) : '-'}</p>
+                      <p className="text-sm font-semibold text-blue-600">{catalogLineTotalValue > 0 ? formatCurrency(catalogLineTotalValue) : '-'}</p>
+                      <p className="text-xs text-gray-400 mt-1">Quantity × unit cost</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Supplier</p>
@@ -12451,7 +12500,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </div>
                 <div>
                   <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Value</p>
-                  <p className={`text-lg font-bold mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatCurrency(item.totalValue || 0)}</p>
+                  <p className={`text-lg font-bold mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatCurrency(catalogLineTotalValue || 0)}</p>
+                  <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Quantity × unit cost</p>
                 </div>
                 {item.reorderPoint > 0 && (
                   <div className={`p-3 rounded-lg border ${availableQty <= item.reorderPoint ? (isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200') : (isDark ? 'bg-green-900/20 border-green-800' : 'bg-green-50 border-green-200')}`}>

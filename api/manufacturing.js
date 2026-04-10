@@ -2350,6 +2350,18 @@ async function handler(req, res) {
             throw updateError;
           }
         }
+
+        // After successful master update: align per-location unit cost with catalog (list vs detail).
+        if (body.unitCost !== undefined && existing.sku) {
+          try {
+            await prisma.locationInventory.updateMany({
+              where: { sku: existing.sku },
+              data: { unitCost: costForValue }
+            })
+          } catch (locErr) {
+            console.warn('⚠️ locationInventory unitCost sync skipped:', locErr.message)
+          }
+        }
         
         auditManufacturing('update', 'inventory', id, {
           summary: `Updated inventory ${item.sku} ${item.name}`,

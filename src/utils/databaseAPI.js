@@ -1698,6 +1698,19 @@ const DatabaseAPI = {
         return normalized;
     },
 
+    async getInventoryItemById(id) {
+        if (!id) {
+            throw new Error('Inventory item id is required');
+        }
+        const raw = await this.makeRequest(`/manufacturing/inventory/${encodeURIComponent(id)}`);
+        const item = raw?.data?.item ?? raw?.item ?? null;
+        return {
+            data: {
+                item
+            }
+        };
+    },
+
     invalidateInventoryCache() {
         try {
             // Clear generic inventory cache (all locations)
