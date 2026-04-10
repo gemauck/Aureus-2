@@ -1,13 +1,13 @@
 /**
  * GET /api/projects/:id/review-cell-activity
- * ProjectActivityLog rows for one tracker cell (monthly data review, compliance review, weekly FMS).
+ * ProjectActivityLog rows for one tracker cell (monthly data review, compliance review, weekly FMS, monthly FMS).
  */
 import { authRequired } from '../../_lib/authRequired.js'
 import { normalizeProjectIdFromRequest } from '../../_lib/documentCollectionCellKeys.js'
 import { badRequest, ok } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
 
-const TRACKERS = new Set(['monthly_data_review', 'compliance_review', 'weekly_fms'])
+const TRACKERS = new Set(['monthly_data_review', 'compliance_review', 'weekly_fms', 'monthly_fms'])
 
 function withGetSafe(fn) {
   const empty = JSON.stringify({ data: { timeline: [] } })
@@ -107,6 +107,24 @@ async function handler(req, res) {
           AND metadata IS NOT NULL
           AND metadata <> ''
           AND (metadata::jsonb->>'entityType') = 'compliance_review'
+          AND (metadata::jsonb->>'entityId') = ${documentId}
+          AND (metadata::jsonb->>'year')::int = ${year}
+          AND (metadata::jsonb->>'month')::int = ${month}
+        ORDER BY "createdAt" ASC
+      `
+    } else if (tracker === 'monthly_fms') {
+      const month = q.month != null ? parseInt(String(q.month), 10) : NaN
+      if (Number.isNaN(month) || month < 1 || month > 12) {
+        return badRequest(res, 'month (1-12) is required for monthly_fms')
+      }
+      rows = await prisma.$queryRaw`
+        SELECT id, type, description, "userName", "userId", "createdAt"
+        FROM "ProjectActivityLog"
+        WHERE "projectId" = ${projectId}
+          AND type = 'monthly_fms_status_change'
+          AND metadata IS NOT NULL
+          AND metadata <> ''
+          AND (metadata::jsonb->>'entityType') = 'monthly_fms'
           AND (metadata::jsonb->>'entityId') = ${documentId}
           AND (metadata::jsonb->>'year')::int = ${year}
           AND (metadata::jsonb->>'month')::int = ${month}

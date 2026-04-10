@@ -38,6 +38,47 @@ const truncateDescription = (text, maxLength = 60) => {
     return { truncated: text.substring(0, cutPoint), isLong: true };
 };
 
+const MFMS_MONTH_NAMES = Object.freeze([
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+]);
+
+/**
+ * Cell key: {sectionId}-{documentId}-{monthName}. Section/document IDs may contain hyphens;
+ * month name is always last (matches MFMS_MONTH_NAMES).
+ */
+const parseMonthlyFMSCellKey = (cellKey) => {
+    const parts = String(cellKey).split('-');
+    if (parts.length < 3) {
+        return { sectionId: '', documentId: '', month: '' };
+    }
+    const last = parts[parts.length - 1];
+    if (MFMS_MONTH_NAMES.includes(last)) {
+        return {
+            sectionId: parts.slice(0, -2).join('-'),
+            documentId: parts[parts.length - 2],
+            month: last
+        };
+    }
+    return { sectionId: parts[0], documentId: parts[1], month: parts.slice(2).join('-') };
+};
+
+const formatMFMSActivityDateTime = (dateValue) => {
+    try {
+        const date = dateValue ? new Date(dateValue) : null;
+        if (!date || isNaN(date.getTime())) return '';
+        return date.toLocaleString('en-ZA', {
+            timeZone: 'Africa/Johannesburg',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (_) {
+        return '';
+    }
+};
+
 // Non-blocking toast for attachment errors (avoids native alert).
 const showAttachmentToast = (message) => {
     const el = document.createElement('div');
@@ -463,6 +504,15 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
     const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+    const hoverCommentCellRef = useRef(null);
+    const [cellActivityTimeline, setCellActivityTimeline] = useState([]);
+    const [cellActivityLoading, setCellActivityLoading] = useState(false);
+    const [cellActivityBump, setCellActivityBump] = useState(0);
+    const cellActivityEffectGenRef = useRef(0);
+
+    useEffect(() => {
+        hoverCommentCellRef.current = hoverCommentCell;
+    }, [hoverCommentCell]);
 
     useEffect(() => { setPendingCommentAttachments([]); }, [hoverCommentCell]);
     const pendingCommentOpenRef = useRef(null);
@@ -1145,6 +1195,87 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             [monthKey]: newComments
         };
     };
+
+    // ProjectActivityLog timeline for the open Monthly FMS cell (status changes)
+    useEffect(() => {
+        if (!hoverCommentCell || !project?.id) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+        const { sectionId: sid, documentId: did, month: monthLabel } = parseMonthlyFMSCellKey(hoverCommentCell);
+        const monthIdx = MFMS_MONTH_NAMES.indexOf(monthLabel);
+        if (monthIdx < 0 || !did) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+        const monthNum = monthIdx + 1;
+
+        cellActivityEffectGenRef.current += 1;
+        const effectGen = cellActivityEffectGenRef.current;
+        let cancelled = false;
+
+        const load = async (silent) => {
+            if (cancelled) return;
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token =
+                (typeof window !== 'undefined' &&
+                    (window.storage?.getToken?.() ??
+                        localStorage.getItem('authToken') ??
+                        localStorage.getItem('auth_token') ??
+                        localStorage.getItem('abcotronics_token') ??
+                        localStorage.getItem('token'))) ||
+                '';
+            if (!silent) setCellActivityLoading(true);
+            try {
+                const q = new URLSearchParams({
+                    tracker: 'monthly_fms',
+                    documentId: String(did).trim(),
+                    year: String(selectedYear),
+                    month: String(monthNum),
+                    _: String(Date.now())
+                });
+                const res = await fetch(`${base}/api/projects/${project.id}/review-cell-activity?${q}`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    cache: 'no-store',
+                    headers: {
+                        Accept: 'application/json',
+                        'Cache-Control': 'no-store',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    }
+                });
+                const json = await res.json().catch(() => ({}));
+                const data = json.data || json;
+                const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+                if (cancelled || cellActivityEffectGenRef.current !== effectGen) return;
+                setCellActivityTimeline((prev) => {
+                    if (silent) {
+                        const prevSig = prev.map((x) => x.id).join('\u0001');
+                        const nextSig = timeline.map((x) => x.id).join('\u0001');
+                        if (prevSig === nextSig) return prev;
+                    }
+                    return timeline;
+                });
+            } catch (_) {
+                if (!cancelled && cellActivityEffectGenRef.current === effectGen && !silent) {
+                    setCellActivityTimeline([]);
+                }
+            } finally {
+                if (!silent && cellActivityEffectGenRef.current === effectGen) {
+                    setCellActivityLoading(false);
+                }
+            }
+        };
+
+        load(false);
+        const iv = setInterval(() => load(true), 18000);
+        return () => {
+            cancelled = true;
+            clearInterval(iv);
+        };
+    }, [hoverCommentCell, project?.id, selectedYear, cellActivityBump]);
     
     // ============================================================
     // STATUS OPTIONS
@@ -1722,7 +1853,7 @@ const getAssigneeColor = (identifier, users) => {
     // STATUS AND COMMENTS
     // ============================================================
     
-    const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
+    const handleUpdateStatus = useCallback(async (sectionId, documentId, month, status, applyToSelected = false) => {
         
         // Use current state (most up-to-date) or fallback to ref
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
@@ -1736,10 +1867,10 @@ const getAssigneeColor = (identifier, users) => {
         // If applying to selected cells, get all selected cell keys
         let cellsToUpdate = [];
         if (applyToSelected && currentSelectedCells.size > 0) {
-            // Parse all selected cell keys
-            cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
-                const [secId, docId, mon] = cellKey.split('-');
-                return { sectionId: secId, documentId: docId, month: mon };
+            // Parse all selected cell keys (IDs may contain hyphens; month name is always last)
+            cellsToUpdate = Array.from(currentSelectedCells).map((cellKey) => {
+                const parsed = parseMonthlyFMSCellKey(cellKey);
+                return { sectionId: parsed.sectionId, documentId: parsed.documentId, month: parsed.month };
             });
         } else {
             // Just update the single cell
@@ -1795,8 +1926,21 @@ const getAssigneeColor = (identifier, users) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        // Save immediately
-        saveToDatabase();
+        try {
+            await saveToDatabase();
+            const open = hoverCommentCellRef.current;
+            if (open) {
+                const cellKeyMatches = (cell) => {
+                    const k = `${cell.sectionId}-${cell.documentId}-${cell.month}`;
+                    return String(k) === String(open);
+                };
+                if (cellsToUpdate.some(cellKeyMatches)) {
+                    setCellActivityBump((b) => b + 1);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error saving Monthly FMS status change:', error);
+        }
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
@@ -2833,7 +2977,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                     setHoverCommentCell(cellKey);
                                     
                                     // Update URL with deep link when opening popup
-                                    const [sectionId, documentId, month] = cellKey.split('-');
+                                    const { sectionId, documentId, month } = parseMonthlyFMSCellKey(cellKey);
                                     if (sectionId && documentId && month && project?.id) {
                                         const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview`;
                                         
@@ -3595,19 +3739,33 @@ const baseTextColorClass = statusConfig && statusConfig.color
         <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
             {/* Comment Popup */}
             {hoverCommentCell && (() => {
-                // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
-                // Never parseInt them – always compare as strings to ensure we find the right row.
-                const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
+                // IMPORTANT: Section/document IDs can contain hyphens; month name is always last.
+                const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseMonthlyFMSCellKey(hoverCommentCell);
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
                 const comments = doc ? getDocumentComments(doc, month) : [];
-                
+                const activityTypeLabel = (t) => (t === 'monthly_fms_status_change' ? 'Status' : 'Activity');
+                const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
+                    (r) => r && r.kind === 'activity'
+                );
+                const commentRows = comments.map((c) => ({
+                    id: `comment-${c.id}`,
+                    kind: 'comment',
+                    comment: c,
+                    createdAt: c.date || c.createdAt
+                }));
+                const activityRows = [...apiActivity, ...commentRows].sort((x, y) => {
+                    const tx = new Date(x.createdAt).getTime();
+                    const ty = new Date(y.createdAt).getTime();
+                    return tx - ty;
+                });
+
                 return (
                     <>
                         {/* Comment Popup */}
                         <div 
-                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
-                            style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
+                            className="comment-popup fixed w-80 max-w-[90vw] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 z-[999] flex flex-col max-h-[min(85vh,520px)] overflow-hidden"
+                            style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px`, contain: 'layout' }}
                         >
                         {/* Show section and document context */}
                         {section && doc && (
@@ -3620,16 +3778,39 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                 </div>
                             </div>
                         )}
-                        {comments.length > 0 && (
-                            <div className="mb-3">
-                                <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div 
-                                    key={`comment-container-${hoverCommentCell}`}
+                        <div className="mb-3 flex flex-col min-h-0 flex-1 overflow-hidden">
+                            <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Activity</div>
+                            {cellActivityLoading && activityRows.length === 0 ? (
+                                <div className="py-4 min-h-[120px] flex items-center justify-center text-center text-[11px] text-gray-500 dark:text-gray-400">
+                                    Loading activity…
+                                </div>
+                            ) : activityRows.length > 0 ? (
+                                <div
+                                    key={`activity-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
-                                    className="comment-scroll-container mb-2"
+                                    className="comment-scroll-container overflow-y-auto max-h-[min(45vh,280px)] flex-shrink min-h-0 mb-2"
                                 >
                                     <div className="space-y-2 pr-1">
-                                        {comments.map((comment, idx) => (
+                                        {activityRows.map((row, idx) => {
+                                            if (row.kind === 'activity') {
+                                                return (
+                                                    <div
+                                                        key={row.id || idx}
+                                                        className="pb-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 bg-slate-50 dark:bg-slate-900/50 rounded p-1.5"
+                                                    >
+                                                        <div className="text-[9px] font-semibold text-sky-700 dark:text-sky-400 mb-0.5">
+                                                            {activityTypeLabel(row.activityType)}
+                                                        </div>
+                                                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{row.description}</p>
+                                                        <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+                                                            <span className="font-medium truncate pr-1">{row.userName || 'System'}</span>
+                                                            <span className="shrink-0">{row.createdAt ? formatMFMSActivityDateTime(row.createdAt) : ''}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            const comment = row.comment;
+                                            return (
                                         <div 
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
@@ -3790,15 +3971,21 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                 <i className="fas fa-link text-[9px]"></i>
                                             </button>
                                         </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="py-3 px-2 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 text-center mb-2">
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">No activity yet</p>
+                                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Status changes and comments appear here</p>
+                                </div>
+                            )}
+                        </div>
                         
                         <div>
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-semibold text-gray-600">Add Comment</span>
+                                <span className="text-[10px] font-semibold text-gray-600 dark:text-gray-400">Add Comment</span>
                                 <div className="flex items-center gap-1">
                                     <input
                                         ref={commentFileInputRef}
