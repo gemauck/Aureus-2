@@ -1600,7 +1600,10 @@ async function handler(req, res) {
               if (process.env.NODE_ENV === 'development') {
                 console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', { projectId: id });
               }
-              await saveDocumentSectionsToTable(id, body.documentSections, getActivityUserFromRequest(req));
+              await saveDocumentSectionsToTable(id, body.documentSections, {
+                ...getActivityUserFromRequest(req),
+                skipActivityLog: true
+              });
               if (process.env.NODE_ENV === 'development') console.log('✅ PUT /api/projects/[id]: documentSections saved');
             } catch (tableError) {
               console.error('⚠️ Error saving documentSections to table (project row already updated):', {

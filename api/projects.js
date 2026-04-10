@@ -587,7 +587,7 @@ function documentSectionsPayloadHasRows(value) {
  * Save documentSections JSON to table structure
  * @param {string} projectId
  * @param {object|string} jsonData
- * @param {{ userId?: string, userName?: string }} [userContext] - Optional user for activity log
+ * @param {{ userId?: string, userName?: string, skipActivityLog?: boolean }} [userContext] - Optional user for activity log; set skipActivityLog when the caller already logs documentSections (e.g. PATCH /api/projects/[id]).
  */
 async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}) {
   if (!jsonData) {
@@ -634,9 +634,10 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
       }
     }
 
-    // Diff old vs new statuses for activity log (before we delete and recreate)
+    // Diff old vs new statuses for activity log (before we delete and recreate).
+    // PATCH /api/projects/[id] also diffs documentSections and logs — skip here to avoid duplicate rows.
     const newStatusMap = buildDocumentStatusMap(sections)
-    if (existingForDiff && Object.keys(existingForDiff).length > 0) {
+    if (!userContext.skipActivityLog && existingForDiff && Object.keys(existingForDiff).length > 0) {
       const oldStatusMap = buildDocumentStatusMap(existingForDiff)
       const userId = userContext.userId || null
       const userName = userContext.userName != null ? userContext.userName : 'System'
