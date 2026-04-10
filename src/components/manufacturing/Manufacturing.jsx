@@ -54,6 +54,20 @@ function inventoryLineTotalValue(quantity, unitCost) {
   return (Number(quantity) || 0) * (Number(unitCost) || 0);
 }
 
+/** Keep `totalValue` on every inventory row aligned with qty × unit cost (API/cache may drift). */
+function normalizeInventoryItemRow(item) {
+  if (!item || typeof item !== 'object') return item;
+  return {
+    ...item,
+    totalValue: inventoryLineTotalValue(item.quantity, item.unitCost)
+  };
+}
+
+function normalizeInventoryRows(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map(normalizeInventoryItemRow);
+}
+
 const INVENTORY_LIST_PAGE_SIZE = 20;
 
 /** ZA VAT rate for PO totals (line unit prices are ex VAT). */
@@ -348,7 +362,7 @@ try {
       const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
       const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, { forceRefresh: options.forceRefresh });
       const invData = invResponse?.data?.inventory || [];
-      const processed = invData.map(item => ({ ...item, id: item.id }));
+      const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
 
       if (requestSeq !== inventoryLoadSeqRef.current) {
         return;
@@ -597,7 +611,7 @@ try {
         const cachedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
 
         if (cachedInventory.length > 0) {
-          setInventory(cachedInventory);
+          setInventory(normalizeInventoryRows(cachedInventory));
         }
         if (cachedBOMs.length > 0) {
           setBoms(cachedBOMs);
@@ -688,7 +702,7 @@ try {
             window.DatabaseAPI.getInventory(locationIdToLoad)
               .then(invResponse => {
                 const invData = invResponse?.data?.inventory || [];
-                const processed = invData.map(item => ({ ...item, id: item.id }));
+                const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
                 setInventory(processed);
                 setInventoryLoadedFromAPI(true);
                 safeSetItem('manufacturing_inventory', JSON.stringify(processed));
@@ -975,7 +989,7 @@ try {
           window.DatabaseAPI.getInventory()
             .then(invResponse => {
               const invData = invResponse?.data?.inventory || [];
-              const processed = invData.map(item => ({ ...item, id: item.id }));
+              const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
               setInventory(processed);
               safeSetItem('manufacturing_inventory', JSON.stringify(processed));
               return { type: 'inventory', data: processed };
@@ -1164,19 +1178,22 @@ try {
         }
       }
 
+      const inventoryExportCell = (item, key) => {
+        if (key === 'totalValue') return inventoryLineTotalValue(item.quantity, item.unitCost);
+        return key in item ? item[key] : '';
+      };
+
       if (XLSXLib && XLSXLib.utils) {
         const headerRow = orderedKeys.slice();
         const dataRows = inventory.map((item) =>
-          orderedKeys.map((key) => formatValueForCell(key in item ? item[key] : ''))
+          orderedKeys.map((key) => formatValueForCell(inventoryExportCell(item, key)))
         );
         // Sum Total Value column for footer row
         const totalValueIdx = orderedKeys.indexOf('totalValue');
         let totalValueSum = 0;
         if (totalValueIdx !== -1) {
           inventory.forEach((item) => {
-            const v = item && (item.totalValue ?? item['totalValue']);
-            const n = typeof v === 'number' ? v : Number(v);
-            if (!Number.isNaN(n)) totalValueSum += n;
+            totalValueSum += inventoryLineTotalValue(item.quantity, item.unitCost);
           });
         }
         const totalRow = orderedKeys.map((key, idx) => {
@@ -1204,9 +1221,7 @@ try {
         let totalValueSum = 0;
         if (totalValueIdx !== -1) {
           inventory.forEach((item) => {
-            const v = item && (item.totalValue ?? item['totalValue']);
-            const n = typeof v === 'number' ? v : Number(v);
-            if (!Number.isNaN(n)) totalValueSum += n;
+            totalValueSum += inventoryLineTotalValue(item.quantity, item.unitCost);
           });
         }
         const sanitizeCsv = (value) => {
@@ -1216,7 +1231,7 @@ try {
         };
         const headerLine = orderedKeys.map(sanitizeCsv).join(',');
         const dataLines = inventory.map((item) =>
-          orderedKeys.map((key) => sanitizeCsv(key in item ? item[key] : '')).join(',')
+          orderedKeys.map((key) => sanitizeCsv(formatValueForCell(inventoryExportCell(item, key)))).join(',')
         );
         const totalRowCells = orderedKeys.map((key, idx) =>
           key === 'totalValue' ? sanitizeCsv(totalValueSum) : idx === 0 ? 'Total' : ''
@@ -1918,9 +1933,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (window.DatabaseAPI && typeof window.DatabaseAPI.getInventory === 'function') {
         try {
           const invResponse = await window.DatabaseAPI.getInventory(selectedLocationId !== 'all' ? selectedLocationId : null);
-          if (invResponse?.data?.items) {
-            setInventory(invResponse.data.items);
-            safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.items));
+          const invList = invResponse?.data?.inventory || invResponse?.data?.items || [];
+          if (Array.isArray(invList)) {
+            const processed = normalizeInventoryRows(invList.map((row) => ({ ...row, id: row.id })));
+            setInventory(processed);
+            safeSetItem('manufacturing_inventory', JSON.stringify(processed));
           }
         } catch (refreshError) {
           console.warn('Failed to refresh inventory after upload:', refreshError);
@@ -2079,7 +2096,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const getInventoryStats = () => {
-    const totalValue = inventory.reduce((sum, item) => sum + item.totalValue, 0);
+    const totalValue = inventory.reduce(
+      (sum, item) => sum + inventoryLineTotalValue(item.quantity, item.unitCost),
+      0
+    );
     // Use available quantity (quantity - allocatedQuantity) for low stock calculation
     const lowStockItems = inventory.filter(item => {
       const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
@@ -2653,8 +2673,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         inventoryItemId: prev.inventoryItemId || fromList.inventoryItemId,
         locations: fromList.locations && fromList.locations.length ? fromList.locations : prev.locations
       };
-      merged.totalValue = inventoryLineTotalValue(merged.quantity, merged.unitCost);
-      return merged;
+      return normalizeInventoryItemRow(merged);
     });
   }, [inventory, detailInventoryCanonicalId]);
 
@@ -2669,13 +2688,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (!fresh || cancelled) return;
         setViewingInventoryItemDetail(prev => {
           if (!prev || getInventoryItemId(prev) !== detailInventoryCanonicalId) return prev;
-          return {
+          return normalizeInventoryItemRow({
             ...fresh,
             locations: Array.isArray(prev.locations) && prev.locations.length ? prev.locations : fresh.locations || [],
             id: prev.id,
-            inventoryItemId: prev.inventoryItemId || fresh.id,
-            totalValue: inventoryLineTotalValue(fresh.quantity, fresh.unitCost)
-          };
+            inventoryItemId: prev.inventoryItemId || fresh.id
+          });
         });
       } catch (e) {
         console.warn('Manufacturing: canonical inventory fetch failed', e);
@@ -2910,8 +2928,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             bVal = parseFloat(b.unitCost || 0);
             break;
           case 'totalValue':
-            aVal = parseFloat(a.totalValue || 0);
-            bVal = parseFloat(b.totalValue || 0);
+            aVal = inventoryLineTotalValue(a.quantity, a.unitCost);
+            bVal = inventoryLineTotalValue(b.quantity, b.unitCost);
             break;
           case 'status':
             aVal = (a.status || '').toString().toLowerCase();
@@ -3193,7 +3211,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 }
               })();
               const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
-              
+              const lineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
+
               return (
                 <div 
                   key={getInventoryItemId(item) || item.sku} 
@@ -3296,7 +3315,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       )}
                       
                       {/* Cost Info */}
-                      {(item.unitCost > 0 || item.totalValue > 0) && (
+                      {(item.unitCost > 0 || lineTotalValue > 0) && (
                         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
                           {item.unitCost > 0 && (
                             <div>
@@ -3304,10 +3323,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                               <span className="ml-1 text-sm font-semibold text-gray-900">{formatCurrency(item.unitCost)}</span>
                             </div>
                           )}
-                          {item.totalValue > 0 && (
+                          {lineTotalValue > 0 && (
                             <div className="text-right">
                               <span className="text-xs text-gray-500">Total Value:</span>
-                              <span className="ml-1 text-sm font-bold text-blue-600">{formatCurrency(item.totalValue)}</span>
+                              <span className="ml-1 text-sm font-bold text-blue-600">{formatCurrency(lineTotalValue)}</span>
                             </div>
                           )}
                         </div>
@@ -3780,6 +3799,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <tbody className="divide-y divide-gray-200">
                 {paginatedInventory.map(item => {
                   const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+                  const lineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
                   return (
                     <tr 
                       key={getInventoryItemId(item) || item.sku} 
@@ -3897,7 +3917,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {item.unitCost > 0 ? formatCurrency(item.unitCost) : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
-                      {item.totalValue > 0 ? formatCurrency(item.totalValue) : <span className="text-gray-400">-</span>}
+                      {lineTotalValue > 0 ? formatCurrency(lineTotalValue) : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(item.status || '')}`}>
@@ -4731,7 +4751,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (window.DatabaseAPI?.getInventory) {
         const response = await window.DatabaseAPI.getInventory();
         if (response?.data?.inventory) {
-          const updatedInventory = response.data.inventory.map(item => ({ ...item, id: item.id }));
+          const updatedInventory = normalizeInventoryRows(response.data.inventory.map(item => ({ ...item, id: item.id })));
           setInventory(updatedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         }
@@ -4767,7 +4787,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (window.DatabaseAPI?.getInventory) {
         const response = await window.DatabaseAPI.getInventory();
         if (response?.data?.inventory) {
-          const updatedInventory = response.data.inventory.map(item => ({ ...item, id: item.id }));
+          const updatedInventory = normalizeInventoryRows(response.data.inventory.map(item => ({ ...item, id: item.id })));
           setInventory(updatedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         }
@@ -4968,7 +4988,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         const targetId = getInventoryItemId(selectedItem);
         const response = await safeCallAPI('updateInventoryItem', targetId, itemData);
         if (response?.data?.item) {
-          const updatedInventory = inventory.map(item => getInventoryItemId(item) === targetId ? response.data.item : item);
+          const updatedInventory = inventory.map(item =>
+            getInventoryItemId(item) === targetId ? normalizeInventoryItemRow(response.data.item) : item
+          );
           setInventory(updatedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
           await reloadInventoryForLocation({ forceRefresh: true });
@@ -5003,7 +5025,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         setIsSavingItem(true);
         const response = await safeCallAPI('createInventoryItem', createData);
         if (response?.data?.item) {
-          const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
+          const updatedInventory = [...inventory, normalizeInventoryItemRow({ ...response.data.item, id: response.data.item.id })];
           setInventory(updatedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
           await reloadInventoryForLocation({ forceRefresh: true });
@@ -5029,7 +5051,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       setIsSavingItem(true);
       const response = await safeCallAPI('createInventoryItem', pendingCreateData);
       if (response?.data?.item) {
-        const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
+        const updatedInventory = [...inventory, normalizeInventoryItemRow({ ...response.data.item, id: response.data.item.id })];
         setInventory(updatedInventory);
         safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         await reloadInventoryForLocation({ forceRefresh: true });
@@ -5421,8 +5443,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               try {
                 const invResponse = await window.DatabaseAPI.getInventory();
                 const invData = invResponse?.data?.inventory || [];
-                setInventory(invData);
-                safeSetItem('manufacturing_inventory', JSON.stringify(invData));
+                const processed = normalizeInventoryRows(invData.map((row) => ({ ...row, id: row.id })));
+                setInventory(processed);
+                safeSetItem('manufacturing_inventory', JSON.stringify(processed));
               } catch (invError) {
                 console.error('❌ Failed to refresh inventory:', invError);
               }
@@ -5644,8 +5667,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       try {
         const invResponse = await safeCallAPI('getInventory');
         if (invResponse?.data?.inventory) {
-          setInventory(invResponse.data.inventory.map((item) => ({ ...item, id: item.id })));
-          safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
+          const processed = normalizeInventoryRows(invResponse.data.inventory.map((item) => ({ ...item, id: item.id })));
+          setInventory(processed);
+          safeSetItem('manufacturing_inventory', JSON.stringify(processed));
         }
       } catch (e) {
         console.warn('Could not refresh inventory:', e);
@@ -6124,7 +6148,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         try {
           const invResponse = await safeCallAPI('getInventory');
           const invData = invResponse?.data?.inventory || [];
-          const processedInventory = invData.map(item => ({ ...item, id: item.id }));
+          const processedInventory = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
           setInventory(processedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(processedInventory));
         } catch (invError) {
@@ -6433,8 +6457,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         try {
           const inventoryResponse = await safeCallAPI('getInventory');
           if (inventoryResponse?.data?.inventory) {
-            setInventory(inventoryResponse.data.inventory);
-            safeSetItem('manufacturing_inventory', JSON.stringify(inventoryResponse.data.inventory));
+            const processed = normalizeInventoryRows(
+              inventoryResponse.data.inventory.map((row) => ({ ...row, id: row.id }))
+            );
+            setInventory(processed);
+            safeSetItem('manufacturing_inventory', JSON.stringify(processed));
           }
         } catch (invError) {
           console.error('⚠️ Failed to refresh inventory:', invError);
@@ -7707,7 +7734,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Total Value</p>
-                      <p className="text-sm font-semibold text-blue-600">{formatCurrency(selectedItem.totalValue)}</p>
+                      <p className="text-sm font-semibold text-blue-600">
+                        {formatCurrency(inventoryLineTotalValue(selectedItem.quantity, selectedItem.unitCost))}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Supplier</p>
@@ -8839,8 +8868,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         try {
           const invResponse = await safeCallAPI('getInventory');
           if (invResponse?.data?.inventory) {
-            setInventory(invResponse.data.inventory.map((x) => ({ ...x, id: x.id })));
-            safeSetItem('manufacturing_inventory', JSON.stringify(invResponse.data.inventory));
+            const processed = normalizeInventoryRows(invResponse.data.inventory.map((x) => ({ ...x, id: x.id })));
+            setInventory(processed);
+            safeSetItem('manufacturing_inventory', JSON.stringify(processed));
           }
         } catch (invError) {
           console.warn('⚠️ Failed to refresh inventory:', invError);
@@ -11902,10 +11932,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         const targetId = getInventoryItemId(item);
         const response = await safeCallAPI('updateInventoryItem', targetId, itemData);
         if (response?.data?.item) {
-          const updatedInventory = inventory.map(invItem => getInventoryItemId(invItem) === targetId ? response.data.item : invItem);
+          const normalized = normalizeInventoryItemRow(response.data.item);
+          const updatedInventory = inventory.map(invItem =>
+            getInventoryItemId(invItem) === targetId ? normalized : invItem
+          );
           setInventory(updatedInventory);
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
-          setViewingInventoryItemDetail(response.data.item);
+          setViewingInventoryItemDetail(normalized);
           setIsEditingInventoryItem(false);
           alert('Item updated successfully!');
         }
@@ -12796,7 +12829,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             {activeTab === 'locations' && window.StockLocations && (
               <window.StockLocations 
                 inventory={inventory}
-                onInventoryUpdate={(updatedInventory) => setInventory(updatedInventory)}
+                onInventoryUpdate={(updatedInventory) => setInventory(normalizeInventoryRows(updatedInventory))}
               />
             )}
             {activeTab === 'stock-count' &&

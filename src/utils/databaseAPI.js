@@ -1,4 +1,18 @@
 // Database-First API Utility - All data operations go through database
+
+/** Manufacturing inventory extended value: quantity × unit cost (matches api/_lib/inventoryValue.js). */
+function _computedManufacturingInventoryTotalValue(quantity, unitCost) {
+    return (Number(quantity) || 0) * (Number(unitCost) || 0);
+}
+
+function _normalizeManufacturingInventoryItem(item) {
+    if (!item || typeof item !== 'object') return item;
+    return {
+        ...item,
+        totalValue: _computedManufacturingInventoryTotalValue(item.quantity, item.unitCost)
+    };
+}
+
 const DatabaseAPI = {
     // Base configuration - Use local API for localhost, production for deployed
     API_BASE: (() => {
@@ -1684,15 +1698,16 @@ const DatabaseAPI = {
     async getInventory(locationId = null, options = {}) {
         const endpoint = locationId && locationId !== 'all' ? `/manufacturing/inventory?locationId=${locationId}` : '/manufacturing/inventory';
         const raw = await this.makeRequest(endpoint, options);
+        const list = Array.isArray(raw?.data?.inventory)
+            ? raw.data.inventory
+            : Array.isArray(raw?.inventory)
+                ? raw.inventory
+                : Array.isArray(raw?.data)
+                    ? raw.data
+                    : [];
         const normalized = {
             data: {
-                inventory: Array.isArray(raw?.data?.inventory)
-                    ? raw.data.inventory
-                    : Array.isArray(raw?.inventory)
-                        ? raw.inventory
-                        : Array.isArray(raw?.data)
-                            ? raw.data
-                            : []
+                inventory: list.map(_normalizeManufacturingInventoryItem)
             }
         };
         return normalized;
@@ -1706,7 +1721,7 @@ const DatabaseAPI = {
         const item = raw?.data?.item ?? raw?.item ?? null;
         return {
             data: {
-                item
+                item: item ? _normalizeManufacturingInventoryItem(item) : null
             }
         };
     },
@@ -1757,6 +1772,9 @@ const DatabaseAPI = {
             body: JSON.stringify(itemData)
         });
         this.invalidateInventoryCache();
+        if (response?.data?.item) {
+            response.data.item = _normalizeManufacturingInventoryItem(response.data.item);
+        }
         return response;
     },
 
@@ -1766,6 +1784,9 @@ const DatabaseAPI = {
             body: JSON.stringify(itemData)
         });
         this.invalidateInventoryCache();
+        if (response?.data?.item) {
+            response.data.item = _normalizeManufacturingInventoryItem(response.data.item);
+        }
         return response;
     },
 
