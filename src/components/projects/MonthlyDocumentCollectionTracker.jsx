@@ -15,6 +15,12 @@ const parseCellKey = (cellKey) => {
     return { sectionId: p[0], documentId: p[1], month: p[2] };
 };
 
+// Stable reference — do not allocate a new array each render (cell-activity effect depends on identity).
+const DOCUMENT_COLLECTION_MONTHS = Object.freeze([
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+]);
+
 // Derive a human‑readable facilities label from the project, handling both
 // array and string shapes and falling back gracefully when nothing is set.
 const getFacilitiesLabel = (project) => {
@@ -210,10 +216,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : isComplianceReview ? `complianceReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
         : null;
 
-    const months = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-    ];
+    const months = DOCUMENT_COLLECTION_MONTHS;
     const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
 
     // Year selection with persistence
@@ -625,6 +628,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [cellActivityBump, setCellActivityBump] = useState(0);
     const [deletingCellEmailLogId, setDeletingCellEmailLogId] = useState(null);
     const hoverCommentCellRef = useRef(null);
+    /** Bumps when the cell-activity effect instance changes so stale fetches never clear loading. */
+    const cellActivityEffectGenRef = useRef(0);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const [pendingCommentAttachments, setPendingCommentAttachments] = useState([]);
@@ -688,10 +693,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             setCellActivityLoading(false);
             return undefined;
         }
-        let cancelled = false;
         const { sectionId: sid, documentId: did, month: monthLabel } = parseCellKey(hoverCommentCell);
         const monthIdx = months.indexOf(monthLabel);
-        if (monthIdx < 0) return undefined;
+        if (monthIdx < 0) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+        cellActivityEffectGenRef.current += 1;
+        const effectGen = cellActivityEffectGenRef.current;
+        let cancelled = false;
         const monthNum = monthIdx + 1;
 
         const load = async (silent) => {
@@ -735,7 +746,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 const json = await res.json().catch(() => ({}));
                 const data = json.data || json;
                 const timeline = Array.isArray(data.timeline) ? data.timeline : [];
-                if (cancelled) return;
+                if (cancelled || cellActivityEffectGenRef.current !== effectGen) return;
                 setCellActivityTimeline((prev) => {
                     if (silent) {
                         const prevSig = prev.map((x) => x.id).join('\u0001');
@@ -745,9 +756,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     return timeline;
                 });
             } catch (_) {
-                if (!cancelled && !silent) setCellActivityTimeline([]);
+                if (!cancelled && cellActivityEffectGenRef.current === effectGen && !silent) {
+                    setCellActivityTimeline([]);
+                }
             } finally {
-                if (!cancelled && !silent) setCellActivityLoading(false);
+                if (!silent && cellActivityEffectGenRef.current === effectGen) {
+                    setCellActivityLoading(false);
+                }
             }
         };
 
@@ -3560,67 +3575,62 @@ const getAssigneeColor = (identifier, users) => {
         if (!hoverCommentCell) deepLinkHandledRef.current = null;
     }, [hoverCommentCell]);
 
-    // Smart positioning for comment popup (no auto-scroll, no window scroll listener)
-    useEffect(() => {
-        if (!hoverCommentCell) {
-            return;
+    const updateCommentPopupPosition = useCallback(() => {
+        if (!hoverCommentCell) return;
+        const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
+        if (!commentButton) return;
+
+        const buttonRect = commentButton.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const popupWidth = 320; // w-80 = 320px
+        const popupHeight = 300; // approximate max height
+        const spacing = 8;
+
+        const spaceBelow = viewportHeight - buttonRect.bottom;
+        const spaceAbove = buttonRect.top;
+        const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+
+        let popupTop;
+        if (positionAbove) {
+            popupTop = buttonRect.top - popupHeight - spacing;
+        } else {
+            popupTop = buttonRect.bottom + spacing;
         }
 
-        const updatePopupPosition = () => {
-            const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);
-            if (!commentButton) {
-                return;
-            }
+        const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+        let preferredLeft = buttonCenterX - popupWidth / 2;
+        if (preferredLeft < 10) {
+            preferredLeft = 10;
+        } else if (preferredLeft + popupWidth > viewportWidth - 10) {
+            preferredLeft = viewportWidth - popupWidth - 10;
+        }
 
-            const buttonRect = commentButton.getBoundingClientRect();
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-            const popupWidth = 320; // w-80 = 320px
-            const popupHeight = 300; // approximate max height
-            const spacing = 8; // Space between button and popup
-
-            // Determine if popup should be above or below
-            const spaceBelow = viewportHeight - buttonRect.bottom;
-            const spaceAbove = buttonRect.top;
-            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
-
-            // Calculate popup position
-            let popupTop, popupLeft;
-
-            if (positionAbove) {
-                // Position above the button
-                popupTop = buttonRect.top - popupHeight - spacing;
-            } else {
-                // Position below the button (default)
-                popupTop = buttonRect.bottom + spacing;
-            }
-
-            // Align horizontally - prefer aligning with button center, but adjust to stay in viewport
-            const buttonCenterX = buttonRect.left + buttonRect.width / 2;
-            let preferredLeft = buttonCenterX - popupWidth / 2;
-
-            // Ensure popup stays within viewport
-            if (preferredLeft < 10) {
-                preferredLeft = 10;
-            } else if (preferredLeft + popupWidth > viewportWidth - 10) {
-                preferredLeft = viewportWidth - popupWidth - 10;
-            }
-
-            popupLeft = preferredLeft;
-
-            // Update popup position
-            setCommentPopupPosition({ top: popupTop, left: popupLeft });
-        };
-
-        // Initial position update
-        setTimeout(updatePopupPosition, 50);
-
-        // Update on window resize only (no scroll listener)
-        window.addEventListener('resize', updatePopupPosition);
-        return () => {
-            window.removeEventListener('resize', updatePopupPosition);
-        };
+        setCommentPopupPosition((prev) => {
+            const topR = Math.round(popupTop);
+            const leftR = Math.round(preferredLeft);
+            if (Math.round(prev.top) === topR && Math.round(prev.left) === leftR) return prev;
+            return { top: popupTop, left: preferredLeft };
+        });
     }, [hoverCommentCell]);
+
+    // Smart positioning for comment popup (no auto-scroll, no window scroll listener)
+    useEffect(() => {
+        if (!hoverCommentCell) return;
+        const t = window.setTimeout(updateCommentPopupPosition, 50);
+        window.addEventListener('resize', updateCommentPopupPosition);
+        return () => {
+            window.clearTimeout(t);
+            window.removeEventListener('resize', updateCommentPopupPosition);
+        };
+    }, [hoverCommentCell, updateCommentPopupPosition]);
+
+    // After activity loads, height changes — re-measure so the panel does not drift / clip.
+    useLayoutEffect(() => {
+        if (!hoverCommentCell) return;
+        if (cellActivityLoading) return;
+        updateCommentPopupPosition();
+    }, [hoverCommentCell, cellActivityLoading, updateCommentPopupPosition]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -7321,7 +7331,9 @@ Abcotronics`;
                         <div className="mb-3 flex flex-col min-h-0 flex-1 overflow-hidden">
                             <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Activity</div>
                             {cellActivityLoading && activityRows.length === 0 && !isJsonOnlyTracker ? (
-                                <div className="py-4 text-center text-[11px] text-gray-500 dark:text-gray-400">Loading activity…</div>
+                                <div className="py-4 min-h-[120px] flex items-center justify-center text-center text-[11px] text-gray-500 dark:text-gray-400">
+                                    Loading activity…
+                                </div>
                             ) : activityRows.length > 0 ? (
                                 <div 
                                     key={`activity-container-${hoverCommentCell}`}

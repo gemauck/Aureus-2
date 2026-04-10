@@ -136,6 +136,32 @@
         }
     };
 
+    // Manufacturing URLs use /manufacturing/{tab}; segment[0] is a tab name (inventory, purchase, …),
+    // not an entity id. Fetching /api/manufacturing/inventory hits the list endpoint (rate limits);
+    // /api/manufacturing/purchase is invalid (400). Only resolve when segment[0] looks like an id.
+    const MANUFACTURING_NON_ENTITY_SEGMENTS = new Set([
+        'dashboard',
+        'inventory',
+        'bom',
+        'boms',
+        'production',
+        'production-orders',
+        'sales',
+        'sales-orders',
+        'purchase',
+        'purchase-orders',
+        'movements',
+        'stock-movements',
+        'suppliers',
+        'locations',
+        'stock-count',
+        'activity',
+        'location-inventory',
+        'stock-transactions',
+        'sync',
+        'purge'
+    ]);
+
     const ENDPOINT_RESOLVERS = {
         projects: (id) => `/api/projects/${encodeURIComponent(id)}`,
         clients: (id) => `/api/clients/${encodeURIComponent(id)}`,
@@ -162,6 +188,9 @@
         const segments = Array.isArray(route?.segments) ? route.segments : [];
         const entityId = segments[0];
         if (!entityId) {
+            return '';
+        }
+        if (page === 'manufacturing' && MANUFACTURING_NON_ENTITY_SEGMENTS.has(String(entityId).toLowerCase())) {
             return '';
         }
         const endpointFactory = ENDPOINT_RESOLVERS[page];
