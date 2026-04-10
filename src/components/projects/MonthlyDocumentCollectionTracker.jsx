@@ -15,6 +15,24 @@ const parseCellKey = (cellKey) => {
     return { sectionId: p[0], documentId: p[1], month: p[2] };
 };
 
+/** If URL targets a specific comment, activity panel should scroll there (deep-link) not to latest. */
+const getCommentIdFromLocation = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        if (hash.includes('?')) {
+            const id = new URLSearchParams(hash.split('?')[1] || '').get('commentId');
+            if (id && String(id).trim()) return String(id).trim();
+        }
+        if (search) {
+            const id = new URLSearchParams(search).get('commentId');
+            if (id && String(id).trim()) return String(id).trim();
+        }
+    } catch (_) {}
+    return null;
+};
+
 // Stable reference — do not allocate a new array each render (cell-activity effect depends on identity).
 const DOCUMENT_COLLECTION_MONTHS = Object.freeze([
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -636,6 +654,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
     const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+    /** Avoid re-scrolling on silent polls when timeline length unchanged; reset when popup closes. */
+    const lastActivityScrollSigRef = useRef(null);
     const [emailModalContext, setEmailModalContext] = useState(null);
     // Received email counts per cell (key: `${documentId}-${month}` where month is 1-12) for badge on envelope
     const [receivedMetaByCell, setReceivedMetaByCell] = useState({});
@@ -3636,6 +3656,42 @@ const getAssigneeColor = (identifier, users) => {
         if (cellActivityLoading) return;
         updateCommentPopupPosition();
     }, [hoverCommentCell, cellActivityLoading, updateCommentPopupPosition]);
+
+    // Scroll activity list so newest entries (bottom; API sorts ascending) are in view — unless deep-link targets one comment.
+    useLayoutEffect(() => {
+        if (!hoverCommentCell) {
+            lastActivityScrollSigRef.current = null;
+            return;
+        }
+        if (getCommentIdFromLocation()) return;
+        if (!isJsonOnlyTracker && cellActivityLoading) return;
+
+        let sig;
+        if (isJsonOnlyTracker) {
+            const { sectionId, documentId, month: monthLabel } = parseCellKey(hoverCommentCell);
+            const sec = sections.find((s) => String(s.id) === String(sectionId));
+            const d = sec?.documents?.find((dd) => String(dd.id) === String(documentId));
+            const list = d ? getDocumentComments(d, monthLabel) : [];
+            if (!list.length) return;
+            sig = `json:${hoverCommentCell}:${list.length}`;
+        } else {
+            const timelineLen = Array.isArray(cellActivityTimeline) ? cellActivityTimeline.length : 0;
+            if (timelineLen === 0) return;
+            sig = `tbl:${hoverCommentCell}:${timelineLen}`;
+        }
+
+        if (lastActivityScrollSigRef.current === sig) return;
+        lastActivityScrollSigRef.current = sig;
+
+        const run = () => {
+            const el = commentPopupContainerRef.current;
+            if (!el) return;
+            el.scrollTop = el.scrollHeight;
+        };
+        requestAnimationFrame(() => {
+            requestAnimationFrame(run);
+        });
+    }, [hoverCommentCell, cellActivityLoading, cellActivityTimeline, isJsonOnlyTracker, sections]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
