@@ -38,6 +38,22 @@ const truncateDescription = (text, maxLength = 60) => {
     return { truncated: text.substring(0, cutPoint), isLong: true };
 };
 
+const formatActivityDateTime = (dateValue) => {
+    try {
+        const date = dateValue ? new Date(dateValue) : null;
+        if (!date || isNaN(date.getTime())) return '';
+        return date.toLocaleString('en-ZA', {
+            timeZone: 'Africa/Johannesburg',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (_) {
+        return '';
+    }
+};
+
 // Non-blocking toast for attachment errors (avoids native alert).
 const showAttachmentToast = (message) => {
     const el = document.createElement('div');
@@ -616,6 +632,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
     const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+    const hoverCommentCellRef = useRef(null);
+    const [cellActivityTimeline, setCellActivityTimeline] = useState([]);
+    const [cellActivityLoading, setCellActivityLoading] = useState(false);
+    const [cellActivityBump, setCellActivityBump] = useState(0);
+    const cellActivityEffectGenRef = useRef(0);
+
+    useEffect(() => {
+        hoverCommentCellRef.current = hoverCommentCell;
+    }, [hoverCommentCell]);
 
     useEffect(() => { setPendingCommentAttachments([]); }, [hoverCommentCell]);
     const pendingCommentOpenRef = useRef(null);
@@ -1284,6 +1309,97 @@ const gridColumns = React.useMemo(() => (
         };
     })
 ), [weeks, selectedYear]);
+
+    // ProjectActivityLog timeline for the open weekly FMS cell (status changes)
+    useEffect(() => {
+        if (!hoverCommentCell || !project?.id) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+        const parts = hoverCommentCell.split('-');
+        if (parts.length < 3) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+        const weekPart = parts[parts.length - 1];
+        const documentId = parts[parts.length - 2];
+        const sectionId = parts.slice(0, -2).join('-');
+        const weekMatch = weekPart.match(/W(\d+)/i);
+        const weekNum = weekMatch ? parseInt(weekMatch[1], 10) : null;
+        const weekObj = weekNum != null ? weeks.find((w) => w.number === weekNum) : null;
+        const statusKey = weekObj ? getWeekKey(weekObj, selectedYear) : null;
+        if (!statusKey || !documentId || !sectionId) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+
+        cellActivityEffectGenRef.current += 1;
+        const effectGen = cellActivityEffectGenRef.current;
+        let cancelled = false;
+
+        const load = async (silent) => {
+            if (cancelled) return;
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token =
+                (typeof window !== 'undefined' &&
+                    (window.storage?.getToken?.() ??
+                        localStorage.getItem('authToken') ??
+                        localStorage.getItem('auth_token') ??
+                        localStorage.getItem('abcotronics_token') ??
+                        localStorage.getItem('token'))) ||
+                '';
+            if (!silent) setCellActivityLoading(true);
+            try {
+                const q = new URLSearchParams({
+                    tracker: 'weekly_fms',
+                    documentId: String(documentId).trim(),
+                    year: String(selectedYear),
+                    statusKey: String(statusKey),
+                    _: String(Date.now())
+                });
+                const res = await fetch(`${base}/api/projects/${project.id}/review-cell-activity?${q}`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    cache: 'no-store',
+                    headers: {
+                        Accept: 'application/json',
+                        'Cache-Control': 'no-store',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    }
+                });
+                const json = await res.json().catch(() => ({}));
+                const data = json.data || json;
+                const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+                if (cancelled || cellActivityEffectGenRef.current !== effectGen) return;
+                setCellActivityTimeline((prev) => {
+                    if (silent) {
+                        const prevSig = prev.map((x) => x.id).join('\u0001');
+                        const nextSig = timeline.map((x) => x.id).join('\u0001');
+                        if (prevSig === nextSig) return prev;
+                    }
+                    return timeline;
+                });
+            } catch (_) {
+                if (!cancelled && cellActivityEffectGenRef.current === effectGen && !silent) {
+                    setCellActivityTimeline([]);
+                }
+            } finally {
+                if (!silent && cellActivityEffectGenRef.current === effectGen) {
+                    setCellActivityLoading(false);
+                }
+            }
+        };
+
+        load(false);
+        const iv = setInterval(() => load(true), 18000);
+        return () => {
+            cancelled = true;
+            clearInterval(iv);
+        };
+    }, [hoverCommentCell, project?.id, selectedYear, cellActivityBump, weeks]);
     
     // Get status for a specific week in the selected year only
     const getStatusForYear = (collectionStatus, week, year = selectedYear) => {
@@ -2122,6 +2238,19 @@ const getAssigneeColor = (identifier, users) => {
         // Save immediately and await to ensure it completes before any navigation
         try {
             await saveToDatabase();
+            const open = hoverCommentCellRef.current;
+            if (open) {
+                const popupMatchesCell = (cell) => {
+                    const w = cell.week;
+                    const wn = typeof w === 'object' && w != null && w.number != null ? w.number : null;
+                    if (wn == null) return false;
+                    const k = `${cell.sectionId}-${cell.documentId}-W${String(wn).padStart(2, '0')}`;
+                    return String(k) === String(open);
+                };
+                if (cellsToUpdate.some(popupMatchesCell)) {
+                    setCellActivityBump((b) => b + 1);
+                }
+            }
         } catch (error) {
             console.error('❌ Error saving status change:', error);
         }
@@ -4101,12 +4230,27 @@ placeholder="Notes..."
                 const weekNum = weekMatch ? parseInt(weekMatch[1], 10) : null;
                 const weekObj = weekNum ? weeks.find(w => w.number === weekNum) : null;
                 const comments = doc && weekObj ? getDocumentComments(doc, weekObj) : [];
-                
+                const activityTypeLabel = (t) => (t === 'weekly_fms_status_change' ? 'Status' : 'Activity');
+                const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
+                    (r) => r && r.kind === 'activity'
+                );
+                const commentRows = comments.map((c) => ({
+                    id: `comment-${c.id}`,
+                    kind: 'comment',
+                    comment: c,
+                    createdAt: c.date || c.createdAt
+                }));
+                const activityRows = [...apiActivity, ...commentRows].sort((x, y) => {
+                    const tx = new Date(x.createdAt).getTime();
+                    const ty = new Date(y.createdAt).getTime();
+                    return tx - ty;
+                });
+
                 return (
                     <>
                         {/* Comment Popup - fixed size and contain:layout to prevent jitter when typing/adding attachments */}
                         <div 
-                            className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999] max-h-[min(80vh,420px)] flex flex-col overflow-hidden"
+                            className="comment-popup fixed w-80 max-w-[90vw] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 z-[999] flex flex-col max-h-[min(85vh,520px)] overflow-hidden"
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px`, contain: 'layout' }}
                         >
                         {/* Show section and document context */}
@@ -4115,21 +4259,44 @@ placeholder="Notes..."
                                 <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
                                     {section.name || 'Section'}
                                 </div>
-                                <div className="text-[9px] text-gray-500">
-                                    {doc.name || 'Document'} • {weekObj ? `${weekObj.label} (${weekObj.dateRange})` : weekLabel}
+                                <div className="text-[9px] text-gray-500 dark:text-gray-400">
+                                    {doc.name || 'Document'} • {weekObj ? `${weekObj.label} (${weekObj.dateRange})` : weekPart}
                                 </div>
                             </div>
                         )}
-                        {comments.length > 0 && (
-                            <div className="flex-1 min-h-0 flex flex-col mb-2">
-                                <div className="text-[10px] font-semibold text-gray-600 mb-1.5 shrink-0">Comments</div>
-                                <div 
-                                    key={`comment-container-${hoverCommentCell}`}
+                        <div className="mb-3 flex flex-col min-h-0 flex-1 overflow-hidden">
+                            <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Activity</div>
+                            {cellActivityLoading && activityRows.length === 0 ? (
+                                <div className="py-4 min-h-[120px] flex items-center justify-center text-center text-[11px] text-gray-500 dark:text-gray-400">
+                                    Loading activity…
+                                </div>
+                            ) : activityRows.length > 0 ? (
+                                <div
+                                    key={`activity-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
-                                    className="comment-scroll-container overflow-y-auto min-h-0 flex-1 mb-2"
+                                    className="comment-scroll-container overflow-y-auto max-h-[min(45vh,280px)] flex-shrink min-h-0 mb-2"
                                 >
                                     <div className="space-y-2 pr-1">
-                                        {comments.map((comment, idx) => (
+                                        {activityRows.map((row, idx) => {
+                                            if (row.kind === 'activity') {
+                                                return (
+                                                    <div
+                                                        key={row.id || idx}
+                                                        className="pb-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 bg-slate-50 dark:bg-slate-900/50 rounded p-1.5"
+                                                    >
+                                                        <div className="text-[9px] font-semibold text-sky-700 dark:text-sky-400 mb-0.5">
+                                                            {activityTypeLabel(row.activityType)}
+                                                        </div>
+                                                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{row.description}</p>
+                                                        <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+                                                            <span className="font-medium truncate pr-1">{row.userName || 'System'}</span>
+                                                            <span className="shrink-0">{row.createdAt ? formatActivityDateTime(row.createdAt) : ''}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            const comment = row.comment;
+                                            return (
                                         <div 
                                             key={comment.id || idx} 
                                             data-comment-id={comment.id}
@@ -4290,15 +4457,21 @@ placeholder="Notes..."
                                                 <i className="fas fa-link text-[9px]"></i>
                                             </button>
                                         </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="py-3 px-2 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 text-center mb-2">
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">No activity yet</p>
+                                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Status changes and comments appear here</p>
+                                </div>
+                            )}
+                        </div>
                         
                         <div>
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-semibold text-gray-600">Add Comment</span>
+                                <span className="text-[10px] font-semibold text-gray-600 dark:text-gray-400">Add Comment</span>
                                 <div className="flex items-center gap-1">
                                     <input
                                         ref={commentFileInputRef}

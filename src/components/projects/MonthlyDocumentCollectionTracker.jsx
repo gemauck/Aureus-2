@@ -706,9 +706,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setPendingCommentAttachments([]);
     }, [hoverCommentCell]);
 
-    // Unified activity timeline for the open comment popup (document collection only)
+    // Unified activity timeline for the open comment popup (document collection + MDR/compliance JSON trackers)
     useEffect(() => {
-        if (isJsonOnlyTracker || !hoverCommentCell || !project?.id) {
+        if (!hoverCommentCell || !project?.id) {
             setCellActivityTimeline([]);
             setCellActivityLoading(false);
             return undefined;
@@ -720,6 +720,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             setCellActivityLoading(false);
             return undefined;
         }
+        const reviewTrackerParam = isMonthlyDataReview
+            ? 'monthly_data_review'
+            : isComplianceReview
+              ? 'compliance_review'
+              : null;
+
+        if (isJsonOnlyTracker && !reviewTrackerParam) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+
         cellActivityEffectGenRef.current += 1;
         const effectGen = cellActivityEffectGenRef.current;
         let cancelled = false;
@@ -736,33 +748,44 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         localStorage.getItem('abcotronics_token') ??
                         localStorage.getItem('token'))) ||
                 '';
-            const q = new URLSearchParams({
-                documentId: String(did).trim(),
-                month: String(monthNum),
-                year: String(selectedYear),
-                _: String(Date.now())
-            });
-            const yrSecs = sectionsByYear[selectedYear] || [];
-            const sec = yrSecs.find((s) => String(s.id) === String(sid));
-            const d = sec?.documents?.find((dd) => String(dd.id) === String(did));
-            if (d?.name) q.set('documentName', String(d.name).trim());
-            if (sec?.id) q.set('sectionId', String(sec.id).trim());
 
             if (!silent) setCellActivityLoading(true);
             try {
-                const res = await fetch(
-                    `${base}/api/projects/${project.id}/document-collection-cell-activity?${q}`,
-                    {
-                        method: 'GET',
-                        credentials: 'include',
-                        cache: 'no-store',
-                        headers: {
-                            Accept: 'application/json',
-                            'Cache-Control': 'no-store',
-                            ...(token ? { Authorization: `Bearer ${token}` } : {})
-                        }
+                let url;
+                if (isJsonOnlyTracker && reviewTrackerParam) {
+                    const q = new URLSearchParams({
+                        tracker: reviewTrackerParam,
+                        documentId: String(did).trim(),
+                        month: String(monthNum),
+                        year: String(selectedYear),
+                        _: String(Date.now())
+                    });
+                    url = `${base}/api/projects/${project.id}/review-cell-activity?${q}`;
+                } else {
+                    const q = new URLSearchParams({
+                        documentId: String(did).trim(),
+                        month: String(monthNum),
+                        year: String(selectedYear),
+                        _: String(Date.now())
+                    });
+                    const yrSecs = sectionsByYear[selectedYear] || [];
+                    const sec = yrSecs.find((s) => String(s.id) === String(sid));
+                    const d = sec?.documents?.find((dd) => String(dd.id) === String(did));
+                    if (d?.name) q.set('documentName', String(d.name).trim());
+                    if (sec?.id) q.set('sectionId', String(sec.id).trim());
+                    url = `${base}/api/projects/${project.id}/document-collection-cell-activity?${q}`;
+                }
+
+                const res = await fetch(url, {
+                    method: 'GET',
+                    credentials: 'include',
+                    cache: 'no-store',
+                    headers: {
+                        Accept: 'application/json',
+                        'Cache-Control': 'no-store',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
                     }
-                );
+                });
                 const json = await res.json().catch(() => ({}));
                 const data = json.data || json;
                 const timeline = Array.isArray(data.timeline) ? data.timeline : [];
@@ -792,11 +815,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             cancelled = true;
             clearInterval(iv);
         };
-    }, [hoverCommentCell, project?.id, selectedYear, cellActivityBump, isJsonOnlyTracker, sectionsByYear, months]);
+    }, [
+        hoverCommentCell,
+        project?.id,
+        selectedYear,
+        cellActivityBump,
+        isJsonOnlyTracker,
+        isMonthlyDataReview,
+        isComplianceReview,
+        sectionsByYear,
+        months
+    ]);
 
-    /** Refetch activity timeline when the comment popup is open for this cell (document collection only). */
+    /** Refetch activity timeline when the comment popup is open for this cell. */
     const bumpCellActivityIfPopupMatchesCell = useCallback((sectionId, documentId, month) => {
-        if (isJsonOnlyTracker) return;
         const open = hoverCommentCellRef.current;
         if (!open) return;
         const k = parseCellKey(open);
@@ -804,17 +836,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (String(k.documentId) !== String(documentId)) return;
         if (k.month !== month) return;
         setCellActivityBump((b) => b + 1);
-    }, [isJsonOnlyTracker]);
+    }, []);
 
     const bumpCellActivityIfPopupMatchesDoc = useCallback((sectionId, documentId) => {
-        if (isJsonOnlyTracker) return;
         const open = hoverCommentCellRef.current;
         if (!open) return;
         const k = parseCellKey(open);
         if (String(k.sectionId) !== String(sectionId)) return;
         if (String(k.documentId) !== String(documentId)) return;
         setCellActivityBump((b) => b + 1);
-    }, [isJsonOnlyTracker]);
+    }, []);
 
     const pendingCommentOpenRef = useRef(null); // Store comment location to open after year switch
     const deepLinkHandledRef = useRef(null); // Last cellKey we opened for; skip re-open to prevent loop
@@ -3678,8 +3709,9 @@ const getAssigneeColor = (identifier, users) => {
             const sec = sections.find((s) => String(s.id) === String(sectionId));
             const d = sec?.documents?.find((dd) => String(dd.id) === String(documentId));
             const list = d ? getDocumentComments(d, monthLabel) : [];
-            if (!list.length) return;
-            sig = `json:${hoverCommentCell}:${list.length}`;
+            const tl = Array.isArray(cellActivityTimeline) ? cellActivityTimeline.length : 0;
+            if (!list.length && tl === 0) return;
+            sig = `json:${hoverCommentCell}:${list.length}:${tl}`;
         } else {
             const timelineLen = Array.isArray(cellActivityTimeline) ? cellActivityTimeline.length : 0;
             if (timelineLen === 0) return;
@@ -7313,12 +7345,20 @@ Abcotronics`;
                     if (t === 'document_section_status_change') return 'Status';
                     if (t === 'document_section_notes_change') return 'Notes';
                     if (t === 'document_section_email_request_change') return 'Email template';
+                    if (t === 'monthly_data_review_status_change') return 'Status';
+                    if (t === 'monthly_data_review_notes_change') return 'Notes';
+                    if (t === 'compliance_review_status_change') return 'Status';
+                    if (t === 'compliance_review_notes_change') return 'Notes';
+                    if (t === 'weekly_fms_status_change') return 'Status';
                     return 'Activity';
                 };
                 let activityRows = [];
                 if (!isJsonOnlyTracker) {
                     activityRows = Array.isArray(cellActivityTimeline) ? cellActivityTimeline : [];
                 } else {
+                    const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
+                        (r) => r && r.kind === 'activity'
+                    );
                     let localComments = doc ? getDocumentComments(doc, month) : [];
                     let urlCommentId = null;
                     if (typeof window !== 'undefined' && localComments.length === 0) {
@@ -7365,7 +7405,7 @@ Abcotronics`;
                             }
                         }
                     }
-                    activityRows = localComments.map((c) => ({
+                    const commentRows = localComments.map((c) => ({
                         id: `comment-${c.id}`,
                         kind: 'comment',
                         commentId: c.id,
@@ -7376,6 +7416,11 @@ Abcotronics`;
                         createdAt: c.createdAt || c.date,
                         updatedAt: c.updatedAt
                     }));
+                    activityRows = [...apiActivity, ...commentRows].sort((x, y) => {
+                        const tx = new Date(x.createdAt).getTime();
+                        const ty = new Date(y.createdAt).getTime();
+                        return tx - ty;
+                    });
                 }
                 
                 return (
@@ -7398,7 +7443,7 @@ Abcotronics`;
                         )}
                         <div className="mb-3 flex flex-col min-h-0 flex-1 overflow-hidden">
                             <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Activity</div>
-                            {cellActivityLoading && activityRows.length === 0 && !isJsonOnlyTracker ? (
+                            {cellActivityLoading && activityRows.length === 0 ? (
                                 <div className="py-4 min-h-[120px] flex items-center justify-center text-center text-[11px] text-gray-500 dark:text-gray-400">
                                     Loading activity…
                                 </div>
