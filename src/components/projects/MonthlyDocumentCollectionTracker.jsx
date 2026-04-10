@@ -1986,12 +1986,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return doc.emailRequestByMonth?.[monthKey] || {};
     };
 
-    // Save email request template for this document across all months (selected year).
-    // Preserves existing lastSentAt per month so scheduled sends are not reset.
+    // Save email request template for the given document + month only (selected year).
+    // Other months keep their own stored recipients/subject/body (avoids wiping contacts when editing one cell).
+    // Merges onto existing cell data so lastSentAt and any future fields are preserved unless overwritten.
     // Returns Promise so caller can await persistence.
-    const saveEmailRequestForCell = (sectionId, documentId, _month, data) => {
+    const saveEmailRequestForCell = (sectionId, documentId, month, data) => {
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const monthKey = month != null ? getMonthKey(month, selectedYear) : null;
+        if (!monthKey) {
+            console.warn('saveEmailRequestForCell: invalid month, skipping save', { month });
+            return Promise.resolve();
+        }
         const byMonthTemplate = {
             recipients: data.recipients,
             cc: data.cc,
@@ -2008,11 +2014,72 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 documents: (section.documents || []).map(doc => {
                     if (String(doc.id) !== String(documentId)) return doc;
                     const existingByMonth = doc.emailRequestByMonth || {};
-                    const byMonth = {};
+                    const existing = existingByMonth[monthKey] || {};
+                    const byMonth = {
+                        ...existingByMonth,
+                        [monthKey]: { ...existing, ...byMonthTemplate }
+                    };
+                    return { ...doc, emailRequestByMonth: byMonth };
+                })
+            };
+        });
+        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+        lastSavedDataRef.current = null;
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        return saveToDatabase({ skipParentUpdate: true });
+    };
+
+    // Copy the same email template to every month in the selected year for this document.
+    // Replaces the source month/year in subject & body with each target month so periods stay correct.
+    // Preserves existing lastSentAt per month (scheduled-send bookkeeping).
+    const saveEmailRequestTemplateForYear = (sectionId, documentId, data, sourceMonthName) => {
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const yearLabel = String(selectedYear);
+        const fromPeriod =
+            sourceMonthName && months.includes(sourceMonthName)
+                ? `${sourceMonthName} ${yearLabel}`.trim()
+                : null;
+        const replacePeriod = (text, toMonthName) => {
+            if (text == null || typeof text !== 'string') return text;
+            const toPeriod = `${toMonthName} ${yearLabel}`.trim();
+            if (!fromPeriod || fromPeriod === toPeriod) return text;
+            return text.split(fromPeriod).join(toPeriod);
+        };
+        const byMonthTemplateBase = {
+            recipients: data.recipients,
+            cc: data.cc,
+            subject: data.subject,
+            body: data.body,
+            recipientName: data.recipientName,
+            sendPlainTextOnly: !!data.sendPlainTextOnly,
+            schedule: data.schedule
+        };
+        const updated = currentYearSections.map((section) => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: (section.documents || []).map((doc) => {
+                    if (String(doc.id) !== String(documentId)) return doc;
+                    const existingByMonth = doc.emailRequestByMonth || {};
+                    const byMonth = { ...existingByMonth };
                     months.forEach((m) => {
                         const monthKey = getMonthKey(m, selectedYear);
-                        const existing = existingByMonth[monthKey];
-                        byMonth[monthKey] = { ...byMonthTemplate, ...(existing && existing.lastSentAt != null ? { lastSentAt: existing.lastSentAt } : {}) };
+                        if (!monthKey) return;
+                        const existing = existingByMonth[monthKey] || {};
+                        const subjectForMonth = replacePeriod(byMonthTemplateBase.subject, m);
+                        const bodyForMonth = replacePeriod(byMonthTemplateBase.body, m);
+                        byMonth[monthKey] = {
+                            ...existing,
+                            ...byMonthTemplateBase,
+                            subject: subjectForMonth,
+                            body: bodyForMonth
+                        };
                     });
                     return { ...doc, emailRequestByMonth: byMonth };
                 })
@@ -4671,6 +4738,7 @@ Abcotronics`;
         const [scheduleStopStatus, setScheduleStopStatus] = useState(defaultStopWhenStatus);
         const [sending, setSending] = useState(false);
         const [savingTemplate, setSavingTemplate] = useState(false);
+        const [applyingAllMonths, setApplyingAllMonths] = useState(false);
         const [result, setResult] = useState(null);
         const [emailActivity, setEmailActivity] = useState({ sent: [], received: [] });
         const [loadingActivity, setLoadingActivity] = useState(false);
@@ -4779,11 +4847,20 @@ Abcotronics`;
             const templateWithPlainText = { ...initialTemplate, sendPlainTextOnly: plainTextValue };
             setLastSavedTemplate(templateWithPlainText);
             setPlainTextPreferenceFallback(ctx?.section?.id, ctx?.doc?.id, plainTextValue);
+            // Only persist plain-text flag to the server when this month already has saved email data.
+            // Otherwise we would write default/empty recipients and wipe contacts for other months (previously: broadcast save).
             if (!hasSavedPlainText && fallbackPlainText != null && ctx?.section?.id && ctx?.doc?.id && ctx?.month) {
-                const nextTemplate = normalizeTemplate({ ...initialTemplate, sendPlainTextOnly: plainTextValue });
-                saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, nextTemplate).catch((err) => {
-                    console.warn('Failed to persist plain text preference fallback:', err);
-                });
+                const hasPersistedEmailData =
+                    (Array.isArray(s?.recipients) && s.recipients.length > 0) ||
+                    (Array.isArray(s?.cc) && s.cc.length > 0) ||
+                    (typeof s?.subject === 'string' && s.subject.trim()) ||
+                    (typeof s?.body === 'string' && s.body.trim());
+                if (hasPersistedEmailData) {
+                    const nextTemplate = normalizeTemplate({ ...initialTemplate, sendPlainTextOnly: plainTextValue });
+                    saveEmailRequestForCell(ctx.section.id, ctx.doc.id, ctx.month, nextTemplate).catch((err) => {
+                        console.warn('Failed to persist plain text preference fallback:', err);
+                    });
+                }
             }
             if (saveNoticeTimeoutRef.current) {
                 clearTimeout(saveNoticeTimeoutRef.current);
@@ -5287,6 +5364,39 @@ Abcotronics`;
                 showSaveNotice({ type: 'error', message: 'Save failed. Please try again.' });
             } finally {
                 setSavingTemplate(false);
+            }
+        };
+
+        const handleApplyToAllMonthsInYear = async () => {
+            if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return;
+            const normalized = buildTemplateFromState();
+            if ((normalized.recipients || []).length === 0) {
+                alert('Add at least one recipient before applying to all months.');
+                return;
+            }
+            const y = String(selectedYear);
+            if (!confirm(
+                `Copy this template to every month in ${y}? Recipients, CC, subject, body, and schedule will update for all 12 months for this document. Each month keeps its own last-sent time for scheduled reminders.`
+            )) {
+                return;
+            }
+            setApplyingAllMonths(true);
+            setResult(null);
+            try {
+                await saveEmailRequestTemplateForYear(ctx.section.id, ctx.doc.id, normalized, ctx.month);
+                setLastSavedTemplate(normalized);
+                setResult({ saved: true, message: `Applied to all months in ${y}`, source: 'applyAll' });
+                showSaveNotice({ type: 'success', message: `Applied to all months in ${y}` });
+                setJustSaved(true);
+                if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current);
+                justSavedTimeoutRef.current = setTimeout(() => setJustSaved(false), 2500);
+                setTimeout(() => setResult((prev) => (prev?.source === 'applyAll' && prev?.saved ? null : prev)), 2500);
+            } catch (err) {
+                console.error('Failed to apply template to all months:', err);
+                setResult({ error: 'Could not apply to all months. Please try again.', source: 'applyAll' });
+                showSaveNotice({ type: 'error', message: 'Could not apply to all months.' });
+            } finally {
+                setApplyingAllMonths(false);
             }
         };
 
@@ -6105,16 +6215,35 @@ Abcotronics`;
                         <button
                             type="button"
                             onClick={handleSaveTemplate}
-                            disabled={savingTemplate || contacts.length === 0}
+                            disabled={savingTemplate || applyingAllMonths || contacts.length === 0}
                             className="px-4 py-2.5 text-sm font-medium text-[#0369a1] bg-[#e0f2fe] hover:bg-[#bae6fd] rounded-xl transition-colors border border-[#7dd3fc]"
                         >
-                            {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this document</>}
+                            {savingTemplate ? <><i className="fas fa-spinner fa-spin mr-1.5"></i>Saving…</> : <><i className="fas fa-save mr-1.5"></i>Save for this month</>}
                         </button>
-                        {!savingTemplate && (justSaved || (lastSavedTemplate && !hasUnsavedChanges)) && (
+                        <button
+                            type="button"
+                            onClick={handleApplyToAllMonthsInYear}
+                            disabled={savingTemplate || applyingAllMonths || contacts.length === 0}
+                            className="px-4 py-2.5 text-sm font-medium text-violet-800 bg-violet-100 hover:bg-violet-200 rounded-xl transition-colors border border-violet-300"
+                            title="Copy recipients, message, and schedule to January through December for this year. Subject and body are adjusted per month."
+                        >
+                            {applyingAllMonths ? (
+                                <><i className="fas fa-spinner fa-spin mr-1.5"></i>Applying…</>
+                            ) : (
+                                <><i className="fas fa-calendar-alt mr-1.5"></i>Apply to all months ({selectedYear})</>
+                            )}
+                        </button>
+                        {!savingTemplate && !applyingAllMonths && (justSaved || (lastSavedTemplate && !hasUnsavedChanges)) && (
                             <span className="text-xs text-emerald-600 font-medium">Saved</span>
                         )}
-                        {!savingTemplate && hasUnsavedChanges && (
+                        {!savingTemplate && !applyingAllMonths && hasUnsavedChanges && (
                             <span className="text-xs text-amber-600 font-medium">Unsaved changes</span>
+                        )}
+                        {result?.source === 'applyAll' && result?.saved && (
+                            <span className="text-xs text-emerald-600 font-medium">{result.message}</span>
+                        )}
+                        {result?.source === 'applyAll' && result?.error && (
+                            <span className="text-xs text-red-600 font-medium">{result.error}</span>
                         )}
                         {result?.source === 'save' && result?.saved && (
                             <span className="text-xs text-emerald-600 font-medium">Saved changes</span>
@@ -6125,7 +6254,7 @@ Abcotronics`;
                         <button
                             type="button"
                             onClick={handleSend}
-                            disabled={sending || contacts.length === 0}
+                            disabled={sending || applyingAllMonths || contacts.length === 0}
                             className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-[#0369a1] to-[#0ea5e9] rounded-xl shadow-md hover:shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:opacity-50 transition-all"
                         >
                             {sending ? (
