@@ -588,6 +588,12 @@ function buildDocumentItemCreateData(doc, docIdx, parentId = null) {
     statuses: { create: statuses },
     comments: { create: comments }
   }
+  // Preserve stable item ids across table rebuilds so ProjectActivityLog.entityId and
+  // DocumentItemComment.itemId stay aligned with the ids the client uses (cell activity API).
+  const stableId = doc.id != null ? String(doc.id).trim() : ''
+  if (stableId) {
+    data.id = stableId
+  }
   if (parentId != null && String(parentId).trim() !== '') {
     data.parentId = String(parentId).trim()
   }
