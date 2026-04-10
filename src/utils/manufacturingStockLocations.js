@@ -5,11 +5,13 @@
 
 function isPmbStockLocation(loc) {
     if (!loc) return false;
-    const code = String(loc.code || '').trim().toUpperCase();
-    const name = String(loc.name || '').trim().toUpperCase();
+    const code = String(loc.code || loc.locationCode || '').trim().toUpperCase();
+    const name = String(loc.name || loc.locationName || '').trim().toUpperCase();
     if (code === 'PMB') return true;
     if (name === 'PMB') return true;
     if (name.startsWith('PMB ')) return true;
+    // Pietermaritzburg office / main site (not vehicle lines that end with "- PMB" in brackets)
+    if (name.includes('PIETERMARITZBURG')) return true;
     return false;
 }
 

@@ -11640,11 +11640,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const locations = Array.isArray(inventoryItem?.locations) ? inventoryItem.locations : [];
       if (!locations.length) return inventoryItem?.locationId || '';
 
-      const pmbLocation = locations.find((loc) => {
-        const code = String(loc?.locationCode || '').trim().toLowerCase();
-        const name = String(loc?.locationName || '').trim().toLowerCase();
-        return code === 'pmb' || name === 'pmb' || name.includes('pmb');
-      });
+      const isPmb = window.manufacturingStockLocations?.isPmbStockLocation;
+      const pmbLocation = isPmb
+        ? locations.find((loc) => isPmb(loc))
+        : locations.find((loc) => {
+            const code = String(loc?.locationCode || '').trim().toUpperCase();
+            const name = String(loc?.locationName || '').trim().toUpperCase();
+            return code === 'PMB' || name === 'PMB' || name.startsWith('PMB ') || name.includes('PIETERMARITZBURG');
+          });
 
       return pmbLocation?.locationId || inventoryItem?.locationId || locations[0]?.locationId || '';
     };
