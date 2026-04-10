@@ -24,8 +24,8 @@
       }
     };
 
-    return React.createElement('div', { className: 'space-y-3' },
-      React.createElement('div', { className: 'bg-white p-3 rounded-lg border border-gray-200' },
+    return React.createElement('div', { className: 'space-y-3 min-w-0 max-w-full w-full' },
+      React.createElement('div', { className: 'bg-white p-3 rounded-lg border border-gray-200 min-w-0' },
         React.createElement('div', { className: 'flex items-center justify-between' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' },
             'Stock Movements',
@@ -61,9 +61,9 @@
           )
         )
       ),
-      React.createElement('div', { className: 'bg-white rounded-lg border border-gray-200 overflow-hidden' },
-        React.createElement('div', { className: 'overflow-x-auto' },
-          React.createElement('table', { className: 'w-full' },
+      React.createElement('div', { className: 'bg-white rounded-lg border border-gray-200 overflow-hidden min-w-0' },
+        React.createElement('div', { className: 'inventory-desktop-xscroll overflow-x-auto w-full min-w-0' },
+          React.createElement('table', { className: 'w-full min-w-max' },
             React.createElement('thead', { className: 'bg-gray-50 border-b border-gray-200' },
               React.createElement('tr', null,
                 ['Movement ID', 'Date', 'Type', 'Item', 'Quantity', 'From Location', 'To Location', 'Reference', 'Performed By', 'Notes', 'Actions'].map(function (label) {

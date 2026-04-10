@@ -12662,7 +12662,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full w-full">
       {/* Show detail view if viewing an item, otherwise show normal view */}
       {viewingInventoryItemDetail ? (
         <InventoryItemDetailView />
@@ -12718,7 +12718,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </div>
 
           {/* Content Area */}
-          <div>
+          <div className="min-w-0 max-w-full">
             {activeTab === 'dashboard' && <DashboardView />}
             {activeTab === 'inventory' && renderInventoryView()}
             {activeTab === 'bom' && <BOMView />}
