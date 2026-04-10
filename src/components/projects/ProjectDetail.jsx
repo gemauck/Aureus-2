@@ -3050,6 +3050,11 @@ function initializeProjectDetail() {
     };
     
     const [activeSection, setActiveSection] = useState(getInitialActiveSection);
+    /** Latest tab for deep-link effects — avoids re-applying URL tab when user switches away while hash still has tab=/doc params. */
+    const activeSectionRef = useRef(activeSection);
+    useEffect(() => {
+        activeSectionRef.current = activeSection;
+    }, [activeSection]);
     
     // Wrapper function to update both section state and URL
     const switchSection = useCallback((section, options = {}) => {
@@ -4682,7 +4687,7 @@ function initializeProjectDetail() {
 
                 // If we have full params with valid document ID, switch to document collection tab
                 if (deepSectionId && isValidDocumentId && deepMonth) {
-                    if (activeSection !== 'documentCollection') {
+                    if (activeSectionRef.current !== 'documentCollection') {
                         switchSection('documentCollection');
                     }
                 } 
@@ -4690,7 +4695,7 @@ function initializeProjectDetail() {
                 // still switch to document collection tab and let MonthlyDocumentCollectionTracker search for it
                 else if (deepCommentId && (!isValidDocumentId || !deepSectionId || !deepMonth)) {
                     console.log('📧 ProjectDetail: Found commentId-only deep link:', deepCommentId, {
-                        activeSection,
+                        activeSection: activeSectionRef.current,
                         hasDocCollection: project?.hasDocumentCollectionProcess
                     });
                     
@@ -4704,14 +4709,14 @@ function initializeProjectDetail() {
                     
                     console.log('📧 ProjectDetail: projectHasDocCollection:', projectHasDocCollection);
                     
-                    if (canShowDocCollection && activeSection !== 'documentCollection') {
+                    if (canShowDocCollection && activeSectionRef.current !== 'documentCollection') {
                         // Switch to document collection tab - the tracker will search for the comment
                         console.log('📧 ProjectDetail: Switching to document collection tab to search for comment:', deepCommentId);
                         switchSection('documentCollection');
-                    } else if (canShowDocCollection && activeSection === 'documentCollection') {
+                    } else if (canShowDocCollection && activeSectionRef.current === 'documentCollection') {
                         console.log('📧 ProjectDetail: Already on document collection tab, comment search should run in tracker');
                     } else {
-                        console.log('⚠️ ProjectDetail: Cannot switch - projectHasDocCollection:', projectHasDocCollection, 'activeSection:', activeSection);
+                        console.log('⚠️ ProjectDetail: Cannot switch - projectHasDocCollection:', projectHasDocCollection, 'activeSection:', activeSectionRef.current);
                     }
                 }
             } catch (error) {
@@ -4766,7 +4771,7 @@ function initializeProjectDetail() {
                 // Only switch to weekly when URL has docWeek/weeklyWeek (weekly link). Document collection
                 // links use docSectionId+docDocumentId+docMonth, so we must not switch on section+doc alone.
                 if (weeklySectionId && weeklyDocumentId && weeklyWeek) {
-                    if (activeSection !== 'weeklyFMSReview') {
+                    if (activeSectionRef.current !== 'weeklyFMSReview') {
                         switchSection('weeklyFMSReview');
                     }
                 }
@@ -4796,7 +4801,7 @@ function initializeProjectDetail() {
                 }
                 const tabFromUrl = params?.get('tab');
                 const hasMonthlyFMSDeepLink = tabFromUrl === 'monthlyFMSReview';
-                if (hasMonthlyFMSDeepLink && activeSection !== 'monthlyFMSReview') {
+                if (hasMonthlyFMSDeepLink && activeSectionRef.current !== 'monthlyFMSReview') {
                     switchSection('monthlyFMSReview');
                 }
             } catch (error) {
@@ -4829,7 +4834,9 @@ function initializeProjectDetail() {
             clearTimeout(delayedCheck);
             window.removeEventListener('hashchange', handleHashChange);
         };
-    }, [project?.id, switchSection, activeSection, project?.hasWeeklyFMSReviewProcess, project?.hasMonthlyFMSReviewProcess, forceDocumentCollectionDeepLink]);
+    // Intentionally omit activeSection: this effect only applies URL→tab on mount and hashchange.
+    // If activeSection were a dependency, stale URL (tab=/doc* params) would yank the user back after manual tab changes.
+    }, [project?.id, switchSection, project?.hasWeeklyFMSReviewProcess, project?.hasMonthlyFMSReviewProcess, forceDocumentCollectionDeepLink]);
     
     // If the project is opened via a deep-link to a specific task
     // (for example from an email notification), open the task modal
