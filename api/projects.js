@@ -17,15 +17,20 @@ let projectListColumnsMigrated = false;
 async function documentSectionsToJson(projectId, options = {}) {
   try {
     const includeComments = !options.skipComments;
+    const db = options.tx || prisma
     let sections = options.preloadedSections;
 
     if (!sections || !Array.isArray(sections)) {
       try {
-        await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
+        if (!options.tx) {
+          await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
+        } else {
+          await db.documentSection.findFirst({ where: { projectId } })
+        }
       } catch (e) {
         return null
       }
-      sections = await prisma.documentSection.findMany({
+      sections = await db.documentSection.findMany({
         where: { projectId: projectId },
         include: {
           documents: {
@@ -306,57 +311,207 @@ async function weeklyFMSReviewSectionsToJson(projectId) {
   }
 }
 
-/**
- * Merge comments from existing (server) sections into incoming payload so we never wipe
- * comments when a client saves without them (e.g. another tab or status-only update).
- * Matches by year + section name + document name so reorders don't attach wrong comments.
- */
-function mergeExistingCommentsIntoPayload(existingByYear, incomingSections) {
-  if (!existingByYear || typeof existingByYear !== 'object' || !incomingSections || typeof incomingSections !== 'object') {
-    return incomingSections;
+function deepCloneJson(obj) {
+  if (obj == null || typeof obj !== 'object') return obj
+  try {
+    return JSON.parse(JSON.stringify(obj))
+  } catch {
+    return obj
   }
-  const merged = {}
-  for (const [yearStr, yearSections] of Object.entries(incomingSections)) {
-    if (!Array.isArray(yearSections)) {
-      merged[yearStr] = yearSections
-      continue
+}
+
+/**
+ * Overlay notes + email request metadata from Project.documentSections JSON onto table-shaped data
+ * (table rows do not carry notesByMonth / emailRequestByMonth).
+ */
+function blendBlobMetaIntoTableSections(tableByYear, blobByYear) {
+  if (!tableByYear || typeof tableByYear !== 'object' || !blobByYear || typeof blobByYear !== 'object') {
+    return tableByYear
+  }
+  const out = deepCloneJson(tableByYear)
+  for (const yearStr of Object.keys(out)) {
+    const blobYear = blobByYear[yearStr]
+    if (!Array.isArray(blobYear)) continue
+    const blobSectionsByName = new Map()
+    const blobSectionsById = new Map()
+    for (const s of blobYear) {
+      if (s?.name != null) blobSectionsByName.set(String(s.name), s)
+      if (s?.id != null) blobSectionsById.set(String(s.id), s)
     }
-    const existingForYear = existingByYear[yearStr]
-    const existingSectionList = Array.isArray(existingForYear) ? existingForYear : []
-    const existingBySectionName = new Map()
-    for (const s of existingSectionList) {
-      const name = (s && s.name != null) ? String(s.name) : ''
-      existingBySectionName.set(name, s)
-    }
-    merged[yearStr] = yearSections.map((section) => {
-      if (!section.documents || !Array.isArray(section.documents)) {
-        return section
+    const yearArr = out[yearStr]
+    if (!Array.isArray(yearArr)) continue
+    for (const section of yearArr) {
+      const blobSection =
+        (section.id != null && blobSectionsById.get(String(section.id))) ||
+        blobSectionsByName.get(String(section.name || ''))
+      if (!blobSection || !Array.isArray(blobSection.documents)) continue
+      const bdById = new Map()
+      const bdByName = new Map()
+      for (const d of blobSection.documents) {
+        if (d?.id != null) bdById.set(String(d.id), d)
+        if (d?.name != null) bdByName.set(String(d.name), d)
       }
-      const existingSection = existingBySectionName.get((section.name != null) ? String(section.name) : '')
-      const existingDocsByName = new Map()
-      if (existingSection && Array.isArray(existingSection.documents)) {
-        for (const d of existingSection.documents) {
-          const docName = (d && d.name != null) ? String(d.name) : ''
-          existingDocsByName.set(docName, d)
+      if (!Array.isArray(section.documents)) continue
+      for (const doc of section.documents) {
+        const blobDoc =
+          (doc.id != null && bdById.get(String(doc.id))) || bdByName.get(String(doc.name || ''))
+        if (!blobDoc) continue
+        if (blobDoc.notesByMonth && typeof blobDoc.notesByMonth === 'object') {
+          doc.notesByMonth = { ...blobDoc.notesByMonth, ...(doc.notesByMonth && typeof doc.notesByMonth === 'object' ? doc.notesByMonth : {}) }
+        }
+        if (blobDoc.emailRequestByMonth && typeof blobDoc.emailRequestByMonth === 'object') {
+          doc.emailRequestByMonth = {
+            ...blobDoc.emailRequestByMonth,
+            ...(doc.emailRequestByMonth && typeof doc.emailRequestByMonth === 'object' ? doc.emailRequestByMonth : {})
+          }
         }
       }
-      return {
-        ...section,
-        documents: section.documents.map((doc) => {
-          const existingDoc = existingDocsByName.get((doc.name != null) ? String(doc.name) : '')
-          const existingComments = (existingDoc && existingDoc.comments && typeof existingDoc.comments === 'object') ? existingDoc.comments : {}
-          const incomingComments = (doc.comments && typeof doc.comments === 'object') ? doc.comments : {}
-          const mergedComments = { ...existingComments }
-          for (const [key, arr] of Object.entries(incomingComments)) {
-            const list = Array.isArray(arr) ? arr : (arr != null ? [arr] : [])
-            if (list.length > 0) {
-              mergedComments[key] = list
-            }
-          }
-          return { ...doc, comments: mergedComments }
-        })
-      }
-    })
+    }
+  }
+  return out
+}
+
+/**
+ * Load canonical "existing" documentSections for merge: table rows + JSON blob metadata when needed.
+ */
+async function loadDocumentSectionsExistingForMerge(projectId, projectDocumentSectionsField, { tx } = {}) {
+  const db = tx || prisma
+  let fromTable = null
+  try {
+    fromTable = await documentSectionsToJson(projectId, { skipComments: false, tx })
+  } catch {
+    fromTable = null
+  }
+  let blob = null
+  try {
+    if (projectDocumentSectionsField) {
+      blob =
+        typeof projectDocumentSectionsField === 'string'
+          ? JSON.parse(projectDocumentSectionsField)
+          : projectDocumentSectionsField
+    }
+  } catch {
+    blob = null
+  }
+  if (fromTable && typeof fromTable === 'object' && Object.keys(fromTable).length > 0) {
+    if (blob && typeof blob === 'object' && !Array.isArray(blob)) {
+      return blendBlobMetaIntoTableSections(fromTable, blob)
+    }
+    return fromTable
+  }
+  if (blob && typeof blob === 'object' && !Array.isArray(blob)) {
+    return deepCloneJson(blob)
+  }
+  return {}
+}
+
+function mergeDocFieldsWithServer(existingDoc, incomingDoc) {
+  const existing = existingDoc || {}
+  const incoming = incomingDoc || {}
+  const existingComments = existing.comments && typeof existing.comments === 'object' ? existing.comments : {}
+  const incomingComments = incoming.comments && typeof incoming.comments === 'object' ? incoming.comments : {}
+  const mergedComments = { ...existingComments }
+  for (const [key, arr] of Object.entries(incomingComments)) {
+    const list = Array.isArray(arr) ? arr : arr != null ? [arr] : []
+    if (list.length > 0) mergedComments[key] = list
+  }
+  const existingStatus =
+    existing.collectionStatus && typeof existing.collectionStatus === 'object' ? existing.collectionStatus : {}
+  const incomingStatus =
+    incoming.collectionStatus && typeof incoming.collectionStatus === 'object' ? incoming.collectionStatus : {}
+  const mergedStatus = { ...existingStatus, ...incomingStatus }
+
+  const existingNotes =
+    existing.notesByMonth && typeof existing.notesByMonth === 'object' ? existing.notesByMonth : {}
+  const incomingNotes =
+    incoming.notesByMonth && typeof incoming.notesByMonth === 'object' ? incoming.notesByMonth : {}
+  const mergedNotes = { ...existingNotes, ...incomingNotes }
+
+  const existingEmail =
+    existing.emailRequestByMonth && typeof existing.emailRequestByMonth === 'object'
+      ? existing.emailRequestByMonth
+      : {}
+  const incomingEmail =
+    incoming.emailRequestByMonth && typeof incoming.emailRequestByMonth === 'object'
+      ? incoming.emailRequestByMonth
+      : {}
+
+  const out = {
+    ...incoming,
+    collectionStatus: mergedStatus,
+    comments: mergedComments
+  }
+  if (Object.keys(mergedNotes).length > 0) {
+    out.notesByMonth = mergedNotes
+  }
+  if (Object.keys({ ...existingEmail, ...incomingEmail }).length > 0) {
+    out.emailRequestByMonth = { ...existingEmail, ...incomingEmail }
+  }
+  return out
+}
+
+function mergeSectionDocuments(existingSection, incomingSection) {
+  const existingDocs = Array.isArray(existingSection?.documents) ? existingSection.documents : []
+  const incomingDocs = Array.isArray(incomingSection?.documents) ? incomingSection.documents : []
+  const usedIndices = new Set()
+  const front = incomingDocs.map((incomingDoc) => {
+    let idx = existingDocs.findIndex(
+      (d) => incomingDoc.id != null && d.id != null && String(d.id) === String(incomingDoc.id)
+    )
+    if (idx < 0) {
+      idx = existingDocs.findIndex(
+        (d) =>
+          incomingDoc.name != null && d.name != null && String(d.name) === String(incomingDoc.name)
+      )
+    }
+    const existingDoc = idx >= 0 ? existingDocs[idx] : null
+    if (idx >= 0) usedIndices.add(idx)
+    return mergeDocFieldsWithServer(existingDoc, incomingDoc)
+  })
+  const orphans = existingDocs.filter((_, i) => !usedIndices.has(i)).map((d) => deepCloneJson(d))
+  return [...front, ...orphans]
+}
+
+function mergeYearSectionsArray(existingList, incomingList) {
+  if (!Array.isArray(incomingList)) return incomingList
+  const existingArr = Array.isArray(existingList) ? existingList : []
+  const matched = new Set()
+  const findExistingSection = (inc) => {
+    let idx = existingArr.findIndex((s) => inc.id != null && s.id != null && String(s.id) === String(inc.id))
+    if (idx >= 0) return { idx, s: existingArr[idx] }
+    idx = existingArr.findIndex(
+      (s) => inc.name != null && s.name != null && String(s.name) === String(inc.name)
+    )
+    return idx >= 0 ? { idx, s: existingArr[idx] } : { idx: -1, s: null }
+  }
+  const mergedSections = incomingList.map((section) => {
+    const { idx, s: existingSection } = findExistingSection(section)
+    if (idx >= 0) matched.add(idx)
+    return {
+      ...section,
+      documents: mergeSectionDocuments(existingSection, section)
+    }
+  })
+  const orphanSections = existingArr.filter((_, i) => !matched.has(i)).map((s) => deepCloneJson(s))
+  return [...mergedSections, ...orphanSections]
+}
+
+/**
+ * Merge server state into an incoming year-based payload so partial client data cannot wipe
+ * statuses, comments, notes, email metadata, whole years, or unmatched documents/sections.
+ */
+function mergeDocumentSectionsPayloadWithServer(existingByYear, incomingSections) {
+  if (!incomingSections || typeof incomingSections !== 'object') return incomingSections
+  if (Array.isArray(incomingSections)) return incomingSections
+  const existingByYearSafe = existingByYear && typeof existingByYear === 'object' ? existingByYear : {}
+  const merged = {}
+  for (const yearStr of Object.keys(incomingSections)) {
+    merged[yearStr] = mergeYearSectionsArray(existingByYearSafe[yearStr], incomingSections[yearStr])
+  }
+  for (const yearStr of Object.keys(existingByYearSafe)) {
+    if (!Object.prototype.hasOwnProperty.call(merged, yearStr)) {
+      merged[yearStr] = deepCloneJson(existingByYearSafe[yearStr])
+    }
   }
   return merged
 }
@@ -587,9 +742,13 @@ function documentSectionsPayloadHasRows(value) {
  * Save documentSections JSON to table structure
  * @param {string} projectId
  * @param {object|string} jsonData
- * @param {{ userId?: string, userName?: string, skipActivityLog?: boolean }} [userContext] - Optional user for activity log; set skipActivityLog when the caller already logs documentSections (e.g. PATCH /api/projects/[id]).
+ * @param {{ userId?: string, userName?: string, skipActivityLog?: boolean, skipMerge?: boolean, projectDocumentSectionsBlob?: string|object|null }} [userContext] - skipMerge when the caller already merged (e.g. PATCH /api/projects/[id]).
+ * @param {{ tx?: import('@prisma/client').Prisma.TransactionClient }} [options] - When set, all reads/writes use this client (atomic with caller's transaction).
  */
-async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}) {
+async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}, options = {}) {
+  const { tx } = options
+  const db = tx || prisma
+
   if (!jsonData) {
     console.log('⚠️ saveDocumentSectionsToTable: No jsonData provided, skipping save');
     return;
@@ -598,7 +757,11 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
   try {
     // Check if table exists (for environments that haven't migrated yet)
     try {
-      await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
+      if (tx) {
+        await db.documentSection.findFirst({ where: { projectId } })
+      } else {
+        await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
+      }
     } catch (e) {
       // Table doesn't exist yet, skip table save (JSON will still be saved)
       console.warn('⚠️ DocumentSection table does not exist, skipping table save')
@@ -623,14 +786,23 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
       return
     }
 
-    // Preserve comments that exist on the server but are missing from the payload (e.g. another tab or status-only save)
     const yearBased = typeof sections === 'object' && !Array.isArray(sections)
     let existingForDiff = null
-    if (yearBased) {
-      const existing = await documentSectionsToJson(projectId, { skipComments: false })
+    if (yearBased && !userContext.skipMerge) {
+      const blobField =
+        userContext.projectDocumentSectionsBlob !== undefined
+          ? userContext.projectDocumentSectionsBlob
+          : (await db.project.findUnique({ where: { id: projectId }, select: { documentSections: true } }))
+              ?.documentSections
+      const existing = await loadDocumentSectionsExistingForMerge(projectId, blobField, { tx })
       if (existing && typeof existing === 'object' && Object.keys(existing).length > 0) {
-        existingForDiff = existing
-        sections = mergeExistingCommentsIntoPayload(existing, sections)
+        existingForDiff = deepCloneJson(existing)
+      }
+      sections = mergeDocumentSectionsPayloadWithServer(existing, sections)
+    } else if (yearBased && userContext.skipMerge && !userContext.skipActivityLog) {
+      const existing = await documentSectionsToJson(projectId, { skipComments: false, tx })
+      if (existing && typeof existing === 'object' && Object.keys(existing).length > 0) {
+        existingForDiff = deepCloneJson(existing)
       }
     }
 
@@ -676,7 +848,7 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
     });
 
     // Delete existing sections for this project
-    const deletedCount = await prisma.documentSection.deleteMany({
+    const deletedCount = await db.documentSection.deleteMany({
       where: { projectId }
     });
     console.log(`🗑️ Deleted ${deletedCount.count} existing document sections for project ${projectId}`);
@@ -708,7 +880,7 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
 
           try {
             // Create section with root documents only (parentId would reference non-existent id otherwise)
-            const created = await prisma.documentSection.create({
+            const created = await db.documentSection.create({
               data: {
                 projectId,
                 year,
@@ -735,7 +907,7 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
               if (doc.parentId && newParentId == null) {
                 console.warn(`⚠️ Child document "${doc.name}" references unknown parentId "${doc.parentId}", skipping parentId`)
               }
-              await prisma.documentItem.create({
+              await db.documentItem.create({
                 data: {
                   sectionId: created.id,
                   ...buildDocumentItemCreateData(doc, roots.length + cIdx, newParentId || undefined)
@@ -769,7 +941,7 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
         const children = allDocs.filter((d) => d.parentId && String(d.parentId).trim() !== '')
 
         try {
-          const created = await prisma.documentSection.create({
+          const created = await db.documentSection.create({
             data: {
               projectId,
               year: currentYear,
@@ -796,7 +968,7 @@ async function saveDocumentSectionsToTable(projectId, jsonData, userContext = {}
             if (doc.parentId && newParentId == null) {
               console.warn(`⚠️ Child document "${doc.name}" references unknown parentId "${doc.parentId}", skipping parentId`)
             }
-            await prisma.documentItem.create({
+            await db.documentItem.create({
               data: {
                 sectionId: created.id,
                 ...buildDocumentItemCreateData(doc, roots.length + cIdx, newParentId || undefined)
@@ -2546,5 +2718,19 @@ async function handler(req, res) {
   }
 }
 
-export { buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, parseDocumentSectionsBody, documentSectionsPayloadHasRows, saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson }
+export {
+  buildDocumentStatusMap,
+  buildWeeklyFMSStatusMap,
+  buildDocumentNotesMap,
+  parseDocumentSectionsBody,
+  documentSectionsPayloadHasRows,
+  saveDocumentSectionsToTable,
+  saveWeeklyFMSReviewSectionsToTable,
+  saveMonthlyFMSReviewSectionsToTable,
+  documentSectionsToJson,
+  weeklyFMSReviewSectionsToJson,
+  monthlyFMSReviewSectionsToJson,
+  mergeDocumentSectionsPayloadWithServer,
+  loadDocumentSectionsExistingForMerge
+}
 export default withHttp(withLogging(authRequired(handler)))

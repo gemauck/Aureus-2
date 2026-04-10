@@ -1,10 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { authRequired } from '../_lib/authRequired.js'
 import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, parseDocumentSectionsBody, documentSectionsPayloadHasRows } from '../projects.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, parseDocumentSectionsBody, documentSectionsPayloadHasRows, mergeDocumentSectionsPayloadWithServer, loadDocumentSectionsExistingForMerge } from '../projects.js'
 import { logProjectActivity, getActivityUserFromRequest } from '../_lib/projectActivityLog.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
@@ -1563,9 +1564,29 @@ async function handler(req, res) {
           }
         }
       }
+
+      let mergedDocumentSectionsObject = null
+      let documentSectionsSaveCorrelationId = null
+      let documentSectionsActivityBaseline = null
+
+      if (body.documentSections !== undefined && body.documentSections !== null) {
+        const probe = parseDocumentSectionsBody(body.documentSections)
+        if (
+          probe !== undefined &&
+          documentSectionsPayloadHasRows(probe) &&
+          typeof probe === 'object' &&
+          !Array.isArray(probe)
+        ) {
+          documentSectionsSaveCorrelationId = randomUUID()
+          const existingForMerge = await loadDocumentSectionsExistingForMerge(id, existingProject.documentSections)
+          documentSectionsActivityBaseline = JSON.parse(JSON.stringify(existingForMerge))
+          mergedDocumentSectionsObject = mergeDocumentSectionsPayloadWithServer(existingForMerge, probe)
+          updateData.documentSections = JSON.stringify(mergedDocumentSectionsObject)
+        }
+      }
       
       try {
-        // Use a transaction to ensure atomicity - if table save fails, project update is rolled back
+        // Project row + DocumentSection table use one transaction; table save uses `tx` (atomic).
         const result = await prisma.$transaction(async (tx) => {
           // First update the project
           const project = await tx.project.update({ 
@@ -1588,31 +1609,42 @@ async function handler(req, res) {
             `;
           }
           
-          // CRITICAL: Save documentSections and weeklyFMSReviewSections to tables
-          // The GET endpoint reads from tables, so we must save to tables for persistence
-          // Pass the original body value (could be string or object) - save functions handle both
           if (
+            mergedDocumentSectionsObject !== null &&
+            documentSectionsPayloadHasRows(mergedDocumentSectionsObject)
+          ) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', { projectId: id });
+            }
+            await saveDocumentSectionsToTable(
+              id,
+              mergedDocumentSectionsObject,
+              {
+                ...getActivityUserFromRequest(req),
+                skipActivityLog: true,
+                skipMerge: true
+              },
+              { tx }
+            );
+            if (process.env.NODE_ENV === 'development') console.log('✅ PUT /api/projects/[id]: documentSections saved');
+          } else if (
             body.documentSections !== undefined &&
             body.documentSections !== null &&
             documentSectionsPayloadHasRows(parseDocumentSectionsBody(body.documentSections))
           ) {
-            try {
-              if (process.env.NODE_ENV === 'development') {
-                console.log('💾 PUT /api/projects/[id]: Saving documentSections to table', { projectId: id });
-              }
-              await saveDocumentSectionsToTable(id, body.documentSections, {
-                ...getActivityUserFromRequest(req),
-                skipActivityLog: true
-              });
-              if (process.env.NODE_ENV === 'development') console.log('✅ PUT /api/projects/[id]: documentSections saved');
-            } catch (tableError) {
-              console.error('⚠️ Error saving documentSections to table (project row already updated):', {
-                error: tableError.message,
-                code: tableError.code,
-                projectId: id
-              });
-              // Don't fail the request - project update and JSON field are already saved
+            if (process.env.NODE_ENV === 'development') {
+              console.log('💾 PUT /api/projects/[id]: Saving documentSections (legacy array shape)', { projectId: id });
             }
+            await saveDocumentSectionsToTable(
+              id,
+              body.documentSections,
+              {
+                ...getActivityUserFromRequest(req),
+                skipActivityLog: true,
+                skipMerge: false
+              },
+              { tx }
+            );
           }
           
           // Weekly FMS: source of truth is Project.weeklyFMSReviewSections JSON (already saved above).
@@ -1851,8 +1883,20 @@ async function handler(req, res) {
         if (body.documentSections !== undefined && body.documentSections !== null) {
           try {
             const oldJson = existingProject.documentSections;
-            const oldParsed = (typeof oldJson === 'string' && oldJson) ? JSON.parse(oldJson) : (oldJson && typeof oldJson === 'object' ? oldJson : {});
-            const newParsed = typeof body.documentSections === 'string' ? JSON.parse(body.documentSections) : body.documentSections;
+            const oldParsedFallback =
+              typeof oldJson === 'string' && oldJson
+                ? JSON.parse(oldJson)
+                : oldJson && typeof oldJson === 'object'
+                  ? oldJson
+                  : {};
+            const oldParsed =
+              documentSectionsActivityBaseline != null ? documentSectionsActivityBaseline : oldParsedFallback;
+            const newParsed =
+              mergedDocumentSectionsObject != null
+                ? mergedDocumentSectionsObject
+                : typeof body.documentSections === 'string'
+                  ? JSON.parse(body.documentSections)
+                  : body.documentSections;
             const oldStatusMap = buildDocumentStatusMap(oldParsed);
             const newStatusMap = buildDocumentStatusMap(newParsed);
             for (const [entryKey, newEntry] of newStatusMap) {
@@ -1898,6 +1942,28 @@ async function handler(req, res) {
           } catch (e) {
             console.warn('Activity log documentSections diff failed (non-fatal):', e?.message);
           }
+        }
+
+        if (documentSectionsSaveCorrelationId && mergedDocumentSectionsObject) {
+          let statusCellCount = 0;
+          try {
+            statusCellCount = buildDocumentStatusMap(mergedDocumentSectionsObject).size;
+          } catch (_) {
+            /* ignore */
+          }
+          await logProjectActivity(prisma, {
+            projectId: id,
+            userId: activityUserId,
+            userName: activityUserName,
+            type: 'document_collection_save',
+            description: `Document Collection persisted (${Object.keys(mergedDocumentSectionsObject).length} year(s), ${statusCellCount} status cell(s))`,
+            metadata: {
+              entityType: 'document_collection',
+              correlationId: documentSectionsSaveCorrelationId,
+              yearKeys: Object.keys(mergedDocumentSectionsObject),
+              statusCellCount
+            }
+          });
         }
 
         if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
