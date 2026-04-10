@@ -5,7 +5,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, parseDocumentSectionsBody, documentSectionsPayloadHasRows, mergeDocumentSectionsPayloadWithServer, loadDocumentSectionsExistingForMerge } from '../projects.js'
+import { saveDocumentSectionsToTable, saveWeeklyFMSReviewSectionsToTable, saveMonthlyFMSReviewSectionsToTable, documentSectionsToJson, weeklyFMSReviewSectionsToJson, monthlyFMSReviewSectionsToJson, buildDocumentStatusMap, buildWeeklyFMSStatusMap, buildDocumentNotesMap, buildDocumentEmailRequestSnapshotMap, emptyEmailRequestSnapshot, isEmailRequestSnapshotEmpty, parseDocumentSectionsBody, documentSectionsPayloadHasRows, mergeDocumentSectionsPayloadWithServer, loadDocumentSectionsExistingForMerge } from '../projects.js'
 import { logProjectActivity, getActivityUserFromRequest } from '../_lib/projectActivityLog.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every GET). */
@@ -1938,6 +1938,50 @@ async function handler(req, res) {
                   }
                 });
               }
+            }
+            const summarizeEmailRequestDiff = (oldS, newS) => {
+              const parts = []
+              const o = oldS || emptyEmailRequestSnapshot()
+              const n = newS || emptyEmailRequestSnapshot()
+              if (JSON.stringify(o.recipients) !== JSON.stringify(n.recipients)) parts.push('recipients')
+              if (JSON.stringify(o.cc) !== JSON.stringify(n.cc)) parts.push('CC')
+              if ((o.subject || '') !== (n.subject || '')) parts.push('subject')
+              if ((o.body || '') !== (n.body || '')) parts.push('body')
+              if ((o.recipientName || '') !== (n.recipientName || '')) parts.push('recipient name')
+              if (!!o.sendPlainTextOnly !== !!n.sendPlainTextOnly) parts.push('plain-text setting')
+              if ((o.scheduleFrequency || 'none') !== (n.scheduleFrequency || 'none')) parts.push('schedule frequency')
+              if ((o.scheduleStop || '') !== (n.scheduleStop || '')) parts.push('schedule stop status')
+              return parts.length ? parts.join(', ') : 'updated'
+            }
+            const oldEmailMap = buildDocumentEmailRequestSnapshotMap(oldParsed)
+            const newEmailMap = buildDocumentEmailRequestSnapshotMap(newParsed)
+            const emailKeys = new Set([...oldEmailMap.keys(), ...newEmailMap.keys()])
+            for (const entryKey of emailKeys) {
+              const oldEntry = oldEmailMap.get(entryKey)
+              const newEntry = newEmailMap.get(entryKey)
+              const oldSnap = oldEntry ? oldEntry.snapshot : emptyEmailRequestSnapshot()
+              const newSnap = newEntry ? newEntry.snapshot : emptyEmailRequestSnapshot()
+              if (JSON.stringify(oldSnap) === JSON.stringify(newSnap)) continue
+              if (isEmailRequestSnapshotEmpty(oldSnap) && isEmailRequestSnapshotEmpty(newSnap)) continue
+              const row = newEntry || oldEntry
+              if (!row) continue
+              await logProjectActivity(prisma, {
+                projectId: id,
+                userId: activityUserId,
+                userName: activityUserName,
+                type: 'document_section_email_request_change',
+                description: `Document Collection email request: "${row.docName}" (${row.year}-${String(row.month).padStart(2, '0')}) — ${summarizeEmailRequestDiff(oldSnap, newSnap)}`,
+                metadata: {
+                  entityType: 'document_section',
+                  entityId: row.docId,
+                  documentName: row.docName,
+                  sectionName: row.sectionName,
+                  year: row.year,
+                  month: row.month,
+                  oldSnapshot: oldSnap,
+                  newSnapshot: newSnap
+                }
+              })
             }
           } catch (e) {
             console.warn('Activity log documentSections diff failed (non-fatal):', e?.message);

@@ -708,6 +708,107 @@ function buildDocumentNotesMap(sectionsByYear) {
   return map
 }
 
+function normalizeEmailListForSnapshot(list) {
+  if (!Array.isArray(list)) return []
+  const out = []
+  const seen = new Set()
+  for (const v of list) {
+    const t = (v != null ? String(v) : '').trim().toLowerCase()
+    if (!t || seen.has(t)) continue
+    seen.add(t)
+    out.push(String(v).trim())
+  }
+  return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+}
+
+function emptyEmailRequestSnapshot() {
+  return {
+    recipients: [],
+    cc: [],
+    subject: '',
+    body: '',
+    recipientName: '',
+    sendPlainTextOnly: false,
+    scheduleFrequency: 'none',
+    scheduleStop: ''
+  }
+}
+
+function isEmailRequestSnapshotEmpty(s) {
+  if (!s) return true
+  return (
+    !(s.recipients && s.recipients.length) &&
+    !(s.cc && s.cc.length) &&
+    !String(s.subject || '').trim() &&
+    !String(s.body || '').trim() &&
+    !String(s.recipientName || '').trim() &&
+    !s.sendPlainTextOnly &&
+    (s.scheduleFrequency === 'none' || !s.scheduleFrequency) &&
+    !String(s.scheduleStop || '').trim()
+  )
+}
+
+/**
+ * Per-cell email request template snapshot from documentSections JSON.
+ * Entry key: `${year}-${sectionName}-${docName}-${month}` (same scheme as buildDocumentNotesMap).
+ * @returns {Map<string, { year: number, month: number, docId: string, docName: string, sectionName: string, snapshot: object }>}
+ */
+function buildDocumentEmailRequestSnapshotMap(sectionsByYear) {
+  const map = new Map()
+  if (!sectionsByYear || typeof sectionsByYear !== 'object') return map
+  const years = Array.isArray(sectionsByYear)
+    ? [new Date().getFullYear()]
+    : Object.keys(sectionsByYear)
+  const yearSections = Array.isArray(sectionsByYear)
+    ? { [years[0]]: sectionsByYear }
+    : sectionsByYear
+  for (const yearStr of years) {
+    const sections = yearSections[yearStr]
+    if (!Array.isArray(sections)) continue
+    for (const section of sections) {
+      const sectionName = section.name || ''
+      for (const doc of section.documents || []) {
+        const docName = doc.name || ''
+        const docId = doc.id != null ? String(doc.id) : ''
+        const byMonth =
+          doc.emailRequestByMonth && typeof doc.emailRequestByMonth === 'object'
+            ? doc.emailRequestByMonth
+            : {}
+        for (const [ymKey, raw] of Object.entries(byMonth)) {
+          const parts = ymKey.split('-')
+          if (parts.length < 2) continue
+          const keyYear = parseInt(parts[0], 10)
+          const keyMonth = parseInt(parts[1], 10)
+          if (isNaN(keyYear) || isNaN(keyMonth) || keyMonth < 1 || keyMonth > 12) continue
+          const entryKey = `${keyYear}-${sectionName}-${docName}-${keyMonth}`
+          const snapshot = {
+            recipients: normalizeEmailListForSnapshot(raw?.recipients),
+            cc: normalizeEmailListForSnapshot(raw?.cc),
+            subject: String(raw?.subject || '').trim(),
+            body: String(raw?.body || '').trim(),
+            recipientName: String(raw?.recipientName || raw?.recipient_name || '').trim(),
+            sendPlainTextOnly: !!(raw?.sendPlainTextOnly ?? raw?.send_plain_text_only),
+            scheduleFrequency:
+              raw?.schedule?.frequency === 'weekly' || raw?.schedule?.frequency === 'monthly'
+                ? raw.schedule.frequency
+                : 'none',
+            scheduleStop: String(raw?.schedule?.stopWhenStatus || '').trim()
+          }
+          map.set(entryKey, {
+            year: keyYear,
+            month: keyMonth,
+            docId,
+            docName,
+            sectionName,
+            snapshot
+          })
+        }
+      }
+    }
+  }
+  return map
+}
+
 /**
  * Parse raw `documentSections` from an API body (string or object).
  * @returns {any|null|undefined} Parsed value, null for empty string, undefined on JSON error
@@ -2722,6 +2823,9 @@ export {
   buildDocumentStatusMap,
   buildWeeklyFMSStatusMap,
   buildDocumentNotesMap,
+  buildDocumentEmailRequestSnapshotMap,
+  emptyEmailRequestSnapshot,
+  isEmailRequestSnapshotEmpty,
   parseDocumentSectionsBody,
   documentSectionsPayloadHasRows,
   saveDocumentSectionsToTable,

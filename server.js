@@ -1910,6 +1910,61 @@ app.get('/api/projects/:id/document-collection-email-activity', async (req, res)
   }
 })
 
+// GET document-collection-cell-activity: never 500/502, always 200 (empty timeline or data)
+app.get('/api/projects/:id/document-collection-cell-activity', async (req, res) => {
+  const emptyPayload = JSON.stringify({ data: { timeline: [] } })
+  let timeoutId = null
+  const sendEmpty = () => {
+    try {
+      if (res.headersSent || res.writableEnded) return
+      if (timeoutId) clearTimeout(timeoutId)
+      timeoutId = null
+      res.status(200).setHeader('Content-Type', 'application/json').end(emptyPayload)
+    } catch (_) {}
+  }
+  timeoutId = setTimeout(() => {
+    sendEmpty()
+  }, 12000)
+  const origStatus = res.status.bind(res)
+  const origEnd = res.end.bind(res)
+  const origWriteHead = res.writeHead.bind(res)
+  res.status = function (code) {
+    if (code === 500) return origStatus(200)
+    return origStatus(code)
+  }
+  res.writeHead = function (code, ...args) {
+    if (code === 500) return origWriteHead(200, ...args)
+    return origWriteHead(code, ...args)
+  }
+  res.end = function (chunk, encoding, cb) {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    if (res.statusCode === 500) {
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json')
+      return origEnd(emptyPayload, encoding, cb)
+    }
+    return origEnd(chunk, encoding, cb)
+  }
+  try {
+    const handlerPath = path.join(apiDir, 'projects', '[id]', 'document-collection-cell-activity.js')
+    const handler = await loadHandler(handlerPath)
+    const result = handler(req, res)
+    if (result != null && typeof result.then === 'function') {
+      await result.catch(() => {
+        sendEmpty()
+      })
+    }
+  } catch (e) {
+    sendEmpty()
+  }
+  if (!res.headersSent && !res.writableEnded) {
+    sendEmpty()
+  }
+})
+
 // Dedicated endpoint for weekly FMS sections (must be before /api/projects/:id so it matches first)
 app.put('/api/projects/:id/weekly-fms-sections', async (req, res) => {
   try {
@@ -2742,8 +2797,15 @@ app.use('/api', async (req, res) => {
           (req.originalUrl && req.originalUrl.includes('document-collection-email-activity')) ||
           (handlerPath && handlerPath.includes('document-collection-email-activity'))
         )
+        const isGetCellActivity = req.method === 'GET' && (
+          (req.url && req.url.includes('document-collection-cell-activity')) ||
+          (req.originalUrl && req.originalUrl.includes('document-collection-cell-activity')) ||
+          (handlerPath && handlerPath.includes('document-collection-cell-activity'))
+        )
         if (isGetActivity) {
           res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } }))
+        } else if (isGetCellActivity) {
+          res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { timeline: [] } }))
         } else {
           const isDevelopment = process.env.NODE_ENV === 'development'
         
@@ -2790,8 +2852,17 @@ app.use('/api', async (req, res) => {
       (req.originalUrl && req.originalUrl.includes('document-collection-email-activity')) ||
       (typeof handlerPath === 'string' && handlerPath.includes('document-collection-email-activity'))
     )
+    const isGetCellActivity = req.method === 'GET' && (
+      (req.url && req.url.includes('document-collection-cell-activity')) ||
+      (req.originalUrl && req.originalUrl.includes('document-collection-cell-activity')) ||
+      (typeof handlerPath === 'string' && handlerPath.includes('document-collection-cell-activity'))
+    )
     if (isGetActivity && !res.headersSent && !res.writableEnded) {
       res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { sent: [], received: [] } }))
+      return
+    }
+    if (isGetCellActivity && !res.headersSent && !res.writableEnded) {
+      res.status(200).setHeader('Content-Type', 'application/json').end(JSON.stringify({ data: { timeline: [] } }))
       return
     }
     

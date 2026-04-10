@@ -620,6 +620,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [isImportingExcel, setIsImportingExcel] = useState(false);
     const complianceImportFileInputRef = useRef(null);
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
+    const [cellActivityTimeline, setCellActivityTimeline] = useState([]);
+    const [cellActivityLoading, setCellActivityLoading] = useState(false);
+    const [cellActivityBump, setCellActivityBump] = useState(0);
+    const [deletingCellEmailLogId, setDeletingCellEmailLogId] = useState(null);
+    const hoverCommentCellRef = useRef(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const [pendingCommentAttachments, setPendingCommentAttachments] = useState([]);
@@ -667,10 +672,115 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         } catch (_) {}
     }, [trackerLayoutMode, layoutStorageKey]);
 
+    useEffect(() => {
+        hoverCommentCellRef.current = hoverCommentCell;
+    }, [hoverCommentCell]);
+
     // Clear pending attachments when switching to another comment cell
     useEffect(() => {
         setPendingCommentAttachments([]);
     }, [hoverCommentCell]);
+
+    // Unified activity timeline for the open comment popup (document collection only)
+    useEffect(() => {
+        if (isJsonOnlyTracker || !hoverCommentCell || !project?.id) {
+            setCellActivityTimeline([]);
+            setCellActivityLoading(false);
+            return undefined;
+        }
+        let cancelled = false;
+        const { sectionId: sid, documentId: did, month: monthLabel } = parseCellKey(hoverCommentCell);
+        const monthIdx = months.indexOf(monthLabel);
+        if (monthIdx < 0) return undefined;
+        const monthNum = monthIdx + 1;
+
+        const load = async (silent) => {
+            if (cancelled) return;
+            const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+            const token =
+                (typeof window !== 'undefined' &&
+                    (window.storage?.getToken?.() ??
+                        localStorage.getItem('authToken') ??
+                        localStorage.getItem('auth_token') ??
+                        localStorage.getItem('abcotronics_token') ??
+                        localStorage.getItem('token'))) ||
+                '';
+            const q = new URLSearchParams({
+                documentId: String(did).trim(),
+                month: String(monthNum),
+                year: String(selectedYear),
+                _: String(Date.now())
+            });
+            const yrSecs = sectionsByYear[selectedYear] || [];
+            const sec = yrSecs.find((s) => String(s.id) === String(sid));
+            const d = sec?.documents?.find((dd) => String(dd.id) === String(did));
+            if (d?.name) q.set('documentName', String(d.name).trim());
+            if (sec?.id) q.set('sectionId', String(sec.id).trim());
+
+            if (!silent) setCellActivityLoading(true);
+            try {
+                const res = await fetch(
+                    `${base}/api/projects/${project.id}/document-collection-cell-activity?${q}`,
+                    {
+                        method: 'GET',
+                        credentials: 'include',
+                        cache: 'no-store',
+                        headers: {
+                            Accept: 'application/json',
+                            'Cache-Control': 'no-store',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                        }
+                    }
+                );
+                const json = await res.json().catch(() => ({}));
+                const data = json.data || json;
+                const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+                if (cancelled) return;
+                setCellActivityTimeline((prev) => {
+                    if (silent) {
+                        const prevSig = prev.map((x) => x.id).join('\u0001');
+                        const nextSig = timeline.map((x) => x.id).join('\u0001');
+                        if (prevSig === nextSig) return prev;
+                    }
+                    return timeline;
+                });
+            } catch (_) {
+                if (!cancelled && !silent) setCellActivityTimeline([]);
+            } finally {
+                if (!cancelled && !silent) setCellActivityLoading(false);
+            }
+        };
+
+        load(false);
+        const iv = setInterval(() => load(true), 18000);
+        return () => {
+            cancelled = true;
+            clearInterval(iv);
+        };
+    }, [hoverCommentCell, project?.id, selectedYear, cellActivityBump, isJsonOnlyTracker, sectionsByYear, months]);
+
+    /** Refetch activity timeline when the comment popup is open for this cell (document collection only). */
+    const bumpCellActivityIfPopupMatchesCell = useCallback((sectionId, documentId, month) => {
+        if (isJsonOnlyTracker) return;
+        const open = hoverCommentCellRef.current;
+        if (!open) return;
+        const k = parseCellKey(open);
+        if (String(k.sectionId) !== String(sectionId)) return;
+        if (String(k.documentId) !== String(documentId)) return;
+        if (k.month !== month) return;
+        setCellActivityBump((b) => b + 1);
+    }, [isJsonOnlyTracker]);
+
+    const bumpCellActivityIfPopupMatchesDoc = useCallback((sectionId, documentId) => {
+        if (isJsonOnlyTracker) return;
+        const open = hoverCommentCellRef.current;
+        if (!open) return;
+        const k = parseCellKey(open);
+        if (String(k.sectionId) !== String(sectionId)) return;
+        if (String(k.documentId) !== String(documentId)) return;
+        setCellActivityBump((b) => b + 1);
+    }, [isJsonOnlyTracker]);
+
     const pendingCommentOpenRef = useRef(null); // Store comment location to open after year switch
     const deepLinkHandledRef = useRef(null); // Last cellKey we opened for; skip re-open to prevent loop
     
@@ -2031,7 +2141,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        return saveToDatabase({ skipParentUpdate: true });
+        return saveToDatabase({ skipParentUpdate: true }).then(() => {
+            setTimeout(() => {
+                bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
+            }, 450);
+        });
     };
 
     // Copy the same email template to every month in the selected year for this document.
@@ -2093,7 +2207,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        return saveToDatabase({ skipParentUpdate: true });
+        return saveToDatabase({ skipParentUpdate: true }).then(() => {
+            setTimeout(() => {
+                bumpCellActivityIfPopupMatchesDoc(sectionId, documentId);
+            }, 450);
+        });
     };
 
     // ============================================================
@@ -2820,6 +2938,21 @@ const getAssigneeColor = (identifier, users) => {
         }
         // Save immediately
         saveToDatabase();
+
+        if (!isJsonOnlyTracker && hoverCommentCellRef.current) {
+            const k = parseCellKey(hoverCommentCellRef.current);
+            const hit = cellsToUpdate.some(
+                (c) =>
+                    String(c.sectionId) === String(k.sectionId) &&
+                    String(c.documentId) === String(k.documentId) &&
+                    c.month === k.month
+            );
+            if (hit) {
+                setTimeout(() => {
+                    bumpCellActivityIfPopupMatchesCell(k.sectionId, k.documentId, k.month);
+                }, 450);
+            }
+        }
         
         // Clear selection after applying status to multiple cells
         // Use setTimeout to ensure React has updated the UI first
@@ -2829,7 +2962,7 @@ const getAssigneeColor = (identifier, users) => {
                 selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear]);
+    }, [selectedYear, isJsonOnlyTracker, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
 
     const handleUpdateNotes = useCallback((sectionId, documentId, month, text) => {
         const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
@@ -2856,7 +2989,10 @@ const getAssigneeColor = (identifier, users) => {
             saveTimeoutRef.current = null;
         }
         saveToDatabase();
-    }, [selectedYear]);
+        setTimeout(() => {
+            bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
+        }, 450);
+    }, [selectedYear, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
 
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -3068,6 +3204,15 @@ const getAssigneeColor = (identifier, users) => {
                 console.error('❌ Error notifying prior participants for document collection comment:', err);
             }
         }
+        try {
+            const cell = hoverCommentCellRef.current;
+            if (cell && !isJsonOnlyTracker) {
+                const k = parseCellKey(cell);
+                if (String(k.documentId) === String(documentId) && k.month === month) {
+                    setCellActivityBump((b) => b + 1);
+                }
+            }
+        } catch (_) {}
     };
     
     const handleDeleteComment = async (sectionId, documentId, month, commentId) => {
@@ -3120,6 +3265,15 @@ const getAssigneeColor = (identifier, users) => {
                     sent: prev.sent.filter((s) => String(s.id) !== String(commentToDelete.id)),
                     received: prev.received.filter((r) => String(r.id) !== String(commentToDelete.id))
                 }));
+                try {
+                    const cell = hoverCommentCellRef.current;
+                    if (cell && !isJsonOnlyTracker) {
+                        const k = parseCellKey(cell);
+                        if (String(k.documentId) === String(documentId) && k.month === month) {
+                            setCellActivityBump((b) => b + 1);
+                        }
+                    }
+                } catch (_) {}
             } catch (err) {
                 alert(err.message || 'Failed to delete');
                 return;
@@ -3155,6 +3309,15 @@ const getAssigneeColor = (identifier, users) => {
         
         // Now update state (this will trigger auto-save)
         setSectionsByYear(updatedSectionsByYear);
+        try {
+            const cell = hoverCommentCellRef.current;
+            if (cell && !isJsonOnlyTracker) {
+                const k = parseCellKey(cell);
+                if (String(k.documentId) === String(documentId) && k.month === month) {
+                    setCellActivityBump((b) => b + 1);
+                }
+            }
+        } catch (_) {}
     };
     
     const getDocumentStatus = (doc, month) => {
@@ -3171,7 +3334,7 @@ const getAssigneeColor = (identifier, users) => {
     };
     const getDocumentComments = (doc, month) => {
         const comments = getCommentsForYear(doc.comments, month, selectedYear);
-        return Array.isArray(comments) ? comments.filter((c) => !isEmailActivityComment(c)) : [];
+        return Array.isArray(comments) ? comments : [];
     };
 
     const getDocumentNotes = (doc, month) => {
@@ -3412,7 +3575,7 @@ const getAssigneeColor = (identifier, users) => {
             const buttonRect = commentButton.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const popupWidth = 288; // w-72 = 288px
+            const popupWidth = 320; // w-80 = 320px
             const popupHeight = 300; // approximate max height
             const spacing = 8; // Space between button and popup
 
@@ -3576,7 +3739,7 @@ const getAssigneeColor = (identifier, users) => {
                             const buttonRect = commentButton.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
                             const viewportHeight = window.innerHeight;
-                            const popupWidth = 288;
+                            const popupWidth = 320;
                             const popupHeight = 300;
                             const spacing = 8;
                             const tailSize = 12;
@@ -3900,7 +4063,7 @@ const getAssigneeColor = (identifier, users) => {
                         const buttonRect = commentButton.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
                         const viewportHeight = window.innerHeight;
-                        const popupWidth = 288;
+                        const popupWidth = 320;
                         const popupHeight = 300;
                         const spacing = 8;
                         const tailSize = 12;
@@ -3936,7 +4099,7 @@ const getAssigneeColor = (identifier, users) => {
                             const cellRect = cell.getBoundingClientRect();
                             const viewportWidth = window.innerWidth;
                             const viewportHeight = window.innerHeight;
-                            const popupWidth = 288;
+                            const popupWidth = 320;
                             const popupHeight = 300;
                             const spacing = 8;
                             const tailSize = 12;
@@ -4168,6 +4331,20 @@ const getAssigneeColor = (identifier, users) => {
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(doc, month);
         const hasComments = comments.length > 0;
+        const monthKeyForEmail = !isJsonOnlyTracker ? getMonthKey(month, selectedYear) : null;
+        const emailDraft =
+            monthKeyForEmail && doc?.emailRequestByMonth && typeof doc.emailRequestByMonth === 'object'
+                ? doc.emailRequestByMonth[monthKeyForEmail]
+                : null;
+        const hasSavedEmailDraft =
+            !isJsonOnlyTracker &&
+            emailDraft &&
+            ((Array.isArray(emailDraft.recipients) && emailDraft.recipients.length > 0) ||
+                (Array.isArray(emailDraft.cc) && emailDraft.cc.length > 0) ||
+                (typeof emailDraft.subject === 'string' && emailDraft.subject.trim()) ||
+                (typeof emailDraft.body === 'string' && emailDraft.body.trim()));
+        const showActivityCommentBadge = hasComments || !!hasSavedEmailDraft;
+        const activityCommentBadgeCount = hasComments ? comments.length : hasSavedEmailDraft ? 1 : 0;
         const cellKey = buildCellKey(section.id, doc.id, month);
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
@@ -4426,7 +4603,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             const buttonRect = commentButton.getBoundingClientRect();
                                             const viewportWidth = window.innerWidth;
                                             const viewportHeight = window.innerHeight;
-                                            const popupWidth = 288;
+                                            const popupWidth = 320;
                                             const popupHeight = 300;
                                             const spacing = 8;
                                             const tailSize = 12;
@@ -4460,13 +4637,19 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                 }
                             }}
                                     className="relative text-gray-500 hover:text-gray-700 transition-colors p-1 rounded shrink-0"
-                                    title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
+                                    title={
+                                        hasComments
+                                            ? `${comments.length} comment(s)`
+                                            : hasSavedEmailDraft
+                                              ? 'Saved email draft — open for activity'
+                                              : 'Activity & comments'
+                                    }
                                     type="button"
                                 >
                                     <i className="fas fa-comment text-base"></i>
-                                    {hasComments && (
-                                        <span className={`absolute -top-1 -right-1 ${commentBadgeClass} text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold`}>
-                                            {comments.length}
+                                    {showActivityCommentBadge && (
+                                        <span className={`absolute -top-1 -right-1 ${commentBadgeClass} text-[9px] rounded-full min-w-[1rem] h-4 px-0.5 flex items-center justify-center font-bold`}>
+                                            {activityCommentBadgeCount}
                                         </span>
                                     )}
                                 </button>
@@ -5135,6 +5318,9 @@ Abcotronics`;
                 }
                 if (sentList.length > 0) {
                     showEmailSentToast();
+                    if (ctx?.section?.id != null && ctx?.doc?.id != null && ctx?.month) {
+                        bumpCellActivityIfPopupMatchesCell(ctx.section.id, ctx.doc.id, ctx.month);
+                    }
                     // Optimistic update so reply appears immediately and persists in UI even if refetch is slow or races
                     setEmailActivity((prev) => ({
                         ...prev,
@@ -5520,6 +5706,9 @@ Abcotronics`;
                 });
                 if (sentList.length > 0) {
                     showEmailSentToast();
+                    if (ctx?.section?.id != null && ctx?.doc?.id != null && ctx?.month) {
+                        bumpCellActivityIfPopupMatchesCell(ctx.section.id, ctx.doc.id, ctx.month);
+                    }
                     setEmailActivity((prev) => ({
                         ...prev,
                         sent: [...prev.sent, { id: 'sent-' + Date.now(), createdAt: new Date().toISOString(), deliveryStatus: 'sent' }]
@@ -7042,59 +7231,80 @@ Abcotronics`;
                 const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseCellKey(hoverCommentCell);
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
-                let comments = doc ? getDocumentComments(doc, month) : [];
-                // Deep link fallback: if URL has commentId but comments are empty, find comment by id in current doc keys, then in any year's same section/doc (fixes empty box when year key or data from different year)
-                let urlCommentId = null;
-                if (typeof window !== 'undefined' && comments.length === 0) {
-                    const hash = window.location.hash || '';
-                    const search = window.location.search || '';
-                    if (hash.includes('?')) {
-                        const p = new URLSearchParams(hash.split('?')[1] || '');
-                        urlCommentId = p.get('commentId');
-                    }
-                    if (!urlCommentId && search) {
-                        const p = new URLSearchParams(search);
-                        urlCommentId = p.get('commentId');
-                    }
-                }
-                if (comments.length === 0 && urlCommentId) {
-                    const idStr = String(urlCommentId);
-                    const idNum = parseInt(urlCommentId, 10);
-                    const matchId = (c) => c && (String(c.id) === idStr || c.id === idNum || c.id === urlCommentId);
-                    if (doc?.comments && typeof doc.comments === 'object') {
-                        for (const key of Object.keys(doc.comments)) {
-                            const arr = Array.isArray(doc.comments[key]) ? doc.comments[key] : [];
-                            const found = arr.find(matchId);
-                            if (found) {
-                                comments = [found];
-                                break;
-                            }
+                const activityTypeLabel = (t) => {
+                    if (t === 'document_section_status_change') return 'Status';
+                    if (t === 'document_section_notes_change') return 'Notes';
+                    if (t === 'document_section_email_request_change') return 'Email template';
+                    return 'Activity';
+                };
+                let activityRows = [];
+                if (!isJsonOnlyTracker) {
+                    activityRows = Array.isArray(cellActivityTimeline) ? cellActivityTimeline : [];
+                } else {
+                    let localComments = doc ? getDocumentComments(doc, month) : [];
+                    let urlCommentId = null;
+                    if (typeof window !== 'undefined' && localComments.length === 0) {
+                        const hash = window.location.hash || '';
+                        const search = window.location.search || '';
+                        if (hash.includes('?')) {
+                            const p = new URLSearchParams(hash.split('?')[1] || '');
+                            urlCommentId = p.get('commentId');
+                        }
+                        if (!urlCommentId && search) {
+                            const p = new URLSearchParams(search);
+                            urlCommentId = p.get('commentId');
                         }
                     }
-                    if (comments.length === 0 && sectionsByYear && typeof sectionsByYear === 'object') {
-                        for (const year of Object.keys(sectionsByYear)) {
-                            const secs = sectionsByYear[year] || [];
-                            const sec = secs.find(s => String(s.id) === String(rawSectionId));
-                            const d = sec?.documents?.find(dd => String(dd.id) === String(rawDocumentId));
-                            if (!d?.comments || typeof d.comments !== 'object') continue;
-                            for (const key of Object.keys(d.comments)) {
-                                const arr = Array.isArray(d.comments[key]) ? d.comments[key] : [];
+                    if (localComments.length === 0 && urlCommentId) {
+                        const idStr = String(urlCommentId);
+                        const idNum = parseInt(urlCommentId, 10);
+                        const matchId = (c) => c && (String(c.id) === idStr || c.id === idNum || c.id === urlCommentId);
+                        if (doc?.comments && typeof doc.comments === 'object') {
+                            for (const key of Object.keys(doc.comments)) {
+                                const arr = Array.isArray(doc.comments[key]) ? doc.comments[key] : [];
                                 const found = arr.find(matchId);
                                 if (found) {
-                                    comments = [found];
+                                    localComments = [found];
                                     break;
                                 }
                             }
-                            if (comments.length > 0) break;
+                        }
+                        if (localComments.length === 0 && sectionsByYear && typeof sectionsByYear === 'object') {
+                            for (const year of Object.keys(sectionsByYear)) {
+                                const secs = sectionsByYear[year] || [];
+                                const sec = secs.find(s => String(s.id) === String(rawSectionId));
+                                const d = sec?.documents?.find(dd => String(dd.id) === String(rawDocumentId));
+                                if (!d?.comments || typeof d.comments !== 'object') continue;
+                                for (const key of Object.keys(d.comments)) {
+                                    const arr = Array.isArray(d.comments[key]) ? d.comments[key] : [];
+                                    const found = arr.find(matchId);
+                                    if (found) {
+                                        localComments = [found];
+                                        break;
+                                    }
+                                }
+                                if (localComments.length > 0) break;
+                            }
                         }
                     }
+                    activityRows = localComments.map((c) => ({
+                        id: `comment-${c.id}`,
+                        kind: 'comment',
+                        commentId: c.id,
+                        text: c.text,
+                        author: c.author,
+                        authorId: c.authorId,
+                        attachments: Array.isArray(c.attachments) ? c.attachments : [],
+                        createdAt: c.createdAt || c.date,
+                        updatedAt: c.updatedAt
+                    }));
                 }
                 
                 return (
                     <>
                         {/* Comment Popup */}
                         <div 
-                            className="comment-popup fixed w-72 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 z-[999]"
+                            className="comment-popup fixed w-80 max-w-[90vw] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 z-[999] flex flex-col max-h-[min(85vh,520px)]"
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                         >
                         {/* Show section and document context */}
@@ -7108,36 +7318,108 @@ Abcotronics`;
                                 </div>
                             </div>
                         )}
-                        {/* Always show Comments section so the popup is clearly the comments modal, not just "Add Comment" */}
-                        <div className="mb-3">
-                            <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                            {comments.length > 0 ? (
+                        <div className="mb-3 flex flex-col min-h-0 flex-1 overflow-hidden">
+                            <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Activity</div>
+                            {cellActivityLoading && activityRows.length === 0 && !isJsonOnlyTracker ? (
+                                <div className="py-4 text-center text-[11px] text-gray-500 dark:text-gray-400">Loading activity…</div>
+                            ) : activityRows.length > 0 ? (
                                 <div 
-                                    key={`comment-container-${hoverCommentCell}`}
+                                    key={`activity-container-${hoverCommentCell}`}
                                     ref={commentPopupContainerRef}
-                                    className="comment-scroll-container mb-2"
+                                    className="comment-scroll-container mb-2 overflow-y-auto max-h-[min(45vh,280px)] flex-shrink min-h-0"
                                 >
                                     <div className="space-y-2 pr-1">
-                                        {comments.map((comment, idx) => (
+                                        {activityRows.map((row, idx) => {
+                                            if (row.kind === 'activity') {
+                                                return (
+                                                    <div
+                                                        key={row.id || idx}
+                                                        className="pb-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 bg-slate-50 dark:bg-slate-900/50 rounded p-1.5"
+                                                    >
+                                                        <div className="text-[9px] font-semibold text-sky-700 dark:text-sky-400 mb-0.5">{activityTypeLabel(row.activityType)}</div>
+                                                        <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{row.description}</p>
+                                                        <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
+                                                            <span className="font-medium truncate pr-1">{row.userName || 'System'}</span>
+                                                            <span className="shrink-0">{row.createdAt ? formatDateTime(row.createdAt) : ''}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            if (row.kind === 'email_sent') {
+                                                return (
+                                                    <div
+                                                        key={row.id || idx}
+                                                        className="pb-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 bg-emerald-50/90 dark:bg-emerald-950/30 rounded p-1.5 relative group"
+                                                    >
+                                                        <div className="text-[9px] font-semibold text-emerald-800 dark:text-emerald-300 mb-0.5">Email sent</div>
+                                                        <p className="text-xs text-gray-800 dark:text-gray-200 pr-6">{row.subject || '(no subject)'}</p>
+                                                        {row.deliveryStatus ? (
+                                                            <span className="text-[9px] text-gray-500 dark:text-gray-400">{row.deliveryStatus}</span>
+                                                        ) : null}
+                                                        <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
+                                                            <span />
+                                                            <span>{row.createdAt ? formatDateTime(row.createdAt) : ''}</span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                if (!project?.id || !row.logId) return;
+                                                                if (!confirm('Remove this sent email from activity?')) return;
+                                                                setDeletingCellEmailLogId(row.logId);
+                                                                const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                                                                const token = (typeof window !== 'undefined' && (window.storage?.getToken?.() ?? localStorage.getItem('authToken') ?? localStorage.getItem('auth_token') ?? localStorage.getItem('abcotronics_token') ?? localStorage.getItem('token'))) || '';
+                                                                try {
+                                                                    const url = `${base}/api/projects/${project.id}/document-collection-email-activity?id=${encodeURIComponent(row.logId)}&type=sent`;
+                                                                    const res = await fetch(url, {
+                                                                        method: 'DELETE',
+                                                                        credentials: 'include',
+                                                                        headers: {
+                                                                            Accept: 'application/json',
+                                                                            'Content-Type': 'application/json',
+                                                                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                                                                        },
+                                                                        body: JSON.stringify({ id: row.logId, type: 'sent' })
+                                                                    });
+                                                                    const json = await res.json().catch(() => ({}));
+                                                                    const data = json.data != null ? json.data : json;
+                                                                    if (res.ok && data.deleted) {
+                                                                        setCellActivityBump((b) => b + 1);
+                                                                    } else {
+                                                                        alert(data.error || json.error || 'Failed to delete');
+                                                                    }
+                                                                } catch (err) {
+                                                                    alert(err.message || 'Failed to delete');
+                                                                } finally {
+                                                                    setDeletingCellEmailLogId(null);
+                                                                }
+                                                            }}
+                                                            disabled={deletingCellEmailLogId === row.logId}
+                                                            className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                                                            title="Remove sent email from list"
+                                                        >
+                                                            <i className="fas fa-trash text-[10px]" />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            }
+                                            const comment = row;
+                                            const cid = comment.commentId;
+                                            return (
                                         <div 
-                                            key={comment.id || idx} 
-                                            data-comment-id={comment.id}
-                                            id={comment.id ? `comment-${comment.id}` : undefined}
-                                            className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group cursor-pointer"
+                                            key={comment.id || cid || idx} 
+                                            data-comment-id={cid}
+                                            id={cid ? `comment-${cid}` : undefined}
+                                            className="pb-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 bg-gray-50 dark:bg-gray-900/40 rounded p-1.5 relative group cursor-pointer"
                                             onClick={(e) => {
                                                 const ce = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
                                                 if (ce?.closest?.('[data-comment-attachment]') || ce?.closest?.('[data-comment-attachment-area]')) {
                                                     e.stopPropagation();
                                                     return;
                                                 }
-                                                // Update URL when clicking on a comment to enable sharing
-                                                if (section && doc && comment.id) {
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
-                                                    
-                                                    // Update URL using RouteState if available, otherwise use hash
+                                                if (section && doc && cid) {
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(cid)}`;
                                                     if (window.RouteState && window.RouteState.navigate) {
-                                                        const url = new URL(window.location.href);
-                                                        url.hash = deepLinkUrl.replace('#', '');
                                                         window.RouteState.navigate({
                                                             page: 'projects',
                                                             segments: [String(project?.id || '')],
@@ -7149,13 +7431,10 @@ Abcotronics`;
                                                     } else {
                                                         window.location.hash = deepLinkUrl;
                                                     }
-                                                    
-                                                    // Copy to clipboard
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     if (navigator.clipboard && navigator.clipboard.writeText) {
                                                         navigator.clipboard.writeText(fullUrl).then(() => {
-                                                            // Show brief feedback
-                                                            const button = window.document.querySelector(`[data-copy-link="${comment.id}"]`);
+                                                            const button = window.document.querySelector(`[data-copy-link="${cid}"]`);
                                                             if (button) {
                                                                 const originalHTML = button.innerHTML;
                                                                 button.innerHTML = '<i class="fas fa-check text-[9px]"></i>';
@@ -7174,7 +7453,7 @@ Abcotronics`;
                                             title="Click to copy link to this comment"
                                         >
                                             <p
-                                                className="text-xs text-gray-700 whitespace-pre-wrap pr-12"
+                                                className="text-xs text-gray-700 dark:text-gray-200 whitespace-pre-wrap pr-12"
                                                 dangerouslySetInnerHTML={{
                                                     __html:
                                                         window.MentionHelper && comment.text
@@ -7221,11 +7500,11 @@ Abcotronics`;
                                             )}
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
-                                                <span>{(comment.date || comment.createdAt) ? (() => {
+                                                <span>{(comment.createdAt || comment.date) ? (() => {
                                                     try {
-                                                        const date = new Date(comment.date || comment.createdAt);
+                                                        const date = new Date(comment.createdAt || comment.date);
                                                         if (isNaN(date.getTime())) return 'Invalid Date';
-                                                        return formatDateTime(comment.date || comment.createdAt);
+                                                        return formatDateTime(comment.createdAt || comment.date);
                                                     } catch (e) {
                                                         return 'Invalid Date';
                                                     }
@@ -7233,9 +7512,9 @@ Abcotronics`;
                                             </div>
                                             <button
                                                 onClick={(e) => {
-                                                    e.stopPropagation(); // Prevent triggering comment click
-                                                    if (!section || !doc) return;
-                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
+                                                    e.stopPropagation();
+                                                    if (!section || !doc || !cid) return;
+                                                    handleDeleteComment(section.id, doc.id, month, cid);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 type="button"
@@ -7244,12 +7523,12 @@ Abcotronics`;
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
                                             <button
-                                                data-copy-link={comment.id}
+                                                data-copy-link={cid}
                                                 onClick={(e) => {
-                                                    e.stopPropagation(); // Prevent triggering comment click
-                                                    if (!section || !doc || !comment.id) return;
+                                                    e.stopPropagation();
+                                                    if (!section || !doc || !cid) return;
                                                     
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(cid)}`;
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     
                                                     // Copy to clipboard
@@ -7300,20 +7579,21 @@ Abcotronics`;
                                                 <i className="fas fa-link text-[9px]"></i>
                                             </button>
                                         </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ) : (
-                                <div className="py-3 px-2 rounded bg-gray-50 border border-gray-100 text-center">
-                                    <p className="text-[11px] text-gray-500">No comments yet</p>
-                                    <p className="text-[10px] text-gray-400 mt-0.5">Add one below</p>
+                                <div className="py-3 px-2 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 text-center">
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">No activity yet</p>
+                                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Changes and comments appear here</p>
                                 </div>
                             )}
                         </div>
                         
-                        <div>
+                        <div className="flex-shrink-0">
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-semibold text-gray-600">Add Comment</span>
+                                <span className="text-[10px] font-semibold text-gray-600 dark:text-gray-400">Add Comment</span>
                                 <div className="flex items-center gap-1">
                                     <input
                                         ref={commentFileInputRef}
