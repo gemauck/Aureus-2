@@ -10,21 +10,6 @@ import { prisma } from '../../_lib/prisma.js'
 
 const SYNTHETIC_SENT_AUTHORS = new Set(['Sent reply (platform)', 'Sent request (platform)'])
 
-const DOCUMENT_SECTION_TIMELINE_TYPES = new Set([
-  'document_section_status_change',
-  'document_section_notes_change',
-  'document_section_email_request_change'
-])
-
-function parseActivityMetadata(log) {
-  try {
-    const raw = log?.metadata
-    if (typeof raw === 'string') return JSON.parse(raw || '{}')
-    if (raw && typeof raw === 'object') return raw
-  } catch (_) {}
-  return {}
-}
-
 function parseSyntheticSubjectBody(text) {
   const firstLine = (text || '').split('\n')[0] || ''
   const subject = firstLine.startsWith('Subject: ') ? firstLine.slice(9).trim() : firstLine.trim()
@@ -127,119 +112,124 @@ async function handler(req, res) {
     return ok(res, { timeline: [] })
   }
 
+  const sentLogSelectFull = {
+    id: true,
+    createdAt: true,
+    subject: true,
+    bodyText: true,
+    messageId: true,
+    deliveryStatus: true,
+    deliveredAt: true,
+    bouncedAt: true,
+    bounceReason: true,
+    lastEventAt: true
+  }
+  const sentLogSelectFallback = {
+    id: true,
+    createdAt: true,
+    subject: true,
+    bodyText: true,
+    deliveryStatus: true,
+    deliveredAt: true,
+    bouncedAt: true,
+    bounceReason: true,
+    lastEventAt: true
+  }
+  const sentWhere = {
+    projectId: cell.projectId,
+    documentId: cell.documentId,
+    year: cell.year,
+    month: cell.month,
+    kind: 'sent'
+  }
+
+  const fetchSentLogs = async () => {
+    if (!prisma.documentCollectionEmailLog) return []
+    try {
+      return await prisma.documentCollectionEmailLog.findMany({
+        where: sentWhere,
+        orderBy: { createdAt: 'asc' },
+        select: sentLogSelectFull
+      })
+    } catch (e) {
+      const msg = String(e?.message || '')
+      if (msg.includes('Unknown field')) {
+        try {
+          return await prisma.documentCollectionEmailLog.findMany({
+            where: sentWhere,
+            orderBy: { createdAt: 'asc' },
+            select: sentLogSelectFallback
+          })
+        } catch (e2) {
+          console.error('document-collection-cell-activity: sent logs query failed:', e2?.message || e2)
+          return []
+        }
+      }
+      console.error('document-collection-cell-activity: sent logs query failed:', e?.message || e)
+      return []
+    }
+  }
+
+  /** Postgres: filter by JSON metadata in SQL — avoids loading hundreds of unrelated project rows per cell. */
+  const fetchActivityLogsForCell = async () => {
+    try {
+      const rows = await prisma.$queryRaw`
+        SELECT id, type, description, "userName", "userId", metadata, "createdAt"
+        FROM "ProjectActivityLog"
+        WHERE "projectId" = ${cell.projectId}
+          AND type IN (
+            'document_section_status_change',
+            'document_section_notes_change',
+            'document_section_email_request_change'
+          )
+          AND metadata IS NOT NULL
+          AND metadata <> ''
+          AND (metadata::jsonb->>'entityType') = 'document_section'
+          AND (metadata::jsonb->>'entityId') = ${String(cell.documentId)}
+          AND (metadata::jsonb->>'year') IS NOT NULL
+          AND (metadata::jsonb->>'month') IS NOT NULL
+          AND (metadata::jsonb->>'year')::int = ${cell.year}
+          AND (metadata::jsonb->>'month')::int = ${cell.month}
+        ORDER BY "createdAt" ASC
+      `
+      return Array.isArray(rows) ? rows : []
+    } catch (e) {
+      console.error('document-collection-cell-activity: activity SQL query failed:', e?.message || e)
+      return []
+    }
+  }
+
   let comments = []
   let sentLogs = []
   let activityLogs = []
 
   try {
-    comments = await prisma.documentItemComment.findMany({
-      where: {
-        itemId: cell.documentId,
-        year: cell.year,
-        month: cell.month
-      },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        text: true,
-        author: true,
-        authorId: true,
-        attachments: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    })
-  } catch (e) {
-    console.error('document-collection-cell-activity: comments query failed:', e?.message || e)
-  }
-
-  try {
-    if (prisma.documentCollectionEmailLog) {
-      sentLogs = await prisma.documentCollectionEmailLog.findMany({
+    ;[comments, sentLogs, activityLogs] = await Promise.all([
+      prisma.documentItemComment.findMany({
         where: {
-          projectId: cell.projectId,
-          documentId: cell.documentId,
+          itemId: cell.documentId,
           year: cell.year,
-          month: cell.month,
-          kind: 'sent'
+          month: cell.month
         },
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
+          text: true,
+          author: true,
+          authorId: true,
+          attachments: true,
           createdAt: true,
-          subject: true,
-          bodyText: true,
-          messageId: true,
-          deliveryStatus: true,
-          deliveredAt: true,
-          bouncedAt: true,
-          bounceReason: true,
-          lastEventAt: true
+          updatedAt: true
         }
-      })
-    }
+      }),
+      fetchSentLogs(),
+      fetchActivityLogsForCell()
+    ])
   } catch (e) {
-    const msg = String(e?.message || '')
-    if (msg.includes('Unknown field')) {
-      try {
-        sentLogs = await prisma.documentCollectionEmailLog.findMany({
-          where: {
-            projectId: cell.projectId,
-            documentId: cell.documentId,
-            year: cell.year,
-            month: cell.month,
-            kind: 'sent'
-          },
-          orderBy: { createdAt: 'asc' },
-          select: {
-            id: true,
-            createdAt: true,
-            subject: true,
-            bodyText: true,
-            deliveryStatus: true,
-            deliveredAt: true,
-            bouncedAt: true,
-            bounceReason: true,
-            lastEventAt: true
-          }
-        })
-      } catch (e2) {
-        console.error('document-collection-cell-activity: sent logs query failed:', e2?.message || e2)
-      }
-    } else {
-      console.error('document-collection-cell-activity: sent logs query failed:', e?.message || e)
-    }
+    console.error('document-collection-cell-activity: parallel fetch failed:', e?.message || e)
   }
 
-  try {
-    activityLogs = await prisma.projectActivityLog.findMany({
-      where: { projectId: cell.projectId },
-      orderBy: { createdAt: 'desc' },
-      take: 800,
-      select: {
-        id: true,
-        type: true,
-        description: true,
-        userName: true,
-        userId: true,
-        metadata: true,
-        createdAt: true
-      }
-    })
-  } catch (e) {
-    console.error('document-collection-cell-activity: activity log query failed:', e?.message || e)
-  }
-
-  const filteredActivity = activityLogs.filter((log) => {
-    if (!DOCUMENT_SECTION_TIMELINE_TYPES.has(String(log.type || ''))) return false
-    const meta = parseActivityMetadata(log)
-    if (String(meta.entityType || '') !== 'document_section') return false
-    if (String(meta.entityId || '') !== String(cell.documentId)) return false
-    const y = Number(meta.year)
-    const m = Number(meta.month)
-    if (y !== cell.year || m !== cell.month) return false
-    return true
-  })
+  const filteredActivity = activityLogs
 
   const timeline = []
 

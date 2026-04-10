@@ -3617,10 +3617,15 @@ const getAssigneeColor = (identifier, users) => {
     // Smart positioning for comment popup (no auto-scroll, no window scroll listener)
     useEffect(() => {
         if (!hoverCommentCell) return;
-        const t = window.setTimeout(updateCommentPopupPosition, 50);
+        let raf1 = 0;
+        let raf2 = 0;
+        raf1 = requestAnimationFrame(() => {
+            raf2 = requestAnimationFrame(updateCommentPopupPosition);
+        });
         window.addEventListener('resize', updateCommentPopupPosition);
         return () => {
-            window.clearTimeout(t);
+            cancelAnimationFrame(raf1);
+            if (raf2) cancelAnimationFrame(raf2);
             window.removeEventListener('resize', updateCommentPopupPosition);
         };
     }, [hoverCommentCell, updateCommentPopupPosition]);
