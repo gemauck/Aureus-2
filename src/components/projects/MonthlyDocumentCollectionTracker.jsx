@@ -3367,6 +3367,12 @@ const getAssigneeColor = (identifier, users) => {
         const text = (comment.text || '').trim();
         return text.startsWith('Email from Client');
     };
+    /** Outbound platform audit rows — not shown on the comment notification badge (client replies & user notes still badge). */
+    const isPlatformOutboundAuditComment = (comment) => {
+        if (!comment) return false;
+        const author = (comment.author || '').trim();
+        return author === 'Sent request (platform)' || author === 'Sent reply (platform)';
+    };
     const getDocumentComments = (doc, month) => {
         const comments = getCommentsForYear(doc.comments, month, selectedYear);
         return Array.isArray(comments) ? comments : [];
@@ -4414,8 +4420,9 @@ const getAssigneeColor = (identifier, users) => {
                 (Array.isArray(emailDraft.cc) && emailDraft.cc.length > 0) ||
                 (typeof emailDraft.subject === 'string' && emailDraft.subject.trim()) ||
                 (typeof emailDraft.body === 'string' && emailDraft.body.trim()));
-        const showActivityCommentBadge = hasComments || !!hasSavedEmailDraft;
-        const activityCommentBadgeCount = hasComments ? comments.length : hasSavedEmailDraft ? 1 : 0;
+        const commentsForNotificationBadge = comments.filter((c) => !isPlatformOutboundAuditComment(c));
+        const showActivityCommentBadge = commentsForNotificationBadge.length > 0;
+        const activityCommentBadgeCount = commentsForNotificationBadge.length;
         const cellKey = buildCellKey(section.id, doc.id, month);
         const isPopupOpen = hoverCommentCell === cellKey;
         const isSelected = selectedCells.has(cellKey);
@@ -4613,8 +4620,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                     const monthNum = months.indexOf(month) + 1;
                                     const docMonthKey = buildDocMonthKey(doc.id, monthNum);
                                     const openedAt = openedNotificationByCell[docMonthKey]?.comment ? new Date(openedNotificationByCell[docMonthKey].comment).getTime() : null;
-                                    const latestCommentAt = Array.isArray(comments)
-                                        ? comments.reduce((max, c) => {
+                                    const latestCommentAt = Array.isArray(commentsForNotificationBadge)
+                                        ? commentsForNotificationBadge.reduce((max, c) => {
                                             const t = c?.createdAt ? new Date(c.createdAt).getTime() : null;
                                             if (!t || isNaN(t)) return max;
                                             return max == null || t > max ? t : max;
