@@ -32,15 +32,14 @@ async function handler(req, res) {
 
   try {
     const userId = req.user?.sub || req.user?.id
+    // Require author match only. text.startsWith('Email from Client') caused false badges when
+    // users pasted or typed that phrase with a normal author (imports, templates, notes).
     const rows = await prisma.documentItemComment.groupBy({
       by: ['itemId', 'month'],
       where: {
         year,
         item: { section: { projectId } },
-        OR: [
-          { author: 'Email from Client' },
-          { text: { startsWith: 'Email from Client' } }
-        ]
+        author: 'Email from Client'
       },
       _count: { id: true },
       _max: { createdAt: true }

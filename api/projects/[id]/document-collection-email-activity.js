@@ -313,8 +313,7 @@ async function runHandler(req, res, sendEmptyActivity) {
         return badRequest(res, 'Received comment not found or access denied')
       }
       const author = (comment.author || '').trim()
-      const text = (comment.text || '').trim()
-      const isReceived = author === 'Email from Client' || text.startsWith('Email from Client')
+      const isReceived = author === 'Email from Client'
       if (!isReceived) {
         return badRequest(res, 'Only received (Email from Client) comments can be moved')
       }
@@ -644,10 +643,7 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
         itemId: cell.documentId,
         year: cell.year,
         month: cell.month,
-        OR: [
-          { author: 'Email from Client' },
-          { text: { startsWith: 'Email from Client' } }
-        ]
+        author: 'Email from Client'
       },
       orderBy: { createdAt: 'asc' },
       select: { id: true, text: true, attachments: true, createdAt: true }
@@ -682,10 +678,7 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
               itemId: { in: docIds },
               year: cell.year,
               month: cell.month,
-              OR: [
-                { author: 'Email from Client' },
-                { text: { startsWith: 'Email from Client' } }
-              ]
+              author: 'Email from Client'
             },
             orderBy: { createdAt: 'asc' },
             select: { id: true, text: true, attachments: true, createdAt: true }
