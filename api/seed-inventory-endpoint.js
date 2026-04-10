@@ -9,6 +9,7 @@ import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, badRequest, serverError } from './_lib/response.js'
 import { stockItems } from './seed-inventory.js'
+import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -96,8 +97,9 @@ async function handler(req, res) {
         }
 
         const quantity = parseFloat(itemData.quantity) || 0
-        const totalValue = parseFloat(itemData.totalValue) || 0
-        const unitCost = quantity > 0 ? Math.round((totalValue / quantity) * 100) / 100 : 0
+        const importTotal = parseFloat(itemData.totalValue) || 0
+        const unitCost = quantity > 0 ? Math.round((importTotal / quantity) * 100) / 100 : 0
+        const totalValue = computedInventoryTotalValue(quantity, unitCost)
         const reorderPoint = Math.max(1, Math.floor(quantity * 0.2))
         const reorderQty = Math.max(10, Math.floor(quantity * 0.3))
         

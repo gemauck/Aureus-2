@@ -8,6 +8,7 @@ import { withLogging } from './_lib/logger.js'
 import { isAdminUser } from './_lib/adminRoles.js'
 // Mutations: after successful create/update/delete, call logAuditFromRequest (see .cursorrules / manufacturingAuditLog.js).
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
+import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
 
 const S_DRAFT = 'draft'
 const S_FINAL = 'final'
@@ -309,7 +310,7 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
     })
 
     if (!inventoryItem) {
-      const totalValue = quantity * unitCost
+      const totalValue = computedInventoryTotalValue(quantity, unitCost)
       inventoryItem = await tx.inventoryItem.create({
         data: {
           sku: item.sku,
@@ -331,7 +332,7 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
     } else {
       const newQuantity = (inventoryItem.quantity || 0) + quantity
       const newUnitCost = unitCost > 0 ? unitCost : inventoryItem.unitCost || 0
-      const totalValue = newQuantity * newUnitCost
+      const totalValue = computedInventoryTotalValue(newQuantity, newUnitCost)
       const reorderPoint = inventoryItem.reorderPoint || 0
       const status =
         newQuantity > reorderPoint ? 'in_stock' : newQuantity > 0 ? 'low_stock' : 'out_of_stock'
@@ -369,7 +370,7 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
         where: { id: inventoryItem.id },
         data: {
           quantity: aggQty,
-          totalValue: aggQty * costForValue,
+          totalValue: computedInventoryTotalValue(aggQty, costForValue),
           status:
             aggQty > (inventoryItem.reorderPoint || 0) ? 'in_stock' : aggQty > 0 ? 'low_stock' : 'out_of_stock'
         }

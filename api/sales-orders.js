@@ -7,6 +7,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 // Mutations: after successful create/update/delete, call logAuditFromRequest (see .cursorrules / manufacturingAuditLog.js).
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
+import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
 
 async function handler(req, res) {
   try {
@@ -335,7 +336,7 @@ async function handler(req, res) {
                   where: { id: inventoryItem.id },
                   data: {
                     quantity: aggQty,
-                    totalValue: aggQty * (inventoryItem.unitCost || 0),
+                    totalValue: computedInventoryTotalValue(aggQty, inventoryItem.unitCost),
                     status: aggQty > (inventoryItem.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
                   }
                 })

@@ -8,6 +8,7 @@ import { isAdminRole } from './_lib/authRoles.js'
 import { isSuperAdminUser } from './_lib/adminRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { parseJsonBody } from './_lib/body.js'
+import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
 import XLSX from 'xlsx'
 
 const INVENTORY_TEMPLATE_FIELDS = {
@@ -242,7 +243,7 @@ async function applyStockCountAdjustmentTx(tx, params) {
     }
     const uc = parseFloat(unitCost) || 0
     const rp = parseFloat(reorderPoint) || 0
-    const totalValue = qty * uc
+    const totalValue = computedInventoryTotalValue(qty, uc)
     const createData = {
       sku: String(sku).trim(),
       name: String(itemName || sku).trim(),
@@ -298,7 +299,7 @@ async function applyStockCountAdjustmentTx(tx, params) {
     }
   } else {
     newQuantity = (item.quantity || 0) + qty
-    const totalValue = newQuantity * (item.unitCost || 0)
+    const totalValue = computedInventoryTotalValue(newQuantity, item.unitCost)
     const rp = item.reorderPoint || 0
     const status = newQuantity > rp ? 'in_stock' : newQuantity > 0 ? 'low_stock' : 'out_of_stock'
     item = await tx.inventoryItem.update({
@@ -320,7 +321,7 @@ async function applyStockCountAdjustmentTx(tx, params) {
       where: { id: item.id },
       data: {
         quantity: aggQty,
-        totalValue: aggQty * (item.unitCost || 0),
+        totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
         status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : aggQty > 0 ? 'low_stock' : 'out_of_stock'
       }
     })
@@ -573,7 +574,7 @@ async function buildLocationInventoryResponse(locationId) {
       location: location.name || template.location || '',
       locationId,
       unitCost,
-      totalValue: unitCost * quantity,
+      totalValue: computedInventoryTotalValue(quantity, unitCost),
       supplier: template.supplier || '',
       supplierPartNumbers: template.supplierPartNumbers || '[]',
       manufacturingPartNumber: template.manufacturingPartNumber || '',
@@ -641,7 +642,6 @@ async function buildAllLocationsInventoryResponse() {
     }
     const row = bySku.get(sku)
     row.quantity += quantity
-    row.totalValue += (record.unitCost ?? unitCost) * quantity
     row.locations.push({
       locationId: record.locationId,
       locationName: record.location?.name || '',
@@ -663,7 +663,7 @@ async function buildAllLocationsInventoryResponse() {
         sku,
         name: template.name || sku,
         quantity: tmplQty,
-        totalValue: (template.unitCost ?? 0) * tmplQty,
+        totalValue: computedInventoryTotalValue(tmplQty, template.unitCost),
         allocatedQuantity: template.allocatedQuantity || 0, // template-level only
         inProductionQuantity: template.inProductionQuantity || 0,
         completedQuantity: template.completedQuantity || 0,
@@ -680,6 +680,7 @@ async function buildAllLocationsInventoryResponse() {
   const result = Array.from(bySku.values())
   for (const row of result) {
     row.status = getStatusFromQuantity(row.quantity, row.reorderPoint ?? 0)
+    row.totalValue = computedInventoryTotalValue(row.quantity, row.unitCost)
     if (row.locations.length === 0) row.location = ''
     else if (row.locations.length === 1) row.location = row.locations[0].locationName || row.locations[0].locationCode || ''
     else row.location = 'Multiple locations'
@@ -1197,7 +1198,10 @@ async function handler(req, res) {
               await tx.inventoryItem.update({ where: { id: master.id }, data: {
                 quantity: aggQty,
                 unitCost: body.unitCost !== undefined ? parseFloat(body.unitCost) : master.unitCost,
-                totalValue: aggQty * (body.unitCost !== undefined ? parseFloat(body.unitCost) : (master.unitCost || 0)),
+                totalValue: computedInventoryTotalValue(
+                  aggQty,
+                  body.unitCost !== undefined ? parseFloat(body.unitCost) : master.unitCost
+                ),
                 lastRestocked: now,
                 status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
               }})
@@ -1223,7 +1227,7 @@ async function handler(req, res) {
             if (master) {
               await tx.inventoryItem.update({ where: { id: master.id }, data: {
                 quantity: aggQty,
-                totalValue: aggQty * (master.unitCost || 0),
+                totalValue: computedInventoryTotalValue(aggQty, master.unitCost),
                 status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
               }})
             }
@@ -1260,7 +1264,7 @@ async function handler(req, res) {
             if (master) {
               await tx.inventoryItem.update({ where: { id: master.id }, data: {
                 quantity: aggQty,
-                totalValue: aggQty * (master.unitCost || 0),
+                totalValue: computedInventoryTotalValue(aggQty, master.unitCost),
                 status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
               }})
             }
@@ -1737,6 +1741,7 @@ async function handler(req, res) {
         // Format dates for response
         let formatted = items.map(item => ({
           ...item,
+          totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
           lastRestocked: formatDate(item.lastRestocked),
           createdAt: formatDate(item.createdAt),
           updatedAt: formatDate(item.updatedAt)
@@ -1773,6 +1778,7 @@ async function handler(req, res) {
         return ok(res, { 
           item: {
             ...item,
+            totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
             lastRestocked: formatDate(item.lastRestocked),
             createdAt: formatDate(item.createdAt),
             updatedAt: formatDate(item.updatedAt)
@@ -1869,8 +1875,19 @@ async function handler(req, res) {
             }
 
             const quantity = parseFloat(itemData.quantity) || 0
-            const totalValue = parseFloat(itemData.totalValue) || 0
-            const unitCost = quantity > 0 ? Math.round((totalValue / quantity) * 100) / 100 : 0
+            const importTotal = parseFloat(itemData.totalValue) || 0
+            const parsedExplicitUc = parseFloat(itemData.unitCost)
+            const hasExplicitUnitCost =
+              itemData.unitCost !== undefined &&
+              itemData.unitCost !== null &&
+              String(itemData.unitCost).trim() !== '' &&
+              Number.isFinite(parsedExplicitUc)
+            const unitCost = hasExplicitUnitCost
+              ? parsedExplicitUc
+              : quantity > 0
+                ? Math.round((importTotal / quantity) * 100) / 100
+                : 0
+            const totalValue = computedInventoryTotalValue(quantity, unitCost)
             const reorderPoint = Math.max(1, Math.floor(quantity * 0.2))
             const reorderQty = Math.max(10, Math.floor(quantity * 0.3))
             
@@ -2069,7 +2086,7 @@ async function handler(req, res) {
           status = 'low_stock'
         }
         
-        const totalValue = quantity * (parseFloat(body.unitCost) || 0)
+        const totalValue = computedInventoryTotalValue(quantity, parseFloat(body.unitCost) || 0)
         const lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : new Date()
         
         // Get locationId - if not provided, default to main warehouse
@@ -2189,6 +2206,7 @@ async function handler(req, res) {
         return created(res, { 
           item: {
             ...item,
+            totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
             lastRestocked: formatDate(item.lastRestocked),
             createdAt: formatDate(item.createdAt),
             updatedAt: formatDate(item.updatedAt)
@@ -2282,13 +2300,6 @@ async function handler(req, res) {
         // Status will be auto-calculated based on quantity and reorder point
         if (body.lastRestocked !== undefined) updateData.lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : null
         
-        // Recalculate totalValue if unitCost changed (quantity won't change as it's read-only)
-        if (body.unitCost !== undefined) {
-          const qty = existing.quantity
-          const cost = parseFloat(body.unitCost)
-          updateData.totalValue = qty * cost
-        }
-        
         // Auto-calculate status based on quantity and reorder point
         // Use existing quantity (it can't be changed via update)
         const quantity = existing.quantity
@@ -2309,6 +2320,10 @@ async function handler(req, res) {
             data: { itemName: body.name }
           })
         }
+
+        const costForValue =
+          updateData.unitCost !== undefined ? Number(updateData.unitCost) || 0 : Number(existing.unitCost) || 0
+        updateData.totalValue = computedInventoryTotalValue(existing.quantity, costForValue)
 
         // Try to update - if new fields cause error, retry without them
         let item;
@@ -2344,6 +2359,7 @@ async function handler(req, res) {
         return ok(res, { 
           item: {
             ...item,
+            totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
             lastRestocked: formatDate(item.lastRestocked),
             createdAt: formatDate(item.createdAt),
             updatedAt: formatDate(item.updatedAt)
@@ -3037,7 +3053,7 @@ async function handler(req, res) {
                   where: { id: inventoryItem.id },
                   data: {
                     ...updateData,
-                    totalValue: Math.max(0, newQuantity * (inventoryItem.unitCost || 0)),
+                    totalValue: Math.max(0, computedInventoryTotalValue(newQuantity, inventoryItem.unitCost)),
                     status: getStatusFromQuantity(newQuantity, inventoryItem.reorderPoint || 0)
                   }
                 })
@@ -3239,7 +3255,7 @@ async function handler(req, res) {
               data: {
                 quantity: finalQty,
                 unitCost: unitCost, // Set to sum of parts
-                totalValue: finalQty * unitCost,
+                totalValue: computedInventoryTotalValue(finalQty, unitCost),
                 status: finalQty > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (finalQty > 0 ? 'low_stock' : 'out_of_stock'),
                 lastRestocked: new Date()
               }
@@ -3743,7 +3759,7 @@ async function handler(req, res) {
                       await tx.inventoryItem.update({
                         where: { id: updated.id },
                         data: {
-                          totalValue: newQty * (updated.unitCost || 0),
+                          totalValue: computedInventoryTotalValue(newQty, updated.unitCost),
                           status: status
                         }
                       })
@@ -3991,7 +4007,7 @@ async function handler(req, res) {
                       await tx.inventoryItem.update({
                         where: { id: updated.id },
                         data: {
-                          totalValue: newQty * (updated.unitCost || 0),
+                          totalValue: computedInventoryTotalValue(newQty, updated.unitCost),
                           status: status
                         }
                       })
@@ -4355,7 +4371,7 @@ async function handler(req, res) {
                 where: { id: item.id },
                 data: {
                   quantity: aggQty,
-                  totalValue: aggQty * (item.unitCost || 0),
+                  totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
                   status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
                 }
               })
@@ -4365,7 +4381,7 @@ async function handler(req, res) {
             if (!item) {
               const unitCost = parseFloat(body.unitCost) || 0
               const reorderPoint = parseFloat(body.reorderPoint) || 0
-              const totalValue = quantity * unitCost
+              const totalValue = computedInventoryTotalValue(quantity, unitCost)
               // Create with core fields
               const createData = {
                 sku: body.sku,
@@ -4408,7 +4424,7 @@ async function handler(req, res) {
               // Increment quantity and update value (quantity is already positive for receipts)
               const unitCost = body.unitCost !== undefined ? parseFloat(body.unitCost) : item.unitCost
               newQuantity = (item.quantity || 0) + quantity // quantity is positive for receipts
-              const totalValue = newQuantity * (unitCost || 0)
+              const totalValue = computedInventoryTotalValue(newQuantity, unitCost)
               const reorderPoint = item.reorderPoint || 0
               const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
               item = await tx.inventoryItem.update({
@@ -4446,7 +4462,7 @@ async function handler(req, res) {
                   where: { id: item.id },
                   data: {
                     quantity: aggQty,
-                    totalValue: aggQty * (item.unitCost || 0),
+                    totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
                     status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
                   }
                 })
@@ -4478,7 +4494,7 @@ async function handler(req, res) {
             }
             
             newQuantity = (item.quantity || 0) + quantity // quantity is negative, so this subtracts
-            const totalValue = newQuantity * (item.unitCost || 0)
+            const totalValue = computedInventoryTotalValue(newQuantity, item.unitCost)
             const reorderPoint = item.reorderPoint || 0
             const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
             item = await tx.inventoryItem.update({
@@ -4512,7 +4528,7 @@ async function handler(req, res) {
                 where: { id: item.id },
                 data: {
                   quantity: aggQty,
-                  totalValue: aggQty * (item.unitCost || 0),
+                  totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
                   status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
                 }
               })
@@ -4542,7 +4558,7 @@ async function handler(req, res) {
             }
             
             newQuantity = (item.quantity || 0) + quantity // quantity is negative, so this subtracts
-            const totalValue = newQuantity * (item.unitCost || 0)
+            const totalValue = computedInventoryTotalValue(newQuantity, item.unitCost)
             const reorderPoint = item.reorderPoint || 0
             const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
             item = await tx.inventoryItem.update({
@@ -4576,7 +4592,7 @@ async function handler(req, res) {
                 where: { id: item.id },
                 data: {
                   quantity: aggQty,
-                  totalValue: aggQty * (item.unitCost || 0),
+                  totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
                   status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
                 }
               })
@@ -4591,7 +4607,7 @@ async function handler(req, res) {
               // Create item with adjustment quantity
               const unitCost = parseFloat(body.unitCost) || 0
               const reorderPoint = parseFloat(body.reorderPoint) || 0
-              const totalValue = quantity * unitCost
+              const totalValue = computedInventoryTotalValue(quantity, unitCost)
               const createData = {
                 sku: body.sku,
                 name: body.itemName,
@@ -4630,7 +4646,7 @@ async function handler(req, res) {
               // Adjust existing item quantity (can be positive or negative)
               newQuantity = (item.quantity || 0) + quantity
               // Allow negative inventory for adjustments (user corrections)
-              const totalValue = newQuantity * (item.unitCost || 0)
+              const totalValue = computedInventoryTotalValue(newQuantity, item.unitCost)
               const reorderPoint = item.reorderPoint || 0
               const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
               item = await tx.inventoryItem.update({
@@ -4676,7 +4692,7 @@ async function handler(req, res) {
                 where: { id: item.id },
                 data: {
                   quantity: aggQty,
-                  totalValue: aggQty * (item.unitCost || 0),
+                  totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
                   status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
                 }
               })
@@ -4890,7 +4906,7 @@ async function handler(req, res) {
           const item = inventoryBySku.get(reqComp.sku)
           const consumeQty = reqComp.quantity
           const newQty = (item.quantity || 0) - consumeQty
-          const totalValue = newQty * (item.unitCost || 0)
+          const totalValue = computedInventoryTotalValue(newQty, item.unitCost)
           const reorderPoint = item.reorderPoint || 0
           const status = newQty > reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
 
@@ -4917,7 +4933,7 @@ async function handler(req, res) {
               where: { id: item.id },
               data: { 
                 quantity: aggQty, 
-                totalValue: aggQty * (item.unitCost || 0), 
+                totalValue: computedInventoryTotalValue(aggQty, item.unitCost), 
                 status: aggQty > reorderPoint ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
               }
             })
