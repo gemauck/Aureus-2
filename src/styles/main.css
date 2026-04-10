@@ -545,3 +545,17 @@ html.dark .crm-leads-table-dark-body > tr + tr > td {
     min-width: 0;
     max-width: 100%;
 }
+
+/* Authenticated shell: #root and flex row fill layout width (avoids clipped / empty strip beside sidebar) */
+body.erp-app #root {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 100vh;
+}
+
+body.erp-app #root .flex.h-screen {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}

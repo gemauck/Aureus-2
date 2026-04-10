@@ -7342,10 +7342,10 @@ const Clients = React.memo(() => {
 
     // Clients List View
     const ClientsListView = () => (
-        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full`}>
-            <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <div className="table-responsive overflow-x-auto min-w-0">
-                <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full min-w-0`}>
+            <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full min-w-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="table-responsive inventory-desktop-xscroll overflow-x-auto min-w-0 w-full">
+                <table className={`w-full min-w-max divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                     <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                         <tr>
                             <th 
@@ -7817,7 +7817,7 @@ const Clients = React.memo(() => {
                     </div>
                 )}
 
-                <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full min-w-0" style={{ WebkitOverflowScrolling: 'touch' }}>
                     {isLoadingGroups ? (
                         <div className="flex items-center justify-center py-12">
                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -7826,7 +7826,8 @@ const Clients = React.memo(() => {
                             </div>
                         </div>
                     ) : (
-                        <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
+                        <div className="inventory-desktop-xscroll overflow-x-auto min-w-0 w-full">
+                        <table className={`w-full min-w-max divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                             <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                                 <tr>
                                     <th 
@@ -7977,6 +7978,7 @@ const Clients = React.memo(() => {
                                 )}
                             </tbody>
                         </table>
+                        </div>
                     )}
                 </div>
                 {/* Pagination Controls */}
@@ -9122,7 +9124,7 @@ const Clients = React.memo(() => {
     // Note: Lead status is now hardcoded as 'active' - removed handleLeadStatusChange function
 
     const LeadsListView = () => (
-        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full`}>
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full min-w-0`}>
             <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Leads</span>
                 <div className="flex items-center gap-4">
@@ -9137,8 +9139,9 @@ const Clients = React.memo(() => {
                     </button>
                 </div>
             </div>
-            <div className="flex-1 overflow-auto w-full">
-                <table className={`w-full ${isDark ? 'crm-leads-table-dark' : 'divide-y divide-gray-200'}`} style={{ width: '100%' }}>
+            <div className="flex-1 overflow-auto w-full min-w-0">
+                <div className="inventory-desktop-xscroll overflow-x-auto w-full min-w-0">
+                <table className={`w-full min-w-max ${isDark ? 'crm-leads-table-dark' : 'divide-y divide-gray-200'}`}>
                     <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                         <tr>
                             <th 
@@ -9422,6 +9425,7 @@ const Clients = React.memo(() => {
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
             {/* Pagination Controls */}
             {sortedLeads.length > 0 && (
@@ -9640,8 +9644,8 @@ const Clients = React.memo(() => {
     // Removed render logging to reduce console spam during infinite loops
 
     return (
-        <div className="flex flex-col h-full w-full max-w-full overflow-hidden" style={{ width: '100%', maxWidth: '100%', minWidth: '100%', height: '100%', minHeight: '100%' }}>
-            <div className="flex-shrink-0 space-y-5 sm:space-y-8 pr-2 sm:pr-4 pt-5 sm:pt-6 pb-2 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
+        <div className="flex flex-col h-full w-full max-w-full min-w-0 overflow-hidden" style={{ width: '100%', maxWidth: '100%', minWidth: 0, height: '100%', minHeight: '100%' }}>
+            <div className="flex-shrink-0 space-y-5 sm:space-y-8 pr-2 sm:pr-4 pt-5 sm:pt-6 pb-2 w-full max-w-full min-w-0" style={{ width: '100%', maxWidth: '100%' }}>
             {/* Modern Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 pb-2">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">

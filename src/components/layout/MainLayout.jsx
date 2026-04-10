@@ -538,8 +538,8 @@ const MainLayout = () => {
         const meta = document.querySelector('meta[name="viewport"]');
         if (!meta) return undefined;
         const defaultContent =
-            'width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
-        const desktopSiteContent = `width=${DESKTOP_SITE_LAYOUT_MIN_PX}, initial-scale=1, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover`;
+            'width=device-width, initial-scale=1.0, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
+        const desktopSiteContent = `width=${DESKTOP_SITE_LAYOUT_MIN_PX}, initial-scale=1, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover`;
         const useWideViewport = isMobile && preferDesktopSite;
         meta.setAttribute('content', useWideViewport ? desktopSiteContent : defaultContent);
         return () => {
@@ -1973,11 +1973,11 @@ const MainLayout = () => {
 
                 {/* Page Content — mobile CRM uses inner scroll only so tabs/search are not in the same scrollport as the list (fixes content bleeding through sticky chrome). */}
                 <main
-                    className={`flex-1 min-w-0 overflow-x-hidden ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-col min-h-0 overflow-y-hidden' : 'overflow-y-auto'} ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : 'px-3 py-4 sm:p-6'}`}
+                    className={`flex-1 min-w-0 ${currentPage === 'clients' ? 'overflow-x-auto' : 'overflow-x-hidden'} ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-col min-h-0 overflow-y-hidden' : 'overflow-y-auto'} ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : 'px-3 py-4 sm:p-6'}`}
                     style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}
                 >
                     <div
-                        className={`erp-module-root w-full ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-1 flex-col min-h-0 px-2 lg:px-3 py-4' : currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`}
+                        className={`erp-module-root w-full min-w-0 ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-1 flex-col min-h-0 px-2 lg:px-3 py-4' : currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : ''}`}
                         style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}
                     >
                         {renderPage}
