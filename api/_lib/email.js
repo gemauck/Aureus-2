@@ -3,6 +3,32 @@ import nodemailer from 'nodemailer';
 import { getAppUrl } from './getAppUrl.js';
 import { formatLongDateInSAST } from './sastDate.js';
 
+/** Standard legal line for every transactional email (HTML + plain text). */
+export const EMAIL_LEGAL_FOOTER_LINE = '© 2026 Abcotronics ERP. All rights reserved.';
+
+const EMAIL_LEGAL_FOOTER_HTML_BLOCK = `
+                <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
+                    <p style="margin: 0;">${EMAIL_LEGAL_FOOTER_LINE}</p>
+                </div>`;
+
+const EMAIL_LEGAL_FOOTER_HTML_BLOCK_COMPACT = `
+                <div style="background: #343a40; color: white; padding: 16px; text-align: center; font-size: 12px;">
+                    <p style="margin: 0;">${EMAIL_LEGAL_FOOTER_LINE}</p>
+                </div>`;
+
+/** Appended to simple HTML bodies from sendEmail when they do not already include the standard line. */
+function appendLegalFooterToHtmlFragment(html) {
+    if (!html || typeof html !== 'string') return html;
+    if (html.includes('© 2026 Abcotronics ERP')) return html;
+    return `${html}<p style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#64748b;text-align:center;">${EMAIL_LEGAL_FOOTER_LINE}</p>`;
+}
+
+function appendLegalFooterToPlainText(text) {
+    if (!text || typeof text !== 'string') return text;
+    if (text.includes('© 2026 Abcotronics ERP')) return text;
+    return `${text.trim()}\n\n${EMAIL_LEGAL_FOOTER_LINE}`;
+}
+
 // Build transporter from environment variables
 // Supported envs:
 // - SMTP_URL (e.g. smtp://user:pass@smtp.gmail.com:587)
@@ -353,14 +379,21 @@ export async function sendEmail(opts) {
     const fromDisplayName = fromName && typeof fromName === 'string' ? fromName : 'Abcotronics';
     const fromEmailOnly = emailFrom.includes('<') ? (emailFrom.match(/<(.+)>/)?.[1] || emailFrom).trim() : emailFrom;
     const fromAddress = `${fromDisplayName} <${fromEmailOnly}>`;
-    const textContent = text || (html ? html.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n\n') : '');
+    let outHtml = html ? appendLegalFooterToHtmlFragment(html) : undefined;
+    let outText = text;
+    if (!outText && outHtml) {
+        outText = outHtml.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').replace(/\n\s*\n/g, '\n\n');
+    }
+    if (outText) {
+        outText = appendLegalFooterToPlainText(outText);
+    }
     const mailOptions = {
         from: fromAddress,
         to: toNormalized.length === 1 ? toNormalized[0] : toNormalized,
         subject,
         ...(replyTo && { replyTo }),
-        ...(html && { html }),
-        ...(textContent && { text: textContent }),
+        ...(outHtml && { html: outHtml }),
+        ...(outText && { text: outText }),
         ...(customHeaders && typeof customHeaders === 'object' && { headers: customHeaders })
     };
     if (cc && (Array.isArray(cc) ? cc.length : cc)) {
@@ -474,12 +507,10 @@ export const sendInvitationEmail = async (invitationData) => {
                     </p>
                 </div>
                 
-                <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
-                    <p style="margin: 0;">© 2024 Abcotronics. All rights reserved.</p>
-                </div>
+                ${EMAIL_LEGAL_FOOTER_HTML_BLOCK}
             </div>
         `,
-        text: `
+        text: appendLegalFooterToPlainText(`
             Welcome to Abcotronics
             
             Hi ${name},
@@ -498,7 +529,7 @@ export const sendInvitationEmail = async (invitationData) => {
             
             Best regards,
             Gareth Mauck
-        `
+        `)
     };
 
     // Check configuration (warn but don't block)
@@ -624,12 +655,10 @@ export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
                     </div>
                     <p style="color: #666; font-size: 14px;">If you didn't request this, you can safely ignore this email. This link will expire in 1 hour.</p>
                 </div>
-                <div style="background: #343a40; color: white; padding: 16px; text-align: center; font-size: 12px;">
-                    <p style="margin: 0;">© 2024 Abcotronics. All rights reserved.</p>
-                </div>
+                ${EMAIL_LEGAL_FOOTER_HTML_BLOCK_COMPACT}
             </div>
         `,
-        text: `Password Reset\n\nHi ${name || email},\n\nClick this link to reset your password: ${resetLink}\n\nIf you didn't request this, ignore this email. The link expires in 1 hour.`
+        text: appendLegalFooterToPlainText(`Password Reset\n\nHi ${name || email},\n\nClick this link to reset your password: ${resetLink}\n\nIf you didn't request this, ignore this email. The link expires in 1 hour.`)
     };
 
     try {
@@ -1002,9 +1031,7 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                     </div>
                 </div>
                 
-                <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
-                    <p style="margin: 0;">© 2024 Abcotronics. All rights reserved.</p>
-                </div>
+                ${EMAIL_LEGAL_FOOTER_HTML_BLOCK.trim()}
             </div>
         `,
         text: (() => {
@@ -1081,7 +1108,7 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                 }
             }
             
-            return text;
+            return appendLegalFooterToPlainText(text);
         })()
     };
 

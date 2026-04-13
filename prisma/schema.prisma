@@ -101,6 +101,8 @@ model User {
   hrPolicyAcknowledgments    HrPolicyAcknowledgment[]
   hrLibraryDocumentsForUser   HrLibraryDocument[]           @relation("HrLibraryDocumentEmployee")
   hrLibraryDocumentsUploaded  HrLibraryDocument[]           @relation("HrLibraryDocumentUploader")
+  travelBookingRequestsCreated  TravelBookingRequest[]       @relation("TravelBookingRequester")
+  travelBookingRequestsAssigned TravelBookingRequest[]       @relation("TravelBookingAssignee")
 
   @@index([createdAt])
   @@index([role])
@@ -1215,6 +1217,28 @@ model FeedbackEmailSent {
 
   @@unique([messageId])
   @@index([feedbackId])
+}
+
+/// Flight & accommodation booking requests (Tools module)
+model TravelBookingRequest {
+  id                     String   @id @default(cuid())
+  requesterId            String
+  assigneeId             String
+  status                 String   @default("submitted")
+  tripTitle              String   @default("")
+  businessReason         String
+  payload                String   @default("{}")
+  assigneeInternalNotes  String   @default("")
+  messageToRequester     String   @default("")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  requester              User     @relation("TravelBookingRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  assignee               User     @relation("TravelBookingAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Ticket {

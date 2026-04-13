@@ -75,10 +75,6 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
             This is an automated notification from your ERP system.
           </p>
         </div>
-        
-        <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
-          <p style="margin: 0;">© 2024 ${process.env.APP_NAME || 'Abcotronics'}. All rights reserved.</p>
-        </div>
       </div>
     `
 
@@ -204,9 +200,6 @@ async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
             <a href="${erpMyQueriesUrl}" style="color:#667eea;">Open in ERP — Reports → My queries</a> (this thread is highlighted). You can reply to this email to add another comment.
           </p>
         </div>
-        <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
-          <p style="margin: 0;">© ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
-        </div>
       </div>
     `
 
@@ -277,9 +270,6 @@ async function notifyFeedbackAuthorOfChange(feedback, changeType, oldVal, newVal
             <p style="color: #333; margin: 8px 0 0; white-space: pre-wrap;">${escapeHtml((feedback?.message || '').slice(0, 300))}${(feedback?.message || '').length > 300 ? '...' : ''}</p>
           </div>
           <p style="color: #666; font-size: 14px;"><a href="${erpMyQueriesUrl}" style="color:#667eea;">Open in ERP — Reports → My queries</a> (this thread is highlighted).</p>
-        </div>
-        <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
-          <p style="margin: 0;">© ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
         </div>
       </div>
     `

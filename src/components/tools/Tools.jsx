@@ -30,7 +30,8 @@ const Tools = () => {
         DocumentParser: null,
         SafetyCultureInspections: null,
         DocumentSorter: null,
-        ExpenseCaptureTool: null
+        ExpenseCaptureTool: null,
+        TravelBookingRequests: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
     const prevUrlToolIdRef = useRef(undefined);
@@ -69,7 +70,8 @@ const Tools = () => {
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
-                ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool
+                ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool,
+                TravelBookingRequests: window.TravelBookingRequests
             };
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
@@ -100,7 +102,8 @@ const Tools = () => {
                     HandwritingToWord: !!components.HandwritingToWord,
                     DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator,
                     DocumentParser: !!components.DocumentParser,
-                    ExpenseCaptureTool: !!components.ExpenseCaptureTool
+                    ExpenseCaptureTool: !!components.ExpenseCaptureTool,
+                    TravelBookingRequests: !!components.TravelBookingRequests
                 });
                 isChecking = false;
             }
@@ -130,7 +133,8 @@ const Tools = () => {
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
-                ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool
+                ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool,
+                TravelBookingRequests: window.TravelBookingRequests
             };
             setToolComponents(prev => {
                 const hasChanged = Object.keys(components).some(key => 
@@ -152,8 +156,8 @@ const Tools = () => {
         };
     }, []);
 
-    // Build tools array with components - use useMemo to recalculate when toolComponents changes
-    const tools = useMemo(() => {
+    // Full tool list (includes admin-only entries for deep links / assignee notification URLs)
+    const allTools = useMemo(() => {
         const toolsArray = [
             {
                 id: 'expense-capture',
@@ -226,6 +230,15 @@ const Tools = () => {
                 icon: 'fa-folder-tree',
                 color: 'amber',
                 component: toolComponents.DocumentSorter
+            },
+            {
+                id: 'travel-booking-requests',
+                name: 'Travel & accommodation requests',
+                description: 'Request flights and accommodation with full trip details; notifies your nominated booker',
+                icon: 'fa-plane',
+                color: 'sky',
+                component: toolComponents.TravelBookingRequests,
+                adminOnly: true
             }
         ];
         // Debug: Log when tools array is recalculated
@@ -239,13 +252,19 @@ const Tools = () => {
         return toolsArray;
     }, [toolComponents, toolsVersion]); // Include toolsVersion to force recalculation
 
-    // Deep link: open a tool from /tools/{toolId} or /tools?tool={toolId}; must run after `tools` exists (not in TDZ)
+    const toolsForGrid = useMemo(() => {
+        const u = window.storage?.getUser?.() || {};
+        const admin = typeof window.isAdminRole === 'function' && window.isAdminRole(u.role);
+        return allTools.filter((t) => !t.adminOnly || admin);
+    }, [allTools, toolsVersion]);
+
+    // Deep link: open a tool from /tools/{toolId} or /tools?tool={toolId}; must run after `allTools` exists (not in TDZ)
     useEffect(() => {
         const syncFromUrl = () => {
             const toolId = parseToolIdFromLocation();
             const prev = prevUrlToolIdRef.current;
             if (toolId) {
-                const found = tools.find((t) => t.id === toolId);
+                const found = allTools.find((t) => t.id === toolId);
                 if (found) setCurrentTool(found);
                 prevUrlToolIdRef.current = toolId;
                 return;
@@ -260,7 +279,7 @@ const Tools = () => {
         return () => {
             if (typeof unsub === 'function') unsub();
         };
-    }, [tools, toolsVersion]);
+    }, [allTools, toolsVersion]);
 
     const renderToolContent = () => {
         if (!currentTool) {
@@ -272,7 +291,7 @@ const Tools = () => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {tools.map(tool => {
+                        {toolsForGrid.map(tool => {
                             const hasComponent = tool.component !== null && tool.component !== undefined;
                             return (
                             <button
@@ -325,7 +344,7 @@ const Tools = () => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-[10px] text-gray-600 mb-0.5">Tools Available</p>
-                                    <p className="text-lg font-bold text-gray-900">{tools.filter(t => !t.comingSoon).length}</p>
+                                    <p className="text-lg font-bold text-gray-900">{toolsForGrid.filter(t => !t.comingSoon).length}</p>
                                 </div>
                                 <i className="fas fa-tools text-primary-600 text-lg"></i>
                             </div>
@@ -334,7 +353,7 @@ const Tools = () => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-[10px] text-gray-600 mb-0.5">Coming Soon</p>
-                                    <p className="text-lg font-bold text-gray-900">{tools.filter(t => t.comingSoon).length}</p>
+                                    <p className="text-lg font-bold text-gray-900">{toolsForGrid.filter(t => t.comingSoon).length}</p>
                                 </div>
                                 <i className="fas fa-clock text-orange-600 text-lg"></i>
                             </div>
@@ -343,7 +362,7 @@ const Tools = () => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-[10px] text-gray-600 mb-0.5">Total Tools</p>
-                                    <p className="text-lg font-bold text-gray-900">{tools.length}</p>
+                                    <p className="text-lg font-bold text-gray-900">{toolsForGrid.length}</p>
                                 </div>
                                 <i className="fas fa-layer-group text-green-600 text-lg"></i>
                             </div>
@@ -354,7 +373,7 @@ const Tools = () => {
         }
 
         // Get the current component from the tools array (in case it was loaded after tool selection)
-        const currentToolWithComponent = tools.find(t => t.id === currentTool.id);
+        const currentToolWithComponent = allTools.find(t => t.id === currentTool.id);
         const ToolComponent = currentToolWithComponent?.component;
         
         // If component is not loaded yet, show loading state
