@@ -77,6 +77,7 @@
         'utils/routeState.js',
         'utils/entityUrl.js',
         'utils/componentUrlRouting.js',
+        'utils/projectTrackerDeepLink.js',
         'utils/mentionHelper.js',
         'utils/dieselRefundEvidenceEvaluator.js',
         'utils/manufacturingStockLocations.js',

@@ -689,8 +689,13 @@ async function handler(req, res) {
             priorCommentTexts,
             authorName: user.name || user.email || 'Someone',
             contextTitle: `Ticket #${ticket.ticketNumber}: ${ticket.title || 'Helpdesk'}`,
-            link: `#/helpdesk/${id}`,
-            metadata: { ticketId: id, commentText: body.message.trim() }
+            link: `#/helpdesk/${id}?commentId=${encodeURIComponent(newComment.id)}`,
+            metadata: {
+              ticketId: id,
+              commentId: newComment.id,
+              commentText: body.message.trim(),
+              source: 'helpdesk_ticket'
+            }
           })
         } catch (notifyErr) {
           console.error('Notify comment participants failed (helpdesk):', notifyErr)

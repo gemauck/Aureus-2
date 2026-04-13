@@ -70,16 +70,16 @@ export async function syncMentionsOnUserNote({
   }
 
   let contextTitle = 'a note'
-  let link = '#/my-notes'
+  let link = `#/my-notes?noteId=${encodeURIComponent(noteId)}`
   const metadata = { noteId, source: 'user_note', clientId: clientId || null, projectId: projectId || null }
   if (projectId) {
     contextTitle = `Project Note: ${title || 'Untitled'}`
-    link = `#/projects/${encodeURIComponent(projectId)}?tab=notes`
+    link = `#/projects/${encodeURIComponent(projectId)}?tab=notes&noteId=${encodeURIComponent(noteId)}`
   } else if (clientId) {
     const client = await prisma.client.findUnique({ where: { id: clientId }, select: { name: true, type: true } })
     const isLead = String(client?.type || '').toLowerCase() === 'lead'
     contextTitle = `${isLead ? 'Lead' : 'Client'} Note: ${title || 'Untitled'}`
-    link = `#/${isLead ? 'leads' : 'clients'}/${encodeURIComponent(clientId)}?tab=notes`
+    link = `#/${isLead ? 'leads' : 'clients'}/${encodeURIComponent(clientId)}?tab=notes&noteId=${encodeURIComponent(noteId)}`
     if (isLead) metadata.leadId = clientId
   } else {
     contextTitle = `My Note: ${title || 'Untitled'}`
@@ -162,7 +162,7 @@ export async function syncMentionsFromEntityNote({
   }
 
   let contextTitle = 'a note'
-  let link = '#/my-notes'
+  let link = `#/my-notes?noteId=${encodeURIComponent(entityNoteId)}`
   const metadata = {
     source: `${safeEntity}_note`,
     noteId: entityNoteId,
@@ -172,12 +172,12 @@ export async function syncMentionsFromEntityNote({
 
   if (safeEntity === 'project' && projectId) {
     contextTitle = `Project Note: ${title || 'Untitled'}`
-    link = `#/projects/${encodeURIComponent(projectId)}?tab=notes`
+    link = `#/projects/${encodeURIComponent(projectId)}?tab=notes&noteId=${encodeURIComponent(entityNoteId)}`
   } else if (clientId) {
     const client = await prisma.client.findUnique({ where: { id: clientId }, select: { name: true, type: true } })
     const isLead = String(client?.type || '').toLowerCase() === 'lead'
     contextTitle = `${isLead ? 'Lead' : 'Client'} Note: ${title || 'Untitled'}`
-    link = `#/${isLead ? 'leads' : 'clients'}/${encodeURIComponent(clientId)}?tab=notes`
+    link = `#/${isLead ? 'leads' : 'clients'}/${encodeURIComponent(clientId)}?tab=notes&noteId=${encodeURIComponent(entityNoteId)}`
     if (isLead) metadata.leadId = clientId
   }
 

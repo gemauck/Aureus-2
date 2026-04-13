@@ -8,6 +8,7 @@
 import { prisma } from '../_lib/prisma.js';
 import { sendEmail } from '../_lib/email.js';
 import { ok, badRequest, serverError } from '../_lib/response.js';
+import { getAppUrl } from '../_lib/getAppUrl.js';
 
 const MS_WEEK = 7 * 24 * 60 * 60 * 1000;
 
@@ -24,6 +25,17 @@ function htmlFromBody(body) {
     .split('\n')
     .map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'))
     .join('<br>');
+}
+
+function buildDocumentCollectionErpLink(projectId, sectionId, documentId, monthKey, yearStr) {
+  const base = getAppUrl().replace(/\/$/, '');
+  const q = new URLSearchParams();
+  q.set('tab', 'documentCollection');
+  if (sectionId != null && String(sectionId) !== '') q.set('docSectionId', String(sectionId));
+  if (documentId != null && String(documentId) !== '') q.set('docDocumentId', String(documentId));
+  if (monthKey != null && String(monthKey) !== '') q.set('docMonth', String(monthKey));
+  if (yearStr != null && String(yearStr) !== '') q.set('docYear', String(yearStr));
+  return `${base}/#/projects/${encodeURIComponent(projectId)}?${q.toString()}`;
 }
 
 async function handler(req, res) {
@@ -90,8 +102,13 @@ async function handler(req, res) {
 
             const subject = (typeof data.subject === 'string' && data.subject.trim()) || 'Abco Document / Data request';
             const body = typeof data.body === 'string' ? data.body.trim() : '';
-            const html = body ? htmlFromBody(body) : '';
-            const text = body || '';
+            const sectionIdForLink = section.id != null ? section.id : String(si);
+            const erpCellUrl = buildDocumentCollectionErpLink(project.id, sectionIdForLink, doc.id, monthKey, yearStr);
+            const htmlBody = body ? htmlFromBody(body) : '';
+            const html = htmlBody
+              ? `${htmlBody}<p style="margin-top:18px;font-size:13px;color:#444;"><a href="${erpCellUrl.replace(/"/g, '&quot;')}">Open this request in the ERP (document collection)</a></p>`
+              : `<p style="font-size:14px;"><a href="${erpCellUrl.replace(/"/g, '&quot;')}">Open this request in the ERP (document collection)</a></p>`;
+            const text = body ? `${body}\n\nOpen in ERP: ${erpCellUrl}` : `Open in ERP: ${erpCellUrl}`;
             const cc = Array.isArray(data.cc) ? data.cc.filter((e) => e && typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())) : [];
 
             const validTo = recipients.filter((e) => e && typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim()));

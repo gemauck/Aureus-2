@@ -4,6 +4,23 @@ const storage = window.storage;
 const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
+const getCommentIdFromLocation = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        if (hash.includes('?')) {
+            const id = new URLSearchParams(hash.split('?')[1] || '').get('commentId');
+            if (id && String(id).trim()) return String(id).trim();
+        }
+        if (search) {
+            const id = new URLSearchParams(search).get('commentId');
+            if (id && String(id).trim()) return String(id).trim();
+        }
+    } catch (_) {}
+    return null;
+};
+
 // Derive a human‑readable facilities label from the project, handling both
 // array and string shapes and falling back gracefully when nothing is set.
 const getFacilitiesLabel = (project) => {
@@ -632,6 +649,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
     const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+    const lastActivityScrollSigRef = useRef(null);
     const hoverCommentCellRef = useRef(null);
     const [cellActivityTimeline, setCellActivityTimeline] = useState([]);
     const [cellActivityLoading, setCellActivityLoading] = useState(false);
@@ -2700,17 +2718,19 @@ const getAssigneeColor = (identifier, users) => {
             const excelData = [];
             const headerRow1 = ['Section / Document'];
             const headerRow2 = [''];
+            const exportFileTag = 'Weekly_FMS_Review';
+            const sheetTitle = `Weekly FMS Review ${selectedYear}`.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
             
             weeks.forEach(week => {
-                headerRow1.push(week.label, '');
-                headerRow2.push('Status', 'Comments');
+                headerRow1.push(week.label, '', '');
+                headerRow2.push('Status', 'Comments', 'Notes');
             });
             
             excelData.push(headerRow1, headerRow2);
             
             sections.forEach(section => {
                 const sectionRow = [section.name];
-                for (let i = 0; i < weeks.length * 2; i++) sectionRow.push('');
+                for (let i = 0; i < weeks.length * 3; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
                 section.documents.forEach(doc => {
@@ -2730,6 +2750,8 @@ const getAssigneeColor = (identifier, users) => {
                             return `[${date}] ${c.author}: ${c.text}`;
                         }).join('\n\n');
                         row.push(commentsText);
+                        
+                        row.push(getNotesForYear(doc.notesByWeek, week, selectedYear) || '');
                     });
                     
                     excelData.push(row);
@@ -2741,13 +2763,13 @@ const getAssigneeColor = (identifier, users) => {
             
             const colWidths = [{ wch: 40 }];
             for (let i = 0; i < weeks.length; i++) {
-                colWidths.push({ wch: 18 }, { wch: 50 });
+                colWidths.push({ wch: 18 }, { wch: 50 }, { wch: 40 });
             }
             ws['!cols'] = colWidths;
             
-            XLSX.utils.book_append_sheet(wb, ws, `Doc Collection ${selectedYear}`);
+            XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
             
-            const filename = `${project.name}_Document_Collection_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const filename = `${project.name}_${exportFileTag}_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, filename);
             
         } catch (error) {
@@ -2831,6 +2853,49 @@ const getAssigneeColor = (identifier, users) => {
             };
         }
     }, [hoverCommentCell, sections]);
+
+    // Scroll activity list so newest entries (bottom; merged list sorts ascending) are in view — unless deep-link targets one comment.
+    useLayoutEffect(() => {
+        if (!hoverCommentCell) {
+            lastActivityScrollSigRef.current = null;
+            return;
+        }
+        if (getCommentIdFromLocation()) return;
+
+        const parts = hoverCommentCell.split('-');
+        if (parts.length < 3) return;
+        const weekPart = parts.slice(-1)[0];
+        const documentId = parts[parts.length - 2];
+        const sectionId = parts.slice(0, -2).join('-');
+        const weekMatch = weekPart.match(/W(\d+)/i);
+        const weekNum = weekMatch ? parseInt(weekMatch[1], 10) : null;
+        const weekObj = weekNum ? weeks.find((w) => w.number === weekNum) : null;
+        const section = sections.find((s) => String(s.id) === String(sectionId));
+        const doc = section?.documents?.find((d) => String(d.id) === String(documentId));
+        const comments = doc && weekObj ? getDocumentComments(doc, weekObj) : [];
+
+        const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
+            (r) => r && r.kind === 'activity'
+        );
+        const apiLen = apiActivity.length;
+        const commentLen = comments.length;
+
+        if (apiLen === 0 && commentLen === 0) return;
+        if (cellActivityLoading && commentLen === 0) return;
+
+        const sig = `weekly-fms:${hoverCommentCell}:${apiLen}:${commentLen}`;
+        if (lastActivityScrollSigRef.current === sig) return;
+        lastActivityScrollSigRef.current = sig;
+
+        const run = () => {
+            const el = commentPopupContainerRef.current;
+            if (!el) return;
+            el.scrollTop = el.scrollHeight;
+        };
+        requestAnimationFrame(() => {
+            requestAnimationFrame(run);
+        });
+    }, [hoverCommentCell, cellActivityLoading, cellActivityTimeline, sections, weeks, selectedYear]);
     
     useEffect(() => {
         const handleClickOutside = (event) => {

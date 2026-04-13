@@ -171,9 +171,17 @@ async function notifyAssigneesOnReply({
     source: 'document-request-reply'
   }
 
+  const q = new URLSearchParams();
+  q.set('tab', 'documentCollection');
+  if (sectionId) q.set('docSectionId', String(sectionId));
+  q.set('docDocumentId', String(documentId));
+  if (month != null && month !== '') q.set('docMonth', String(month));
+  if (year != null && year !== '') q.set('docYear', String(year));
+  const deepLink = `#/projects/${encodeURIComponent(projectId)}?${q.toString()}`;
+
   await Promise.allSettled(
     [...matchedIds].map((userId) =>
-      createNotificationForUser(userId, 'system', title, message, '', metadata)
+      createNotificationForUser(userId, 'system', title, message, deepLink, metadata)
     )
   )
 }

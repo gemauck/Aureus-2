@@ -196,8 +196,8 @@ async function handler(req, res) {
             let emailSent = false
             let emailError = null
             try {
-                const appUrl = getAppUrl()
-                const loginUrl = `${appUrl}/login`
+                const appUrl = getAppUrl().replace(/\/$/, '')
+                const loginUrl = `${appUrl}/#/login`
 
                 const subject = 'Your Abcotronics account has been created'
                 const message = `

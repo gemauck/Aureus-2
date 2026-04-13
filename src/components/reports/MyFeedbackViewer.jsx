@@ -12,7 +12,8 @@ function feedbackScreenshotFromMeta(meta) {
     }
 }
 
-const MyFeedbackViewer = () => {
+const MyFeedbackViewer = (props = {}) => {
+    const { scrollToFeedbackId = null } = props;
     const [feedback, setFeedback] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState({ status: 'open', search: '' });
@@ -22,6 +23,17 @@ const MyFeedbackViewer = () => {
     useEffect(() => {
         if (user?.id || user?.sub) loadFeedback();
     }, [user?.id, user?.sub]);
+
+    useEffect(() => {
+        if (!scrollToFeedbackId || !Array.isArray(feedback) || feedback.length === 0) return undefined;
+        const safe =
+            typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(scrollToFeedbackId) : String(scrollToFeedbackId).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const t = window.setTimeout(() => {
+            const el = document.querySelector(`[data-feedback-id="${safe}"]`);
+            el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        }, 400);
+        return () => clearTimeout(t);
+    }, [scrollToFeedbackId, feedback]);
 
     const loadFeedback = async () => {
         setLoading(true);
@@ -120,6 +132,7 @@ const MyFeedbackViewer = () => {
                         return (
                         <div
                             key={item.id}
+                            data-feedback-id={item.id}
                             className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-lg p-4`}
                         >
                             <div className="flex items-start gap-3">

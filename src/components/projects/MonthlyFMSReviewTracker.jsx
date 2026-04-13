@@ -4,6 +4,23 @@ const storage = window.storage;
 const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
+const getCommentIdFromLocation = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        if (hash.includes('?')) {
+            const id = new URLSearchParams(hash.split('?')[1] || '').get('commentId');
+            if (id && String(id).trim()) return String(id).trim();
+        }
+        if (search) {
+            const id = new URLSearchParams(search).get('commentId');
+            if (id && String(id).trim()) return String(id).trim();
+        }
+    } catch (_) {}
+    return null;
+};
+
 // Derive a human‑readable facilities label from the project, handling both
 // array and string shapes and falling back gracefully when nothing is set.
 const getFacilitiesLabel = (project) => {
@@ -504,6 +521,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
     const commentFileInputRef = useRef(null);
     const commentPopupContainerRef = useRef(null);
+    const lastActivityScrollSigRef = useRef(null);
     const hoverCommentCellRef = useRef(null);
     const [cellActivityTimeline, setCellActivityTimeline] = useState([]);
     const [cellActivityLoading, setCellActivityLoading] = useState(false);
@@ -2325,6 +2343,8 @@ const getAssigneeColor = (identifier, users) => {
             const excelData = [];
             const headerRow1 = ['Section / Document'];
             const headerRow2 = [''];
+            const exportFileTag = 'Monthly_FMS_Review';
+            const sheetTitle = `Monthly FMS Review ${selectedYear}`.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
             
             months.forEach(month => {
                 const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
@@ -2371,9 +2391,9 @@ const getAssigneeColor = (identifier, users) => {
             }
             ws['!cols'] = colWidths;
             
-            XLSX.utils.book_append_sheet(wb, ws, `Doc Collection ${selectedYear}`);
+            XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
             
-            const filename = `${project.name}_Document_Collection_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const filename = `${project.name}_${exportFileTag}_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, filename);
             
         } catch (error) {
@@ -2456,6 +2476,42 @@ const getAssigneeColor = (identifier, users) => {
             };
         }
     }, [hoverCommentCell, sections, commentPopupPosition]);
+
+    // Scroll activity list so newest entries (bottom; merged list sorts ascending) are in view — unless deep-link targets one comment.
+    useLayoutEffect(() => {
+        if (!hoverCommentCell) {
+            lastActivityScrollSigRef.current = null;
+            return;
+        }
+        if (getCommentIdFromLocation()) return;
+
+        const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseMonthlyFMSCellKey(hoverCommentCell);
+        const section = sections.find((s) => String(s.id) === String(rawSectionId));
+        const doc = section?.documents?.find((d) => String(d.id) === String(rawDocumentId));
+        const comments = doc ? getDocumentComments(doc, month) : [];
+
+        const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
+            (r) => r && r.kind === 'activity'
+        );
+        const apiLen = apiActivity.length;
+        const commentLen = comments.length;
+
+        if (apiLen === 0 && commentLen === 0) return;
+        if (cellActivityLoading && commentLen === 0) return;
+
+        const sig = `monthly-fms:${hoverCommentCell}:${apiLen}:${commentLen}`;
+        if (lastActivityScrollSigRef.current === sig) return;
+        lastActivityScrollSigRef.current = sig;
+
+        const run = () => {
+            const el = commentPopupContainerRef.current;
+            if (!el) return;
+            el.scrollTop = el.scrollHeight;
+        };
+        requestAnimationFrame(() => {
+            requestAnimationFrame(run);
+        });
+    }, [hoverCommentCell, cellActivityLoading, cellActivityTimeline, sections, selectedYear]);
     
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -3767,14 +3823,23 @@ const baseTextColorClass = statusConfig && statusConfig.color
                             className="comment-popup fixed w-80 max-w-[90vw] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-3 z-[999] flex flex-col max-h-[min(85vh,520px)] overflow-hidden"
                             style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px`, contain: 'layout' }}
                         >
-                        {/* Show section and document context */}
-                        {section && doc && (
-                            <div className="mb-2 pb-2 border-b border-gray-200">
-                                <div className="text-[10px] font-semibold text-gray-700 mb-0.5">
+                        {/* Show section and document context (fallback when IDs do not match loaded sections, e.g. wrong tab briefly open) */}
+                        {section && doc ? (
+                            <div className="mb-2 pb-2 border-b border-gray-200 dark:border-gray-600">
+                                <div className="text-[10px] font-semibold text-gray-700 dark:text-gray-200 mb-0.5">
                                     {section.name || 'Section'}
                                 </div>
-                                <div className="text-[9px] text-gray-500">
+                                <div className="text-[9px] text-gray-500 dark:text-gray-400">
                                     {doc.name || 'Document'} • {month}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mb-2 pb-2 border-b border-gray-200 dark:border-gray-600">
+                                <div className="text-[10px] font-semibold text-gray-700 dark:text-gray-200 mb-0.5">
+                                    Monthly FMS Review
+                                </div>
+                                <div className="text-[9px] text-gray-500 dark:text-gray-400">
+                                    {[project?.name, String(selectedYear), month].filter(Boolean).join(' · ')}
                                 </div>
                             </div>
                         )}

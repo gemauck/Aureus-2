@@ -7,6 +7,7 @@ import { withHttp } from './_lib/withHttp.js';
 import { withLogging } from './_lib/logger.js';
 import { authRequired } from './_lib/authRequired.js';
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js';
+import { appendTabQueryParamForSource } from './_lib/projectTrackerDeepLink.js';
 
 let projectCommentColumnsEnsured = false;
 async function ensureProjectCommentColumns() {
@@ -240,7 +241,7 @@ async function handler(req, res) {
         if (month != null) linkParts.push(`docMonth=${encodeURIComponent(month)}`);
         if (weekVal != null) linkParts.push(`docWeek=${encodeURIComponent(weekVal)}`);
         if (yearVal != null) linkParts.push(`docYear=${encodeURIComponent(yearVal)}`);
-        if (source === 'monthlyFMSReview') linkParts.push('tab=monthlyFMSReview');
+        appendTabQueryParamForSource(linkParts, source);
         const linkWithComment = `#/projects/${projectId}?${linkParts.join('&')}`;
         await notifyCommentParticipants({
           commentAuthorId: finalAuthorId,

@@ -86,10 +86,12 @@ async function sendDailyLeaveNotifications() {
       emailContent += `</ul><br/>`
     })
 
+    const appOrigin = (process.env.APP_URL || 'https://erp.abcotronics.co.za').replace(/\/$/, '')
+    const leaveDeepLink = `${appOrigin}/#/leave-platform`
     emailContent += `
       <p>Total employees on leave: ${leaveApplications.length}</p>
       <br/>
-      <p>You can view the full leave calendar in <a href="${process.env.APP_URL || 'https://erp.abcotronics.co.za'}/leave-platform">Leave &amp; HR</a>.</p>
+      <p>You can view the full leave calendar in <a href="${leaveDeepLink}">Leave &amp; HR</a>.</p>
       <br/>
       <p>Have a great day!</p>
     `

@@ -7,6 +7,11 @@ import { withLogging } from './_lib/logger.js'
 import { sendNotificationEmail } from './_lib/email.js'
 import { parseJsonBody } from './_lib/body.js'
 import { logDatabaseError } from './_lib/dbErrorHandler.js'
+import {
+    appendTabQueryParamForSource,
+    emailTrackerSectionLabel,
+    isWeeklyTrackerMetadata
+} from './_lib/projectTrackerDeepLink.js'
 
 // Helper function to escape HTML
 function escapeHtml(text) {
@@ -69,6 +74,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     const linkIsEntityDeepLink = validLink && String(validLink).trim() && (
         validLink.includes('#/clients/') || validLink.includes('#/leads/') ||
         validLink.includes('#/helpdesk/') || validLink.includes('#/teams') ||
+        validLink.includes('#/reports') || validLink.includes('#/leave-platform') ||
         (validLink.includes('#/projects/') && validLink.includes('task='))
     );
     // Otherwise build from metadata when we have tracker params (or no link)
@@ -79,17 +85,20 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     if (!linkIsFullTrackerDeepLink && !linkIsEntityDeepLink && (hasTrackerMetadata || !validLink || !validLink.trim())) {
         try {
             const docYearVal = metadataObj.docYear != null ? metadataObj.docYear : metadataObj.year;
-            const weekLabelFromMeta = metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;
-            const isWeeklyFMS = metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.weeklyDocumentId || metadataObj.weeklyWeek != null || metadataObj.weeklyMonth != null || (metadataObj.sectionId && (metadataObj.weekNumber != null || metadataObj.week != null)));
-            if (isWeeklyFMS) {
+            const weeklyWeekLabel = metadataObj.docWeek ?? metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth;
+            if (
+                isWeeklyTrackerMetadata(metadataObj) &&
+                metadataObj.projectId &&
+                (metadataObj.weeklySectionId || metadataObj.sectionId) &&
+                (metadataObj.weeklyDocumentId || metadataObj.documentId)
+            ) {
                 validLink = `#/projects/${metadataObj.projectId}`;
                 const q = [];
                 const sectionId = metadataObj.weeklySectionId || metadataObj.sectionId;
                 const documentId = metadataObj.weeklyDocumentId || metadataObj.documentId;
-                const weekLabel = weekLabelFromMeta;
                 if (sectionId) q.push(`docSectionId=${encodeURIComponent(sectionId)}`);
                 if (documentId) q.push(`docDocumentId=${encodeURIComponent(documentId)}`);
-                if (weekLabel != null) q.push(`docWeek=${encodeURIComponent(weekLabel)}`);
+                if (weeklyWeekLabel != null) q.push(`docWeek=${encodeURIComponent(weeklyWeekLabel)}`);
                 if (docYearVal != null) q.push(`docYear=${encodeURIComponent(docYearVal)}`);
                 if (metadataObj.commentId) q.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
                 if (q.length) validLink += `?${q.join('&')}`;
@@ -101,19 +110,56 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 if (metadataObj.month != null) q.push(`docMonth=${encodeURIComponent(metadataObj.month)}`);
                 if (docYearVal != null) q.push(`docYear=${encodeURIComponent(docYearVal)}`);
                 if (metadataObj.commentId) q.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                if (metadataObj.source === 'monthlyFMSReview') q.push(`tab=${encodeURIComponent('monthlyFMSReview')}`);
+                appendTabQueryParamForSource(q, metadataObj.source);
                 if (q.length) validLink += `?${q.join('&')}`;
             } else if (!validLink || !validLink.trim()) {
                 if (metadataObj.projectId) validLink = `#/projects/${metadataObj.projectId}`;
-                else if (metadataObj.taskId) validLink = metadataObj.projectId ? `#/projects/${metadataObj.projectId}?task=${encodeURIComponent(metadataObj.taskId)}` : `#/tasks/${metadataObj.taskId}`;
+                else if (metadataObj.taskId) {
+                    if (metadataObj.projectId) {
+                        const tq = [`task=${encodeURIComponent(metadataObj.taskId)}`];
+                        if (metadataObj.commentId) tq.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
+                        validLink = `#/projects/${metadataObj.projectId}?${tq.join('&')}`;
+                    } else {
+                        validLink = `#/tasks/${metadataObj.taskId}${metadataObj.commentId ? `?commentId=${encodeURIComponent(metadataObj.commentId)}` : ''}`;
+                    }
+                }
                 else if (metadataObj.clientId) validLink = `#/clients/${metadataObj.clientId}`;
                 else if (metadataObj.leadId) validLink = `#/clients/${metadataObj.leadId}`;
-                else if (metadataObj.ticketId) validLink = `#/helpdesk/${metadataObj.ticketId}`;
+                else if (metadataObj.ticketId) {
+                    validLink = `#/helpdesk/${metadataObj.ticketId}`;
+                    if (metadataObj.commentId) {
+                        validLink += `?commentId=${encodeURIComponent(metadataObj.commentId)}`;
+                    }
+                }
                 else validLink = '/dashboard';
             }
         } catch (_) {
             if (!validLink || !validLink.trim()) validLink = '/dashboard';
         }
+    }
+    try {
+        const meetingNotesLike =
+            metadataObj.source === 'meeting_notes' ||
+            (metadataObj.meetingCommentId &&
+                (metadataObj.monthlyNotesId || metadataObj.departmentNotesId || metadataObj.actionItemId));
+        if (meetingNotesLike) {
+            const { resolveMeetingNotesLinkContext, buildMeetingNotesAppLink } = await import('./_lib/meetingNotesDeepLink.js');
+            const ctx = await resolveMeetingNotesLinkContext(prisma, {
+                monthlyNotesId: metadataObj.monthlyNotesId || null,
+                departmentNotesId: metadataObj.departmentNotesId || null,
+                actionItemId: metadataObj.actionItemId || null
+            });
+            validLink = buildMeetingNotesAppLink(ctx, metadataObj.meetingCommentId || metadataObj.commentId || null);
+        } else if (metadataObj.type === 'week_created' && metadataObj.monthKey && metadataObj.weekKey) {
+            const q = new URLSearchParams();
+            q.set('tab', 'meeting-notes');
+            q.set('team', 'management');
+            q.set('month', String(metadataObj.monthKey));
+            q.set('week', String(metadataObj.weekKey));
+            validLink = `#/teams/management?${q.toString()}`;
+        }
+    } catch (_) {
+        /* keep prior validLink */
     }
     if (validLink && !validLink.startsWith('/') && !validLink.startsWith('#')) validLink = '/' + validLink;
 
@@ -216,6 +262,9 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                     commentLink = link || `#/clients/${cid}`;
                 } else if (metadataObj.ticketId) {
                     commentLink = link || `#/helpdesk/${metadataObj.ticketId}`;
+                    if (metadataObj.commentId && commentLink && !String(commentLink).includes('commentId=')) {
+                        commentLink += (commentLink.includes('?') ? '&' : '?') + `commentId=${encodeURIComponent(metadataObj.commentId)}`;
+                    }
                 }
             }
             let enhancedSubject = title;
@@ -228,9 +277,14 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 if (taskTitle) enhancedMessage += `<p style="color:#555;margin:5px 0;"><strong>Task:</strong> ${escapeHtml(taskTitle)}</p>`;
                 enhancedMessage += '</div>';
             }
-            // Source heading: where the comment comes from (e.g. Projects, Document Collection, Photos of meters, February 2026)
+            // Source heading: where the activity lives (Projects trackers, Helpdesk, Teams, Tasks)
             const hasPeriod = metadataObj && (metadataObj.month != null || metadataObj.docYear != null || metadataObj.year != null);
             const hasDocCollectionMeta = metadataObj && (metadataObj.sectionId || metadataObj.documentId || metadataObj.projectId) && hasPeriod;
+            let appendedWhereBlock = false;
+            const pushWhere = (pathStr) => {
+                enhancedMessage += `<div style="background:#f0f4f8;border-left:4px solid #64748b;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📍 Where</h3><p style="color:#555;margin:5px 0;">${escapeHtml(pathStr)}</p></div>`;
+                appendedWhereBlock = true;
+            };
             if (hasDocCollectionMeta) {
                 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                 const monthNum = metadataObj.month != null ? Number(metadataObj.month) : null;
@@ -238,21 +292,13 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 const monthLabel = monthNum >= 1 && monthNum <= 12 ? monthNames[monthNum - 1] : (metadataObj.month != null && metadataObj.month !== '' ? String(metadataObj.month) : '');
 
                 const sourceValue = String(metadataObj.source || '').trim();
-                const weeklyLabelFromMeta = metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth;
-                const hasWeeklyHint = (
-                    sourceValue === 'weeklyFMSReview' ||
-                    metadataObj.weeklySectionId != null ||
-                    metadataObj.weeklyDocumentId != null ||
-                    weeklyLabelFromMeta != null
-                );
-                const hasMonthlyHint = (
-                    sourceValue === 'monthlyFMSReview' ||
-                    metadataObj.month != null
-                );
+                const hasWeeklyHint = isWeeklyTrackerMetadata(metadataObj);
+                const weeklyLabelFromMeta = metadataObj.docWeek ?? metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth;
 
+                const explicitTrackerLabel = emailTrackerSectionLabel(sourceValue);
                 const sourceTypeLabel = hasWeeklyHint
                     ? 'Weekly FMS review'
-                    : (hasMonthlyHint ? 'Monthly FMS review' : 'Document collection');
+                    : (explicitTrackerLabel || 'Document collection');
 
                 const periodLabel = hasWeeklyHint
                     ? (weeklyLabelFromMeta && year
@@ -267,6 +313,8 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 const sourceLabelTitleCase = sourceTypeLabel
                     .replace(/^document collection$/i, 'Document Collection')
                     .replace(/^monthly fms review$/i, 'Monthly FMS review')
+                    .replace(/^monthly data review$/i, 'Monthly Data Review')
+                    .replace(/^compliance review$/i, 'Compliance Review')
                     .replace(/^weekly fms review$/i, 'Weekly FMS review');
                 const sectionName = (metadataObj.sectionName != null ? String(metadataObj.sectionName).trim() : '');
                 const documentName = (metadataObj.documentName != null ? String(metadataObj.documentName).trim() : '');
@@ -274,8 +322,55 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                 if (sectionName) pathParts.push(sectionName);
                 if (documentName) pathParts.push(documentName);
                 if (periodLabel) pathParts.push(periodLabel);
-                const sourceLabel = pathParts.join(', ');
-                enhancedMessage += `<div style="background:#f0f4f8;border-left:4px solid #64748b;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📍 Where</h3><p style="color:#555;margin:5px 0;">${escapeHtml(sourceLabel)}</p></div>`;
+                pushWhere(pathParts.join(', '));
+            }
+            if (!appendedWhereBlock && metadataObj.ticketId && (type === 'comment' || type === 'mention')) {
+                let ticketLabel = 'Ticket';
+                try {
+                    const t = await prisma.ticket.findUnique({
+                        where: { id: String(metadataObj.ticketId) },
+                        select: { ticketNumber: true, title: true }
+                    });
+                    if (t) ticketLabel = `Ticket #${t.ticketNumber}${t.title ? ': ' + t.title : ''}`;
+                } catch (_) {}
+                const parts = ['Helpdesk', ticketLabel];
+                if (metadataObj.commentId) parts.push('Comments');
+                pushWhere(parts.join(', '));
+            }
+            if (!appendedWhereBlock && (metadataObj.source === 'team_discussion' || metadataObj.source === 'team_discussion_reply')) {
+                const teamNm = (metadataObj.teamName != null ? String(metadataObj.teamName).trim() : '') || 'Team';
+                const disc = (metadataObj.discussionTitle != null ? String(metadataObj.discussionTitle).trim() : '') || 'Discussion';
+                pushWhere(['Teams', teamNm, 'Discussions', disc].join(', '));
+            }
+            if (!appendedWhereBlock && metadataObj.taskId && taskTitle && (type === 'task' || type === 'comment' || type === 'mention')) {
+                pushWhere(['Projects', 'Tasks', String(taskTitle).trim()].join(', '));
+            }
+            if (!appendedWhereBlock && (metadataObj.source === 'meeting_notes' || metadataObj.type === 'week_created')) {
+                const deptId = metadataObj.departmentId != null ? String(metadataObj.departmentId).trim() : '';
+                const parts = ['Teams', 'Management', 'Meeting notes'];
+                if (metadataObj.monthKey) parts.push(String(metadataObj.monthKey));
+                if (metadataObj.weekKey) parts.push(String(metadataObj.weekKey));
+                if (deptId) parts.push(deptId);
+                pushWhere(parts.join(', '));
+            }
+            if (!appendedWhereBlock && metadataObj.feedbackId) {
+                const src = String(metadataObj.source || '').trim();
+                const whereLabel =
+                    src === 'feedback_reply' || src === 'feedback_change'
+                        ? 'Reports, My queries'
+                        : src === 'feedback_submitted'
+                          ? 'Reports, User feedback'
+                          : 'Reports, Feedback';
+                pushWhere(whereLabel);
+            }
+            if (!appendedWhereBlock && (metadataObj.source === 'user_note' || metadataObj.source === 'project_note' || metadataObj.source === 'client_note')) {
+                const kind =
+                    metadataObj.source === 'project_note'
+                        ? 'Project notes'
+                        : metadataObj.source === 'client_note'
+                          ? 'Client notes'
+                          : 'My notes';
+                pushWhere(['Notes', kind].join(', '));
             }
             if (commentText) {
                 const prev = commentText.length > 200 ? commentText.slice(0, 200) + '...' : commentText;

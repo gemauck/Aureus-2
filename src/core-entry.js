@@ -30,6 +30,7 @@ import './utils/cache-manager.js';
 import './utils/liveDataSync.js';
 import './utils/auditLogger.js';
 import './utils/componentDependencyChecker.js';
+import './utils/projectTrackerDeepLink.js';
 import './utils/mentionHelper.js';
 import './hooks/usePersistence.js';
 

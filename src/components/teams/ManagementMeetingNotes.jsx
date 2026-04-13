@@ -243,6 +243,32 @@ const deriveWeekDetails = (value) => {
     return { weekStart, weekEnd, weekKey, monthKey };
 };
 
+/** Query params from hash (#/teams/management?…) or document search (legacy). */
+function getMeetingNotesRouteSearchParams() {
+    const hash = window.location.hash || '';
+    if (hash.indexOf('?') !== -1) {
+        return new URLSearchParams(hash.slice(hash.indexOf('?') + 1));
+    }
+    return new URLSearchParams(window.location.search || '');
+}
+
+function buildMeetingNotesClientDeepLink({ selectedMonth, selectedWeek, commentContext }) {
+    const q = new URLSearchParams();
+    q.set('tab', 'meeting-notes');
+    q.set('team', 'management');
+    if (selectedMonth) q.set('month', String(selectedMonth));
+    if (selectedWeek) q.set('week', String(selectedWeek));
+    if (commentContext?.type === 'department' && commentContext.departmentId) {
+        q.set('department', String(commentContext.departmentId));
+        q.set('departmentNotesId', String(commentContext.id));
+    } else if (commentContext?.type === 'monthly') {
+        q.set('monthlyNotesId', String(commentContext.id));
+    } else if (commentContext) {
+        q.set('actionItemId', String(commentContext.id));
+    }
+    return `#/teams/management?${q.toString()}`;
+}
+
 const ManagementMeetingNotes = () => {
     // Get theme state
     let themeResult = { isDark: false };
@@ -486,41 +512,56 @@ const ManagementMeetingNotes = () => {
     const [scrollRestoreTrigger, setScrollRestoreTrigger] = useState(0);
     
     // Initialize selectedMonth and selectedWeek from URL or default
-    const getMonthFromURL = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get('month') || null;
-    };
-    
-    const getWeekFromURL = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get('week') || null;
-    };
+    const getMonthFromURL = () => getMeetingNotesRouteSearchParams().get('month') || null;
+
+    const getWeekFromURL = () => getMeetingNotesRouteSearchParams().get('week') || null;
     
     const [selectedMonth, setSelectedMonth] = useState(getMonthFromURL());
     const [selectedWeek, setSelectedWeek] = useState(getWeekFromURL());
     const [selectedDepartment, setSelectedDepartment] = useState(null);
-    
+    const [deepLinkNonce, setDeepLinkNonce] = useState(0);
+
+    useEffect(() => {
+        const bump = () => setDeepLinkNonce((n) => n + 1);
+        window.addEventListener('hashchange', bump);
+        return () => {
+            window.removeEventListener('hashchange', bump);
+        };
+    }, []);
+
     // Update URL when month or week changes
     useEffect(() => {
-        const url = new URL(window.location);
-        if (selectedMonth) {
-            url.searchParams.set('month', selectedMonth);
+        const sp = new URLSearchParams();
+        sp.set('tab', 'meeting-notes');
+        sp.set('team', 'management');
+        if (selectedMonth) sp.set('month', selectedMonth);
+        if (selectedWeek) sp.set('week', selectedWeek);
+        const qs = sp.toString();
+        const hash = window.location.hash || '';
+        if (hash.startsWith('#/teams')) {
+            const newHash = `#/teams/management?${qs}`;
+            const next = `${window.location.pathname}${window.location.search || ''}${newHash}`;
+            window.history.pushState({ month: selectedMonth, week: selectedWeek, tab: 'meeting-notes' }, '', next);
         } else {
-            url.searchParams.delete('month');
+            const url = new URL(window.location.href);
+            if (selectedMonth) {
+                url.searchParams.set('month', selectedMonth);
+            } else {
+                url.searchParams.delete('month');
+            }
+            if (selectedWeek) {
+                url.searchParams.set('week', selectedWeek);
+            } else {
+                url.searchParams.delete('week');
+            }
+            if (url.searchParams.get('tab') !== 'meeting-notes') {
+                url.searchParams.set('tab', 'meeting-notes');
+            }
+            if (url.searchParams.get('team') !== 'management') {
+                url.searchParams.set('team', 'management');
+            }
+            window.history.pushState({ month: selectedMonth, week: selectedWeek, tab: 'meeting-notes' }, '', url);
         }
-        if (selectedWeek) {
-            url.searchParams.set('week', selectedWeek);
-        } else {
-            url.searchParams.delete('week');
-        }
-        // Keep other params
-        if (url.searchParams.get('tab') !== 'meeting-notes') {
-            url.searchParams.set('tab', 'meeting-notes');
-        }
-        if (url.searchParams.get('team') !== 'management') {
-            url.searchParams.set('team', 'management');
-        }
-        window.history.pushState({ month: selectedMonth, week: selectedWeek, tab: 'meeting-notes' }, '', url);
     }, [selectedMonth, selectedWeek]);
     
     // Listen for browser back/forward
@@ -1039,6 +1080,21 @@ const ManagementMeetingNotes = () => {
         };
         loadCurrentMonth();
     }, [selectedMonth, isAdminUser]);
+
+    // Scroll to a comment when opened from a notification/email deep link (?meetingCommentId=)
+    useEffect(() => {
+        if (!isAdminUser || !currentMonthlyNotes) return undefined;
+        const commentId = getMeetingNotesRouteSearchParams().get('meetingCommentId');
+        if (!commentId) return undefined;
+        const safe = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(commentId) : commentId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const t = window.setTimeout(() => {
+            const el = document.querySelector(`[data-meeting-comment-id="${safe}"]`);
+            if (el && typeof el.scrollIntoView === 'function') {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 600);
+        return () => clearTimeout(t);
+    }, [isAdminUser, currentMonthlyNotes, selectedMonth, selectedWeek, deepLinkNonce, loading]);
 
     // Get available months
     const availableMonths = useMemo(() => {
@@ -2127,7 +2183,7 @@ const ManagementMeetingNotes = () => {
                             type: 'system',
                             title: 'New Week Generated',
                             message: `${authorName} created a new week (${weekStartStr} - ${weekEndStr}) for ${formatMonth(weekDetails.monthKey)}`,
-                            link: `/teams?month=${weekDetails.monthKey}&week=${weekDetails.weekKey}`,
+                            link: `#/teams/management?tab=meeting-notes&team=management&month=${encodeURIComponent(weekDetails.monthKey)}&week=${encodeURIComponent(weekDetails.weekKey)}`,
                             metadata: {
                                 type: 'week_created',
                                 monthKey: weekDetails.monthKey,
@@ -3834,14 +3890,12 @@ const ManagementMeetingNotes = () => {
                   commentContext.type === 'department' ? 'departmentNotesId' : 
                   'actionItemId']: commentContext.id
             };
-            // Deep link for email/in-app notifications (same format as mention contextLink)
-            if (commentContext.type === 'department') {
-                commentData.link = `#/teams?month=${selectedMonth || ''}&week=${selectedWeek || ''}&department=${commentContext.departmentId || ''}`;
-            } else if (commentContext.type === 'monthly') {
-                commentData.link = `#/teams?month=${selectedMonth || ''}`;
-            } else {
-                commentData.link = '#/teams/meeting-notes';
-            }
+            // Deep link for email/in-app notifications (Teams → Management → meeting-notes)
+            commentData.link = buildMeetingNotesClientDeepLink({
+                selectedMonth,
+                selectedWeek,
+                commentContext
+            });
             const response = await window.DatabaseAPI.createComment(commentData);
             
             // Get the actual comment from response
@@ -4503,10 +4557,6 @@ const ManagementMeetingNotes = () => {
                                                 e.stopPropagation();
                                                 setSelectedWeek(identifier);
                                                 scrollToWeekId(identifier);
-                                                // Update URL with week parameter
-                                                const url = new URL(window.location);
-                                                url.searchParams.set('week', identifier);
-                                                window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
                                             }}
                                             className={`relative whitespace-nowrap px-4 py-3 rounded-xl border text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 ${
                                                 isActualCurrentWeek
@@ -4609,9 +4659,6 @@ const ManagementMeetingNotes = () => {
                                                                 e.stopPropagation();
                                                                 setSelectedWeek(identifier);
                                                                 scrollToWeekId(identifier);
-                                                                const url = new URL(window.location);
-                                                                url.searchParams.set('week', identifier);
-                                                                window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
                                                             }}
                                                             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                                         >
@@ -5110,7 +5157,7 @@ const ManagementMeetingNotes = () => {
                                                                         displayContent = linkifyText(displayContent);
                                                                         
                                                                         return (
-                                                                            <div key={comment.id} className={`p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                                                            <div key={comment.id} data-meeting-comment-id={comment.id} className={`p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
                                                                                 <div className="flex items-start justify-between gap-2">
                                                                                     <div className="flex-1 min-w-0">
                                                                                         <p 

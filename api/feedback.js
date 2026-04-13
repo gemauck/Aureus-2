@@ -1,4 +1,5 @@
 import { prisma } from './_lib/prisma.js'
+import { getAppUrl } from './_lib/getAppUrl.js'
 import { badRequest, created, forbidden, notFound, ok, serverError, unauthorized } from './_lib/response.js'
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
@@ -39,7 +40,9 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     }
 
     const subject = `New ${feedback.type} on ${section} - ${process.env.APP_NAME || 'Abcotronics ERP'}`
-    
+    const appBase = getAppUrl().replace(/\/$/, '')
+    const erpFeedbackUrl = `${appBase}/#/reports?tab=feedback&highlightFeedbackId=${encodeURIComponent(feedback.id)}`
+
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
@@ -64,7 +67,7 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
           
           <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="color: #666; margin: 0; font-size: 14px;">
-              <strong>Review this feedback:</strong> Log into your ERP system and check the Reports section or visit the specific page mentioned above.
+              <strong>Open in ERP:</strong> <a href="${erpFeedbackUrl}" style="color:#667eea;">Reports → User feedback</a> (this item is highlighted).
             </p>
           </div>
           
@@ -105,9 +108,10 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
         {
           userId: adminUserId || recipientEmail, // Pass userId or email (will look up if email)
           notificationType: 'system',
-          notificationLink: feedback.pageUrl || '/feedback',
+          notificationLink: erpFeedbackUrl,
           notificationMetadata: {
             feedbackId: feedback.id,
+            source: 'feedback_submitted',
             feedbackType: feedback.type,
             feedbackSection: feedback.section,
             pageUrl: feedback.pageUrl,
@@ -171,6 +175,8 @@ async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
     const authorName = escapeHtml(feedback?.user?.name || feedback?.user?.email || 'there')
     const replierName = escapeHtml(replyingUser?.name || replyingUser?.email || 'An administrator')
     const appName = process.env.APP_NAME || 'Abcotronics ERP'
+    const appBase = getAppUrl().replace(/\/$/, '')
+    const erpMyQueriesUrl = `${appBase}/#/reports?tab=my-queries&highlightFeedbackId=${encodeURIComponent(feedback.id)}`
     const subject = `Re: Your feedback – ${appName}`
 
     const rawMessage = feedback?.message || ''
@@ -195,7 +201,7 @@ async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
             <p style="color: #333; margin: 8px 0 0; white-space: pre-wrap;">${escapeHtml(replyPreview)}</p>
           </div>
           <p style="color: #666; font-size: 14px;">
-            View in ERP: <strong>Reports → My queries</strong>. You can reply to this email to add another comment.
+            <a href="${erpMyQueriesUrl}" style="color:#667eea;">Open in ERP — Reports → My queries</a> (this thread is highlighted). You can reply to this email to add another comment.
           </p>
         </div>
         <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
@@ -216,7 +222,7 @@ async function notifyFeedbackAuthorOfReply(feedback, reply, replyingUser) {
       {
         userId: authorId || authorEmail,
         notificationType: 'system',
-        notificationLink: '/reports',
+        notificationLink: erpMyQueriesUrl,
         notificationMetadata: { feedbackId: feedback.id, source: 'feedback_reply' },
         customHeaders,
         replyTo: replyToEmail
@@ -243,6 +249,8 @@ async function notifyFeedbackAuthorOfChange(feedback, changeType, oldVal, newVal
     if (!authorEmail || !authorEmail.trim()) return
 
     const appName = process.env.APP_NAME || 'Abcotronics ERP'
+    const appBase = getAppUrl().replace(/\/$/, '')
+    const erpMyQueriesUrl = `${appBase}/#/reports?tab=my-queries&highlightFeedbackId=${encodeURIComponent(feedback.id)}`
     const changerName = changedBy?.name || changedBy?.email || 'An administrator'
     let subject = ''
     let detail = ''
@@ -268,7 +276,7 @@ async function notifyFeedbackAuthorOfChange(feedback, changeType, oldVal, newVal
             <p style="color: #555; margin: 0; font-size: 13px;"><strong>Your feedback:</strong></p>
             <p style="color: #333; margin: 8px 0 0; white-space: pre-wrap;">${escapeHtml((feedback?.message || '').slice(0, 300))}${(feedback?.message || '').length > 300 ? '...' : ''}</p>
           </div>
-          <p style="color: #666; font-size: 14px;">View in ERP: <strong>Reports → My queries</strong>.</p>
+          <p style="color: #666; font-size: 14px;"><a href="${erpMyQueriesUrl}" style="color:#667eea;">Open in ERP — Reports → My queries</a> (this thread is highlighted).</p>
         </div>
         <div style="background: #343a40; color: white; padding: 20px; text-align: center; font-size: 12px;">
           <p style="margin: 0;">© ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
@@ -284,7 +292,7 @@ async function notifyFeedbackAuthorOfChange(feedback, changeType, oldVal, newVal
       {
         userId: authorId || authorEmail,
         notificationType: 'system',
-        notificationLink: '/reports',
+        notificationLink: erpMyQueriesUrl,
         notificationMetadata: { feedbackId: feedback.id, source: 'feedback_change', changeType, oldVal, newVal },
         customHeaders: { 'Message-ID': feedbackMessageId(feedback.id) }
       }

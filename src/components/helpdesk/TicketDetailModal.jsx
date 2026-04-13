@@ -32,7 +32,8 @@ const TicketDetailModal = ({
     ticket, 
     onSave, 
     onClose,
-    onDelete
+    onDelete,
+    focusCommentId = null
 }) => {
     const isCreating = !ticket || !ticket.id;
     
@@ -173,6 +174,18 @@ const TicketDetailModal = ({
             console.error('Error loading ticket details:', error);
         }
     };
+
+    useEffect(() => {
+        if (!focusCommentId || !ticket?.id || isCreating) return;
+        setActiveTab('comments');
+        const safeId = String(focusCommentId).replace(/\\/g, '').replace(/"/g, '');
+        const scroll = () => {
+            const el = document.querySelector(`[data-ticket-comment-id="${safeId}"]`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+        const t = window.setTimeout(scroll, 450);
+        return () => window.clearTimeout(t);
+    }, [focusCommentId, ticket?.id, isCreating, comments.length]);
 
     // Handle form change
     const handleChange = (field, value) => {
@@ -996,7 +1009,11 @@ const TicketDetailModal = ({
                                         </p>
                                     ) : (
                                         comments.map((comment, index) => (
-                                            <div key={index} className="border-b border-gray-200 dark:border-gray-700 pb-4">
+                                            <div
+                                                key={comment.id || index}
+                                                data-ticket-comment-id={comment.id || ''}
+                                                className="border-b border-gray-200 dark:border-gray-700 pb-4"
+                                            >
                                                 <div className="flex items-start space-x-3">
                                                     <div className="flex-shrink-0">
                                                         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">

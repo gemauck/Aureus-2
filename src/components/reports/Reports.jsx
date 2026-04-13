@@ -1,5 +1,5 @@
 // Use React from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useCallback } = React;
 
 const Reports = () => {
     // Get report components from window
@@ -16,6 +16,31 @@ const Reports = () => {
     const [activeTab, setActiveTab] = useState(
       canViewAuditTrail ? 'audit' : (canViewFeedback ? 'feedback' : 'my-queries')
     );
+    const [highlightFeedbackId, setHighlightFeedbackId] = useState(null);
+
+    const applyReportsHash = useCallback(() => {
+        const h = window.location.hash || '';
+        if (!h.startsWith('#/reports')) return;
+        const qStr = h.includes('?') ? h.split('?').slice(1).join('?') : '';
+        const q = new URLSearchParams(qStr);
+        const tab = q.get('tab');
+        if (tab === 'feedback' || tab === 'my-queries' || tab === 'audit') {
+            if (tab === 'audit' && !canViewAuditTrail) {
+                setActiveTab(canViewFeedback ? 'feedback' : 'my-queries');
+            } else if (tab === 'feedback' && !canViewFeedback) {
+                setActiveTab('my-queries');
+            } else {
+                setActiveTab(tab);
+            }
+        }
+        setHighlightFeedbackId(q.get('highlightFeedbackId') || null);
+    }, [canViewAuditTrail, canViewFeedback]);
+
+    useEffect(() => {
+        applyReportsHash();
+        window.addEventListener('hashchange', applyReportsHash);
+        return () => window.removeEventListener('hashchange', applyReportsHash);
+    }, [applyReportsHash]);
 
     // When user loads, set correct default tab
     useEffect(() => {
@@ -142,7 +167,7 @@ const Reports = () => {
                 {activeTab === 'my-queries' && (
                     <div>
                         {MyFeedbackViewer && myFeedbackViewerReady ? (
-                            <MyFeedbackViewer />
+                            <MyFeedbackViewer scrollToFeedbackId={highlightFeedbackId} />
                         ) : (
                             <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                 <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
@@ -165,7 +190,7 @@ const Reports = () => {
                 {activeTab === 'feedback' && canViewFeedback && (
                     <div>
                         {FeedbackViewer && feedbackViewerReady ? (
-                            <FeedbackViewer />
+                            <FeedbackViewer scrollToFeedbackId={highlightFeedbackId} />
                         ) : (
                             <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                 <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>

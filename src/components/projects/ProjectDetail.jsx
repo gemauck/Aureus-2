@@ -3028,6 +3028,9 @@ function initializeProjectDetail() {
             const t = params.get('tab');
             return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity', 'notes'].includes(t) ? t : null;
         })() : null;
+        const noteIdDeep = params ? (params.get('noteId') || params.get('highlightNoteId')) : null;
+        if (tabFromUrl === 'notes') return 'notes';
+        if (noteIdDeep && !tabFromUrl) return 'notes';
         const hasDocWeek = params ? !!params.get('docWeek') : false;
         const hasWeeklySectionId = params ? !!params.get('weeklySectionId') : false;
         const hasDocMonth = params ? !!params.get('docMonth') : false;
@@ -3621,6 +3624,26 @@ function initializeProjectDetail() {
             return new Date(bAt) - new Date(aAt);
         });
     }, [projectNotesFromProject, projectNotes]);
+
+    useEffect(() => {
+        if (activeSection !== 'notes' || !project?.id) return undefined;
+        let params = null;
+        const hash = window.location.hash || '';
+        if (hash.includes('?')) {
+            const parts = hash.split('?');
+            if (parts.length > 1) params = new URLSearchParams(parts[1]);
+        }
+        if (!params && window.location.search) params = new URLSearchParams(window.location.search);
+        const targetNoteId = params?.get('noteId') || params?.get('highlightNoteId');
+        if (!targetNoteId || mergedNotesList.length === 0) return undefined;
+        const safe =
+            typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(targetNoteId) : String(targetNoteId).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const t = window.setTimeout(() => {
+            const el = document.querySelector(`[data-project-note-id="${safe}"]`);
+            el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        }, 500);
+        return () => clearTimeout(t);
+    }, [activeSection, project?.id, mergedNotesList]);
 
     const createProjectNote = useCallback(async () => {
         if (!project?.id || !window.storage?.getToken) return;
@@ -4668,8 +4691,13 @@ function initializeProjectDetail() {
                     if (!tabFromUrl) tabFromUrl = hashParams.get('tab');
                 }
                 
-                // Do NOT switch to Document Collection when this is a Weekly or Monthly FMS link (prevents tab flipping)
-                if (deepDocWeek || tabFromUrl === 'monthlyFMSReview') {
+                // Do NOT switch to Document Collection when another project tab owns this deep link
+                if (
+                    deepDocWeek ||
+                    tabFromUrl === 'monthlyFMSReview' ||
+                    tabFromUrl === 'monthlyDataReview' ||
+                    tabFromUrl === 'complianceReview'
+                ) {
                     return;
                 }
                 
@@ -4809,24 +4837,70 @@ function initializeProjectDetail() {
             }
         };
 
-        // Check immediately and again after a short delay so we catch the hash if it's set
-        // after mount (e.g. by router or when opening project from URL)
-        checkAndSwitchToDocumentCollection();
-        checkAndSwitchToWeeklyFMSReview();
-        checkAndSwitchToMonthlyFMSReview();
-        const delayedCheck = setTimeout(() => {
-            checkAndSwitchToDocumentCollection();
-            checkAndSwitchToWeeklyFMSReview();
+        const checkAndSwitchToMonthlyDataReview = () => {
+            const projectHas = project?.hasMonthlyDataReviewProcess === true ||
+                project?.hasMonthlyDataReviewProcess === 'true' ||
+                project?.hasMonthlyDataReviewProcess === 1 ||
+                (typeof project?.hasMonthlyDataReviewProcess === 'string' && project?.hasMonthlyDataReviewProcess?.toLowerCase() === 'true');
+            if (!project?.id || !projectHas) return;
+            try {
+                let params = null;
+                const hash = window.location.hash || '';
+                if (hash.includes('?')) {
+                    const hp = hash.split('?');
+                    if (hp.length > 1) params = new URLSearchParams(hp[1]);
+                }
+                if (!params) {
+                    const search = window.location.search || '';
+                    if (search) params = new URLSearchParams(search);
+                }
+                if (params?.get('tab') === 'monthlyDataReview' && activeSectionRef.current !== 'monthlyDataReview') {
+                    switchSection('monthlyDataReview');
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to apply monthly data review deep-link:', error);
+            }
+        };
+
+        const checkAndSwitchToComplianceReview = () => {
+            const projectHas = project?.hasComplianceReviewProcess === true ||
+                project?.hasComplianceReviewProcess === 'true' ||
+                project?.hasComplianceReviewProcess === 1 ||
+                (typeof project?.hasComplianceReviewProcess === 'string' && project?.hasComplianceReviewProcess?.toLowerCase() === 'true');
+            if (!project?.id || !projectHas) return;
+            try {
+                let params = null;
+                const hash = window.location.hash || '';
+                if (hash.includes('?')) {
+                    const hp = hash.split('?');
+                    if (hp.length > 1) params = new URLSearchParams(hp[1]);
+                }
+                if (!params) {
+                    const search = window.location.search || '';
+                    if (search) params = new URLSearchParams(search);
+                }
+                if (params?.get('tab') === 'complianceReview' && activeSectionRef.current !== 'complianceReview') {
+                    switchSection('complianceReview');
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to apply compliance review deep-link:', error);
+            }
+        };
+
+        // Tracker tabs that share docSectionId/docDocumentId/docMonth must run before Document Collection
+        const runAllDeepLinkChecks = () => {
             checkAndSwitchToMonthlyFMSReview();
-        }, 50);
+            checkAndSwitchToMonthlyDataReview();
+            checkAndSwitchToComplianceReview();
+            checkAndSwitchToWeeklyFMSReview();
+            checkAndSwitchToDocumentCollection();
+        };
+        runAllDeepLinkChecks();
+        const delayedCheck = setTimeout(runAllDeepLinkChecks, 50);
 
         // Also listen for hash changes
         const handleHashChange = () => {
-            setTimeout(() => {
-                checkAndSwitchToDocumentCollection();
-                checkAndSwitchToWeeklyFMSReview();
-                checkAndSwitchToMonthlyFMSReview();
-            }, 100);
+            setTimeout(runAllDeepLinkChecks, 100);
         };
 
         window.addEventListener('hashchange', handleHashChange);
@@ -4836,7 +4910,7 @@ function initializeProjectDetail() {
         };
     // Intentionally omit activeSection: this effect only applies URL→tab on mount and hashchange.
     // If activeSection were a dependency, stale URL (tab=/doc* params) would yank the user back after manual tab changes.
-    }, [project?.id, switchSection, project?.hasWeeklyFMSReviewProcess, project?.hasMonthlyFMSReviewProcess, forceDocumentCollectionDeepLink]);
+    }, [project?.id, switchSection, project?.hasWeeklyFMSReviewProcess, project?.hasMonthlyFMSReviewProcess, project?.hasMonthlyDataReviewProcess, project?.hasComplianceReviewProcess, forceDocumentCollectionDeepLink]);
     
     // If the project is opened via a deep-link to a specific task
     // (for example from an email notification), open the task modal
@@ -10040,6 +10114,7 @@ function initializeProjectDetail() {
                                         mergedNotesList.map((note) => (
                                             <div
                                                 key={note.id}
+                                                data-project-note-id={note.id}
                                                 role="button"
                                                 tabIndex={0}
                                                 onClick={() => openNoteForEditing(note)}

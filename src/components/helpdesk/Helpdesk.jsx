@@ -86,6 +86,8 @@ const Helpdesk = () => {
     const [focusedIndex, setFocusedIndex] = useState(-1); // keyboard focus in list, -1 = none
     const [toastMessage, setToastMessage] = useState(null); // { text, type: 'success'|'error' }
     const listContainerRef = React.useRef(null);
+    const helpdeskDeeplinkHandledRef = useRef('');
+    const [helpdeskFocusCommentId, setHelpdeskFocusCommentId] = useState(null);
     
     useEffect(() => {
         if (!toastMessage) return;
@@ -160,6 +162,47 @@ const Helpdesk = () => {
         loadTickets();
     }, [loadTickets]);
 
+    // Open ticket (and optionally scroll to comment) from notification/email: #/helpdesk/{ticketId}?commentId=...
+    useEffect(() => {
+        const tryOpenFromUrl = async () => {
+            const route = window.RouteState?.getRoute?.();
+            if (!route || route.page !== 'helpdesk' || !route.segments?.[0]) return;
+            const tid = String(route.segments[0]);
+            const cid = route.search?.get('commentId') || '';
+            const key = window.location.hash || '';
+            if (helpdeskDeeplinkHandledRef.current === key) return;
+            try {
+                let t = tickets.find((x) => String(x.id) === tid);
+                if (!t) {
+                    let response;
+                    if (window.DatabaseAPI?.makeRequest) {
+                        response = await window.DatabaseAPI.makeRequest(`/helpdesk/${tid}`);
+                    } else {
+                        const r = await fetch(`/api/helpdesk/${tid}`, { credentials: 'include' });
+                        if (!r.ok) return;
+                        response = await r.json();
+                    }
+                    t = response?.ticket || response?.data?.ticket;
+                }
+                if (t) {
+                    setSelectedTicket(t);
+                    setShowModal(true);
+                    setHelpdeskFocusCommentId(cid || null);
+                    helpdeskDeeplinkHandledRef.current = key;
+                }
+            } catch (e) {
+                console.warn('Helpdesk deep link failed:', e?.message || e);
+            }
+        };
+        tryOpenFromUrl();
+        const onHash = () => {
+            helpdeskDeeplinkHandledRef.current = '';
+            tryOpenFromUrl();
+        };
+        window.addEventListener('hashchange', onHash);
+        return () => window.removeEventListener('hashchange', onHash);
+    }, [tickets]);
+
     // Handle create ticket
     const handleCreateTicket = useCallback(() => {
         setSelectedTicket(null);
@@ -168,6 +211,7 @@ const Helpdesk = () => {
 
     // Handle view ticket
     const handleViewTicket = useCallback((ticket) => {
+        setHelpdeskFocusCommentId(null);
         setSelectedTicket(ticket);
         setShowModal(true);
     }, []);
@@ -334,6 +378,7 @@ const Helpdesk = () => {
     const handleCloseModal = useCallback(() => {
         setShowModal(false);
         setSelectedTicket(null);
+        setHelpdeskFocusCommentId(null);
     }, []);
 
     // Kanban: update ticket status when dropped in another column
@@ -1015,6 +1060,7 @@ const Helpdesk = () => {
                     onSave={handleSaveTicket}
                     onClose={handleCloseModal}
                     onDelete={selectedTicket ? () => handleDeleteTicket(selectedTicket.id) : null}
+                    focusCommentId={helpdeskFocusCommentId}
                 />
             )}
         </div>

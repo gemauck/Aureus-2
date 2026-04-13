@@ -1,5 +1,7 @@
 // @mention helper utilities
 // Version: 2025-11-03-v2 (with enhanced token refresh debugging)
+import { appendTabQueryParamForSource, isWeeklyTrackerMetadata } from './projectTrackerDeepLink.js';
+
 const MentionHelper = {
     /**
      * Normalize identifiers for matching (names, usernames, emails)
@@ -161,6 +163,13 @@ const MentionHelper = {
                 if (projectInfo.documentId) {
                     metadata.documentId = projectInfo.documentId;
                 }
+                // Email "Where" line and in-app context (must match comment-participants metadata)
+                if (projectInfo.sectionName !== undefined && projectInfo.sectionName !== null) {
+                    metadata.sectionName = projectInfo.sectionName;
+                }
+                if (projectInfo.documentName !== undefined && projectInfo.documentName !== null) {
+                    metadata.documentName = projectInfo.documentName;
+                }
                 if (projectInfo.month !== undefined && projectInfo.month !== null) {
                     metadata.month = projectInfo.month;
                 }
@@ -299,25 +308,26 @@ const MentionHelper = {
                 if (contextLink && contextLink.trim() !== '' && contextLink !== '#') {
                     entityUrl = contextLink;
                     console.log('📧 MentionHelper: Using contextLink as fallback:', entityUrl);
-                } else if (metadata.weeklySectionId || metadata.weeklyDocumentId || (metadata.sectionId && (metadata.weekNumber != null || metadata.weeklyWeek != null))) {
-                    // Build hash-based URL from metadata for weekly FMS (use docSectionId/docDocumentId/docWeek so tracker opens comment)
+                } else if (
+                    isWeeklyTrackerMetadata(metadata) &&
+                    metadata.projectId &&
+                    (metadata.weeklySectionId || metadata.sectionId) &&
+                    (metadata.weeklyDocumentId || metadata.documentId)
+                ) {
                     const projectId = metadata.projectId;
-                    if (projectId) {
-                        const sectionId = metadata.weeklySectionId || metadata.sectionId;
-                        const documentId = metadata.weeklyDocumentId || metadata.documentId;
-                        const weekLabel = metadata.weeklyWeek ?? metadata.weekNumber ?? metadata.weeklyMonth ?? metadata.month;
-                        const queryParams = [];
-                        if (sectionId) queryParams.push(`docSectionId=${encodeURIComponent(sectionId)}`);
-                        if (documentId) queryParams.push(`docDocumentId=${encodeURIComponent(documentId)}`);
-                        if (weekLabel != null) queryParams.push(`docWeek=${encodeURIComponent(weekLabel)}`);
-                        if (metadata.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadata.docYear)}`);
-                        if (metadata.year != null) queryParams.push(`docYear=${encodeURIComponent(metadata.year)}`);
-                        if (metadata.commentId) queryParams.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
-                        entityUrl = `#/projects/${projectId}?${queryParams.join('&')}`;
-                        console.log('📧 MentionHelper: Rebuilt entityUrl from weekly FMS review metadata:', entityUrl);
-                    }
+                    const sectionId = metadata.weeklySectionId || metadata.sectionId;
+                    const documentId = metadata.weeklyDocumentId || metadata.documentId;
+                    const weekLabel = metadata.docWeek ?? metadata.weeklyWeek ?? metadata.week ?? metadata.weekNumber ?? metadata.weeklyMonth;
+                    const queryParams = [];
+                    if (sectionId) queryParams.push(`docSectionId=${encodeURIComponent(sectionId)}`);
+                    if (documentId) queryParams.push(`docDocumentId=${encodeURIComponent(documentId)}`);
+                    if (weekLabel != null) queryParams.push(`docWeek=${encodeURIComponent(weekLabel)}`);
+                    if (metadata.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadata.docYear)}`);
+                    if (metadata.year != null) queryParams.push(`docYear=${encodeURIComponent(metadata.year)}`);
+                    if (metadata.commentId) queryParams.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
+                    entityUrl = `#/projects/${projectId}?${queryParams.join('&')}`;
+                    console.log('📧 MentionHelper: Rebuilt entityUrl from weekly FMS review metadata:', entityUrl);
                 } else if (metadata.sectionId || metadata.documentId) {
-                    // Build hash-based URL from metadata for document collection / monthly FMS
                     const projectId = metadata.projectId;
                     if (projectId) {
                         const queryParams = [];
@@ -327,9 +337,9 @@ const MentionHelper = {
                         if (metadata.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadata.docYear)}`);
                         if (metadata.year != null) queryParams.push(`docYear=${encodeURIComponent(metadata.year)}`);
                         if (metadata.commentId) queryParams.push(`commentId=${encodeURIComponent(metadata.commentId)}`);
-                        if (metadata.source === 'monthlyFMSReview') queryParams.push(`tab=${encodeURIComponent('monthlyFMSReview')}`);
+                        appendTabQueryParamForSource(queryParams, metadata.source);
                         entityUrl = `#/projects/${projectId}?${queryParams.join('&')}`;
-                        console.log('📧 MentionHelper: Rebuilt entityUrl from document collection/monthly FMS metadata:', entityUrl);
+                        console.log('📧 MentionHelper: Rebuilt entityUrl from document collection / tracker metadata:', entityUrl);
                     }
                 }
             }

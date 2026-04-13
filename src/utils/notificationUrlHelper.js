@@ -15,6 +15,25 @@
         return;
     }
 
+    function notificationHelperIsWeeklyTrackerMetadata(o) {
+        if (!o || typeof o !== 'object') return false;
+        if (String(o.source || '').trim() === 'weeklyFMSReview') return true;
+        if (o.docWeek != null && String(o.docWeek).trim() !== '') return true;
+        if (o.weeklyWeek != null && String(o.weeklyWeek).trim() !== '') return true;
+        return false;
+    }
+    function notificationHelperAppendTabForSource(q, source) {
+        const s = String(source || '').trim();
+        const m = {
+            documentCollection: 'documentCollection',
+            monthlyFMSReview: 'monthlyFMSReview',
+            monthlyDataReview: 'monthlyDataReview',
+            complianceReview: 'complianceReview'
+        };
+        const tab = m[s];
+        if (tab) q.push(`tab=${encodeURIComponent(tab)}`);
+    }
+
     /**
      * Component to URL mapping
      * Maps all components/pages to their base URLs
@@ -243,15 +262,20 @@
                     return '/dashboard';
                 }
                 
-                // PRIORITY 1: Weekly FMS – build hash URL with docSectionId, docDocumentId, docWeek, docYear, commentId
-                const weekLabel = metadataObj.weeklyWeek ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth ?? metadataObj.month;
-                if (metadataObj.projectId && (metadataObj.weeklySectionId || metadataObj.sectionId || metadataObj.weeklyDocumentId || metadataObj.documentId) && weekLabel != null) {
+                // PRIORITY 1: Weekly FMS only (never use docMonth as docWeek)
+                if (
+                    notificationHelperIsWeeklyTrackerMetadata(metadataObj) &&
+                    metadataObj.projectId &&
+                    (metadataObj.weeklySectionId || metadataObj.sectionId) &&
+                    (metadataObj.weeklyDocumentId || metadataObj.documentId)
+                ) {
+                    const weekLabel = metadataObj.docWeek ?? metadataObj.weeklyWeek ?? metadataObj.week ?? metadataObj.weekNumber ?? metadataObj.weeklyMonth;
                     const queryParams = [];
                     const sectionId = metadataObj.weeklySectionId || metadataObj.sectionId;
                     const documentId = metadataObj.weeklyDocumentId || metadataObj.documentId;
                     if (sectionId) queryParams.push(`docSectionId=${encodeURIComponent(sectionId)}`);
                     if (documentId) queryParams.push(`docDocumentId=${encodeURIComponent(documentId)}`);
-                    queryParams.push(`docWeek=${encodeURIComponent(weekLabel)}`);
+                    if (weekLabel != null) queryParams.push(`docWeek=${encodeURIComponent(weekLabel)}`);
                     if (metadataObj.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
                     if (metadataObj.year != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
                     if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
@@ -259,7 +283,7 @@
                     const hashUrl = `#/projects/${metadataObj.projectId}?${queryParams.join('&')}`;
                     return hashUrl;
                 }
-                // PRIORITY 2: Document collection / Monthly FMS – build hash URL with all params
+                // PRIORITY 2: Document collection / Monthly FMS / Data & Compliance trackers
                 if (metadataObj.projectId && (metadataObj.sectionId || metadataObj.documentId || metadataObj.month !== undefined || metadataObj.commentId)) {
                     const queryParams = [];
                     if (metadataObj.sectionId) queryParams.push(`docSectionId=${encodeURIComponent(metadataObj.sectionId)}`);
@@ -268,7 +292,7 @@
                     if (metadataObj.docYear != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.docYear)}`);
                     if (metadataObj.year != null) queryParams.push(`docYear=${encodeURIComponent(metadataObj.year)}`);
                     if (metadataObj.commentId) queryParams.push(`commentId=${encodeURIComponent(metadataObj.commentId)}`);
-                    if (metadataObj.source === 'monthlyFMSReview') queryParams.push(`tab=${encodeURIComponent('monthlyFMSReview')}`);
+                    notificationHelperAppendTabForSource(queryParams, metadataObj.source);
                     const hashUrl = `#/projects/${metadataObj.projectId}?${queryParams.join('&')}`;
                     return hashUrl;
                 }

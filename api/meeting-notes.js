@@ -6,6 +6,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError, logDatabaseError } from './_lib/dbErrorHandler.js'
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js'
+import { resolveMeetingNotesLinkContext, buildMeetingNotesAppLink } from './_lib/meetingNotesDeepLink.js'
 
 // Department definitions
 const DEPARTMENTS = [
@@ -769,7 +770,7 @@ async function handler(req, res) {
   // Create comment
   if (req.method === 'POST' && action === 'comment') {
     try {
-      const { monthlyNotesId, departmentNotesId, actionItemId, content, link } = req.body
+      const { monthlyNotesId, departmentNotesId, actionItemId, content } = req.body
 
       if (!content) {
         return badRequest(res, 'content is required')
@@ -828,6 +829,12 @@ async function handler(req, res) {
           )
         )
         const authorName = comment.author?.name || comment.author?.email || 'Someone'
+        const linkCtx = await resolveMeetingNotesLinkContext(prisma, {
+          monthlyNotesId: monthlyNotesId || null,
+          departmentNotesId: departmentNotesId || null,
+          actionItemId: actionItemId || null
+        })
+        const notifyLink = buildMeetingNotesAppLink(linkCtx, comment.id)
         await notifyCommentParticipants({
           commentAuthorId: authorId,
           commentText: content,
@@ -835,9 +842,20 @@ async function handler(req, res) {
           priorCommentAuthorIds: subscriberIds,
           priorCommentTexts,
           authorName,
-          contextTitle: 'Meeting notes',
-          link: (link && String(link).trim()) ? link : '#/teams/meeting-notes',
-          metadata: { monthlyNotesId, departmentNotesId, actionItemId, commentId: comment.id, commentText: content }
+          contextTitle: 'Meeting notes (Management)',
+          link: notifyLink,
+          metadata: {
+            source: 'meeting_notes',
+            monthlyNotesId: monthlyNotesId || null,
+            departmentNotesId: departmentNotesId || null,
+            actionItemId: actionItemId || null,
+            commentId: comment.id,
+            meetingCommentId: comment.id,
+            commentText: content,
+            monthKey: linkCtx.monthKey || null,
+            weekKey: linkCtx.weekKey || null,
+            departmentId: linkCtx.departmentId || null
+          }
         })
       } catch (notifyErr) {
         console.error('Notify comment participants failed (meeting notes):', notifyErr)

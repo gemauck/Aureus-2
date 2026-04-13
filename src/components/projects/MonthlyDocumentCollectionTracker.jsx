@@ -192,6 +192,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             ? 'compliance-review'
             : 'document-collection';
     const isJsonOnlyTracker = isMonthlyDataReview || isComplianceReview;
+    /** Hash ?tab= value so emails/notifications open the correct project sub-tab (not Document Collection by mistake). */
+    const trackerTabForDeepLink = isMonthlyDataReview ? 'monthlyDataReview' : isComplianceReview ? 'complianceReview' : 'documentCollection';
+    const trackerNotifySource = trackerTabForDeepLink;
+    const trackerContextTitlePrefix = isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document Collection';
     // Month grid column widths (Data Review, Compliance Review, Document Collection)
     const jsonTrackerStatusColPx = isComplianceReview ? 280 : 360;
     const jsonTrackerNotesColPx = isComplianceReview ? 260 : 340;
@@ -3196,13 +3200,13 @@ const getAssigneeColor = (identifier, users) => {
                     
                     const linkedSection = currentYearSections.find((s) => String(s.id) === String(linkSectionId));
                     const linkedDoc = (linkedSection?.documents || []).find((d) => String(d.id) === String(linkDocumentId));
-                    const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
+                    const contextTitle = `${trackerContextTitlePrefix} - ${project?.name || 'Project'}`;
                     // Deep-link using link* IDs (from cellKey when provided) so email link matches the open cell
-                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&tab=${encodeURIComponent(trackerTabForDeepLink)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                     const projectInfo = {
                         projectId: project?.id,
                         projectName: project?.name,
-                        source: 'documentCollection',
+                        source: trackerNotifySource,
                         sectionId: linkSectionId,
                         sectionName: linkedSection?.name || priorSection?.name || '',
                         documentId: linkDocumentId,
@@ -3237,8 +3241,8 @@ const getAssigneeColor = (identifier, users) => {
             try {
                 const linkedSection = currentYearSections.find((s) => String(s.id) === String(linkSectionId));
                 const linkedDoc = (linkedSection?.documents || []).find((d) => String(d.id) === String(linkDocumentId));
-                const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
-                const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
+                const contextTitle = `${trackerContextTitlePrefix} - ${project?.name || 'Project'}`;
+                const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(linkSectionId)}&docDocumentId=${encodeURIComponent(linkDocumentId)}&docMonth=${encodeURIComponent(linkMonth)}&docYear=${encodeURIComponent(selectedYear)}&tab=${encodeURIComponent(trackerTabForDeepLink)}&commentId=${encodeURIComponent(newCommentId)}&focusInput=comment`;
                 await window.DatabaseAPI.makeRequest('/notifications/comment-participants', {
                     method: 'POST',
                     body: JSON.stringify({
@@ -3254,7 +3258,7 @@ const getAssigneeColor = (identifier, users) => {
                         metadata: {
                             projectId: project?.id,
                             projectName: project?.name,
-                            source: 'documentCollection',
+                            source: trackerNotifySource,
                             sectionId: linkSectionId,
                             sectionName: linkedSection?.name || priorSection?.name || '',
                             documentId: linkDocumentId,
@@ -3553,18 +3557,20 @@ const getAssigneeColor = (identifier, users) => {
             const excelData = [];
             const headerRow1 = ['Section / Document'];
             const headerRow2 = [''];
+            const exportFileTag = isMonthlyDataReview ? 'Monthly_Data_Review' : isComplianceReview ? 'Compliance_Review' : 'Document_Collection';
+            const sheetTitle = `${trackerContextTitlePrefix} ${selectedYear}`.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
             
             months.forEach(month => {
                 const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
-                headerRow1.push(monthYear, '');
-                headerRow2.push('Status', 'Comments');
+                headerRow1.push(monthYear, '', '');
+                headerRow2.push('Status', 'Comments', 'Notes');
             });
             
             excelData.push(headerRow1, headerRow2);
             
             sections.forEach(section => {
                 const sectionRow = [section.name];
-                for (let i = 0; i < 24; i++) sectionRow.push('');
+                for (let i = 0; i < months.length * 3; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
                 getOrderedDocumentRows(section).forEach(({ doc, isSubRow }) => {
@@ -3593,6 +3599,8 @@ const getAssigneeColor = (identifier, users) => {
                             }
                         }).join('\n\n');
                         row.push(commentsText);
+                        
+                        row.push(getNotesForYear(doc.notesByMonth, month, selectedYear) || '');
                     });
                     
                     excelData.push(row);
@@ -3603,14 +3611,14 @@ const getAssigneeColor = (identifier, users) => {
             const ws = XLSX.utils.aoa_to_sheet(excelData);
             
             const colWidths = [{ wch: 40 }];
-            for (let i = 0; i < 12; i++) {
-                colWidths.push({ wch: 18 }, { wch: 50 });
+            for (let i = 0; i < months.length; i++) {
+                colWidths.push({ wch: 18 }, { wch: 50 }, { wch: 40 });
             }
             ws['!cols'] = colWidths;
             
-            XLSX.utils.book_append_sheet(wb, ws, `Doc Collection ${selectedYear}`);
+            XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
             
-            const filename = `${project.name}_Document_Collection_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const filename = `${project.name}_${exportFileTag}_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, filename);
             
         } catch (error) {
@@ -4690,7 +4698,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                     // Update URL with deep link when opening popup
                                     const { sectionId, documentId, month } = parseCellKey(cellKey);
                                     if (sectionId && documentId && month && project?.id) {
-                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}`;
+                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=${encodeURIComponent(trackerTabForDeepLink)}`;
                                         
                                         if (window.RouteState && window.RouteState.navigate) {
                                             window.RouteState.navigate({
@@ -7543,7 +7551,7 @@ Abcotronics`;
                                                     return;
                                                 }
                                                 if (section && doc && cid) {
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(cid)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=${encodeURIComponent(trackerTabForDeepLink)}&commentId=${encodeURIComponent(cid)}`;
                                                     if (window.RouteState && window.RouteState.navigate) {
                                                         window.RouteState.navigate({
                                                             page: 'projects',
@@ -7653,7 +7661,7 @@ Abcotronics`;
                                                     e.stopPropagation();
                                                     if (!section || !doc || !cid) return;
                                                     
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&commentId=${encodeURIComponent(cid)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=${encodeURIComponent(trackerTabForDeepLink)}&commentId=${encodeURIComponent(cid)}`;
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     
                                                     // Copy to clipboard
