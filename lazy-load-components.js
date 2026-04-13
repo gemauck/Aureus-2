@@ -166,6 +166,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/tools/DocumentParser.jsx',
         './src/components/tools/SafetyCultureInspections.jsx',
         './src/components/tools/DocumentSorter.jsx',
+        './src/components/tools/TravelBookingRequests.jsx',
         './src/components/tools/Tools.jsx',
         
         // ERP Calendar (greenfield)

@@ -1,6 +1,6 @@
 /**
  * Travel & accommodation booking requests: comprehensive form, nominee selection,
- * queues for requester / assignee, status updates (API enforces admin-only create in v1).
+ * queues for requester / assignee. Only allowlisted emails may create requests (server + UI).
  */
 const { useState, useEffect, useCallback, useMemo } = React;
 
@@ -51,9 +51,21 @@ function authHeaders() {
   };
 }
 
-function isAdminUser() {
-  const u = window.storage?.getUser?.();
-  return typeof window.isAdminRole === 'function' && window.isAdminRole(u?.role);
+function travelBookingCreatorEmails() {
+  const custom = typeof window !== 'undefined' && window.__TRAVEL_BOOKING_TOOL_EMAILS__;
+  if (custom && String(custom).trim()) {
+    return String(custom)
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return ['garethm@abcotronics.co.za'];
+}
+
+function isTravelBookingCreatorUser() {
+  const u = window.storage?.getUser?.() || {};
+  const email = (u.email || '').trim().toLowerCase();
+  return travelBookingCreatorEmails().includes(email);
 }
 
 function parseHighlightRequestId() {
@@ -78,8 +90,8 @@ function parseHighlightRequestId() {
 
 function TravelBookingRequests() {
   const { isDark } = window.useTheme?.() || { isDark: false };
-  const isAdmin = useMemo(() => isAdminUser(), []);
-  const [tab, setTab] = useState(() => (isAdmin ? 'new' : 'assigned'));
+  const canCreateTravelBooking = useMemo(() => isTravelBookingCreatorUser(), []);
+  const [tab, setTab] = useState(() => (isTravelBookingCreatorUser() ? 'new' : 'assigned'));
 
   const [users, setUsers] = useState([]);
   const [userFilter, setUserFilter] = useState('');
@@ -332,7 +344,9 @@ function TravelBookingRequests() {
     }
   };
 
-  const canEditBooking = detail && (detail.assigneeId === window.storage?.getUser?.()?.id || isAdmin);
+  const meId = window.storage?.getUser?.()?.id;
+  const canEditBooking =
+    detail && (detail.assigneeId === meId || isTravelBookingCreatorUser());
 
   const fieldClass = `w-full rounded-lg border px-3 py-2 text-sm ${
     isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'
@@ -604,7 +618,7 @@ function TravelBookingRequests() {
       </p>
 
       <div className="flex flex-wrap gap-2">
-        {isAdmin ? tabBtn('new', 'New request') : null}
+        {canCreateTravelBooking ? tabBtn('new', 'New request') : null}
         {tabBtn('mine', 'My requests')}
         {tabBtn('assigned', 'Assigned to me')}
       </div>
@@ -613,7 +627,7 @@ function TravelBookingRequests() {
         <p className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>{msg}</p>
       ) : null}
 
-      {tab === 'new' && isAdmin && (
+      {tab === 'new' && canCreateTravelBooking && (
         <div className="space-y-4">
           <div>
             <label className={labelClass}>Nominated booker</label>

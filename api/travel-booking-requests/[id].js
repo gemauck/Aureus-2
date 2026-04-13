@@ -4,7 +4,7 @@ import { badRequest, forbidden, notFound, ok, serverError, unauthorized } from '
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { isAdminRole } from '../_lib/authRoles.js'
+import { canCreateTravelBookingRequest } from '../_lib/travelBookingAccess.js'
 import { patchTravelBookingBodySchema } from '../_lib/travelBookingPayload.js'
 import { notifyRequesterTravelUpdate } from '../_lib/travelBookingNotify.js'
 
@@ -52,7 +52,7 @@ const includeUsers = {
 
 function canAccessRow(actor, row) {
   if (!actor || !row) return false
-  if (isAdminRole(actor.role)) return true
+  if (canCreateTravelBookingRequest(actor.email)) return true
   if (row.requesterId === actor.id) return true
   if (row.assigneeId === actor.id) return true
   return false
@@ -60,7 +60,7 @@ function canAccessRow(actor, row) {
 
 function canPatchRow(actor, row) {
   if (!actor || !row) return false
-  if (isAdminRole(actor.role)) return true
+  if (canCreateTravelBookingRequest(actor.email)) return true
   return row.assigneeId === actor.id
 }
 
@@ -91,7 +91,7 @@ async function handler(req, res) {
         include: includeUsers
       })
       if (!row) return notFound(res, 'Request not found')
-      if (!canPatchRow(actor, row)) return forbidden(res, 'Only the nominated booker or an admin can update this request')
+      if (!canPatchRow(actor, row)) return forbidden(res, 'Only the nominated booker can update this request')
 
       const raw = await parseJsonBody(req, res)
       if (raw === undefined) return

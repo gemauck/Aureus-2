@@ -4,7 +4,7 @@ import { badRequest, created, forbidden, ok, serverError, unauthorized } from '.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
-import { isAdminRole } from './_lib/authRoles.js'
+import { canCreateTravelBookingRequest } from './_lib/travelBookingAccess.js'
 import { createTravelBookingBodySchema } from './_lib/travelBookingPayload.js'
 import {
   notifyAssigneeNewTravelRequest,
@@ -68,9 +68,10 @@ async function handler(req, res) {
         where.status = statusFilter
       }
 
-      const admin = isAdminRole(actor.role)
       if (scope === 'all') {
-        if (!admin) return forbidden(res, 'Admin access required for scope=all')
+        if (!canCreateTravelBookingRequest(actor.email)) {
+          return forbidden(res, 'Access denied for this list scope')
+        }
       } else if (scope === 'assigned_to_me') {
         where.assigneeId = actor.id
       } else {
@@ -86,15 +87,16 @@ async function handler(req, res) {
       return ok(res, {
         requests: rows.map((row) =>
           serializeRequest(row, {
-            includeInternalNotes: admin || row.assigneeId === actor.id
+            includeInternalNotes:
+              canCreateTravelBookingRequest(actor.email) || row.assigneeId === actor.id
           })
         )
       })
     }
 
     if (req.method === 'POST') {
-      if (!isAdminRole(actor.role)) {
-        return forbidden(res, 'Only administrators can submit travel requests in this release')
+      if (!canCreateTravelBookingRequest(actor.email)) {
+        return forbidden(res, 'You are not authorised to create travel booking requests')
       }
 
       const raw = await parseJsonBody(req, res)

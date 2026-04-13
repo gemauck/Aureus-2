@@ -1,6 +1,24 @@
 // Use React from window
 const { useState, useEffect, useMemo, useRef } = React;
 
+/** Emails allowed to see the travel tool card and submit requests. Optional override: window.__TRAVEL_BOOKING_TOOL_EMAILS__ = "a@x.com,b@y.com" */
+function travelBookingCreatorEmails() {
+    const custom = typeof window !== 'undefined' && window.__TRAVEL_BOOKING_TOOL_EMAILS__;
+    if (custom && String(custom).trim()) {
+        return String(custom)
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean);
+    }
+    return ['garethm@abcotronics.co.za'];
+}
+
+function isTravelBookingCreatorUser() {
+    const u = window.storage?.getUser?.() || {};
+    const email = (u.email || '').trim().toLowerCase();
+    return travelBookingCreatorEmails().includes(email);
+}
+
 /** Tool id from /tools/{id}, #/tools/{id}, or /tools?tool={id} when RouteState page is tools */
 function parseToolIdFromLocation() {
     try {
@@ -237,8 +255,7 @@ const Tools = () => {
                 description: 'Request flights and accommodation with full trip details; notifies your nominated booker',
                 icon: 'fa-plane',
                 color: 'sky',
-                component: toolComponents.TravelBookingRequests,
-                adminOnly: true
+                component: toolComponents.TravelBookingRequests
             }
         ];
         // Debug: Log when tools array is recalculated
@@ -253,9 +270,14 @@ const Tools = () => {
     }, [toolComponents, toolsVersion]); // Include toolsVersion to force recalculation
 
     const toolsForGrid = useMemo(() => {
-        const u = window.storage?.getUser?.() || {};
-        const admin = typeof window.isAdminRole === 'function' && window.isAdminRole(u.role);
-        return allTools.filter((t) => !t.adminOnly || admin);
+        return allTools.filter((t) => {
+            if (t.id === 'travel-booking-requests') return isTravelBookingCreatorUser();
+            if (t.adminOnly) {
+                const u = window.storage?.getUser?.() || {};
+                return typeof window.isAdminRole === 'function' && window.isAdminRole(u.role);
+            }
+            return true;
+        });
     }, [allTools, toolsVersion]);
 
     // Deep link: open a tool from /tools/{toolId} or /tools?tool={toolId}; must run after `allTools` exists (not in TDZ)
