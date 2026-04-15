@@ -1501,9 +1501,22 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
       console.warn('document-request-reply: assignee notify failed', notifyErr.message)
     }
 
-    // Forward a copy to the requester (documents@ is not a real mailbox) and notify in-app
+    // Forward a copy to the requester (documents@ is not a real mailbox) and notify in-app.
+    // Safety: subject fallback can be ambiguous across similar threads, so do not forward
+    // to requester unless we matched by strong identifiers.
     const requesterEmail = mapping.requesterEmail
-    if (requesterEmail && isValidEmail(requesterEmail)) {
+    const strongRequesterMatch =
+      matchMethod === 'matched_message_id' ||
+      matchMethod === 'matched_request_number' ||
+      matchMethod === 'matched_request_number_header'
+    if (!strongRequesterMatch && requesterEmail && isValidEmail(requesterEmail)) {
+      console.warn('document-request-reply: skip requester forward/in-app for non-strong match', {
+        emailId,
+        matchMethod,
+        requesterEmail: requesterEmail.trim().toLowerCase()
+      })
+    }
+    if (strongRequesterMatch && requesterEmail && isValidEmail(requesterEmail)) {
       forwardReplyToRequester(apiKey, email, requesterEmail, uploaded.length).catch((e) =>
         console.warn('document-request-reply: forward to requester', e.message)
       )
