@@ -542,10 +542,39 @@ async function getInReplyToFromEmail(email, fetchRawUrl, apiKey) {
   return null
 }
 
+function cleanInboundEmailBodyText(text) {
+  if (!text || typeof text !== 'string') return ''
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\t/g, ' ')
+    .replace(/\.EmailQuote\s*\{[^}]*\}/gi, ' ')
+    .replace(/\.x?_?(?:word|mso)[^{]*\{[^}]*\}/gi, ' ')
+  const lines = normalized.split('\n').map((line) => line.replace(/\s+/g, ' ').trimRight())
+  const out = []
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line) {
+      if (out.length > 0 && out[out.length - 1] !== '') out.push('')
+      continue
+    }
+    // Stop at quoted-history markers so comment shows only new reply content.
+    if (/^on .+ wrote:$/i.test(line)) break
+    if (/^from:\s/i.test(line)) break
+    if (/^sent:\s/i.test(line)) break
+    if (/^to:\s/i.test(line)) break
+    if (/^subject:\s/i.test(line)) break
+    if (/^>+/.test(line)) continue
+    if (/^\[cid:[^\]]+\]$/i.test(line)) continue
+    out.push(line)
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 4000)
+}
+
 /** Extract plain text from email (text or html). */
 function emailBodyText(email) {
   const text = email.text
-  if (text && typeof text === 'string' && text.trim()) return text.trim().slice(0, 4000)
+  if (text && typeof text === 'string' && text.trim()) return cleanInboundEmailBodyText(text)
   const html = email.html
   if (html && typeof html === 'string') {
     const stripped = html
@@ -559,8 +588,7 @@ function emailBodyText(email) {
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
       .trim()
-      .slice(0, 4000)
-    if (stripped) return stripped
+    if (stripped) return cleanInboundEmailBodyText(stripped)
   }
   return ''
 }

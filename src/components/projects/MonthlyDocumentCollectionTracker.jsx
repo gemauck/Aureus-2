@@ -5329,6 +5329,34 @@ Abcotronics`;
             return match && match[1] && emailRe.test(match[1].trim()) ? match[1].trim() : null;
         };
 
+        const getCleanReceivedBodyText = (r) => {
+            const raw = (r && typeof r.text === 'string' ? r.text : '').replace(/\r\n/g, '\n');
+            if (!raw) return '';
+            let body = raw
+                .replace(/^Email from Client\s*\([^)]+\)\s*/i, '')
+                .replace(/^CC:\s*[^\n]*\n?/i, '')
+                .replace(/\nAttachments:\s*[^\n]*$/i, '')
+                .trim();
+            const lines = body.split('\n');
+            const out = [];
+            for (const l of lines) {
+                const line = l.trim();
+                if (!line) {
+                    if (out.length > 0 && out[out.length - 1] !== '') out.push('');
+                    continue;
+                }
+                if (/^on .+ wrote:$/i.test(line)) break;
+                if (/^from:\s/i.test(line)) break;
+                if (/^sent:\s/i.test(line)) break;
+                if (/^to:\s/i.test(line)) break;
+                if (/^subject:\s/i.test(line)) break;
+                if (/^>+/.test(line)) continue;
+                if (/^\[cid:[^\]]+\]$/i.test(line)) continue;
+                out.push(line);
+            }
+            return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+        };
+
         function normalizeEmailList(list) {
             if (!Array.isArray(list)) return [];
             const map = new Map();
@@ -6344,7 +6372,7 @@ Abcotronics`;
                                                                 {deletingActivityId === r.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-trash-alt text-xs"></i>}
                                                             </button>
                                                         </div>
-                                                        <div className="px-3 py-2 text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-sm">{r.text && r.text.trim() ? r.text : '—'}</div>
+                                                        <div className="px-3 py-2 text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-sm">{getCleanReceivedBodyText(r) || '—'}</div>
                                                         {r.attachments && r.attachments.length > 0 && (
                                                             <div className="px-3 py-2 border-t border-gray-200 flex flex-wrap gap-2">
                                                                 {r.attachments.map((att, idx) => {
