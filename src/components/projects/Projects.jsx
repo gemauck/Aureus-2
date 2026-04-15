@@ -4758,9 +4758,6 @@ const Projects = () => {
                                     {activeProjectCount} active
                                 </span>
                             </div>
-                            <p className={`text-sm mt-1.5 max-w-xl ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                Track delivery, ownership, and health across every client engagement.
-                            </p>
                             {SectionCommentWidget && (
                                 <div className="mt-3 hidden sm:block">
                                     <SectionCommentWidget sectionId="projects-main" sectionName="Projects" />
