@@ -39,7 +39,8 @@ export async function resolveAuthorNamesToUserIds(authorNames) {
             const n = normalize(u.name || '');
             const e = normalize((u.email || '').split('@')[0]);
             const fullEmail = normalize((u.email || '').replace('@', ''));
-            return n === norm || e === norm || fullEmail === norm || n.includes(norm) || norm.includes(n) || (e && e.includes(norm));
+            // Strict match only to avoid false positives notifying unrelated users.
+            return n === norm || e === norm || fullEmail === norm;
         });
         if (user && !ids.includes(user.id)) ids.push(user.id);
     }
@@ -71,7 +72,8 @@ export async function resolveMentionedUserIds(commentText) {
             const n = normalize(u.name || '');
             const e = normalize((u.email || '').split('@')[0]);
             const fullEmail = normalize((u.email || '').replace('@', ''));
-            return n === norm || e === norm || fullEmail === norm || n.includes(norm) || norm.includes(n) || (e && e.includes(norm)) || (fullEmail && fullEmail.includes(norm));
+            // Strict match only to avoid false positives on short/partial mention text.
+            return n === norm || e === norm || fullEmail === norm;
         });
         if (user) {
             const idStr = String(user.id);
@@ -110,11 +112,6 @@ export async function notifyCommentParticipants(opts) {
         metadata = {}
     } = opts;
     const mentionedIds = await resolveMentionedUserIds(commentText);
-    const priorTexts = Array.isArray(priorCommentTexts) ? priorCommentTexts : [];
-    const priorMentionedArrays = await Promise.all(
-        priorTexts.filter((t) => t != null && typeof t === 'string' && String(t).trim()).map(resolveMentionedUserIds)
-    );
-    const priorMentionedIds = [...new Set(priorMentionedArrays.flat())].filter(Boolean);
     // Resolve prior comment author names to IDs (document collection often has author name only, not authorId)
     const priorAuthorNames = Array.isArray(priorCommentAuthorNames) ? priorCommentAuthorNames : [];
     const priorAuthorIdsFromNames = priorAuthorNames.length > 0
@@ -143,14 +140,13 @@ export async function notifyCommentParticipants(opts) {
         });
     }
 
-    // Recipients: entity author, prior commenters, prior @mentioned.
+    // Recipients: entity author and prior commenters only.
     // Exclude users @mentioned in this comment so they do not receive both
     // a mention and a generic comment notification.
     const recipientIds = new Set([
         entityAuthorId,
         ...priorCommentAuthorIds,
-        ...priorAuthorIdsFromNames,
-        ...priorMentionedIds
+        ...priorAuthorIdsFromNames
     ].filter(Boolean));
     const toNotify = [...recipientIds].filter(
         (id) => authorIdStr !== String(id) && !mentionedSet.has(String(id))
