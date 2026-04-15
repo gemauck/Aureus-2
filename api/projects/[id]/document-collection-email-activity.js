@@ -10,6 +10,7 @@ import { ok, badRequest, serverError } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 function parseCcFromText(text) {
   if (!text || typeof text !== 'string') return []
   const lines = text.split(/\r?\n/)

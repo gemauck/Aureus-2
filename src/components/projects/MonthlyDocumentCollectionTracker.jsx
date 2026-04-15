@@ -3635,11 +3635,6 @@ const getAssigneeColor = (identifier, users) => {
     // COMMENT POPUP MANAGEMENT
     // ============================================================
     
-    // Clear deep-link "already opened" guard when popup is closed so we can re-open from same URL later
-    useEffect(() => {
-        if (!hoverCommentCell) deepLinkHandledRef.current = null;
-    }, [hoverCommentCell]);
-
     const updateCommentPopupPosition = useCallback(() => {
         if (!hoverCommentCell) return;
         const commentButton = window.document.querySelector(`[data-comment-cell="${hoverCommentCell}"]`);

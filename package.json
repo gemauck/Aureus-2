@@ -38,6 +38,7 @@
     "test:crm:functionality": "node tests/crm/crm-functionality-tests.js",
     "test:crm:business": "node tests/crm/crm-business-logic-tests.js",
     "test:document-collection": "node --test tests/document-collection-email-routing.test.js",
+    "repair:doc-collection-email": "node scripts/repair-document-collection-email-allocation.js",
     "test:weekly-fms-put": "node tests/test-weekly-fms-put.js",
     "test:projects": "node tests/projects-functionality-persistence-tests.js",
     "stress:poa": "node scripts/stress-test-poa-review.js",

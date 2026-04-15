@@ -27,6 +27,20 @@ function parseXDocReqFromRaw(rawText) {
   return null
 }
 
+/** Keep in sync with api/inbound/document-request-reply.js extractProjectNameFromAbcoSubject */
+function extractProjectNameFromAbcoSubject(subject) {
+  const raw = String(subject || '')
+  const m = raw.match(/Document\s*\/\s*Data\s*request:\s*(.+)/i)
+  if (!m || !m[1]) return null
+  const rest = m[1]
+    .replace(/^(?:\s*Re:)+/i, '')
+    .trim()
+  const parts = rest.split(/\s*[–—]\s*|\s+-\s+/).map((p) => p.trim()).filter(Boolean)
+  if (!parts.length) return null
+  const project = parts[0]
+  return project.length > 0 && project.length < 400 ? project : null
+}
+
 describe('document collection routing helpers', () => {
   it('extracts bracket and DOC- tokens', () => {
     const t = 'Re: Hi [Req DOC-2026-A1B2C3D4] tail DOC-2026-FFFFFFFF'
@@ -38,5 +52,15 @@ describe('document collection routing helpers', () => {
   it('parses X-Abcotronics-Doc-Req from raw eml', () => {
     const raw = 'X-Abcotronics-Doc-Req: DOC-2026-ABCDEF12\r\n\r\nbody'
     assert.strictEqual(parseXDocReqFromRaw(raw), 'DOC-2026-ABCDEF12')
+  })
+
+  it('extracts project name from Abco data-request subject', () => {
+    const subj =
+      'Re: Abco Document / Data request: Mondi Mzfube – Section A – CIPC registration – January 2026'
+    assert.strictEqual(extractProjectNameFromAbcoSubject(subj), 'Mondi Mzfube')
+  })
+
+  it('returns null when data-request template missing', () => {
+    assert.strictEqual(extractProjectNameFromAbcoSubject('Re: random subject – January 2026'), null)
   })
 })

@@ -256,6 +256,42 @@ function normalizeMessageId(value) {
 const DOC_REQ_MATCH_MAX_AGE_MS =
   (parseInt(process.env.DOCUMENT_REQUEST_MATCH_MAX_AGE_DAYS || '120', 10) || 120) * 24 * 60 * 60 * 1000
 
+function isSubjectFallbackEnabled() {
+  const v = String(process.env.DOCUMENT_REQUEST_REPLY_SUBJECT_FALLBACK ?? '1')
+    .toLowerCase()
+    .trim()
+  return v !== '0' && v !== 'false' && v !== 'no' && v !== 'off'
+}
+
+/**
+ * When true: if the subject contains "… Document / Data request: {Project} …" but {Project} does not match
+ * exactly one of the projects that sent a doc request that month, skip subject-based routing (avoids wrong client).
+ * Default false for backward compatibility; set to 1 in multi-tenant / multi-site environments.
+ */
+function isSubjectStrictProjectEnabled() {
+  const v = String(process.env.DOCUMENT_REQUEST_REPLY_SUBJECT_STRICT_PROJECT ?? '0')
+    .toLowerCase()
+    .trim()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
+}
+
+/**
+ * First segment after "Document / Data request:" matches outbound template (project – section – doc – period).
+ * Strips a leading "Re:" only on that segment tail, not the whole subject.
+ */
+function extractProjectNameFromAbcoSubject(subject) {
+  const raw = String(subject || '')
+  const m = raw.match(/Document\s*\/\s*Data\s*request:\s*(.+)/i)
+  if (!m || !m[1]) return null
+  const rest = m[1]
+    .replace(/^(?:\s*Re:)+/i, '')
+    .trim()
+  const parts = rest.split(/\s*[–—]\s*|\s+-\s+/).map((p) => p.trim()).filter(Boolean)
+  if (!parts.length) return null
+  const project = parts[0]
+  return project.length > 0 && project.length < 400 ? project : null
+}
+
 /** Extract DOC-YYYY-… or [Req …] tokens from subject/body. */
 function extractRequestNumbersFromText(blob) {
   if (!blob || typeof blob !== 'string') return []
@@ -1150,7 +1186,9 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
     // Reply subject: "Re: Abco Document / Data request: ProjectName - DocumentName - February 2026"
     // Or with section (location): "Re: Abco Document / Data request: ProjectName - SectionName - DocumentName - February 2026"
     // Use the LAST " - Month Year" so we get the segment before it (DocumentName or "SectionName - DocumentName").
-    if (!mapping) {
+    // Set DOCUMENT_REQUEST_REPLY_SUBJECT_FALLBACK=0 to disable entirely (safest). DOCUMENT_REQUEST_REPLY_SUBJECT_STRICT_PROJECT=1
+    // requires the subject's project label to match exactly one recent sender when narrowing.
+    if (!mapping && isSubjectFallbackEnabled()) {
       const subject = (email.subject || '').toString()
       const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
       let fallbackMonth = null
@@ -1211,40 +1249,83 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
             distinct: ['projectId'],
             take: 40
           })
-          const projectIds = recentProjects.map((p) => p.projectId)
+          let projectIds = recentProjects.map((p) => p.projectId)
           subjectFallbackProjectIds = projectIds
+          let abandonSubjectFallback = false
+
+          const projectNameGuess = extractProjectNameFromAbcoSubject(subject)
+          if (projectNameGuess && projectIds.length > 0) {
+            const nameMatched = await prisma.project.findMany({
+              where: { id: { in: projectIds }, name: { equals: projectNameGuess, mode: 'insensitive' } },
+              select: { id: true }
+            })
+            const narrowedIds = [...new Set(nameMatched.map((p) => p.id).filter(Boolean))]
+            if (narrowedIds.length === 1) {
+              projectIds = narrowedIds
+              subjectFallbackProjectIds = projectIds
+            } else if (isSubjectStrictProjectEnabled()) {
+              console.warn(
+                'document-request-reply: subject strict project — project label did not match exactly one sending client; skipping subject routing',
+                { projectNameGuess, narrowedCount: narrowedIds.length, recentSenderCount: projectIds.length }
+              )
+              abandonSubjectFallback = true
+            }
+          }
+
           const sectionFilter = sectionNameFromSubject
             ? { name: { equals: sectionNameFromSubject, mode: 'insensitive' } }
             : {}
-          let docsWithName = await prisma.documentItem.findMany({
-            where: {
-              name: { equals: cleanDocName, mode: 'insensitive' },
-              section: { projectId: { in: projectIds }, ...sectionFilter }
-            },
-            select: { id: true, section: { select: { projectId: true } } }
-          })
-          if (docsWithName.length === 0 && projectIds.length > 0) {
+          let docsWithName = []
+          if (!abandonSubjectFallback) {
             docsWithName = await prisma.documentItem.findMany({
               where: {
-                name: { contains: cleanDocName, mode: 'insensitive' },
+                name: { equals: cleanDocName, mode: 'insensitive' },
                 section: { projectId: { in: projectIds }, ...sectionFilter }
               },
               select: { id: true, section: { select: { projectId: true } } }
             })
+            if (docsWithName.length === 0 && projectIds.length > 0) {
+              docsWithName = await prisma.documentItem.findMany({
+                where: {
+                  name: { contains: cleanDocName, mode: 'insensitive' },
+                  section: { projectId: { in: projectIds }, ...sectionFilter }
+                },
+                select: { id: true, section: { select: { projectId: true } } }
+              })
+            }
           }
           const matchingDocIds = docsWithName.map((d) => d.id)
           subjectFallbackDocIds = matchingDocIds
-          subjectFallbackProjectIds = docsWithName.length > 0 ? [...new Set(docsWithName.map((d) => d.section?.projectId).filter(Boolean))] : projectIds
+          subjectFallbackProjectIds =
+            docsWithName.length > 0 ? [...new Set(docsWithName.map((d) => d.section?.projectId).filter(Boolean))] : projectIds
           docsWithNameFromSubject = docsWithName
-          if (matchingDocIds.length > 0) {
+
+          if (!abandonSubjectFallback && matchingDocIds.length > 1) {
+            console.warn('document-request-reply: subject fallback skipped — multiple checklist rows match name (ambiguous client/cell)', {
+              cleanDocName,
+              matchCount: matchingDocIds.length
+            })
+            abandonSubjectFallback = true
+          }
+
+          if (!abandonSubjectFallback && matchingDocIds.length === 1) {
             whereClause = {
               month: fallbackMonth,
               year: fallbackYear,
-              documentId: { in: matchingDocIds },
+              documentId: matchingDocIds[0],
               createdAt: { gte: sinceCutoff }
             }
           }
-          console.log('document-request-reply: subject fallback lookup', { fallbackMonth, fallbackYear, cleanDocName, sectionNameFromSubject: sectionNameFromSubject || null, projectCount: projectIds.length, matchingDocIds: matchingDocIds.length })
+          console.log('document-request-reply: subject fallback lookup', {
+            fallbackMonth,
+            fallbackYear,
+            cleanDocName,
+            sectionNameFromSubject: sectionNameFromSubject || null,
+            projectCount: projectIds.length,
+            matchingDocIds: matchingDocIds.length,
+            projectNameGuess: projectNameGuess || null,
+            abandoned: abandonSubjectFallback
+          })
         }
         if (whereClause) {
           mapping = await prisma.documentRequestEmailSent.findFirst({
@@ -1255,10 +1336,11 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
         if (mapping) {
           matchMethod = 'matched_subject'
           console.log('document-request-reply: matched by subject fallback', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear, docName: cleanDocName || 'any', sectionName: sectionNameFromSubject || null })
-        } else if (subjectFallbackDocIds.length > 0 && subjectFallbackProjectIds.length > 0) {
-          // No DocumentRequestEmailSent row for this doc+month+year (e.g. send log succeeded but reply routing row failed). Still attach reply to the document we matched by name (and section when present).
+        } else if (subjectFallbackDocIds.length === 1 && subjectFallbackProjectIds.length > 0) {
+          // No DocumentRequestEmailSent row for this doc+month+year (e.g. send log succeeded but reply routing row failed). Still attach reply to the single document we matched by name (and section when present).
           const chosenDocId = subjectFallbackDocIds[0]
-          const chosenProjectId = docsWithNameFromSubject.find((d) => d.id === chosenDocId)?.section?.projectId ?? subjectFallbackProjectIds[0]
+          const chosenProjectId =
+            docsWithNameFromSubject.find((d) => d.id === chosenDocId)?.section?.projectId ?? subjectFallbackProjectIds[0]
           mapping = {
             documentId: chosenDocId,
             projectId: chosenProjectId,
