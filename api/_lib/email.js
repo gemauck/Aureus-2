@@ -66,7 +66,10 @@ async function sendViaResendAPI(mailOptions, apiKey) {
     if (mailOptions.cc && (Array.isArray(mailOptions.cc) ? mailOptions.cc.length : mailOptions.cc)) {
         payload.cc = Array.isArray(mailOptions.cc) ? mailOptions.cc : [mailOptions.cc];
     }
-    
+    if (mailOptions.bcc && (Array.isArray(mailOptions.bcc) ? mailOptions.bcc.length : mailOptions.bcc)) {
+        payload.bcc = Array.isArray(mailOptions.bcc) ? mailOptions.bcc : [mailOptions.bcc];
+    }
+
     // Add reply_to if provided
     if (mailOptions.replyTo) {
         const replyEmail = mailOptions.replyTo.includes('<') 
@@ -362,11 +365,11 @@ function checkEmailConfiguration() {
 /**
  * Send a simple email (raw subject/body). Used for document collection requests,
  * leave notifications, and other custom user-drafted emails.
- * @param {{ to: string|string[], cc?: string|string[], subject: string, html?: string, text?: string, replyTo?: string, fromName?: string, from?: string }} opts
+ * @param {{ to: string|string[], cc?: string|string[], bcc?: string|string[], subject: string, html?: string, text?: string, replyTo?: string, fromName?: string, from?: string, headers?: Record<string, string> }} opts
  * @returns {{ success: boolean, messageId: string }}
  */
 export async function sendEmail(opts) {
-    const { to, cc, subject, html, text, replyTo, fromName, from: fromOverride, headers: customHeaders } = opts;
+    const { to, cc, bcc, subject, html, text, replyTo, fromName, from: fromOverride, headers: customHeaders } = opts;
     if (!to || !subject) {
         throw new Error('sendEmail requires "to" and "subject"');
     }
@@ -398,6 +401,9 @@ export async function sendEmail(opts) {
     };
     if (cc && (Array.isArray(cc) ? cc.length : cc)) {
         mailOptions.cc = Array.isArray(cc) ? cc : [cc];
+    }
+    if (bcc && (Array.isArray(bcc) ? bcc.length : bcc)) {
+        mailOptions.bcc = Array.isArray(bcc) ? bcc : [bcc];
     }
     if (fromName && typeof fromName === 'string') {
         mailOptions.fromName = fromName;

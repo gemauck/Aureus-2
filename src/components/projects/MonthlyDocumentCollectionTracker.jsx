@@ -5053,6 +5053,7 @@ Abcotronics`;
         const [replyBody, setReplyBody] = useState('');
         const [replyCc, setReplyCc] = useState([]);
         const [replyNewCc, setReplyNewCc] = useState('');
+        const [replyRequestNumber, setReplyRequestNumber] = useState(null);
         const [sendingReply, setSendingReply] = useState(false);
         const activityFetchIdRef = useRef(0);
         const saveNoticeTimeoutRef = useRef(null);
@@ -5173,6 +5174,7 @@ Abcotronics`;
             setReplyBody('');
             setReplyCc([]);
             setReplyNewCc('');
+            setReplyRequestNumber(null);
         }, [ctx?.section?.id, ctx?.doc?.id, ctx?.month, selectedYear]);
 
         // Fetch email activity (sent/received) for this document and month; callable from useEffect and after send. Returns a promise.
@@ -5355,15 +5357,40 @@ Abcotronics`;
                 ...(Array.isArray(s.recipients) ? s.recipients : []),
                 ...(Array.isArray(s.cc) ? s.cc : [])
             ];
-            const responderCc = Array.isArray(r.cc) ? r.cc : [];
-            const mergedCc = normalizeEmailList([...baseCc, ...responderCc])
-                .filter((e) => e.toLowerCase() !== toAddr.toLowerCase());
+            const sentList = Array.isArray(emailActivity.sent)
+                ? [...emailActivity.sent].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+                : [];
+            const anchor =
+                sentList.find((row) => row && row.requestNumber) ||
+                sentList[sentList.length - 1] ||
+                null;
+            const rn =
+                (anchor && anchor.requestNumber) ||
+                (() => {
+                    const sub = (anchor && anchor.subject) || '';
+                    const m = String(sub).match(/\[Req\s+([A-Za-z0-9-]+)\]/i);
+                    return m ? m[1].trim() : null;
+                })();
+            let outboundCc = [];
+            if (
+                anchor &&
+                (Array.isArray(anchor.ccEmails) || Array.isArray(anchor.toEmails)) &&
+                (anchor.ccEmails?.length > 0 || anchor.toEmails?.length > 0)
+            ) {
+                outboundCc = normalizeEmailList([
+                    ...(Array.isArray(anchor.toEmails) ? anchor.toEmails : []),
+                    ...(Array.isArray(anchor.ccEmails) ? anchor.ccEmails : [])
+                ]).filter((e) => e.toLowerCase() !== toAddr.toLowerCase());
+            } else {
+                outboundCc = normalizeEmailList([...baseCc]).filter((e) => e.toLowerCase() !== toAddr.toLowerCase());
+            }
             setReplyingToReceivedId(r.id);
             setReplyToEmail(toAddr);
             setReplySubject((defaultSubject || '').trim().toLowerCase().startsWith('re:') ? defaultSubject : `Re: ${(defaultSubject || '').trim()}`);
             setReplyBody('');
-            setReplyCc(mergedCc);
+            setReplyCc(outboundCc);
             setReplyNewCc('');
+            setReplyRequestNumber(rn || null);
         };
 
         const cancelReply = () => {
@@ -5373,6 +5400,7 @@ Abcotronics`;
             setReplyBody('');
             setReplyCc([]);
             setReplyNewCc('');
+            setReplyRequestNumber(null);
         };
 
         const addReplyCc = () => {
@@ -5421,6 +5449,7 @@ Abcotronics`;
                         documentId: String(ctx.doc.id).trim(),
                         month: Number(monthNum),
                         year: Number(yearNum),
+                        ...(replyRequestNumber ? { requestNumber: String(replyRequestNumber).trim() } : {}),
                         ...(ctx?.section?.id ? { sectionId: String(ctx.section.id).trim() } : {})
                     })
                 });

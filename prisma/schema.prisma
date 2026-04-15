@@ -928,11 +928,15 @@ model DocumentRequestEmailSent {
   year           Int
   month          Int
   requesterEmail String?  // Person who sent the request; replies are forwarded here (documents@ is not a real mailbox)
+  requestNumber  String?  // Stable thread id (e.g. DOC-2026-xxxx); repeated across sends for same cell+period
+  toEmails       String?  @default("[]") // JSON array — actual To at send time
+  ccEmails       String?  @default("[]") // JSON array — actual CC at send time
   createdAt      DateTime @default(now())
 
   @@unique([messageId])
   @@index([projectId])
   @@index([messageId])
+  @@index([requestNumber])
 }
 
 // Tracks processed inbound reply emails to prevent duplicate comments on retries
@@ -971,10 +975,27 @@ model DocumentCollectionEmailLog {
   openedAt       DateTime?
   lastOpenedAt   DateTime?
   openCount      Int      @default(0)
+  requestNumber  String?  // Stable thread id; same across resends/replies for cell+period
+  toEmails       String?  @default("[]") // JSON array
+  ccEmails       String?  @default("[]") // JSON array
 
   @@index([projectId, documentId, year, month])
   @@index([projectId, sectionId, documentId, year, month])
   @@index([messageId])
+  @@index([requestNumber])
+}
+
+// Inbound document reply could not be routed to a cell (for admin review; no silent drop)
+model DocumentRequestInboundUnmatched {
+  id             String   @id @default(cuid())
+  emailId        String   @unique // Resend receiving email ID
+  fromAddress    String?  @db.Text
+  subject        String?  @db.Text
+  candidatesJson String?  @db.Text // JSON: message-id candidates tried
+  reason         String?  @default("no_match") // no_match | parse_error
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // Per-user read state for document collection email/comment notifications

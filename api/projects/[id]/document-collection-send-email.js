@@ -24,6 +24,72 @@ function isValidEmail(s) {
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
+function generateRequestNumber(year) {
+  const y = Number(year) && !Number.isNaN(Number(year)) ? Number(year) : new Date().getFullYear()
+  return `DOC-${y}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+}
+
+async function getExistingRequestNumberForCell({ projectId, documentId, year, month }) {
+  try {
+    const log = await prisma.documentCollectionEmailLog.findFirst({
+      where: { projectId, documentId, year, month, requestNumber: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { requestNumber: true }
+    })
+    if (log?.requestNumber) return log.requestNumber
+  } catch (_) {}
+  try {
+    const row = await prisma.documentRequestEmailSent.findFirst({
+      where: { projectId, documentId, year, month, requestNumber: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { requestNumber: true }
+    })
+    if (row?.requestNumber) return row.requestNumber
+  } catch (_) {}
+  return null
+}
+
+function parseJsonEmailArrayStored(s) {
+  if (!s || typeof s !== 'string') return []
+  try {
+    const j = JSON.parse(s)
+    return Array.isArray(j) ? j.map((e) => String(e).trim().toLowerCase()).filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+async function getAllowedRecipientSetForReply({ projectId, documentId, year, month, requestNumber }) {
+  const set = new Set()
+  const addLog = (log) => {
+    parseJsonEmailArrayStored(log.toEmails).forEach((e) => set.add(e))
+    parseJsonEmailArrayStored(log.ccEmails).forEach((e) => set.add(e))
+  }
+  try {
+    if (requestNumber) {
+      const logs = await prisma.documentCollectionEmailLog.findMany({
+        where: { projectId, documentId, year, month, kind: 'sent', requestNumber },
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      })
+      logs.forEach(addLog)
+    }
+    if (set.size === 0) {
+      const log = await prisma.documentCollectionEmailLog.findFirst({
+        where: { projectId, documentId, year, month, kind: 'sent' },
+        orderBy: { createdAt: 'desc' }
+      })
+      if (log) addLog(log)
+    }
+  } catch (_) {}
+  const extra = (process.env.DOCUMENT_COLLECTION_CC_EXTRA_ALLOWLIST || '')
+    .split(/[;,]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+  extra.forEach((e) => set.add(e))
+  return set
+}
+
 function parseDocAndPeriodFromSubject(subject) {
   if (!subject || typeof subject !== 'string') return { docName: null, month: null, year: null }
   const subj = subject.trim()
@@ -92,10 +158,12 @@ async function handler(req, res) {
     const qYear = query.get('year') != null ? parseInt(String(query.get('year')), 10) : (q.year != null ? parseInt(String(q.year), 10) : null)
     const to = Array.isArray(body.to) ? body.to : (typeof body.to === 'string' ? [body.to] : [])
     const cc = Array.isArray(body.cc) ? body.cc : (typeof body.cc === 'string' ? [body.cc] : [])
-    const subject = typeof body.subject === 'string' ? body.subject.trim() : ''
+    let subject = typeof body.subject === 'string' ? body.subject.trim() : ''
+    const isReplyPersist = subject.trim().toLowerCase().startsWith('re:')
     let html = typeof body.html === 'string' ? body.html.trim() : ''
     let text = typeof body.text === 'string' ? body.text.trim() : undefined
     const sectionId = body.sectionId != null ? String(body.sectionId).trim() : null
+    const requestNumberHint = body.requestNumber != null ? String(body.requestNumber).trim() : ''
     const requesterEmail = typeof body.requesterEmail === 'string' ? body.requesterEmail.trim() : ''
     // Cell keys: body first, then URL query (manual), then Express req.query so reply always persists
     let documentId = (body.documentId != null ? String(body.documentId).trim() : null) || qDoc || null
@@ -171,6 +239,42 @@ async function handler(req, res) {
       if (text) text = text + replyAllLine
     }
 
+    let resolvedRequestNumber = null
+    if (hasCellContext && cell) {
+      resolvedRequestNumber =
+        requestNumberHint || (await getExistingRequestNumberForCell(cell)) || generateRequestNumber(cell.year)
+      if (isReplyPersist) {
+        const allowed = await getAllowedRecipientSetForReply({
+          projectId: cell.projectId,
+          documentId: cell.documentId,
+          year: cell.year,
+          month: cell.month,
+          requestNumber: resolvedRequestNumber
+        })
+        if (requesterAddress) allowed.add(requesterAddress.trim().toLowerCase())
+        if (inboundEmail && isValidEmail(inboundEmail)) allowed.add(inboundEmail.trim().toLowerCase())
+        if (userEmail && isValidEmail(userEmail)) allowed.add(userEmail.trim().toLowerCase())
+        validTo.forEach((e) => allowed.add(e.trim().toLowerCase()))
+        const beforeCc = validCc.length
+        validCc = validCc.filter((e) => allowed.has(e.trim().toLowerCase()))
+        if (beforeCc !== validCc.length) {
+          console.warn('document-collection-send-email: reply CC trimmed to allowed set', {
+            before: beforeCc,
+            after: validCc.length
+          })
+        }
+      }
+      if (resolvedRequestNumber && !subject.includes(resolvedRequestNumber)) {
+        subject = `${subject.trim()} [Req ${resolvedRequestNumber}]`
+      }
+      if (resolvedRequestNumber) {
+        const refFooterText = `\n\nRequest ref: ${resolvedRequestNumber}`
+        const refFooterHtml = `<p style="margin-top:12px;font-size:12px;color:#64748b;">Request ref: ${resolvedRequestNumber}</p>`
+        if (text && !text.includes(resolvedRequestNumber)) text = text + refFooterText
+        if (html && !html.includes(resolvedRequestNumber)) html = html + refFooterHtml
+      }
+    }
+
     const replyTo = hasCellContext && inboundEmail && isValidEmail(inboundEmail)
       ? inboundEmail
       : (requesterAddress ? requesterAddress : undefined)
@@ -222,20 +326,29 @@ async function handler(req, res) {
           html = `${html}<img src="${pixelUrl}" alt="" width="1" height="1" style="display:block;width:1px;height:1px;opacity:0;" />`
         }
       }
+      const archiveBcc = process.env.DOCUMENT_COLLECTION_ARCHIVE_BCC
+      const bccList =
+        archiveBcc && isValidEmail(archiveBcc.trim())
+          ? [archiveBcc.trim()]
+          : undefined
+      const docHeaders = {}
+      if (messageIdForReply) {
+        docHeaders['Message-ID'] = messageIdForReply.startsWith('<') ? messageIdForReply : `<${messageIdForReply}>`
+      }
+      if (resolvedRequestNumber) {
+        docHeaders['X-Abcotronics-Doc-Req'] = resolvedRequestNumber
+      }
       const result = await sendEmail({
         to: validTo.map((e) => e.trim()),
         cc: validCc.length > 0 ? [...new Set(validCc.map((e) => e.trim()))] : undefined,
+        ...(bccList ? { bcc: bccList } : {}),
         subject,
         html: html || undefined,
         text: text || undefined,
         replyTo,
         fromName,
         ...(fromAddress && { from: fromAddress }),
-        ...(messageIdForReply && {
-          headers: {
-            'Message-ID': messageIdForReply.startsWith('<') ? messageIdForReply : `<${messageIdForReply}>`
-          }
-        })
+        ...(Object.keys(docHeaders).length > 0 ? { headers: docHeaders } : {})
       })
       providerMessageId = result?.messageId || null
       validTo.forEach((e) => sent.push(e.trim()))
@@ -245,8 +358,7 @@ async function handler(req, res) {
       validCc.forEach((e) => failed.push({ email: e.trim(), error: err.message || 'Send failed' }))
     }
 
-    // Persist for activity view. Replies (Re:) use DocumentItemComment only so they always show; initial sends use DocumentCollectionEmailLog.
-    const isReply = (subject || '').trim().toLowerCase().startsWith('re:')
+    // Persist: DocumentCollectionEmailLog for all successful sends (requests and replies)
     let activityPersisted = false
     let logId = null
     let warning = null
@@ -257,10 +369,58 @@ async function handler(req, res) {
         ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
         : ''
     const commentText = `Subject: ${(subject || '').slice(0, 500)}\n\n${bodyForStorage}`
+    const toEmailsJson = JSON.stringify(validTo.map((e) => e.trim()))
+    const ccEmailsJson = JSON.stringify(validCc.map((e) => e.trim()))
     if (sent.length > 0 && cell) {
-
-      if (isReply) {
-        // Replies: persist only as comment (same table as received emails — always works)
+      const logData = {
+        projectId: cell.projectId,
+        documentId: cell.documentId,
+        year: cell.year,
+        month: cell.month,
+        kind: 'sent',
+        ...(sectionId ? { sectionId } : {}),
+        ...(subject ? { subject: subject.slice(0, 1000) } : {}),
+        ...(bodyForStorage ? { bodyText: bodyForStorage } : {}),
+        ...(providerMessageId ? { messageId: providerMessageId } : {}),
+        ...(trackingId ? { trackingId } : {}),
+        ...(resolvedRequestNumber ? { requestNumber: resolvedRequestNumber } : {}),
+        toEmails: toEmailsJson,
+        ccEmails: ccEmailsJson
+      }
+      const minimalLogData = {
+        projectId: cell.projectId,
+        documentId: cell.documentId,
+        year: cell.year,
+        month: cell.month,
+        kind: 'sent'
+      }
+      try {
+        const log = await prisma.documentCollectionEmailLog.create({ data: logData })
+        activityPersisted = true
+        logId = log.id
+        savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
+        console.log('document-collection-send-email: activity log created', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
+      } catch (logErr) {
+        const msg = String(logErr?.message || '')
+        const isSchemaMismatch =
+          msg.includes('Unknown field') ||
+          msg.toLowerCase().includes('unknown column') ||
+          msg.toLowerCase().includes('does not exist')
+        if (isSchemaMismatch) {
+          try {
+            const log = await prisma.documentCollectionEmailLog.create({ data: minimalLogData })
+            activityPersisted = true
+            logId = log.id
+            savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
+            console.log('document-collection-send-email: activity log created (minimal)', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
+          } catch (retryErr) {
+            console.error('document-collection-send-email: log create failed (minimal):', retryErr.message, { projectId: cell.projectId, documentId: cell.documentId })
+          }
+        } else {
+          console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId })
+        }
+      }
+      if (!activityPersisted) {
         try {
           await prisma.documentItemComment.create({
             data: {
@@ -268,83 +428,18 @@ async function handler(req, res) {
               year: cell.year,
               month: cell.month,
               text: commentText,
-              author: 'Sent reply (platform)'
+              author: isReplyPersist ? 'Sent reply (platform)' : 'Sent request (platform)'
             }
           })
           activityPersisted = true
-          console.log('document-collection-send-email: reply persisted as comment', { documentId: cell.documentId, month: cell.month, year: cell.year })
-        } catch (commentErr) {
-          console.error('document-collection-send-email: reply comment create failed:', commentErr.message, { documentId: cell.documentId, month: cell.month, year: cell.year })
-        }
-      } else {
-        // Initial sends: use DocumentCollectionEmailLog
-        const logData = {
-          projectId: cell.projectId,
-          documentId: cell.documentId,
-          year: cell.year,
-          month: cell.month,
-          kind: 'sent',
-          ...(sectionId ? { sectionId } : {}),
-          ...(subject ? { subject: subject.slice(0, 1000) } : {}),
-          ...(bodyForStorage ? { bodyText: bodyForStorage } : {}),
-          ...(providerMessageId ? { messageId: providerMessageId } : {}),
-          ...(trackingId ? { trackingId } : {})
-        }
-        const minimalLogData = {
-          projectId: cell.projectId,
-          documentId: cell.documentId,
-          year: cell.year,
-          month: cell.month,
-          kind: 'sent'
-        }
-        try {
-          const log = await prisma.documentCollectionEmailLog.create({ data: logData })
-          activityPersisted = true
-          logId = log.id
           savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
-          console.log('document-collection-send-email: activity log created', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
-        } catch (logErr) {
-          const msg = String(logErr?.message || '')
-          const isSchemaMismatch =
-            msg.includes('Unknown field') ||
-            msg.toLowerCase().includes('unknown column') ||
-            msg.toLowerCase().includes('does not exist')
-          if (isSchemaMismatch) {
-            try {
-              const log = await prisma.documentCollectionEmailLog.create({ data: minimalLogData })
-              activityPersisted = true
-              logId = log.id
-              savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
-              console.log('document-collection-send-email: activity log created (minimal)', { logId: log.id, projectId: cell.projectId, documentId: cell.documentId, month: cell.month, year: cell.year })
-            } catch (retryErr) {
-              console.error('document-collection-send-email: log create failed (minimal):', retryErr.message, { projectId: cell.projectId, documentId: cell.documentId })
-            }
-          } else {
-            console.error('document-collection-send-email: log create failed:', logErr.message, { projectId: cell.projectId, documentId: cell.documentId })
-          }
-        }
-        if (!activityPersisted) {
-          // Fallback: store as comment so activity can still show
-          try {
-            await prisma.documentItemComment.create({
-              data: {
-                itemId: cell.documentId,
-                year: cell.year,
-                month: cell.month,
-                text: commentText,
-                author: 'Sent request (platform)'
-              }
-            })
-            activityPersisted = true
-            savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
-            console.log('document-collection-send-email: activity fallback saved as comment', { documentId: cell.documentId, month: cell.month, year: cell.year })
-          } catch (commentErr) {
-            console.error('document-collection-send-email: fallback comment create failed:', commentErr.message, { documentId: cell.documentId, month: cell.month, year: cell.year })
-          }
+          console.log('document-collection-send-email: activity fallback saved as comment', { documentId: cell.documentId, month: cell.month, year: cell.year })
+        } catch (commentErr) {
+          console.error('document-collection-send-email: fallback comment create failed:', commentErr.message, { documentId: cell.documentId, month: cell.month, year: cell.year })
         }
       }
 
-    if (messageIdForReply) {
+      if (messageIdForReply) {
         try {
           await prisma.documentRequestEmailSent.create({
             data: {
@@ -354,7 +449,10 @@ async function handler(req, res) {
               documentId: cell.documentId,
               year: cell.year,
               month: cell.month,
-              ...(requesterAddress ? { requesterEmail: requesterAddress.trim() } : {})
+              ...(requesterAddress ? { requesterEmail: requesterAddress.trim() } : {}),
+              ...(resolvedRequestNumber ? { requestNumber: resolvedRequestNumber } : {}),
+              toEmails: toEmailsJson,
+              ccEmails: ccEmailsJson
             }
           })
         } catch (dbErr) {

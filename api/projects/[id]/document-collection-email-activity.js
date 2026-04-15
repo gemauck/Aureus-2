@@ -27,6 +27,16 @@ function parseCcFromText(text) {
   return [...new Set(emails)]
 }
 
+function parseStoredEmailJson(s) {
+  if (!s || typeof s !== 'string') return []
+  try {
+    const j = JSON.parse(s)
+    return Array.isArray(j) ? j.map((e) => String(e).trim()).filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
 function buildSentSelect({ includeMessageId = true } = {}) {
   const select = {
     id: true,
@@ -34,6 +44,9 @@ function buildSentSelect({ includeMessageId = true } = {}) {
     subject: true,
     bodyText: true,
     messageId: true,
+    requestNumber: true,
+    toEmails: true,
+    ccEmails: true,
     deliveryStatus: true,
     deliveredAt: true,
     bouncedAt: true,
@@ -396,6 +409,8 @@ async function getDocumentCollectionEmailActivity(req, res, { cell, documentName
 }
 
 async function getDocumentCollectionEmailActivityInner(req, res, { cell, documentName, params, q }) {
+  const mergeSameNameReceived =
+    params.get('includeSameNameInProject') === '1' || String(q.includeSameNameInProject || '') === '1'
   const sentWhere = {
     projectId: cell.projectId,
     documentId: cell.documentId,
@@ -407,6 +422,7 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
   try {
     if (prisma.documentCollectionEmailLog) {
       let includeMessageId = true
+      let includeExtendedMeta = true
       try {
         sent = await prisma.documentCollectionEmailLog.findMany({
           where: sentWhere,
@@ -415,13 +431,20 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
         })
       } catch (logErr) {
         const msg = String(logErr?.message || '')
-        if (msg.includes('Unknown field `messageId`')) {
-          includeMessageId = false
+        if (msg.includes('Unknown field') && (msg.includes('messageId') || msg.includes('requestNumber') || msg.includes('toEmails'))) {
+          if (msg.includes('messageId')) includeMessageId = false
+          if (msg.includes('requestNumber') || msg.includes('toEmails')) includeExtendedMeta = false
           try {
+            const sel = buildSentSelect({ includeMessageId })
+            if (!includeExtendedMeta) {
+              delete sel.requestNumber
+              delete sel.toEmails
+              delete sel.ccEmails
+            }
             sent = await prisma.documentCollectionEmailLog.findMany({
               where: sentWhere,
               orderBy: { createdAt: 'asc' },
-              select: buildSentSelect({ includeMessageId: false })
+              select: sel
             })
           } catch (retryErr) {
             console.error('document-collection-email-activity: log query failed (returning empty sent):', retryErr.message)
@@ -464,18 +487,7 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
         }
         const exactMatch = fallback
           .filter((row) => String(row.documentId).trim() === String(cell.documentId).trim())
-          .map(({ id, createdAt, subject, bodyText, messageId, deliveryStatus, deliveredAt, bouncedAt, bounceReason, lastEventAt }) => ({
-            id,
-            createdAt,
-            subject,
-            bodyText,
-            messageId,
-            deliveryStatus,
-            deliveredAt,
-            bouncedAt,
-            bounceReason,
-            lastEventAt
-          }))
+          .map((row) => ({ ...row }))
         if (exactMatch.length > 0) {
           sent = exactMatch
         } else if (fallback.length > 0) {
@@ -486,18 +498,7 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
               const subject = (row.subject || '').toLowerCase()
               const body = (row.bodyText || '').toLowerCase()
               return subject.includes(name) || body.includes(name)
-            }).map(({ id, createdAt, subject, bodyText, messageId, deliveryStatus, deliveredAt, bouncedAt, bounceReason, lastEventAt }) => ({
-              id,
-              createdAt,
-              subject,
-              bodyText,
-              messageId,
-              deliveryStatus,
-              deliveredAt,
-              bouncedAt,
-              bounceReason,
-              lastEventAt
-            }))
+            }).map((row) => ({ ...row }))
             if (matched.length > 0) {
               sent = matched
             } else {
@@ -586,6 +587,17 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
     if (replyComments.length > 0) sent.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
   } catch (_) {}
 
+  const enrichSentRow = (row) => {
+    if (!row || typeof row !== 'object') return row
+    return {
+      ...row,
+      toEmails: parseStoredEmailJson(row.toEmails),
+      ccEmails: parseStoredEmailJson(row.ccEmails),
+      requestNumber: row.requestNumber ?? null
+    }
+  }
+  sent = sent.map(enrichSentRow)
+
   // Deduplicate sent: same subject + createdAt within 10s → keep first (avoids 3x same send in UI). Never dedupe replies (Re:) so all replies show.
   if (sent.length > 1) {
     const deduped = []
@@ -649,9 +661,9 @@ async function getDocumentCollectionEmailActivityInner(req, res, { cell, documen
       select: { id: true, text: true, attachments: true, createdAt: true }
     })
 
-    // Include received emails for other documents with the same name (same project/year/month) so replies show even when matched to a different section's doc
+    // Optional: merge received from other documents with the same name (legacy). Default off to avoid cross-site bleed.
     let receivedRowsExtended = receivedRows
-    if (documentName && (documentName || '').trim()) {
+    if (mergeSameNameReceived && documentName && (documentName || '').trim()) {
       try {
         let docsByName = await prisma.documentItem.findMany({
           where: {

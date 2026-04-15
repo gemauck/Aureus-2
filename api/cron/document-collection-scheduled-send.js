@@ -5,6 +5,7 @@
  * Schedule: weekly = send if last sent > 7 days ago; monthly = send if not sent this month.
  * Stops when cell status equals the configured stopWhenStatus (e.g. "collected").
  */
+import crypto from 'crypto';
 import { prisma } from '../_lib/prisma.js';
 import { sendEmail } from '../_lib/email.js';
 import { ok, badRequest, serverError } from '../_lib/response.js';
@@ -100,21 +101,46 @@ async function handler(req, res) {
             if (schedule.frequency === 'monthly' && lastSentAt && sameMonth(data.lastSentAt, now.toISOString()))
               continue;
 
-            const subject = (typeof data.subject === 'string' && data.subject.trim()) || 'Abco Document / Data request';
+            let subject = (typeof data.subject === 'string' && data.subject.trim()) || 'Abco Document / Data request';
             const body = typeof data.body === 'string' ? data.body.trim() : '';
             const sectionIdForLink = section.id != null ? section.id : String(si);
             const erpCellUrl = buildDocumentCollectionErpLink(project.id, sectionIdForLink, doc.id, monthKey, yearStr);
             const htmlBody = body ? htmlFromBody(body) : '';
-            const html = htmlBody
-              ? `${htmlBody}<p style="margin-top:18px;font-size:13px;color:#444;"><a href="${erpCellUrl.replace(/"/g, '&quot;')}">Open this request in the ERP (document collection)</a></p>`
-              : `<p style="font-size:14px;"><a href="${erpCellUrl.replace(/"/g, '&quot;')}">Open this request in the ERP (document collection)</a></p>`;
-            const text = body ? `${body}\n\nOpen in ERP: ${erpCellUrl}` : `Open in ERP: ${erpCellUrl}`;
             const cc = Array.isArray(data.cc) ? data.cc.filter((e) => e && typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())) : [];
 
             const validTo = recipients.filter((e) => e && typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim()));
             if (validTo.length === 0) continue;
             const inboundEmail = process.env.DOCUMENT_REQUEST_INBOUND_EMAIL || process.env.INBOUND_EMAIL_FOR_DOCUMENT_REQUESTS || '';
             const fromAddress = inboundEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inboundEmail.trim()) ? inboundEmail.trim() : undefined;
+            const monthKeyMatch = typeof monthKey === 'string' && monthKey.match(/^(\d{4})-(\d{2})$/);
+            const cronYear = monthKeyMatch ? parseInt(monthKeyMatch[1], 10) : currentYear;
+            const cronMonth = monthKeyMatch ? parseInt(monthKeyMatch[2], 10) : null;
+            const requestNumber =
+              cronMonth >= 1 && cronMonth <= 12
+                ? `DOC-${cronYear}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+                : null;
+            if (requestNumber && !subject.includes(requestNumber)) {
+              subject = `${subject.trim()} [Req ${requestNumber}]`;
+            }
+            const refFooter = requestNumber ? `\n\nRequest ref: ${requestNumber}` : '';
+            const html = (() => {
+              const base = htmlBody
+                ? `${htmlBody}<p style="margin-top:18px;font-size:13px;color:#444;"><a href="${erpCellUrl.replace(/"/g, '&quot;')}">Open this request in the ERP (document collection)</a></p>`
+                : `<p style="font-size:14px;"><a href="${erpCellUrl.replace(/"/g, '&quot;')}">Open this request in the ERP (document collection)</a></p>`;
+              const refHtml = requestNumber
+                ? `<p style="margin-top:12px;font-size:12px;color:#64748b;">Request ref: ${requestNumber}</p>`
+                : '';
+              return base + refHtml;
+            })();
+            const text = body
+              ? `${body}\n\nOpen in ERP: ${erpCellUrl}${refFooter}`
+              : `Open in ERP: ${erpCellUrl}${refFooter}`;
+            const dom = inboundEmail && inboundEmail.includes('@') ? inboundEmail.split('@')[1] : 'local';
+            const messageIdForReply = `docreq-${crypto.randomUUID()}@${dom}`;
+            const docHeaders = {
+              'Message-ID': `<${messageIdForReply}>`,
+              ...(requestNumber ? { 'X-Abcotronics-Doc-Req': requestNumber } : {})
+            };
             try {
               await sendEmail({
                 to: validTo,
@@ -123,9 +149,46 @@ async function handler(req, res) {
                 html,
                 text,
                 ...(fromAddress && { from: fromAddress }),
-                ...(fromAddress && { replyTo: fromAddress })
+                ...(fromAddress && { replyTo: fromAddress }),
+                headers: docHeaders
               });
               sent += validTo.length + cc.length;
+              if (requestNumber && doc.id && cronMonth >= 1 && cronMonth <= 12) {
+                const toJ = JSON.stringify(validTo.map((e) => e.trim()));
+                const ccJ = JSON.stringify(cc.map((e) => e.trim()));
+                try {
+                  await prisma.documentCollectionEmailLog.create({
+                    data: {
+                      projectId: project.id,
+                      documentId: doc.id,
+                      year: cronYear,
+                      month: cronMonth,
+                      kind: 'sent',
+                      ...(section.id != null ? { sectionId: String(section.id) } : {}),
+                      subject: subject.slice(0, 1000),
+                      bodyText: text.slice(0, 50000),
+                      requestNumber,
+                      toEmails: toJ,
+                      ccEmails: ccJ
+                    }
+                  });
+                  await prisma.documentRequestEmailSent.create({
+                    data: {
+                      messageId: messageIdForReply,
+                      projectId: project.id,
+                      documentId: doc.id,
+                      year: cronYear,
+                      month: cronMonth,
+                      ...(section.id != null ? { sectionId: String(section.id) } : {}),
+                      requestNumber,
+                      toEmails: toJ,
+                      ccEmails: ccJ
+                    }
+                  });
+                } catch (persistErr) {
+                  console.warn('document-collection-scheduled-send: persist log/RN failed', persistErr.message);
+                }
+              }
             } catch (err) {
               validTo.forEach((email) => {
                 errors.push({

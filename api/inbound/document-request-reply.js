@@ -253,6 +253,88 @@ function normalizeMessageId(value) {
   return value.replace(/^<|>$/g, '').trim()
 }
 
+const DOC_REQ_MATCH_MAX_AGE_MS =
+  (parseInt(process.env.DOCUMENT_REQUEST_MATCH_MAX_AGE_DAYS || '120', 10) || 120) * 24 * 60 * 60 * 1000
+
+/** Extract DOC-YYYY-… or [Req …] tokens from subject/body. */
+function extractRequestNumbersFromText(blob) {
+  if (!blob || typeof blob !== 'string') return []
+  const out = new Set()
+  const bracket = /\[(?:Req|REQ)\s+([A-Za-z0-9-]+)\]/gi
+  let m
+  while ((m = bracket.exec(blob)) !== null) {
+    if (m[1]) out.add(m[1].trim())
+  }
+  const plain = /\b(DOC-\d{4}-[A-Za-z0-9]+)\b/gi
+  while ((m = plain.exec(blob)) !== null) {
+    if (m[1]) out.add(m[1].trim())
+  }
+  return [...out]
+}
+
+function parseXDocReqFromRaw(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null
+  const mm = rawText.match(/x-abcotronics-doc-req:\s*([^\r\n]+)/i)
+  if (mm && mm[1]) return mm[1].trim().replace(/^<|>$/g, '').trim()
+  return null
+}
+
+async function findMappingByRequestNumber(requestNumber) {
+  if (!requestNumber || typeof requestNumber !== 'string') return null
+  const since = new Date(Date.now() - DOC_REQ_MATCH_MAX_AGE_MS)
+  try {
+    const sent = await prisma.documentRequestEmailSent.findFirst({
+      where: { requestNumber, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' }
+    })
+    if (sent) return sent
+  } catch (e) {
+    if (!isMissingTableError(e)) console.warn('document-request-reply: find by RN (sent)', e.message)
+  }
+  try {
+    const log = await prisma.documentCollectionEmailLog.findFirst({
+      where: { requestNumber, kind: 'sent', createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' }
+    })
+    if (log) {
+      return {
+        id: '',
+        messageId: log.messageId || '',
+        projectId: log.projectId,
+        sectionId: log.sectionId,
+        documentId: log.documentId,
+        year: log.year,
+        month: log.month,
+        requesterEmail: null,
+        requestNumber: log.requestNumber
+      }
+    }
+  } catch (e) {
+    if (!isMissingTableError(e)) console.warn('document-request-reply: find by RN (log)', e.message)
+  }
+  return null
+}
+
+async function recordUnmatchedInbound(emailId, email, allCandidates, reason) {
+  if (!emailId) return
+  try {
+    if (!prisma.documentRequestInboundUnmatched) return
+    const existing = await prisma.documentRequestInboundUnmatched.findUnique({ where: { emailId } })
+    if (existing) return
+    await prisma.documentRequestInboundUnmatched.create({
+      data: {
+        emailId,
+        fromAddress: ((email.from || '').toString().slice(0, 8000)),
+        subject: ((email.subject || '').toString().slice(0, 4000)),
+        candidatesJson: JSON.stringify((allCandidates || []).slice(0, 50)),
+        reason: reason || 'no_match'
+      }
+    })
+  } catch (e) {
+    if (!isMissingTableError(e)) console.warn('document-request-reply: unmatched record failed', e.message)
+  }
+}
+
 /** Normalize headers to a plain object with lowercase keys for consistent lookup. */
 function normalizeHeaders(headers) {
   if (!headers) return {}
@@ -888,7 +970,8 @@ async function handler(req, res) {
       ok: true,
       endpoint: 'Resend email.received webhook',
       method: 'POST',
-      hint: 'In Resend Dashboard add a webhook for event "email.received" with this URL (change to your domain).'
+      hint: 'In Resend Dashboard add a webhook for event "email.received" with this URL (change to your domain).',
+      replyMatchStats: { ...replyMatchStats }
     })
   }
   if (req.method !== 'POST') {
@@ -896,7 +979,13 @@ async function handler(req, res) {
   }
 
   // Log every POST immediately so we can confirm webhook is being called
-  console.log('document-request-reply: POST received', { contentType: req.headers?.['content-type'] || 'none' })
+    console.log(
+      JSON.stringify({
+        event: 'document_request_inbound_webhook',
+        contentType: req.headers?.['content-type'] || 'none'
+      })
+    )
+    console.log('document-request-reply: POST received', { contentType: req.headers?.['content-type'] || 'none' })
 
   try {
     const rawBody = typeof req.body === 'string' ? req.body : (req.body ? JSON.stringify(req.body) : '{}')
@@ -1002,53 +1091,61 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
 
     let mapping = null
     let matchMethod = null
-    // Try message-ID matching when we have candidates.
+    const sinceCutoff = new Date(Date.now() - DOC_REQ_MATCH_MAX_AGE_MS)
+
+    // 1) Strict Message-ID match (exact values only; no fuzzy substring matching)
     if (allCandidates.length > 0) {
-      const messageIdCandidates = new Set(allCandidates)
-      allCandidates.forEach((c) => {
-        const lp = c.split('@')[0]
-        if (lp && lp.startsWith('docreq-')) messageIdCandidates.add(lp)
-      })
-      const candidatesArray = [...messageIdCandidates]
-      mapping = await prisma.documentRequestEmailSent.findFirst({
-        where: { messageId: { in: candidatesArray } }
-      })
-      if (mapping) matchMethod = 'matched_message_id'
-      if (!mapping) {
-        const recent = await prisma.documentRequestEmailSent.findMany({
-          take: 300,
-          orderBy: { createdAt: 'desc' }
+      const messageIdCandidates = new Set()
+      for (const c of allCandidates) {
+        const n = normalizeMessageId(c)
+        if (n) messageIdCandidates.add(n)
+      }
+      const candidatesArray = [...messageIdCandidates].filter(Boolean)
+      if (candidatesArray.length > 0) {
+        mapping = await prisma.documentRequestEmailSent.findFirst({
+          where: { messageId: { in: candidatesArray } }
         })
-        for (const cand of candidatesArray) {
-          const lp = cand.split('@')[0]
-          mapping =
-            recent.find(
-              (r) =>
-                r.messageId === cand ||
-                r.messageId === lp ||
-                cand.startsWith(r.messageId) ||
-                (r.messageId.length >= 10 && cand.includes(r.messageId))
-            ) || null
-          if (mapping) break
-        }
         if (mapping) matchMethod = 'matched_message_id'
       }
-      if (!mapping) {
-        for (const cand of candidatesArray) {
-          const lp = cand.split('@')[0]
-          if (lp && lp.startsWith('docreq-')) {
-            const byLocalPart = await prisma.documentRequestEmailSent.findFirst({
-              where: { messageId: { startsWith: lp + '@' } }
-            })
-            if (byLocalPart) {
-              mapping = byLocalPart
-              matchMethod = 'matched_message_id'
-              break
-            }
-          }
+    }
+
+    // 2) Request number: raw .eml header, then subject/body/html
+    let rawTextCached = null
+    if (!mapping && rawUrl) {
+      try {
+        const opts = { method: 'GET' }
+        if (apiKey) opts.headers = { Authorization: `Bearer ${apiKey}` }
+        const res = await fetch(rawUrl, opts)
+        if (res.ok) rawTextCached = await res.text()
+      } catch (err) {
+        console.warn('document-request-reply: raw fetch for RN/header', err.message)
+      }
+    }
+    if (!mapping && rawTextCached) {
+      const hdrRn = parseXDocReqFromRaw(rawTextCached)
+      if (hdrRn) {
+        mapping = await findMappingByRequestNumber(hdrRn)
+        if (mapping) matchMethod = 'matched_request_number_header'
+      }
+    }
+    if (!mapping) {
+      const blobForRn = [
+        (email.subject || '').toString(),
+        emailBodyText(email),
+        (email.html || '').toString(),
+        rawTextCached || ''
+      ].join('\n')
+      const rns = extractRequestNumbersFromText(blobForRn)
+      for (const rn of rns) {
+        mapping = await findMappingByRequestNumber(rn)
+        if (mapping) {
+          matchMethod = 'matched_request_number'
+          break
         }
       }
     }
+
+    // 3) Subject fallback (strict: must resolve at least one document id; never month/year-only)
     // Fallback: match by subject (e.g. "Re: ... - CIPC Documents - February 2026"). Works even when In-Reply-To is missing.
     // Reply subject: "Re: Abco Document / Data request: ProjectName - DocumentName - February 2026"
     // Or with section (location): "Re: Abco Document / Data request: ProjectName - SectionName - DocumentName - February 2026"
@@ -1106,13 +1203,13 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
       let subjectFallbackProjectIds = []
       let docsWithNameFromSubject = []
       if (fallbackMonth && fallbackYear) {
-        let whereClause = { month: fallbackMonth, year: fallbackYear }
+        let whereClause = null
         if (cleanDocName && cleanDocName.length > 1) {
           const recentProjects = await prisma.documentRequestEmailSent.findMany({
-            where: { month: fallbackMonth, year: fallbackYear },
+            where: { month: fallbackMonth, year: fallbackYear, createdAt: { gte: sinceCutoff } },
             select: { projectId: true },
             distinct: ['projectId'],
-            take: 20
+            take: 40
           })
           const projectIds = recentProjects.map((p) => p.projectId)
           subjectFallbackProjectIds = projectIds
@@ -1140,14 +1237,21 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
           subjectFallbackProjectIds = docsWithName.length > 0 ? [...new Set(docsWithName.map((d) => d.section?.projectId).filter(Boolean))] : projectIds
           docsWithNameFromSubject = docsWithName
           if (matchingDocIds.length > 0) {
-            whereClause = { ...whereClause, documentId: { in: matchingDocIds } }
+            whereClause = {
+              month: fallbackMonth,
+              year: fallbackYear,
+              documentId: { in: matchingDocIds },
+              createdAt: { gte: sinceCutoff }
+            }
           }
           console.log('document-request-reply: subject fallback lookup', { fallbackMonth, fallbackYear, cleanDocName, sectionNameFromSubject: sectionNameFromSubject || null, projectCount: projectIds.length, matchingDocIds: matchingDocIds.length })
         }
-        mapping = await prisma.documentRequestEmailSent.findFirst({
-          where: whereClause,
-          orderBy: { createdAt: 'desc' }
-        })
+        if (whereClause) {
+          mapping = await prisma.documentRequestEmailSent.findFirst({
+            where: whereClause,
+            orderBy: { createdAt: 'desc' }
+          })
+        }
         if (mapping) {
           matchMethod = 'matched_subject'
           console.log('document-request-reply: matched by subject fallback', { documentId: mapping.documentId, month: fallbackMonth, year: fallbackYear, docName: cleanDocName || 'any', sectionName: sectionNameFromSubject || null })
@@ -1172,74 +1276,16 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
       }
     }
     if (!mapping) {
-      const parsedContext = parseReplyContextFromEmail(email, email.subject || '')
-      if (parsedContext.projectName && parsedContext.docName && parsedContext.month && parsedContext.year) {
-        try {
-          let project = await prisma.project.findFirst({
-            where: { name: { equals: parsedContext.projectName, mode: 'insensitive' } },
-            select: { id: true, name: true }
-          })
-          if (!project) {
-            project = await prisma.project.findFirst({
-              where: { name: { contains: parsedContext.projectName, mode: 'insensitive' } },
-              select: { id: true, name: true }
-            })
-          }
-          if (project) {
-            const sectionFilter = parsedContext.sectionName
-              ? { name: { equals: parsedContext.sectionName, mode: 'insensitive' } }
-              : {}
-            let docs = await prisma.documentItem.findMany({
-              where: {
-                name: { equals: parsedContext.docName, mode: 'insensitive' },
-                section: { projectId: project.id, ...sectionFilter }
-              },
-              select: { id: true, sectionId: true }
-            })
-            if (docs.length === 0) {
-              docs = await prisma.documentItem.findMany({
-                where: {
-                  name: { contains: parsedContext.docName, mode: 'insensitive' },
-                  section: { projectId: project.id, ...sectionFilter }
-                },
-                select: { id: true, sectionId: true }
-              })
-            }
-            if (docs.length > 0) {
-              mapping = {
-                documentId: docs[0].id,
-                projectId: project.id,
-                sectionId: docs[0].sectionId || null,
-                year: parsedContext.year,
-                month: parsedContext.month,
-                messageId: ''
-              }
-              matchMethod = 'matched_body'
-              console.log('document-request-reply: matched by body context fallback', {
-                projectId: mapping.projectId,
-                documentId: mapping.documentId,
-                month: mapping.month,
-                year: mapping.year,
-                sectionName: parsedContext.sectionName || null
-              })
-            }
-          }
-        } catch (fallbackErr) {
-          console.warn('document-request-reply: body context fallback failed', fallbackErr.message)
-        }
-      }
-    }
-    if (!mapping) {
       incrementReplyStat('unmatched')
       const primaryId = allCandidates[0] || ''
       console.warn('document-request-reply: unknown_thread', {
         candidatesCount: allCandidates.length,
         firstCandidate: primaryId.slice(0, 80),
         tried: allCandidates.slice(0, 10),
-        recentCount: (await prisma.documentRequestEmailSent.count()).toString(),
         subject: (email.subject || '').slice(0, 80),
-        hint: 'Send a new document request from the app, then reply to that email. Resend may use a different In-Reply-To format.'
+        hint: 'No Message-ID, request number, or unambiguous subject match — stored as unmatched for review.'
       })
+      await recordUnmatchedInbound(emailId, email, allCandidates, 'no_match')
       return
     }
 
@@ -1249,7 +1295,8 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
       itemId: mapping.documentId,
       year: mapping.year,
       month: mapping.month,
-      messageId: mapping.messageId.slice(0, 60)
+      messageId: (mapping.messageId || '').toString().slice(0, 60),
+      matchMethod
     })
 
     const { projectId, sectionId, documentId: itemId, year, month } = mapping
