@@ -12618,7 +12618,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   if (fromHere && !toHere) return -qtyAbs;
                   if (fromHere && toHere) return 0;
                 }
-                return qtyAbs;
+                // Combined (all-locations) view: internal transfers do not change total stock.
+                return 0;
               }
               if (movement.type === 'receipt') qty = Math.abs(qty);
               else if (movement.type === 'production') {
