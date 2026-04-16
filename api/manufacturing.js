@@ -1199,6 +1199,7 @@ async function handler(req, res) {
           const seq = last && last.movementId?.startsWith('MOV') ? (parseInt(last.movementId.replace('MOV','')) + 1) : 1
           const movementId = body.movementId || `MOV${String(seq).padStart(4, '0')}`
 
+          let movementQuantity = qty
           // Adjust per type
           if (type === 'receipt') {
             if (!body.toLocationId) return badRequest(res, 'toLocationId required for receipt')
@@ -1270,6 +1271,7 @@ async function handler(req, res) {
             const parsedDelta = parseFloat(body.delta)
             const hasValidDelta = body.delta !== undefined && body.delta !== null && body.delta !== '' && !Number.isNaN(parsedDelta)
             const delta = type === 'sale' ? -qty : (hasValidDelta ? parsedDelta : qty)
+            movementQuantity = delta
             const newQty = (fromLi.quantity || 0) + delta
             if (newQty < 0 && type === 'sale') throw new Error('Resulting quantity cannot be negative')
             // Allow negative for adjustments (user corrections)
@@ -1296,7 +1298,7 @@ async function handler(req, res) {
             type: type === 'sale' ? 'consumption' : (type === 'adjustment' ? 'adjustment' : type),
             itemName: body.itemName,
             sku: body.sku,
-            quantity: qty,
+            quantity: movementQuantity,
             fromLocation: body.fromLocationId || body.locationId || '',
             toLocation: body.toLocationId || '',
             reference: body.reference || '',
@@ -2993,135 +2995,132 @@ async function handler(req, res) {
             
             // Process all components to deduct stock
             for (const component of validComponents) {
-              try {
-                const requiredQty = parseFloat(component.quantity) * quantityProduced
-                if (requiredQty <= 0) continue
+              const requiredQty = parseFloat(component.quantity) * quantityProduced
+              if (requiredQty <= 0) continue
+              
+              const inventoryItem = await tx.inventoryItem.findFirst({
+                where: { sku: component.sku }
+              })
+              
+              if (!inventoryItem) {
+                throw new Error(`Inventory item not found for component ${component.sku}`)
+              }
+              if ((inventoryItem.quantity || 0) < requiredQty) {
+                throw new Error(`Insufficient stock for component ${component.sku}. Available: ${inventoryItem.quantity || 0}, required: ${requiredQty}`)
+              }
                 
-                const inventoryItem = await tx.inventoryItem.findFirst({
-                  where: { sku: component.sku }
+              // Get component location (default to main warehouse if not specified)
+              let componentLocationId = inventoryItem.locationId || null
+              if (!componentLocationId) {
+                let mainWarehouse = await tx.stockLocation.findFirst({ 
+                  where: { code: 'LOC001' } 
+                })
+                if (!mainWarehouse) {
+                  mainWarehouse = await tx.stockLocation.create({
+                    data: {
+                      code: 'LOC001',
+                      name: 'Main Warehouse',
+                      type: 'warehouse',
+                      status: 'active'
+                    }
+                  })
+                  console.log(`✅ Created default location LOC001 for component ${component.sku}`)
+                }
+                componentLocationId = mainWarehouse.id
+              }
+                
+              // Helper to update LocationInventory for consumed components
+              async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
+                if (!locationId) return null
+                
+                let li = await tx.locationInventory.findUnique({ 
+                  where: { locationId_sku: { locationId, sku } } 
                 })
                 
-                if (!inventoryItem) {
-                  console.warn(`⚠️ Inventory item not found for component ${component.sku} - skipping deduction`)
-                  continue
-                }
-                
-                // Get component location (default to main warehouse if not specified)
-                let componentLocationId = inventoryItem.locationId || null
-                if (!componentLocationId) {
-                  let mainWarehouse = await tx.stockLocation.findFirst({ 
-                    where: { code: 'LOC001' } 
-                  })
-                  if (!mainWarehouse) {
-                    mainWarehouse = await tx.stockLocation.create({
-                      data: {
-                        code: 'LOC001',
-                        name: 'Main Warehouse',
-                        type: 'warehouse',
-                        status: 'active'
-                      }
-                    })
-                    console.log(`✅ Created default location LOC001 for component ${component.sku}`)
-                  }
-                  componentLocationId = mainWarehouse.id
-                }
-                
-                // Helper to update LocationInventory for consumed components
-                async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
-                  if (!locationId) return null
-                  
-                  let li = await tx.locationInventory.findUnique({ 
-                    where: { locationId_sku: { locationId, sku } } 
-                  })
-                  
-                  if (!li) {
-                    li = await tx.locationInventory.create({ 
-                      data: {
-                        locationId,
-                        sku,
-                        itemName,
-                        quantity: 0,
-                        unitCost: unitCost || 0,
-                        reorderPoint: reorderPoint || 0,
-                        status: 'out_of_stock'
-                      }
-                    })
-                  }
-                  
-                  const newQty = (li.quantity || 0) + quantityDelta
-                  const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
-                  
-                  return await tx.locationInventory.update({
-                    where: { id: li.id },
+                if (!li) {
+                  li = await tx.locationInventory.create({ 
                     data: {
-                      quantity: newQty,
-                      unitCost: unitCost !== undefined ? unitCost : li.unitCost,
-                      reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
-                      status,
-                      itemName: itemName || li.itemName
+                      locationId,
+                      sku,
+                      itemName,
+                      quantity: 0,
+                      unitCost: unitCost || 0,
+                      reorderPoint: reorderPoint || 0,
+                      status: 'out_of_stock'
                     }
                   })
                 }
                 
-                // Update LocationInventory for consumed component (decrease quantity)
-                if (componentLocationId) {
-                  await upsertLocationInventory(
-                    componentLocationId,
-                    component.sku,
-                    component.name || component.sku,
-                    -requiredQty, // Negative for consumption
-                    inventoryItem.unitCost,
-                    inventoryItem.reorderPoint
-                  )
-                }
+                const newQty = (li.quantity || 0) + quantityDelta
+                const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
                 
-                // Always deduct consumed quantity from on-hand stock.
-                // Allocation is a reservation and must be released separately.
-                const allocatedQty = inventoryItem.allocatedQuantity || 0
-                const updateData = {
-                  quantity: { decrement: requiredQty }
-                }
-                
-                if (allocatedQty > 0) {
-                  const deductFromAllocated = Math.min(requiredQty, allocatedQty)
-                  updateData.allocatedQuantity = { decrement: deductFromAllocated }
-                }
-                
-                // Update inventory item
-                const newQuantity = Math.max(0, (inventoryItem.quantity || 0) - requiredQty)
-                await tx.inventoryItem.update({
-                  where: { id: inventoryItem.id },
+                return await tx.locationInventory.update({
+                  where: { id: li.id },
                   data: {
-                    ...updateData,
-                    totalValue: Math.max(0, computedInventoryTotalValue(newQuantity, inventoryItem.unitCost)),
-                    status: getStatusFromQuantity(newQuantity, inventoryItem.reorderPoint || 0)
+                    quantity: newQty,
+                    unitCost: unitCost !== undefined ? unitCost : li.unitCost,
+                    reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
+                    status,
+                    itemName: itemName || li.itemName
                   }
                 })
-                
-                // Get location code for stock movement
-                const componentLocation = componentLocationId ? await tx.stockLocation.findUnique({ where: { id: componentLocationId } }) : null
-                const componentLocationCode = componentLocation?.code || ''
-                
-                // Create stock movement record (consumption should be negative)
-                await tx.stockMovement.create({
-                  data: {
-                    movementId: `MOV${String(seq++).padStart(4, '0')}`,
-                    date: new Date(),
-                    type: 'consumption',
-                    itemName: component.name || component.sku,
-                    sku: component.sku,
-                    quantity: -Math.abs(requiredQty), // Consumption should always be negative
-                    fromLocation: componentLocationCode,
-                    toLocation: '',
-                    reference: orderInTx.workOrderNumber || id,
-                    performedBy: req.user?.name || 'System',
-                    notes: `Production completion - component consumption for ${orderInTx.productName} (${orderInTx.workOrderNumber || id})`
-                  }
-                })
-              } catch (componentError) {
-                console.error(`❌ Failed to deduct component ${component.sku}:`, componentError.message)
-                // Continue with other components, but log the error
               }
+                
+              // Update LocationInventory for consumed component (decrease quantity)
+              if (componentLocationId) {
+                await upsertLocationInventory(
+                  componentLocationId,
+                  component.sku,
+                  component.name || component.sku,
+                  -requiredQty, // Negative for consumption
+                  inventoryItem.unitCost,
+                  inventoryItem.reorderPoint
+                )
+              }
+                
+              // Always deduct consumed quantity from on-hand stock.
+              // Allocation is a reservation and must be released separately.
+              const allocatedQty = inventoryItem.allocatedQuantity || 0
+              const updateData = {
+                quantity: { decrement: requiredQty }
+              }
+              
+              if (allocatedQty > 0) {
+                const deductFromAllocated = Math.min(requiredQty, allocatedQty)
+                updateData.allocatedQuantity = { decrement: deductFromAllocated }
+              }
+                
+              // Update inventory item
+              const newQuantity = Math.max(0, (inventoryItem.quantity || 0) - requiredQty)
+              await tx.inventoryItem.update({
+                where: { id: inventoryItem.id },
+                data: {
+                  ...updateData,
+                  totalValue: Math.max(0, computedInventoryTotalValue(newQuantity, inventoryItem.unitCost)),
+                  status: getStatusFromQuantity(newQuantity, inventoryItem.reorderPoint || 0)
+                }
+              })
+                
+              // Get location code for stock movement
+              const componentLocation = componentLocationId ? await tx.stockLocation.findUnique({ where: { id: componentLocationId } }) : null
+              const componentLocationCode = componentLocation?.code || ''
+                
+              // Create stock movement record (consumption should always be negative)
+              await tx.stockMovement.create({
+                data: {
+                  movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                  date: new Date(),
+                  type: 'consumption',
+                  itemName: component.name || component.sku,
+                  sku: component.sku,
+                  quantity: -Math.abs(requiredQty),
+                  fromLocation: componentLocationCode,
+                  toLocation: '',
+                  reference: orderInTx.workOrderNumber || id,
+                  performedBy: req.user?.name || 'System',
+                  notes: `Production completion - component consumption for ${orderInTx.productName} (${orderInTx.workOrderNumber || id})`
+                }
+              })
             }
             
             // Get the finished product inventory item
@@ -3290,14 +3289,15 @@ async function handler(req, res) {
             if (toLocationId && Math.abs(finalQty - newMasterQty) > 0.01) {
               console.warn(`⚠️ Quantity mismatch for ${finishedProduct.sku}: direct=${newMasterQty}, from locations=${aggQtyFromLocations}`)
             }
+            const finalUnitCost = finalQty > 0 ? (newTotalValue / finalQty) : unitCost
             
             // Update inventory item with final quantity
             await tx.inventoryItem.update({
               where: { id: finishedProduct.id },
               data: {
                 quantity: finalQty,
-                unitCost: unitCost, // Set to sum of parts
-                totalValue: newTotalValue,
+                unitCost: finalUnitCost,
+                totalValue: computedInventoryTotalValue(finalQty, finalUnitCost),
                 status: finalQty > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (finalQty > 0 ? 'low_stock' : 'out_of_stock'),
                 lastRestocked: new Date()
               }
@@ -3584,37 +3584,42 @@ async function handler(req, res) {
                     console.warn(`⚠️ Insufficient available stock for ${component.sku}: available=${availableQty}, required=${requiredQty}`)
                   }
                   
-                  // ALLOCATE stock (increase allocatedQuantity) - don't deduct yet
-                  const newAllocatedQty = allocatedQty + requiredQty
+                  // Orders created as requested/received are already allocated; only top up shortfalls.
+                  const targetAllocatedQty = oldStatus === 'requested' || oldStatus === 'received'
+                    ? Math.max(allocatedQty, requiredQty)
+                    : (allocatedQty + requiredQty)
+                  const allocationDelta = targetAllocatedQty - allocatedQty
                   
                   // Update inventory item with allocated quantity
                   await tx.inventoryItem.update({
                     where: { id: inventoryItem.id },
                     data: {
-                      allocatedQuantity: newAllocatedQty,
+                      allocatedQuantity: targetAllocatedQty,
                       // Update status based on available quantity (total - allocated)
-                      status: (totalQty - newAllocatedQty) > (inventoryItem.reorderPoint || 0) 
+                      status: (totalQty - targetAllocatedQty) > (inventoryItem.reorderPoint || 0) 
                         ? 'in_stock' 
-                        : ((totalQty - newAllocatedQty) > 0 ? 'low_stock' : 'out_of_stock')
+                        : ((totalQty - targetAllocatedQty) > 0 ? 'low_stock' : 'out_of_stock')
                     }
                   })
                   
                   // Create stock movement record for allocation (no quantity change, just tracking)
-                  await tx.stockMovement.create({
-                    data: {
-                      movementId: `MOV${String(seq++).padStart(4, '0')}`,
-                      date: now,
-                      type: 'adjustment',
-                      itemName: component.name || component.sku,
-                      sku: component.sku,
-                      quantity: 0, // No quantity change, just allocation tracking
-                      fromLocation: '',
-                      toLocation: '',
-                      reference: orderInTx.workOrderNumber || id,
-                      performedBy: req.user?.name || 'System',
-                      notes: `Stock allocated for ${orderInTx.productName} (Order in production) - ${requiredQty} reserved`
-                    }
-                  })
+                  if (allocationDelta > 0) {
+                    await tx.stockMovement.create({
+                      data: {
+                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                        date: now,
+                        type: 'adjustment',
+                        itemName: component.name || component.sku,
+                        sku: component.sku,
+                        quantity: 0, // No quantity change, just allocation tracking
+                        fromLocation: '',
+                        toLocation: '',
+                        reference: orderInTx.workOrderNumber || id,
+                        performedBy: req.user?.name || 'System',
+                        notes: `Stock allocated for ${orderInTx.productName} (Order in production) - ${allocationDelta} reserved`
+                      }
+                    })
+                  }
               } catch (componentError) {
                 // Log the error and re-throw to rollback the entire transaction
                 console.error(`❌ Failed to allocate component ${component.sku}:`, componentError.message)

@@ -97,20 +97,23 @@
                     )
                   : movements.map(function (movement) {
                       const qty = parseFloat(movement.quantity) || 0;
+                      const normalizedQty = movement.type === 'production' ? -Math.abs(qty) : qty;
                       let qtyDisplay;
                       if (movement.type === 'receipt') {
                         qtyDisplay = '+' + Math.abs(qty);
                       } else if (movement.type === 'production') {
-                        qtyDisplay = qty < 0 ? ('' + qty) : ('+' + Math.abs(qty));
+                        qtyDisplay = '' + normalizedQty;
                       } else if (movement.type === 'consumption' || movement.type === 'sale') {
                         qtyDisplay = '' + (-Math.abs(qty));
+                      } else if (movement.type === 'transfer') {
+                        qtyDisplay = '' + Math.abs(qty);
                       } else {
                         qtyDisplay = qty > 0 ? '+' + qty : '' + qty;
                       }
                       const qtyClass =
-                        movement.type === 'receipt' || (movement.type === 'production' && qty > 0)
+                        movement.type === 'receipt'
                           ? 'text-green-600'
-                          : movement.type === 'consumption' || movement.type === 'sale' || (movement.type === 'production' && qty < 0)
+                          : movement.type === 'consumption' || movement.type === 'sale' || movement.type === 'production'
                             ? 'text-red-600'
                             : 'text-gray-900';
                       return React.createElement('tr', { key: movement.id, className: 'hover:bg-gray-50' },

@@ -241,7 +241,10 @@ async function handler(req, res) {
                 }
                 
                 const oldQty = li.quantity || 0
-                const newQty = Math.max(0, oldQty + quantityDelta) // Don't allow negative
+                const newQty = oldQty + quantityDelta
+                if (newQty < 0) {
+                  throw new Error(`Insufficient stock at location for ${sku}. Available: ${oldQty}, Required: ${Math.abs(quantityDelta)}`)
+                }
                 const status = newQty > (li.reorderPoint || 0) ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
                 
                 
@@ -274,14 +277,6 @@ async function handler(req, res) {
                   continue
                 }
                 
-                // Check if sufficient stock available
-                const availableQty = inventoryItem.quantity || 0
-                if (availableQty < quantityToDeduct) {
-                  const errorMsg = `Insufficient stock for ${item.sku || item.name || 'item'}. Available: ${availableQty}, Required: ${quantityToDeduct}`
-                  console.error(`❌ ${errorMsg}`)
-                  throw new Error(errorMsg)
-                }
-                
                 // Get location for inventory item (prefer item's location, then inventory item's location, then main warehouse)
                 let locationId = item.locationId || inventoryItem.locationId || null
                 if (!locationId) {
@@ -292,6 +287,15 @@ async function handler(req, res) {
                     console.error(`❌ Main warehouse (LOC001) not found - cannot process stock movement for ${item.sku}`)
                     continue
                   }
+                }
+                const existingLocationInventory = await tx.locationInventory.findUnique({
+                  where: { locationId_sku: { locationId, sku: item.sku } }
+                })
+                const availableQtyAtLocation = existingLocationInventory?.quantity || 0
+                if (availableQtyAtLocation < quantityToDeduct) {
+                  const errorMsg = `Insufficient stock at ${locationId} for ${item.sku || item.name || 'item'}. Available: ${availableQtyAtLocation}, Required: ${quantityToDeduct}`
+                  console.error(`❌ ${errorMsg}`)
+                  throw new Error(errorMsg)
                 }
                 
                 // Update LocationInventory (decrease stock)

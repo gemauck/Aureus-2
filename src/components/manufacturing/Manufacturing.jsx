@@ -2481,7 +2481,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   {inventoryLoadedFromAPI ? formatCurrency(invStats.totalValue) : '—'}
                 </p>
                 <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {inventoryLoadedFromAPI ? invStats.totalItems.toLocaleString() : '—'} items
+                  {inventoryLoadedFromAPI ? invStats.totalItems.toLocaleString() : '—'} units on hand
                 </p>
               </div>
               <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
@@ -2672,7 +2672,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {(() => {
                         const q = parseFloat(movement.quantity) || 0;
                         if (movement.type === 'receipt') return `+${Math.abs(q)}`;
-                        if (movement.type === 'production') return q < 0 ? String(q) : `+${Math.abs(q)}`;
+                        if (movement.type === 'production') return String(-Math.abs(q));
                         if (movement.type === 'consumption' || movement.type === 'sale') return String(-Math.abs(q));
                         if (movement.type === 'transfer') return String(Math.abs(q));
                         return `${q > 0 ? '+' : ''}${q}`;
@@ -3246,7 +3246,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   return [];
                 }
               })();
-              const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+              const availableQty = getAvailableInventoryQuantity(item);
               const lineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
 
               return (
@@ -3834,7 +3834,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {paginatedInventory.map(item => {
-                  const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+                  const availableQty = getAvailableInventoryQuantity(item);
                   const lineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
                   return (
                     <tr 
