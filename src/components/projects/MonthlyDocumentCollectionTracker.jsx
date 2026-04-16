@@ -260,6 +260,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Simplified refs - only essential ones for debouncing and API reference
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
+    const pendingSaveRef = useRef(false); // Queue one retry when save is blocked by in-flight save/loading
+    const pendingSaveSkipLoadingGuardRef = useRef(false); // Preserve skipLoadingGuard intent for queued save
     const sectionsRef = useRef({}); // Keep ref for immediate access during rapid updates
     const apiRef = useRef(window.DocumentCollectionAPI || null);
     const lastSavedDataRef = useRef(null); // Track last saved data to prevent unnecessary saves
@@ -1488,6 +1490,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
         };
     }, [sectionsByYear, isLoading, project?.id]);
+
+    // Flush queued save once loading completes and no save is currently running.
+    useEffect(() => {
+        if (!project?.id || isLoading || isSavingRef.current || !pendingSaveRef.current) return;
+        const queuedSkipLoadingGuard = pendingSaveSkipLoadingGuardRef.current;
+        pendingSaveRef.current = false;
+        pendingSaveSkipLoadingGuardRef.current = false;
+        void saveToDatabase({ skipLoadingGuard: queuedSkipLoadingGuard });
+    }, [isLoading, project?.id]);
     
     // Synchronize horizontal scrolling across all table containers.
     // Use root ref + querySelectorAll. Listen to both 'scroll' and 'wheel' (deltaX); trackpad
@@ -1612,6 +1623,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     async function saveToDatabase(options = {}) {
         const skipLoadingGuard = Boolean(options.skipLoadingGuard);
         if (isSavingRef.current || !project?.id || (!skipLoadingGuard && isLoading)) {
+            if (project?.id && (isSavingRef.current || isLoading)) {
+                pendingSaveRef.current = true;
+                pendingSaveSkipLoadingGuardRef.current =
+                    pendingSaveSkipLoadingGuardRef.current || skipLoadingGuard;
+            }
             console.log('⏸️ Save skipped:', { 
                 isSaving: isSavingRef.current, 
                 hasProjectId: !!project?.id, 
@@ -1731,6 +1747,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             lastSavedDataRef.current = null;
         } finally {
             isSavingRef.current = false;
+            if (pendingSaveRef.current && project?.id && (!isLoading || pendingSaveSkipLoadingGuardRef.current)) {
+                const queuedSkipLoadingGuard = pendingSaveSkipLoadingGuardRef.current;
+                pendingSaveRef.current = false;
+                pendingSaveSkipLoadingGuardRef.current = false;
+                void saveToDatabase({ skipLoadingGuard: queuedSkipLoadingGuard });
+            }
         }
     };
     
