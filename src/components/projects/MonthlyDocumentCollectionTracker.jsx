@@ -2188,8 +2188,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 collectionStatus: remapYearKeys(doc.collectionStatus, sourceYear, targetYear),
                 comments: remapYearKeys(doc.comments, sourceYear, targetYear),
                 notesByMonth: remapYearKeys(doc.notesByMonth, sourceYear, targetYear),
-                emailRequestByMonth: remapYearKeys(doc.emailRequestByMonth, sourceYear, targetYear),
-                monthReviewByMonth: remapYearKeys(doc.monthReviewByMonth, sourceYear, targetYear)
+                emailRequestByMonth: remapYearKeys(doc.emailRequestByMonth, sourceYear, targetYear)
             }))
         }));
 
@@ -2302,32 +2301,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             delete next[monthKey];
         } else {
             next[monthKey] = String(text).trim();
-        }
-        return next;
-    };
-
-    /** Per-month review metadata (Monthly Data Review only), keyed like notesByMonth (`YYYY-MM`). */
-    const getMonthReviewMeta = (doc, month, year = selectedYear) => {
-        if (!doc?.monthReviewByMonth || typeof doc.monthReviewByMonth !== 'object') return null;
-        const monthKey = getMonthKey(month, year);
-        if (!monthKey) return null;
-        const v = doc.monthReviewByMonth[monthKey];
-        if (!v || typeof v !== 'object') return null;
-        return v;
-    };
-
-    const setMonthReviewMeta = (monthReviewByMonth, month, meta, year = selectedYear) => {
-        const monthKey = getMonthKey(month, year);
-        if (!monthKey) return monthReviewByMonth && typeof monthReviewByMonth === 'object' ? { ...monthReviewByMonth } : {};
-        const next = { ...(monthReviewByMonth && typeof monthReviewByMonth === 'object' ? monthReviewByMonth : {}) };
-        if (!meta || !meta.reviewedAt) {
-            delete next[monthKey];
-        } else {
-            next[monthKey] = {
-                reviewedAt: meta.reviewedAt,
-                reviewedById: meta.reviewedById,
-                reviewedByName: meta.reviewedByName
-            };
         }
         return next;
     };
@@ -3018,22 +2991,6 @@ const getAssigneeColor = (identifier, users) => {
         return (user.name || user.fullName || '').toString().trim() || null;
     };
 
-    const getReviewerDisplayName = (meta) => {
-        if (!meta) return '';
-        if (meta.reviewedByName && String(meta.reviewedByName).trim()) return String(meta.reviewedByName).trim();
-        if (!meta.reviewedById) return 'Unknown';
-        const rid = String(meta.reviewedById).trim();
-        const user = users.find((u) => {
-            if (!u) return false;
-            const id = u.id || u._id;
-            const email = (u.email || '').toString().trim().toLowerCase();
-            if (id && String(id) === rid) return true;
-            if (email && email === rid.toLowerCase()) return true;
-            return false;
-        });
-        return user ? (user.name || user.fullName || user.email || rid) : rid;
-    };
-
     const handleAssignmentChange = (sectionId, docId, newAssignedTo) => {
         setSections(prev => prev.map(section => {
             if (String(section.id) !== String(sectionId)) return section;
@@ -3269,45 +3226,6 @@ const getAssigneeColor = (identifier, users) => {
             bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
         }, 450);
     }, [selectedYear, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
-
-    const handleUpdateMonthReview = useCallback((sectionId, documentId, month, shouldReview) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
-            ? sectionsByYear
-            : (sectionsRef.current || {});
-        const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        const currentUser = getCurrentUser();
-        const meta = shouldReview
-            ? {
-                reviewedAt: new Date().toISOString(),
-                reviewedById: getUserIdentifier(currentUser) || 'system',
-                reviewedByName: currentUser.name || currentUser.fullName || currentUser.email || 'System'
-            }
-            : null;
-
-        const updated = currentYearSections.map((section) => {
-            if (String(section.id) !== String(sectionId)) return section;
-            return {
-                ...section,
-                documents: section.documents.map((doc) => {
-                    if (String(doc.id) !== String(documentId)) return doc;
-                    return {
-                        ...doc,
-                        monthReviewByMonth: setMonthReviewMeta(doc.monthReviewByMonth, month, meta, selectedYear)
-                    };
-                })
-            };
-        });
-
-        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
-        sectionsRef.current = updatedSectionsByYear;
-        setSectionsByYear(updatedSectionsByYear);
-        lastSavedDataRef.current = null;
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = null;
-        }
-        saveToDatabase();
-    }, [selectedYear, sectionsByYear]);
 
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -3804,24 +3722,18 @@ const getAssigneeColor = (identifier, users) => {
             const headerRow2 = [''];
             const exportFileTag = isMonthlyDataReview ? 'Monthly_Data_Review' : isComplianceReview ? 'Compliance_Review' : 'Document_Collection';
             const sheetTitle = `${trackerContextTitlePrefix} ${selectedYear}`.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
-            const colsPerMonth = isMonthlyDataReview ? 4 : 3;
             
             months.forEach(month => {
                 const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
-                if (isMonthlyDataReview) {
-                    headerRow1.push(monthYear, '', '', '');
-                    headerRow2.push('Status', 'Comments', 'Notes', 'Reviewed');
-                } else {
-                    headerRow1.push(monthYear, '', '');
-                    headerRow2.push('Status', 'Comments', 'Notes');
-                }
+                headerRow1.push(monthYear, '', '');
+                headerRow2.push('Status', 'Comments', 'Notes');
             });
             
             excelData.push(headerRow1, headerRow2);
             
             sections.forEach(section => {
                 const sectionRow = [section.name];
-                for (let i = 0; i < months.length * colsPerMonth; i++) sectionRow.push('');
+                for (let i = 0; i < months.length * 3; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
                 getOrderedDocumentRows(section).forEach(({ doc, isSubRow }) => {
@@ -3852,15 +3764,6 @@ const getAssigneeColor = (identifier, users) => {
                         row.push(commentsText);
                         
                         row.push(getNotesForYear(doc.notesByMonth, month, selectedYear) || '');
-                        if (isMonthlyDataReview) {
-                            const rm = getMonthReviewMeta(doc, month, selectedYear);
-                            if (rm && rm.reviewedAt) {
-                                const who = getReviewerDisplayName(rm);
-                                row.push(who ? `Reviewed ${formatDateTime(rm.reviewedAt)} by ${who}` : `Reviewed ${formatDateTime(rm.reviewedAt)}`);
-                            } else {
-                                row.push('');
-                            }
-                        }
                     });
                     
                     excelData.push(row);
@@ -3873,7 +3776,6 @@ const getAssigneeColor = (identifier, users) => {
             const colWidths = [{ wch: 40 }];
             for (let i = 0; i < months.length; i++) {
                 colWidths.push({ wch: 18 }, { wch: 50 }, { wch: 40 });
-                if (isMonthlyDataReview) colWidths.push({ wch: 36 });
             }
             ws['!cols'] = colWidths;
             
@@ -4813,39 +4715,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 title: isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple',
                 role: 'gridcell'
             };
-        const isMasterGreyedOut = !doc.parentId && hasChildDocuments(section, doc);
-
         return (
             <OuterTag {...outerProps}>
                 <div className={innerWidthClass}>
-                    {isMonthlyDataReview && !isMasterGreyedOut ? (() => {
-                        const meta = getMonthReviewMeta(doc, month, selectedYear);
-                        const reviewed = !!(meta && meta.reviewedAt);
-                        const author = reviewed ? getReviewerDisplayName(meta) : '';
-                        const tooltip = reviewed
-                            ? `Reviewed ${formatDateTime(meta.reviewedAt)}${author ? ` by ${author}` : ''}`
-                            : 'Mark as reviewed (this month)';
-                        return (
-                            <button
-                                type="button"
-                                className={`absolute top-1 left-1 z-20 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                    reviewed
-                                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                        : 'border-gray-300 bg-white/80 text-gray-400 hover:border-sky-400 hover:text-sky-600 dark:border-gray-600 dark:bg-gray-800/80 dark:hover:border-sky-500'
-                                }`}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleUpdateMonthReview(section.id, doc.id, month, !reviewed);
-                                }}
-                                title={tooltip}
-                                aria-label={tooltip}
-                                aria-pressed={reviewed}
-                            >
-                                <i className="fas fa-check text-[10px]" aria-hidden="true" />
-                            </button>
-                        );
-                    })() : null}
                     <select
                         value={isMonthlyDataReview ? (status ? resolveMonthlyDataReviewStatusKey(status) : '') : (status || '')}
                         onChange={(e) => {
@@ -4901,7 +4773,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full ${isMonthlyDataReview ? 'pl-8' : 'pl-2'} pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
+                        className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
                     >
                         <option value="">—</option>
                         {statusOptions.map(option => (
@@ -5182,39 +5054,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                         <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
                                             {month.slice(0, 3)} {selectedYear}
                                         </span>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            {focusMonth ? (
-                                                <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wide">Focus</span>
-                                            ) : null}
-                                            {isMonthlyDataReview && !isMasterGreyedOut ? (() => {
-                                                const meta = getMonthReviewMeta(doc, month, selectedYear);
-                                                const reviewed = !!(meta && meta.reviewedAt);
-                                                const author = reviewed ? getReviewerDisplayName(meta) : '';
-                                                const tooltip = reviewed
-                                                    ? `Reviewed ${formatDateTime(meta.reviewedAt)}${author ? ` by ${author}` : ''}`
-                                                    : 'Mark as reviewed (this month)';
-                                                return (
-                                                    <button
-                                                        type="button"
-                                                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-                                                            reviewed
-                                                                ? 'border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                                                : 'border-gray-300 bg-white text-gray-400 hover:border-sky-400 hover:text-sky-600 dark:border-gray-600 dark:bg-gray-800 dark:hover:border-sky-500'
-                                                        }`}
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            handleUpdateMonthReview(section.id, doc.id, month, !reviewed);
-                                                        }}
-                                                        title={tooltip}
-                                                        aria-label={tooltip}
-                                                        aria-pressed={reviewed}
-                                                    >
-                                                        <i className="fas fa-check text-[10px]" aria-hidden="true" />
-                                                    </button>
-                                                );
-                                            })() : null}
-                                        </div>
+                                        {focusMonth ? (
+                                            <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wide">Focus</span>
+                                        ) : null}
                                     </div>
                                     {isMasterGreyedOut ? (
                                         <p className="text-xs text-gray-500 dark:text-gray-400 italic py-1">
