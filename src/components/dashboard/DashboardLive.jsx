@@ -70,6 +70,11 @@ const warnTaskDebug = (...args) => {
     }
 };
 
+const isArchivedTask = (task) => {
+    const normalizedStatus = String(task?.status || '').toLowerCase().replace(/\s+/g, '');
+    return normalizedStatus === 'archived';
+};
+
 // MyProjectTasksWidget - Separate component to properly use hooks
 const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     const [projectTasks, setProjectTasks] = React.useState([]);
@@ -305,9 +310,11 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     // Combine and sort tasks
     const allTasks = React.useMemo(() => {
         logTaskDebug('🔄 Combining tasks - projectTasks:', projectTasks.length, 'userTasks:', userTasks.length);
+        const activeProjectTasks = projectTasks.filter(task => !isArchivedTask(task));
+        const activeUserTasks = userTasks.filter(task => !isArchivedTask(task));
         const combined = [
-            ...projectTasks.map(t => ({ ...t, type: 'project' })),
-            ...userTasks.map(t => ({ ...t, type: 'user', id: t.id || `user-task-${Date.now()}-${Math.random()}` }))
+            ...activeProjectTasks.map(t => ({ ...t, type: 'project' })),
+            ...activeUserTasks.map(t => ({ ...t, type: 'user', id: t.id || `user-task-${Date.now()}-${Math.random()}` }))
         ];
         
         logTaskDebug('🔄 Combined tasks:', combined.length, combined);
@@ -330,6 +337,15 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             return aDate - bDate;
         });
     }, [projectTasks, userTasks]);
+
+    const activeProjectTaskCount = React.useMemo(
+        () => projectTasks.filter(task => !isArchivedTask(task)).length,
+        [projectTasks]
+    );
+    const activeUserTaskCount = React.useMemo(
+        () => userTasks.filter(task => !isArchivedTask(task)).length,
+        [userTasks]
+    );
 
     const getStatusColor = (status) => {
         switch (status?.toLowerCase()) {
@@ -455,7 +471,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                     No tasks assigned to you.
                     <br />
                     <span className="text-xs opacity-75">
-                        (Project: {projectTasks.length}, User: {userTasks.length})
+                        (Project: {activeProjectTaskCount}, User: {activeUserTaskCount})
                     </span>
                 </div>
             ) : (
@@ -527,14 +543,14 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                     </div>
                     {allTasks.length > 0 && (
                         <div className={`text-xs ${subText} text-center pt-3 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'} flex-shrink-0 mt-3`}>
-                            {projectTasks.length > 0 && userTasks.length > 0 && (
-                                <span>{projectTasks.length} project task{projectTasks.length !== 1 ? 's' : ''} • {userTasks.length} personal task{userTasks.length !== 1 ? 's' : ''}</span>
+                            {activeProjectTaskCount > 0 && activeUserTaskCount > 0 && (
+                                <span>{activeProjectTaskCount} project task{activeProjectTaskCount !== 1 ? 's' : ''} • {activeUserTaskCount} personal task{activeUserTaskCount !== 1 ? 's' : ''}</span>
                             )}
-                            {projectTasks.length > 0 && userTasks.length === 0 && (
-                                <span>{projectTasks.length} project task{projectTasks.length !== 1 ? 's' : ''}</span>
+                            {activeProjectTaskCount > 0 && activeUserTaskCount === 0 && (
+                                <span>{activeProjectTaskCount} project task{activeProjectTaskCount !== 1 ? 's' : ''}</span>
                             )}
-                            {projectTasks.length === 0 && userTasks.length > 0 && (
-                                <span>{userTasks.length} personal task{userTasks.length !== 1 ? 's' : ''}</span>
+                            {activeProjectTaskCount === 0 && activeUserTaskCount > 0 && (
+                                <span>{activeUserTaskCount} personal task{activeUserTaskCount !== 1 ? 's' : ''}</span>
                             )}
                         </div>
                     )}
