@@ -4317,10 +4317,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     );
   };
 
+  // Resolve linked BOM and display fields so rows stay in sync even if BOM details changed later.
+  const getLinkedBomForOrder = (order) => {
+    if (!order) return null;
+    if (order.bomId) return boms.find((b) => b.id === order.bomId) || null;
+    if (order.productSku) return boms.find((b) => b.productSku === order.productSku) || null;
+    return null;
+  };
+
+  const getOrderDisplayProduct = (order) => {
+    const linkedBom = getLinkedBomForOrder(order);
+    return {
+      productName: linkedBom?.productName || order?.productName || '—',
+      productSku: linkedBom?.productSku || order?.productSku || '—'
+    };
+  };
+
   // Get BOM for a production order and components with required qty vs on-hand (for expand/print)
   // Only include components that have at least SKU or name, so we don't show blank rows
   const getProductionOrderComponentsWithStock = (order) => {
-    const bom = order?.bomId ? boms.find(b => b.id === order.bomId) : boms.find(b => b.productSku === order?.productSku);
+    const bom = getLinkedBomForOrder(order);
     if (!bom || !Array.isArray(bom.components) || bom.components.length === 0) {
       return [];
     }
@@ -4417,18 +4433,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               const progress = (order.quantityProduced / order.quantity) * 100;
               const isExpanded = expandedProductionOrderId === order.id;
               const componentsWithStock = getProductionOrderComponentsWithStock(order);
+              const displayProduct = getOrderDisplayProduct(order);
               return (
                 <div key={order.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start gap-2 mb-2">
-                        <h3 className="text-base font-semibold text-gray-900">{order.productName}</h3>
+                        <h3 className="text-base font-semibold text-gray-900">{displayProduct.productName}</h3>
                         <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize flex-shrink-0 ${getStatusColor(order.status)}`}>
                           {(order.status || '').replace('_', ' ')}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-1">Order ID: {order.id}</p>
-                      <p className="text-xs text-gray-500">SKU: {order.productSku}</p>
+                      <p className="text-xs text-gray-500">SKU: {displayProduct.productSku}</p>
                     </div>
                   </div>
                   
@@ -4597,6 +4614,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   const progress = (order.quantityProduced / order.quantity) * 100;
                   const isExpanded = expandedProductionOrderId === order.id;
                   const componentsWithStock = getProductionOrderComponentsWithStock(order);
+                  const displayProduct = getOrderDisplayProduct(order);
                   return (
                     <Fragment key={order.id}>
                     <tr
@@ -4617,8 +4635,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       </td>
                       <td className="px-3 py-2 text-sm font-medium text-gray-900">{order.id}</td>
                       <td className="px-3 py-2">
-                        <div className="text-sm font-medium text-gray-900">{order.productName}</div>
-                        <div className="text-xs text-gray-500">{order.productSku}</div>
+                        <div className="text-sm font-medium text-gray-900">{displayProduct.productName}</div>
+                        <div className="text-xs text-gray-500">{displayProduct.productSku}</div>
                       </td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
@@ -6460,12 +6478,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     try {
       const oldStatus = String(selectedItem.status || '').trim()
       const newStatus = String(formData.status || selectedItem.status || 'requested').trim()
+      const resolvedBomId = formData.bomId !== undefined ? formData.bomId : selectedItem.bomId
+      const selectedBom = resolvedBomId ? boms.find((b) => b.id === resolvedBomId) : null
+      const resolvedQuantity = parseInt(formData.quantity) || selectedItem.quantity
+      const resolvedTotalCost = selectedBom
+        ? (parseFloat(selectedBom.totalCost) || 0) * (parseInt(resolvedQuantity, 10) || 0)
+        : (selectedItem.totalCost || 0)
       
       const orderData = {
-        bomId: formData.bomId !== undefined ? formData.bomId : selectedItem.bomId,
-        productSku: formData.productSku !== undefined ? formData.productSku : selectedItem.productSku,
-        productName: formData.productName !== undefined ? formData.productName : selectedItem.productName,
-        quantity: parseInt(formData.quantity) || selectedItem.quantity,
+        bomId: resolvedBomId,
+        productSku: selectedBom?.productSku || (formData.productSku !== undefined ? formData.productSku : selectedItem.productSku),
+        productName: selectedBom?.productName || (formData.productName !== undefined ? formData.productName : selectedItem.productName),
+        quantity: resolvedQuantity,
         quantityProduced: parseInt(formData.quantityProduced) || selectedItem.quantityProduced || 0,
         status: newStatus, // Explicitly set status
         priority: formData.priority !== undefined ? formData.priority : selectedItem.priority,
@@ -6477,6 +6501,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         stockLocationId: formData.stockLocationId !== undefined ? formData.stockLocationId : (selectedItem.stockLocationId || defaultManufacturingStockLocation(stockLocations)?.id),
         clientId: formData.clientId !== undefined ? formData.clientId : selectedItem.clientId,
         allocationType: formData.allocationType !== undefined ? formData.allocationType : selectedItem.allocationType,
+        totalCost: resolvedTotalCost,
         completedDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
       };
 
