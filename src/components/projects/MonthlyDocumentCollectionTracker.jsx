@@ -2991,21 +2991,6 @@ const getAssigneeColor = (identifier, users) => {
         return (user.name || user.fullName || '').toString().trim() || null;
     };
 
-    const getReviewerLabel = (reviewedByName, reviewedById) => {
-        if (reviewedByName && String(reviewedByName).trim()) return String(reviewedByName).trim();
-        if (!reviewedById) return 'Unknown reviewer';
-        const reviewerId = String(reviewedById).trim();
-        const user = users.find((u) => {
-            if (!u) return false;
-            const id = u.id || u._id;
-            const email = (u.email || '').toString().trim().toLowerCase();
-            if (id && String(id) === reviewerId) return true;
-            if (email && email === reviewerId.toLowerCase()) return true;
-            return false;
-        });
-        return user ? (user.name || user.fullName || user.email || reviewerId) : reviewerId;
-    };
-
     const handleAssignmentChange = (sectionId, docId, newAssignedTo) => {
         setSections(prev => prev.map(section => {
             if (String(section.id) !== String(sectionId)) return section;
@@ -3241,45 +3226,6 @@ const getAssigneeColor = (identifier, users) => {
             bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
         }, 450);
     }, [selectedYear, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
-
-    const handleSetRowReviewed = useCallback((sectionId, documentId, shouldReview) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
-            ? sectionsByYear
-            : (sectionsRef.current || {});
-        const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        const currentUser = getCurrentUser();
-        const reviewedAt = shouldReview ? new Date().toISOString() : null;
-        const reviewedById = shouldReview ? (getUserIdentifier(currentUser) || 'system') : null;
-        const reviewedByName = shouldReview
-            ? (currentUser.name || currentUser.fullName || currentUser.email || 'System')
-            : null;
-
-        const updated = currentYearSections.map((section) => {
-            if (String(section.id) !== String(sectionId)) return section;
-            return {
-                ...section,
-                documents: section.documents.map((doc) => {
-                    if (String(doc.id) !== String(documentId)) return doc;
-                    return {
-                        ...doc,
-                        reviewedAt,
-                        reviewedById,
-                        reviewedByName
-                    };
-                })
-            };
-        });
-
-        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
-        sectionsRef.current = updatedSectionsByYear;
-        setSectionsByYear(updatedSectionsByYear);
-        lastSavedDataRef.current = null;
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = null;
-        }
-        saveToDatabase();
-    }, [selectedYear, sectionsByYear]);
 
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -5081,9 +5027,6 @@ const baseTextColorClass = statusConfig && statusConfig.color
         }
         return getOrderedDocumentRows(section).map(({ doc, isSubRow }) => {
             const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
-            const isReviewed = Boolean(doc?.reviewedAt);
-            const reviewerLabel = getReviewerLabel(doc?.reviewedByName, doc?.reviewedById);
-            const reviewedAtLabel = doc?.reviewedAt ? formatDateTime(doc.reviewedAt) : '';
             return (
                 <div
                     key={doc.id}
@@ -5093,28 +5036,6 @@ const baseTextColorClass = statusConfig && statusConfig.color
                         <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug">{doc.name}</div>
                         {doc.description ? (
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-4">{doc.description}</div>
-                        ) : null}
-                        {isMonthlyDataReview ? (
-                            <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                <button
-                                    type="button"
-                                    onClick={() => handleSetRowReviewed(section.id, doc.id, !isReviewed)}
-                                    disabled={isMasterGreyedOut}
-                                    className={`px-2 py-1 text-[11px] font-semibold rounded border transition-colors ${
-                                        isReviewed
-                                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                                    } ${isMasterGreyedOut ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                    title={isReviewed ? 'Clear reviewed state' : 'Mark this row as reviewed'}
-                                >
-                                    {isReviewed ? 'Reviewed' : 'Mark reviewed'}
-                                </button>
-                                {isReviewed ? (
-                                    <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                                        {reviewerLabel}{reviewedAtLabel ? ` · ${reviewedAtLabel}` : ''}
-                                    </span>
-                                ) : null}
-                            </div>
                         ) : null}
                     </div>
                     <div className="space-y-3">
@@ -8810,9 +8731,6 @@ Abcotronics`;
                                             getOrderedDocumentRows(section).map(({ doc, isSubRow }, docIndex) => {
                                                 const canDrag = true;
                                                 const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
-                                                const isReviewed = Boolean(doc?.reviewedAt);
-                                                const reviewerLabel = getReviewerLabel(doc?.reviewedByName, doc?.reviewedById);
-                                                const reviewedAtLabel = doc?.reviewedAt ? formatDateTime(doc.reviewedAt) : '';
                                                 return (
                                                 <tr
                                                     key={doc.id}
@@ -9008,28 +8926,6 @@ Abcotronics`;
                                                                     );
                                                                 })()}
                                                             </div>
-                                                            {isMonthlyDataReview ? (
-                                                                <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleSetRowReviewed(section.id, doc.id, !isReviewed)}
-                                                                        disabled={isMasterGreyedOut}
-                                                                        className={`px-2 py-1 text-[11px] font-semibold rounded border transition-colors ${
-                                                                            isReviewed
-                                                                                ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                                                                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                                                                        } ${isMasterGreyedOut ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                                                        title={isReviewed ? 'Clear reviewed state' : 'Mark this row as reviewed'}
-                                                                    >
-                                                                        {isReviewed ? 'Reviewed' : 'Mark reviewed'}
-                                                                    </button>
-                                                                    {isReviewed ? (
-                                                                        <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                                                                            {reviewerLabel}{reviewedAtLabel ? ` · ${reviewedAtLabel}` : ''}
-                                                                        </span>
-                                                                    ) : null}
-                                                                </div>
-                                                            ) : null}
                                                             </div>
                                                     </td>
                                                     {isMasterGreyedOut ? (
