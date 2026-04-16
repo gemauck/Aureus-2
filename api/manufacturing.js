@@ -1724,6 +1724,9 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const owner = req.user?.sub
+        // Keep all locations aligned with a complete SKU list (missing SKUs -> 0 qty).
+        // Throttled by syncInventoryAcrossAllLocations to avoid running on every request.
+        await syncInventoryAcrossAllLocations(false)
         
         // Parse query parameters from URL - use safe parsing method
         let locationId = null
@@ -2168,14 +2171,10 @@ async function handler(req, res) {
           }
         }
         
-        // Create LocationInventory placeholder for this item's location only
-        // Best practice: Items are location-specific, not duplicated across all locations
-        if (locationId && quantity > 0) {
-          await ensureLocationInventoryPlaceholder(locationId, item)
-          // Update the LocationInventory with the initial quantity
-          await upsertLocationInventoryQuantity(locationId, item, quantity)
-        } else if (locationId && quantity === 0) {
-          await ensureLocationInventoryPlaceholder(locationId, item)
+        // Ensure this SKU exists in all locations.
+        // Selected/default location keeps initial quantity; all other locations start at 0.
+        if (locationId) {
+          await ensureItemExistsInAllLocations(item)
         }
         
         // Create stock movement for starting balance (best practice: record all inventory changes)

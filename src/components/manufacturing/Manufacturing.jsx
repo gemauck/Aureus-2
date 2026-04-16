@@ -16,6 +16,7 @@ const useAuth = window.useAuth || (() => {
 const getReactForError = () => window.React || ReactGlobal;
 
 const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'activity'];
+const INVENTORY_AUTO_REFRESH_INTERVAL_MS = 15000;
 const normalizeManufacturingTab = (value = 'dashboard') => {
   const normalized = (value || 'dashboard').toLowerCase();
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
@@ -66,6 +67,30 @@ function normalizeInventoryItemRow(item) {
 function normalizeInventoryRows(items) {
   if (!Array.isArray(items)) return [];
   return items.map(normalizeInventoryItemRow);
+}
+
+function inventoryRowsEquivalentForUi(prevRows, nextRows) {
+  if (!Array.isArray(prevRows) || !Array.isArray(nextRows)) return false;
+  if (prevRows.length !== nextRows.length) return false;
+
+  const fingerprintFor = (row) => [
+    row?.inventoryItemId || row?.id || '',
+    row?.id || '',
+    Number(row?.quantity) || 0,
+    Number(row?.availableQuantity) || 0,
+    Number(row?.allocatedQuantity) || 0,
+    Number(row?.unitCost) || 0,
+    Number(row?.totalValue) || 0,
+    row?.status || '',
+    row?.updatedAt || ''
+  ].join('|');
+
+  for (let i = 0; i < prevRows.length; i += 1) {
+    if (fingerprintFor(prevRows[i]) !== fingerprintFor(nextRows[i])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 const INVENTORY_LIST_PAGE_SIZE = 20;
@@ -502,6 +527,7 @@ try {
   const [manufacturingActivityError, setManufacturingActivityError] = useState(null);
   const [manufacturingActivityExpandedId, setManufacturingActivityExpandedId] = useState(null);
   const manufacturingActivityPollRef = useRef(null);
+  const inventoryAutoRefreshPollRef = useRef(null);
   const manufacturingActivityTabPrevRef = useRef(null);
   const [activityPage, setActivityPage] = useState(1);
   const [activityPageSize, setActivityPageSize] = useState(50);
@@ -2768,6 +2794,48 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       loadLocations();
     }
   }, [activeTab]);
+
+  // Keep inventory data fresh without requiring hard refreshes.
+  // Silent mode avoids loading flashes and skips updates while the user is typing.
+  useEffect(() => {
+    if (activeTab !== 'inventory' || !window.DatabaseAPI?.getInventory) {
+      if (inventoryAutoRefreshPollRef.current) {
+        clearInterval(inventoryAutoRefreshPollRef.current);
+        inventoryAutoRefreshPollRef.current = null;
+      }
+      return;
+    }
+
+    const silentlyRefreshInventory = async () => {
+      if (isUserTypingRef.current) {
+        return;
+      }
+      try {
+        const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+        const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, { forceRefresh: true });
+        const invData = invResponse?.data?.inventory || [];
+        const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
+
+        setInventory((prev) => (inventoryRowsEquivalentForUi(prev, processed) ? prev : processed));
+        setInventoryLoadedFromAPI(true);
+        safeSetItem('manufacturing_inventory', JSON.stringify(processed));
+      } catch (error) {
+        console.error('Error in silent inventory auto-refresh:', error);
+      }
+    };
+
+    void silentlyRefreshInventory();
+    inventoryAutoRefreshPollRef.current = setInterval(() => {
+      void silentlyRefreshInventory();
+    }, INVENTORY_AUTO_REFRESH_INTERVAL_MS);
+
+    return () => {
+      if (inventoryAutoRefreshPollRef.current) {
+        clearInterval(inventoryAutoRefreshPollRef.current);
+        inventoryAutoRefreshPollRef.current = null;
+      }
+    };
+  }, [activeTab, selectedLocationId]);
 
   // Listen for location updates from StockLocations component
   useEffect(() => {
@@ -6632,8 +6700,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   {modalType === 'edit_item' ? 'Edit Inventory Item' : 'Add Inventory Item'}
                 </h2>
                 <p className="mt-1 text-xs text-gray-500">
-                  This item will be created for: <span className="font-medium text-gray-700">{resolvedLocation}</span>
+                  Adding to location: <span className="font-medium text-gray-700">{resolvedLocation}</span>
                 </p>
+                {modalType === 'add_item' && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Other locations will be created with <span className="font-medium text-gray-700">0 quantity</span>.
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); }}
