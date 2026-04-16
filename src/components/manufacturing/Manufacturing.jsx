@@ -11713,19 +11713,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     const item = viewingInventoryItemDetail;
     const getDefaultDetailLocationId = (inventoryItem) => {
-      const locations = Array.isArray(inventoryItem?.locations) ? inventoryItem.locations : [];
-      if (!locations.length) return inventoryItem?.locationId || '';
-
-      const isPmb = window.manufacturingStockLocations?.isPmbStockLocation;
-      const pmbLocation = isPmb
-        ? locations.find((loc) => isPmb(loc))
-        : locations.find((loc) => {
-            const code = String(loc?.locationCode || '').trim().toUpperCase();
-            const name = String(loc?.locationName || '').trim().toUpperCase();
-            return code === 'PMB' || name === 'PMB' || name.startsWith('PMB ') || name.includes('PIETERMARITZBURG');
-          });
-
-      return pmbLocation?.locationId || inventoryItem?.locationId || locations[0]?.locationId || '';
+      // Default to combined/all locations so quantity and ledger reflect total stock.
+      return '';
     };
 
     const [editFormData, setEditFormData] = useState({ ...item });
@@ -11784,6 +11773,32 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     useEffect(() => {
       setSelectedMovementTemplateId('');
     }, [item?.id]);
+
+    useEffect(() => {
+      if (!item?.sku || movementsLoadedFromAPI) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          if (window.DatabaseAPI?.getStockMovements) {
+            const movementsResponse = await window.DatabaseAPI.getStockMovements();
+            if (cancelled) return;
+            const movementsData = movementsResponse?.data?.movements || [];
+            const processed = movementsData.map((movement) => ({ ...movement, id: movement.id }));
+            setMovements(processed);
+            setMovementsLoadedFromAPI(true);
+            safeSetItem('manufacturing_movements', JSON.stringify(processed));
+          }
+        } catch (error) {
+          if (!cancelled) {
+            console.error('Error loading stock movements for detail view:', error);
+            setMovementsLoadedFromAPI(true);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [item?.sku, movementsLoadedFromAPI]);
 
     const formatMovementType = useCallback((type) => {
       const typeMap = {
@@ -12652,7 +12667,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
             return (
               <div className="overflow-x-auto">
-                {displayRows.length === 0 ? (
+                {!movementsLoadedFromAPI ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <i className="fas fa-spinner fa-spin text-2xl mb-2 text-gray-300"></i>
+                    <p className="text-sm">Loading stock ledger...</p>
+                  </div>
+                ) : displayRows.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <i className="fas fa-inbox text-4xl mb-2 text-gray-300"></i>
                     <p className="text-sm">No stock movements recorded for this item</p>
