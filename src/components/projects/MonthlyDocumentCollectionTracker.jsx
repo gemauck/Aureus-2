@@ -3046,11 +3046,28 @@ const getAssigneeColor = (identifier, users) => {
             
             return updated;
         });
+
+        // Force persistence for document deletion (don't rely only on debounced autosave).
+        // Some older rows can be rehydrated by background refresh if deletion isn't saved immediately.
+        lastSavedDataRef.current = null;
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        setTimeout(() => {
+            Promise.resolve(saveToDatabase({ skipParentUpdate: true }))
+                .catch((err) => {
+                    console.error('❌ Failed to persist document deletion:', err);
+                })
+                .finally(() => {
+                    isDeletingRef.current = false;
+                });
+        }, 50);
         
-        // Clear the deleting flag after auto-save completes (2 seconds should be enough)
+        // Fallback in case save path is blocked by an unexpected early return.
         setTimeout(() => {
             isDeletingRef.current = false;
-        }, 2000);
+        }, 3000);
     };
     
     // ============================================================

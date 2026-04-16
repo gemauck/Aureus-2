@@ -453,8 +453,7 @@ function mergeDocFieldsWithServer(existingDoc, incomingDoc) {
 function mergeSectionDocuments(existingSection, incomingSection) {
   const existingDocs = Array.isArray(existingSection?.documents) ? existingSection.documents : []
   const incomingDocs = Array.isArray(incomingSection?.documents) ? incomingSection.documents : []
-  const usedIndices = new Set()
-  const front = incomingDocs.map((incomingDoc) => {
+  return incomingDocs.map((incomingDoc) => {
     let idx = existingDocs.findIndex(
       (d) => incomingDoc.id != null && d.id != null && String(d.id) === String(incomingDoc.id)
     )
@@ -465,17 +464,13 @@ function mergeSectionDocuments(existingSection, incomingSection) {
       )
     }
     const existingDoc = idx >= 0 ? existingDocs[idx] : null
-    if (idx >= 0) usedIndices.add(idx)
     return mergeDocFieldsWithServer(existingDoc, incomingDoc)
   })
-  const orphans = existingDocs.filter((_, i) => !usedIndices.has(i)).map((d) => deepCloneJson(d))
-  return [...front, ...orphans]
 }
 
 function mergeYearSectionsArray(existingList, incomingList) {
   if (!Array.isArray(incomingList)) return incomingList
   const existingArr = Array.isArray(existingList) ? existingList : []
-  const matched = new Set()
   const findExistingSection = (inc) => {
     let idx = existingArr.findIndex((s) => inc.id != null && s.id != null && String(s.id) === String(inc.id))
     if (idx >= 0) return { idx, s: existingArr[idx] }
@@ -485,20 +480,19 @@ function mergeYearSectionsArray(existingList, incomingList) {
     return idx >= 0 ? { idx, s: existingArr[idx] } : { idx: -1, s: null }
   }
   const mergedSections = incomingList.map((section) => {
-    const { idx, s: existingSection } = findExistingSection(section)
-    if (idx >= 0) matched.add(idx)
+    const { s: existingSection } = findExistingSection(section)
     return {
       ...section,
       documents: mergeSectionDocuments(existingSection, section)
     }
   })
-  const orphanSections = existingArr.filter((_, i) => !matched.has(i)).map((s) => deepCloneJson(s))
-  return [...mergedSections, ...orphanSections]
+  return mergedSections
 }
 
 /**
- * Merge server state into an incoming year-based payload so partial client data cannot wipe
- * statuses, comments, notes, email metadata, whole years, or unmatched documents/sections.
+ * Merge server metadata into an incoming year-based payload while honoring client structure.
+ * Existing statuses/comments/notes/email fields are merged for matching docs, but sections/docs
+ * missing from the incoming payload are treated as intentional removals.
  */
 function mergeDocumentSectionsPayloadWithServer(existingByYear, incomingSections) {
   if (!incomingSections || typeof incomingSections !== 'object') return incomingSections
