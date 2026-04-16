@@ -15,6 +15,19 @@ const parseCellKey = (cellKey) => {
     return { sectionId: p[0], documentId: p[1], month: p[2] };
 };
 
+/** Reserved key in monthlyDataReviewSections JSON: { [year]: { [monthIndex]: url } } (not section rows). */
+const MDR_DRIVE_LINKS_KEY = '__mdrDriveLinks';
+
+/** True for keys that hold per-year section arrays (excludes `__…` metadata keys). */
+const isSectionsYearMapDataKey = (k) => k != null && !String(k).startsWith('__');
+
+const normalizeDriveOpenUrl = (input) => {
+    const s = String(input || '').trim();
+    if (!s) return '';
+    if (/^https?:\/\//i.test(s)) return s;
+    return `https://${s.replace(/^\/+/, '')}`;
+};
+
 /** If URL targets a specific comment, activity panel should scroll there (deep-link) not to latest. */
 const getCommentIdFromLocation = () => {
     if (typeof window === 'undefined') return null;
@@ -424,7 +437,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     const yearMapHasSections = (byYear) => {
         if (!byYear || typeof byYear !== 'object') return false;
-        return Object.keys(byYear).some((y) => Array.isArray(byYear[y]) && byYear[y].length > 0);
+        return Object.keys(byYear).some(
+            (y) => isSectionsYearMapDataKey(y) && Array.isArray(byYear[y]) && byYear[y].length > 0
+        );
     };
 
     const inferYearsFromSections = (sections) => {
@@ -477,6 +492,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             for (let i = 0; i < yearKeys.length; i++) {
                 const yearKey = yearKeys[i];
                 const value = parsedValue[yearKey];
+                if (yearKey === MDR_DRIVE_LINKS_KEY && value && typeof value === 'object' && !Array.isArray(value)) {
+                    result[yearKey] = value;
+                    continue;
+                }
+                if (String(yearKey).startsWith('__')) {
+                    continue;
+                }
                 result[yearKey] = Array.isArray(value) ? value : parseSections(value);
             }
             return result;
@@ -531,6 +553,52 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return updated;
         });
     };
+
+    const [driveLinkModal, setDriveLinkModal] = useState(null);
+    const driveHoverTimerRef = useRef(null);
+
+    const clearDriveHoverTimer = useCallback(() => {
+        if (driveHoverTimerRef.current) {
+            clearTimeout(driveHoverTimerRef.current);
+            driveHoverTimerRef.current = null;
+        }
+    }, []);
+
+    const getMdrDriveUrl = useCallback((byYear, year, monthIndex) => {
+        if (!byYear || typeof byYear !== 'object') return '';
+        const meta = byYear[MDR_DRIVE_LINKS_KEY];
+        if (!meta || typeof meta !== 'object') return '';
+        const ym = meta[String(year)];
+        if (!ym || typeof ym !== 'object') return '';
+        const v = ym[String(monthIndex)] ?? ym[monthIndex];
+        return v != null ? String(v).trim() : '';
+    }, []);
+
+    const applyMdrDriveUrl = useCallback((year, monthIndex, urlRaw) => {
+        const url = (urlRaw || '').trim();
+        setSectionsByYear((prev) => {
+            const next = { ...prev };
+            const prevMeta =
+                next[MDR_DRIVE_LINKS_KEY] && typeof next[MDR_DRIVE_LINKS_KEY] === 'object'
+                    ? { ...next[MDR_DRIVE_LINKS_KEY] }
+                    : {};
+            const yKey = String(year);
+            const monthMap = {
+                ...(prevMeta[yKey] && typeof prevMeta[yKey] === 'object' ? prevMeta[yKey] : {}),
+            };
+            const mKey = String(monthIndex);
+            if (!url) delete monthMap[mKey];
+            else monthMap[mKey] = url;
+            if (Object.keys(monthMap).length === 0) delete prevMeta[yKey];
+            else prevMeta[yKey] = monthMap;
+            if (Object.keys(prevMeta).length === 0) delete next[MDR_DRIVE_LINKS_KEY];
+            else next[MDR_DRIVE_LINKS_KEY] = prevMeta;
+            sectionsRef.current = next;
+            return next;
+        });
+    }, []);
+
+    useEffect(() => () => clearDriveHoverTimer(), [clearDriveHoverTimer]);
 
     const [isLoading, setIsLoading] = useState(true);
     const [loadingSlow, setLoadingSlow] = useState(false);
@@ -1267,8 +1335,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (typeof document === 'undefined') return;
         const onVisibility = () => {
             if (document.visibilityState !== 'visible' || !project?.id || isJsonOnlyTracker) return;
-            const years = sectionsByYear && typeof sectionsByYear === 'object' ? Object.keys(sectionsByYear) : [];
-            const hasAny = years.some((y) => Array.isArray(sectionsByYear[y]) && sectionsByYear[y].length > 0);
+            const years =
+                sectionsByYear && typeof sectionsByYear === 'object' ? Object.keys(sectionsByYear) : [];
+            const hasAny = years.some(
+                (y) =>
+                    isSectionsYearMapDataKey(y) &&
+                    Array.isArray(sectionsByYear[y]) &&
+                    sectionsByYear[y].length > 0
+            );
             if (!hasAny) loadData();
         };
         document.addEventListener('visibilitychange', onVisibility);
@@ -1320,10 +1394,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
         }
 
-        const yearsWithData = Object.keys(sectionsByYear).filter((y) => {
-            const arr = sectionsByYear[y];
-            return Array.isArray(arr) && arr.length > 0;
-        }).map((y) => parseInt(y, 10)).filter((y) => isValidYear(y)).sort((a, b) => b - a);
+        const yearsWithData = Object.keys(sectionsByYear)
+            .filter((y) => {
+                if (!isSectionsYearMapDataKey(y)) return false;
+                const arr = sectionsByYear[y];
+                return Array.isArray(arr) && arr.length > 0;
+            })
+            .map((y) => parseInt(y, 10))
+            .filter((y) => isValidYear(y))
+            .sort((a, b) => b - a);
         if (yearsWithData.length === 0) return;
         const currentSections = Array.isArray(sectionsByYear[selectedYear]) ? sectionsByYear[selectedYear] : [];
         if (currentSections.length > 0) return;
@@ -3936,11 +4015,16 @@ const getAssigneeColor = (identifier, users) => {
             
             // Only proceed if we have data to work with: either current-year sections or (for commentId search) any year in sectionsByYear
             const hasSectionsForCurrentYear = sections && sections.length > 0;
-            const hasAnyYearData = Object.keys(sectionsByYear || {}).some(y => Array.isArray(sectionsByYear[y]) && sectionsByYear[y].length > 0);
+            const hasAnyYearData = Object.keys(sectionsByYear || {}).some(
+                (y) =>
+                    isSectionsYearMapDataKey(y) &&
+                    Array.isArray(sectionsByYear[y]) &&
+                    sectionsByYear[y].length > 0
+            );
             const canSearchByCommentId = deepCommentId && hasAnyYearData;
             if (!hasSectionsForCurrentYear && !canSearchByCommentId) {
                 if (deepSectionId && isValidDocumentId && deepMonth) {
-                    const yearsToSearch = Object.keys(sectionsByYear || {});
+                    const yearsToSearch = Object.keys(sectionsByYear || {}).filter(isSectionsYearMapDataKey);
                     for (const year of yearsToSearch) {
                         const yearSections = sectionsByYear[year] || [];
                         const matchingSection = yearSections.find(s => String(s.id) === String(deepSectionId));
@@ -3974,7 +4058,7 @@ const getAssigneeColor = (identifier, users) => {
                 const section = sections.find(s => String(s.id) === String(deepSectionId));
                 const doc = section?.documents?.find(d => String(d.id) === String(deepDocumentId));
                 if (!section || !doc) {
-                    const yearsToSearch = Object.keys(sectionsByYear || {});
+                    const yearsToSearch = Object.keys(sectionsByYear || {}).filter(isSectionsYearMapDataKey);
                     for (const year of yearsToSearch) {
                         const yearSections = sectionsByYear[year] || [];
                         const matchingSection = yearSections.find(s => String(s.id) === String(deepSectionId));
@@ -4032,7 +4116,7 @@ const getAssigneeColor = (identifier, users) => {
                     const commentIdNum = parseInt(deepCommentId, 10);
                     
                     // Search through all years in sectionsByYear
-                    const yearsToSearch = Object.keys(sectionsByYear);
+                    const yearsToSearch = Object.keys(sectionsByYear).filter(isSectionsYearMapDataKey);
                     if (yearsToSearch.length === 0) {
                         yearsToSearch.push(String(selectedYear));
                     }
@@ -4362,7 +4446,7 @@ const getAssigneeColor = (identifier, users) => {
     }, [sections.length, checkAndOpenDeepLink]);
     
     // When sectionsByYear is first populated (e.g. after loadData), run deep link so comment links open popup
-    const sectionsByYearKeyCount = Object.keys(sectionsByYear || {}).length;
+    const sectionsByYearKeyCount = Object.keys(sectionsByYear || {}).filter(isSectionsYearMapDataKey).length;
     useEffect(() => {
         if (sectionsByYearKeyCount > 0) {
             const timer = setTimeout(() => {
@@ -4912,6 +4996,130 @@ const baseTextColorClass = statusConfig && statusConfig.color
     // ============================================================
     // MODALS
     // ============================================================
+
+    const handleMdrDriveIconMouseEnter = (monthIdx) => {
+        if (!isMonthlyDataReview) return;
+        clearDriveHoverTimer();
+        driveHoverTimerRef.current = setTimeout(() => {
+            driveHoverTimerRef.current = null;
+            const cur = getMdrDriveUrl(sectionsByYear, selectedYear, monthIdx);
+            setDriveLinkModal({ year: selectedYear, monthIndex: monthIdx, draftUrl: cur });
+        }, 2000);
+    };
+
+    const handleMdrDriveIconMouseLeave = () => {
+        clearDriveHoverTimer();
+    };
+
+    const handleMdrDriveIconClick = (e, monthIdx) => {
+        if (!isMonthlyDataReview) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearDriveHoverTimer();
+        const url = getMdrDriveUrl(sectionsByYear, selectedYear, monthIdx);
+        if (url) {
+            window.open(normalizeDriveOpenUrl(url), '_blank', 'noopener,noreferrer');
+        } else {
+            setDriveLinkModal({ year: selectedYear, monthIndex: monthIdx, draftUrl: '' });
+        }
+    };
+
+    const DriveLinkModal = () => {
+        if (!driveLinkModal) return null;
+        const { year, monthIndex, draftUrl = '' } = driveLinkModal;
+        const monthLabel = months[monthIndex] || `Month ${monthIndex + 1}`;
+
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            applyMdrDriveUrl(year, monthIndex, draftUrl);
+            setDriveLinkModal(null);
+        };
+
+        const handleClear = () => {
+            applyMdrDriveUrl(year, monthIndex, '');
+            setDriveLinkModal(null);
+        };
+
+        return (
+            <div
+                className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-60 flex items-center justify-center z-[60] p-4"
+                data-mdr-drive-modal="true"
+                onClick={() => setDriveLinkModal(null)}
+                role="presentation"
+            >
+                <div
+                    className="modal-panel bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-600"
+                    onClick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="mdr-drive-modal-title"
+                >
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                        <h2 id="mdr-drive-modal-title" className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                            <i className="fab fa-google-drive text-green-600 dark:text-green-400" aria-hidden="true" />
+                            Google Drive folder
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={() => setDriveLinkModal(null)}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                            aria-label="Close"
+                        >
+                            <i className="fas fa-times text-sm" />
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                            {monthLabel} {year} — paste a Google Drive folder or file link for this month.
+                        </p>
+                        <div>
+                            <label htmlFor="mdr-drive-url" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                Link
+                            </label>
+                            <input
+                                id="mdr-drive-url"
+                                type="url"
+                                inputMode="url"
+                                autoComplete="off"
+                                value={draftUrl}
+                                onChange={(e) =>
+                                    setDriveLinkModal((prev) =>
+                                        prev ? { ...prev, draftUrl: e.target.value } : prev
+                                    )
+                                }
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-sky-400"
+                                placeholder="https://drive.google.com/drive/folders/…"
+                            />
+                        </div>
+
+                        <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
+                            <button
+                                type="button"
+                                onClick={handleClear}
+                                className="px-3 py-1.5 text-xs text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"
+                            >
+                                Remove link
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDriveLinkModal(null)}
+                                className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-3 py-1.5 text-xs bg-sky-200 dark:bg-sky-700 text-sky-900 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
     
     const SectionModal = () => {
         const [formData, setFormData] = useState({
@@ -7448,7 +7656,7 @@ Abcotronics`;
                             }
                         }
                         if (localComments.length === 0 && sectionsByYear && typeof sectionsByYear === 'object') {
-                            for (const year of Object.keys(sectionsByYear)) {
+                            for (const year of Object.keys(sectionsByYear).filter(isSectionsYearMapDataKey)) {
                                 const secs = sectionsByYear[year] || [];
                                 const sec = secs.find(s => String(s.id) === String(rawSectionId));
                                 const d = sec?.documents?.find(dd => String(dd.id) === String(rawDocumentId));
@@ -8119,7 +8327,11 @@ Abcotronics`;
             <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
                 {sections.length === 0 ? (
                     (() => {
-                        const yearsWithSections = Object.keys(sectionsByYear || {}).filter((y) => (sectionsByYear[y] || []).length > 0).map((y) => parseInt(y, 10)).filter((y) => !Number.isNaN(y)).sort((a, b) => b - a);
+                        const yearsWithSections = Object.keys(sectionsByYear || {})
+                            .filter((y) => isSectionsYearMapDataKey(y) && (sectionsByYear[y] || []).length > 0)
+                            .map((y) => parseInt(y, 10))
+                            .filter((y) => !Number.isNaN(y))
+                            .sort((a, b) => b - a);
                         const hasDataInOtherYears = yearsWithSections.length > 0;
                         const bestYear = yearsWithSections[0];
                         return (
@@ -8311,9 +8523,30 @@ Abcotronics`;
                                                                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
                                                             }`}
                                                         >
-                                                            <div className="flex flex-col items-center gap-0.5">
-                                                                <span>{month.slice(0, 3)}</span>
-                                                                <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                            <div className="relative flex items-center justify-center min-h-[2.75rem] px-0.5">
+                                                                {isMonthlyDataReview ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 p-0.5 rounded-md text-green-700 dark:text-green-400 hover:bg-white/70 dark:hover:bg-gray-900/40 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1 focus:ring-offset-sky-100 dark:focus:ring-offset-sky-900 ${
+                                                                            getMdrDriveUrl(sectionsByYear, selectedYear, idx)
+                                                                                ? 'opacity-100'
+                                                                                : 'opacity-55'
+                                                                        }`}
+                                                                        onClick={(e) => handleMdrDriveIconClick(e, idx)}
+                                                                        onMouseEnter={() => handleMdrDriveIconMouseEnter(idx)}
+                                                                        onMouseLeave={handleMdrDriveIconMouseLeave}
+                                                                        title="Hover 2 seconds to set folder link · Click to open saved link"
+                                                                        aria-label={`Google Drive folder for ${month} ${selectedYear}`}
+                                                                    >
+                                                                        <i className="fab fa-google-drive text-base leading-none" aria-hidden="true" />
+                                                                    </button>
+                                                                ) : null}
+                                                                <div
+                                                                    className={`flex flex-col items-center gap-0.5 ${isMonthlyDataReview ? 'pl-5' : ''}`}
+                                                                >
+                                                                    <span>{month.slice(0, 3)}</span>
+                                                                    <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                                </div>
                                                             </div>
                                                         </th>
                                                     ))}
@@ -8696,6 +8929,7 @@ Abcotronics`;
             </div>
             
             {/* Modals */}
+            {driveLinkModal && <DriveLinkModal />}
             {showSectionModal && <SectionModal />}
             {emailModalContext && <DocumentRequestEmailModal />}
             {showDocumentModal && <DocumentModal />}
