@@ -2095,18 +2095,43 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     return loc ? `${loc.code} – ${loc.name}` : idOrCode;
   };
 
+  const toSafeNumber = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const getAvailableInventoryQuantity = (item) => (
+    toSafeNumber(item.quantity) - toSafeNumber(item.allocatedQuantity)
+  );
+
+  const getItemReorderPoint = (item) => {
+    const reorderPoint = Number(item.reorderPoint);
+    return Number.isFinite(reorderPoint) ? reorderPoint : 0;
+  };
+
+  const isLowStockInventoryItem = (item) => {
+    const availableQty = getAvailableInventoryQuantity(item);
+    return availableQty <= getItemReorderPoint(item);
+  };
+
+  const formatMovementDateLabel = (movement) => {
+    const raw = movement?.date || movement?.createdAt;
+    if (!raw) return '-';
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return String(raw);
+    return parsed.toLocaleDateString();
+  };
+
   const getInventoryStats = () => {
     const totalValue = inventory.reduce(
       (sum, item) => sum + inventoryLineTotalValue(item.quantity, item.unitCost),
       0
     );
-    // Use available quantity (quantity - allocatedQuantity) for low stock calculation
-    const lowStockItems = inventory.filter(item => {
-      const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
-      return availableQty <= item.reorderPoint;
-    }).length;
-    const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
-    const categories = [...new Set(inventory.map(item => item.category))].length;
+    const lowStockItems = inventory.filter(isLowStockInventoryItem).length;
+    const totalItems = inventory.reduce((sum, item) => sum + toSafeNumber(item.quantity), 0);
+    const categories = [...new Set(inventory
+      .map(item => (item.category || '').trim())
+      .filter(Boolean))].length;
     const needsCatalogReviewCount = inventory.filter((item) => item.needsCatalogReview).length;
     
     return { totalValue, lowStockItems, totalItems, categories, needsCatalogReviewCount };
@@ -2114,11 +2139,25 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
 
   const getProductionStats = () => {
-    const requestedOrders = productionOrders.filter(o => o.status === 'requested').length;
     const activeOrders = productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').length;
-    const completedOrders = productionOrders.filter(o => o.status === 'completed').length;
-    const totalProduction = productionOrders.reduce((sum, o) => sum + o.quantityProduced, 0);
-    const pendingUnits = productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').reduce((sum, o) => sum + (o.quantity - o.quantityProduced), 0);
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const nextMonthStart = new Date(monthStart);
+    nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+    const completedThisMonth = productionOrders.filter((order) => {
+      if (order.status !== 'completed') return false;
+      const completedAt = order.completedDate || order.updatedAt || order.createdAt;
+      if (!completedAt) return false;
+      const parsed = new Date(completedAt);
+      if (Number.isNaN(parsed.getTime())) return false;
+      return parsed >= monthStart && parsed < nextMonthStart;
+    });
+    const completedOrders = completedThisMonth.length;
+    const totalProduction = completedThisMonth.reduce((sum, order) => sum + toSafeNumber(order.quantityProduced), 0);
+    const pendingUnits = productionOrders
+      .filter(o => o.status === 'in_production' || o.status === 'in_progress')
+      .reduce((sum, o) => sum + (toSafeNumber(o.quantity) - toSafeNumber(o.quantityProduced)), 0);
     
     return { activeOrders, completedOrders, totalProduction, pendingUnits };
   };
@@ -2547,11 +2586,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
             <div className="p-4">
               <div className="space-y-2">
-                {inventory.filter(item => {
-                  const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
-                  return availableQty <= item.reorderPoint;
-                }).slice(0, 5).map(item => {
-                  const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+                {inventory.filter(isLowStockInventoryItem).slice(0, 5).map(item => {
+                  const availableQty = getAvailableInventoryQuantity(item);
                   return (
                     <div key={item.id} className={`${isDark ? 'bg-yellow-900/20 border-yellow-800' : 'bg-yellow-50 border-yellow-200'} flex items-center justify-between p-3 rounded-lg border`}>
                       <div className="flex-1">
@@ -2560,7 +2596,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       </div>
                       <div className="text-right">
                         <p className={`text-sm font-semibold ${isDark ? 'text-yellow-200' : 'text-yellow-700'}`}>{availableQty} / {item.quantity} {item.unit}</p>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Reorder: {item.reorderPoint}</p>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Reorder: {getItemReorderPoint(item)}</p>
                         {(item.allocatedQuantity || 0) > 0 && (
                           <p className={`text-xs ${isDark ? 'text-orange-300' : 'text-orange-600'}`}>Allocated: {item.allocatedQuantity}</p>
                         )}
@@ -2622,7 +2658,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <tbody className={`${isDark ? 'divide-gray-800' : 'divide-gray-100'} divide-y`}>
                 {movements.slice(0, 10).map(movement => (
                   <tr key={movement.id} className={isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
-                    <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{movement.date}</td>
+                    <td className={`px-4 py-3 text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{formatMovementDateLabel(movement)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
                         {movement.type}

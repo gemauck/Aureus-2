@@ -24,6 +24,14 @@
       }
     };
 
+    const formatMovementDate = (movement) => {
+      const raw = movement?.date || movement?.createdAt;
+      if (!raw) return '-';
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) return String(raw);
+      return parsed.toLocaleDateString();
+    };
+
     return React.createElement('div', { className: 'space-y-3 min-w-0 max-w-full w-full' },
       React.createElement('div', { className: 'bg-white p-3 rounded-lg border border-gray-200 min-w-0' },
         React.createElement('div', { className: 'flex items-center justify-between' },
@@ -107,7 +115,7 @@
                             : 'text-gray-900';
                       return React.createElement('tr', { key: movement.id, className: 'hover:bg-gray-50' },
                         React.createElement('td', { className: 'px-3 py-2 text-sm font-medium text-gray-900' }, movement.movementId || movement.id),
-                        React.createElement('td', { className: 'px-3 py-2 text-sm text-gray-900' }, movement.date),
+                        React.createElement('td', { className: 'px-3 py-2 text-sm text-gray-900' }, formatMovementDate(movement)),
                         React.createElement('td', { className: 'px-3 py-2' },
                           React.createElement('span', { className: 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ' + (getStatusColor ? getStatusColor(movement.type) : 'text-gray-600 bg-gray-50') }, movement.type)
                         ),

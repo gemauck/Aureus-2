@@ -40,6 +40,22 @@ const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {
   return 'out_of_stock'
 }
 
+const VALID_PRODUCTION_ORDER_STATUSES = new Set([
+  'requested',
+  'received',
+  'in_production',
+  'in_progress',
+  'completed',
+  'cancelled'
+])
+
+function normalizeProductionOrderStatus(status, fallback = 'requested') {
+  if (status === undefined || status === null || String(status).trim() === '') return fallback
+  const normalized = String(status).trim().toLowerCase().replace(/\s+/g, '_')
+  if (normalized === 'inprogress') return 'in_progress'
+  return VALID_PRODUCTION_ORDER_STATUSES.has(normalized) ? normalized : null
+}
+
 /**
  * Activity list date filter: YYYY-MM-DD is interpreted as whole UTC calendar days; other strings use Date parsing.
  */
@@ -642,6 +658,7 @@ async function buildAllLocationsInventoryResponse() {
     }
     const row = bySku.get(sku)
     row.quantity += quantity
+    row.totalValue += computedInventoryTotalValue(quantity, unitCost)
     row.locations.push({
       locationId: record.locationId,
       locationName: record.location?.name || '',
@@ -680,7 +697,9 @@ async function buildAllLocationsInventoryResponse() {
   const result = Array.from(bySku.values())
   for (const row of result) {
     row.status = getStatusFromQuantity(row.quantity, row.reorderPoint ?? 0)
-    row.totalValue = computedInventoryTotalValue(row.quantity, row.unitCost)
+    if (row.locations.length === 0) {
+      row.totalValue = computedInventoryTotalValue(row.quantity, row.unitCost)
+    }
     if (row.locations.length === 0) row.location = ''
     else if (row.locations.length === 1) row.location = row.locations[0].locationName || row.locations[0].locationCode || ''
     else row.location = 'Multiple locations'
@@ -2800,7 +2819,10 @@ async function handler(req, res) {
 
       try {
         const orderQuantity = parseInt(body.quantity) || 0
-        const orderStatus = body.status || 'requested'
+        const orderStatus = normalizeProductionOrderStatus(body.status, 'requested')
+        if (!orderStatus) {
+          return badRequest(res, 'Invalid production order status')
+        }
 
         const order = await prisma.$transaction(async (tx) => {
           if (body.bomId && orderStatus === 'requested') {
@@ -2915,7 +2937,13 @@ async function handler(req, res) {
         if (body.productName !== undefined) updateData.productName = body.productName
         if (body.quantity !== undefined) updateData.quantity = parseInt(body.quantity)
         if (body.quantityProduced !== undefined) updateData.quantityProduced = parseInt(body.quantityProduced)
-        if (body.status !== undefined) updateData.status = body.status
+        if (body.status !== undefined) {
+          const normalizedStatus = normalizeProductionOrderStatus(body.status, null)
+          if (!normalizedStatus) {
+            return badRequest(res, 'Invalid production order status')
+          }
+          updateData.status = normalizedStatus
+        }
         if (body.priority !== undefined) updateData.priority = body.priority
         if (body.startDate !== undefined) updateData.startDate = body.startDate ? new Date(body.startDate) : null
         if (body.targetDate !== undefined) updateData.targetDate = body.targetDate ? new Date(body.targetDate) : null
@@ -2928,8 +2956,8 @@ async function handler(req, res) {
         if (body.allocationType !== undefined) updateData.allocationType = body.allocationType || 'stock'
         
         // Handle status change to 'completed' - add finished goods to inventory
-        const oldStatus = String(existingOrder.status || '').trim()
-        const newStatus = String(body.status || '').trim()
+        const oldStatus = String(existingOrder.status || '').trim().toLowerCase().replace(/\s+/g, '_')
+        const newStatus = updateData.status || oldStatus
         
         // Handle status change to 'completed' - add finished goods to inventory with cost = sum of parts
         if (newStatus === 'completed' && oldStatus !== 'completed') {
@@ -3144,9 +3172,11 @@ async function handler(req, res) {
             if (!unitCost && bom.totalMaterialCost === null) {
             }
             
-            // Calculate new quantity and value
+            // Calculate new quantity and value (incremental valuation to preserve prior stock value basis)
             const newQuantity = (finishedProduct.quantity || 0) + quantityProduced
-            const newTotalValue = newQuantity * unitCost
+            const existingTotalValue = computedInventoryTotalValue(finishedProduct.quantity || 0, finishedProduct.unitCost || 0)
+            const producedValue = computedInventoryTotalValue(quantityProduced, unitCost)
+            const newTotalValue = existingTotalValue + producedValue
             
             // Get default location (main warehouse) for finished product
             // If no location exists, create a default one to ensure LocationInventory is always updated
@@ -3267,7 +3297,7 @@ async function handler(req, res) {
               data: {
                 quantity: finalQty,
                 unitCost: unitCost, // Set to sum of parts
-                totalValue: computedInventoryTotalValue(finalQty, unitCost),
+                totalValue: newTotalValue,
                 status: finalQty > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (finalQty > 0 ? 'low_stock' : 'out_of_stock'),
                 lastRestocked: new Date()
               }
