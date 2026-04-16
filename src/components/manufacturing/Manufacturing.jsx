@@ -12638,20 +12638,22 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               }
               if (movement.type === 'receipt') qty = Math.abs(qty);
               else if (movement.type === 'production') {
-                // createStockMovement stores negative qty for material use (like consumption). Legacy rows may be positive.
-                const q = parseFloat(movement.quantity) || 0;
-                qty = q < 0 ? -Math.abs(q) : Math.abs(q);
+                // Production movement in this ledger represents component/material usage (stock-out).
+                // Treat legacy positive rows as stock-out as well.
+                qty = -Math.abs(qty);
               } else if (movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
               return qty;
             };
 
-            // Compute balances forward from 0 (ledger is source of truth; works for fresh uploads)
-            // itemMovementsForDetail is already sorted oldest-first
+            // Compute balances with a derived opening so closing matches the current quantity.
+            // This keeps the ledger reconciled even when historical movements are incomplete.
             const rowsWithBalances = itemMovementsForDetail.map((movement) => {
               const qty = normalizeQuantity(movement);
               return { movement, qty };
             });
-            let opening = 0;
+            const movementNetChange = rowsWithBalances.reduce((sum, row) => sum + row.qty, 0);
+            const currentQuantity = displayQuantity;
+            let opening = currentQuantity - movementNetChange;
             const rowsCalculated = rowsWithBalances.map(({ movement, qty }) => {
               const openingBalance = opening;
               const balanceAfter = openingBalance + qty;
@@ -12659,7 +12661,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               return { movement, qty, openingBalance, balanceAfter };
             });
             const ledgerClosingBalance = opening;
-            const currentQuantity = displayQuantity;
             const mismatch = Math.abs(ledgerClosingBalance - currentQuantity) > 0.001;
 
             // Display newest-first
@@ -12680,7 +12681,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </div>
                 ) : (
                   <>
-                  <p className="text-xs text-gray-500 mb-2">Opening + In − Out = Balance (each row shows balance after that movement; ledger starts at 0 for the first movement)</p>
+                  <p className="text-xs text-gray-500 mb-2">Opening + In − Out = Balance (each row shows balance after that movement; opening is derived from current stock and shown movement history)</p>
                   {mismatch && (
                     <p className="text-xs text-amber-600 mb-2">
                       Item quantity ({currentQuantity.toFixed(2)} {item.unit}) differs from ledger total ({ledgerClosingBalance.toFixed(2)} {item.unit}). Consider reconciling or re-running the stock count fix.
