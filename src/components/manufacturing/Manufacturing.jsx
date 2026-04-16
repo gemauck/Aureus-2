@@ -11749,7 +11749,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     const item = viewingInventoryItemDetail;
     const getDefaultDetailLocationId = (inventoryItem) => {
-      // Default to combined/all locations so quantity and ledger reflect total stock.
+      // When list is filtered to a specific location, open detail on that same location
+      // so qty/available match the clicked list row by default.
+      const preferredLocationId =
+        selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : '';
+      if (!preferredLocationId) return '';
+
+      const hasPreferredInBreakdown = Array.isArray(inventoryItem?.locations)
+        ? inventoryItem.locations.some((loc) => loc?.locationId === preferredLocationId)
+        : false;
+      if (hasPreferredInBreakdown) return preferredLocationId;
+
+      if (inventoryItem?.locationId === preferredLocationId) return preferredLocationId;
       return '';
     };
 
@@ -11955,10 +11966,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const selectedLocationInfo = selectedDetailLocationId && detailLocations.find(l => l.locationId === selectedDetailLocationId);
     const totalQuantityFromLocations = detailLocations.reduce((sum, loc) => sum + (parseFloat(loc?.quantity) || 0), 0);
     const hasLocationBreakdown = detailLocations.length > 0;
+    // Keep "all locations" quantity aligned with list rows (catalog quantity is canonical).
     const displayQuantity = selectedLocationInfo
       ? (parseFloat(selectedLocationInfo.quantity) || 0)
-      : (hasLocationBreakdown ? totalQuantityFromLocations : (item.quantity || 0));
-    const availableQty = displayQuantity - (item.allocatedQuantity || 0);
+      : toSafeNumber(item.quantity);
+    const availableQty = selectedLocationInfo
+      ? (displayQuantity - toSafeNumber(item.allocatedQuantity))
+      : getAvailableInventoryQuantity(item);
 
     const handleSaveEdit = async () => {
       try {
@@ -12504,9 +12518,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Quantity</p>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {hasLocationBreakdown ? totalQuantityFromLocations : (item.quantity || 0)} {item.unit}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-900">{displayQuantity} {item.unit}</p>
+                      {selectedLocationInfo && hasLocationBreakdown && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          All locations total: {totalQuantityFromLocations} {item.unit}
+                        </p>
+                      )}
                       <p className="text-xs text-gray-400 mt-1">(Update via stock movements/purchase orders)</p>
                     </div>
                     <div>
