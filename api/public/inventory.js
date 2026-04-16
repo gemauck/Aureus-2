@@ -57,30 +57,52 @@ async function inventoryForLocation(locationId) {
     }
   }
 
-  const out = []
+  // Aggregate by SKU so the picker shows total on-hand per component at this location.
+  const bySkuAggregate = new Map()
   for (const record of records) {
-    const template = bySku.get(record.sku) || {}
-    if (template.status === 'inactive') {
+    const sku = record.sku
+    if (!sku) continue
+    const template = bySku.get(sku) || {}
+    if (template.status === 'inactive') continue
+
+    const currentQty = Number(record.quantity) || 0
+    const existing = bySkuAggregate.get(sku)
+    if (!existing) {
+      bySkuAggregate.set(sku, {
+        template,
+        sku,
+        quantity: currentQty,
+        unitCost: record.unitCost ?? template.unitCost ?? 0,
+        name: template.name || record.itemName || sku,
+        status: template.status || record.status || 'in_stock'
+      })
       continue
     }
-    const quantity = record.quantity ?? 0
-    if (quantity <= 0) {
-      continue
+
+    existing.quantity += currentQty
+    // Keep non-zero/defined unit cost if available on later rows.
+    if (record.unitCost != null) existing.unitCost = record.unitCost
+    if (!existing.name && (record.itemName || template.name)) {
+      existing.name = template.name || record.itemName || sku
     }
-    const unitCost = record.unitCost ?? template.unitCost ?? 0
+  }
+
+  const out = []
+  for (const aggregate of bySkuAggregate.values()) {
+    if ((Number(aggregate.quantity) || 0) <= 0) continue
     out.push({
-      ...template,
-      id: `${record.id}-${locationId}`,
-      inventoryItemId: template.id || null,
-      sku: record.sku,
-      name: template.name || record.itemName || record.sku,
-      quantity,
-      unitCost,
+      ...aggregate.template,
+      id: `${aggregate.sku}-${locationId}`,
+      inventoryItemId: aggregate.template.id || null,
+      sku: aggregate.sku,
+      name: aggregate.name,
+      quantity: aggregate.quantity,
+      unitCost: aggregate.unitCost,
       locationId,
-      unit: template.unit || 'pcs',
-      category: template.category || null,
-      type: template.type || null,
-      status: template.status || record.status || 'in_stock'
+      unit: aggregate.template.unit || 'pcs',
+      category: aggregate.template.category || null,
+      type: aggregate.template.type || null,
+      status: aggregate.status
     })
   }
 
