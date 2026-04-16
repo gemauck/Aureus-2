@@ -11917,7 +11917,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     })();
 
     const selectedLocationInfo = selectedDetailLocationId && detailLocations.find(l => l.locationId === selectedDetailLocationId);
-    const displayQuantity = selectedLocationInfo ? selectedLocationInfo.quantity : (item.quantity || 0);
+    const totalQuantityFromLocations = detailLocations.reduce((sum, loc) => sum + (parseFloat(loc?.quantity) || 0), 0);
+    const hasLocationBreakdown = detailLocations.length > 0;
+    const displayQuantity = selectedLocationInfo
+      ? (parseFloat(selectedLocationInfo.quantity) || 0)
+      : (hasLocationBreakdown ? totalQuantityFromLocations : (item.quantity || 0));
     const availableQty = displayQuantity - (item.allocatedQuantity || 0);
 
     const handleSaveEdit = async () => {
@@ -12464,7 +12468,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Quantity</p>
-                      <p className="text-sm font-semibold text-gray-900">{item.quantity || 0} {item.unit}</p>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {hasLocationBreakdown ? totalQuantityFromLocations : (item.quantity || 0)} {item.unit}
+                      </p>
                       <p className="text-xs text-gray-400 mt-1">(Update via stock movements/purchase orders)</p>
                     </div>
                     <div>
