@@ -35,22 +35,34 @@ async function inventoryForLocation(locationId) {
     where: { locationId },
     orderBy: { itemName: 'asc' }
   })
-  if (!records.length) {
-    return []
-  }
 
-  const skuList = [...new Set(records.map((r) => r.sku).filter(Boolean))]
-  if (!skuList.length) {
-    return []
-  }
-
-  const templates = await prisma.inventoryItem.findMany({
-    where: { sku: { in: skuList } },
+  // Some locations still rely on catalog rows (InventoryItem.locationId) while
+  // others use LocationInventory as source of truth. Merge both so the stock
+  // picker shows the full selected-location stock list.
+  const catalogAtLocation = await prisma.inventoryItem.findMany({
+    where: {
+      locationId,
+      status: { not: 'inactive' }
+    },
     select: TEMPLATE_SELECT,
     orderBy: { updatedAt: 'desc' }
   })
 
+  const skuList = [...new Set(records.map((r) => r.sku).filter(Boolean))]
+  const templates = skuList.length
+    ? await prisma.inventoryItem.findMany({
+        where: { sku: { in: skuList } },
+        select: TEMPLATE_SELECT,
+        orderBy: { updatedAt: 'desc' }
+      })
+    : []
+
   const bySku = new Map()
+  for (const t of catalogAtLocation) {
+    if (t?.sku && !bySku.has(t.sku)) {
+      bySku.set(t.sku, t)
+    }
+  }
   for (const t of templates) {
     if (!bySku.has(t.sku)) {
       bySku.set(t.sku, t)
@@ -59,6 +71,21 @@ async function inventoryForLocation(locationId) {
 
   // Aggregate by SKU so the picker shows total on-hand per component at this location.
   const bySkuAggregate = new Map()
+  const locationInventorySkuSet = new Set(records.map((record) => record.sku).filter(Boolean))
+
+  // Seed from per-location catalog rows when no LocationInventory row exists for the SKU.
+  for (const item of catalogAtLocation) {
+    if (!item?.sku || locationInventorySkuSet.has(item.sku)) continue
+    bySkuAggregate.set(item.sku, {
+      template: item,
+      sku: item.sku,
+      quantity: Number(item.quantity) || 0,
+      unitCost: item.unitCost ?? 0,
+      name: item.name || item.sku,
+      status: item.status || 'in_stock'
+    })
+  }
+
   for (const record of records) {
     const sku = record.sku
     if (!sku) continue
