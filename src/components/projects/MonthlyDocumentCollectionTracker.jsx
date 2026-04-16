@@ -28,6 +28,35 @@ const normalizeDriveOpenUrl = (input) => {
     return `https://${s.replace(/^\/+/, '')}`;
 };
 
+/** If GET returns before PUT is visible, keep in-memory Drive URLs that the server row does not yet list. */
+const mergeMdrDriveLinksFromRef = (serverNorm, refSnap) => {
+    if (!serverNorm || typeof serverNorm !== 'object' || !refSnap || typeof refSnap !== 'object') {
+        return serverNorm;
+    }
+    const refMeta = refSnap[MDR_DRIVE_LINKS_KEY];
+    if (!refMeta || typeof refMeta !== 'object') return serverNorm;
+    const out = { ...serverNorm };
+    const srvMeta =
+        out[MDR_DRIVE_LINKS_KEY] && typeof out[MDR_DRIVE_LINKS_KEY] === 'object'
+            ? { ...out[MDR_DRIVE_LINKS_KEY] }
+            : {};
+    for (const y of Object.keys(refMeta)) {
+        const refYm = refMeta[y];
+        if (!refYm || typeof refYm !== 'object') continue;
+        const srvYm = { ...(typeof srvMeta[y] === 'object' ? srvMeta[y] : {}) };
+        for (const m of Object.keys(refYm)) {
+            const rv = String(refYm[m] || '').trim();
+            const sv = String(srvYm[m] || '').trim();
+            if (!sv && rv) srvYm[m] = refYm[m];
+        }
+        if (Object.keys(srvYm).length) srvMeta[y] = srvYm;
+        else delete srvMeta[y];
+    }
+    if (Object.keys(srvMeta).length) out[MDR_DRIVE_LINKS_KEY] = srvMeta;
+    else delete out[MDR_DRIVE_LINKS_KEY];
+    return out;
+};
+
 /** If URL targets a specific comment, activity panel should scroll there (deep-link) not to latest. */
 const getCommentIdFromLocation = () => {
     if (typeof window === 'undefined') return null;
@@ -1076,6 +1105,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             showedPropDataRef.current = true;
             let normalized = normalizeSectionsByYear(propSectionsFirst, urlYearForNormalize);
             normalized = seedUrlYearFromOtherYearsIfMissing(normalized, urlYearForNormalize);
+            if (isMonthlyDataReview) {
+                normalized = mergeMdrDriveLinksFromRef(normalized, sectionsRef.current);
+            }
             setSectionsByYear(normalized);
             sectionsRef.current = normalized;
             lastSavedDataRef.current = JSON.stringify(normalized);
@@ -1191,6 +1223,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 let normalized = normalizeSectionsByYear(sectionsField, urlYearForNormalize);
                 // If URL has docYear but that year is missing from API data, seed from another year (not when year is explicit [])
                 normalized = seedUrlYearFromOtherYearsIfMissing(normalized, urlYearForNormalize);
+                if (isMonthlyDataReview) {
+                    normalized = mergeMdrDriveLinksFromRef(normalized, sectionsRef.current);
+                }
                 if (!yearMapHasSections(normalized) && yearMapHasSections(sectionsRef.current)) {
                     console.warn('📥 Ignoring empty sections payload; keeping existing tracker data (avoid wipe from race or partial API response).');
                     setIsLoading(false);
@@ -1209,6 +1244,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             if (propSections) {
                 let normalized = normalizeSectionsByYear(propSections, urlYearForNormalize);
                 normalized = seedUrlYearFromOtherYearsIfMissing(normalized, urlYearForNormalize);
+                if (isMonthlyDataReview) {
+                    normalized = mergeMdrDriveLinksFromRef(normalized, sectionsRef.current);
+                }
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
@@ -1572,11 +1610,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     
     // Simplified save function - clear and reliable
     async function saveToDatabase(options = {}) {
-        if (isSavingRef.current || !project?.id || isLoading) {
+        const skipLoadingGuard = Boolean(options.skipLoadingGuard);
+        if (isSavingRef.current || !project?.id || (!skipLoadingGuard && isLoading)) {
             console.log('⏸️ Save skipped:', { 
                 isSaving: isSavingRef.current, 
                 hasProjectId: !!project?.id, 
-                isLoading 
+                isLoading,
+                skipLoadingGuard
             });
             return;
         }
@@ -1606,7 +1646,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             console.log('⏸️ Save skipped: data unchanged');
             return;
         }
-        
+
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+
         console.log('💾 Saving to database...', { 
             hasData: Object.keys(payload).length > 0,
             yearKeys: Object.keys(payload),
@@ -5033,11 +5078,15 @@ const baseTextColorClass = statusConfig && statusConfig.color
             e.preventDefault();
             applyMdrDriveUrl(year, monthIndex, draftUrl);
             setDriveLinkModal(null);
+            // Immediate save: debounced autosave is cancelled when loadData sets isLoading, and
+            // saveToDatabase otherwise skips while isLoading — without this, Drive links never persist.
+            void saveToDatabase({ skipLoadingGuard: true });
         };
 
         const handleClear = () => {
             applyMdrDriveUrl(year, monthIndex, '');
             setDriveLinkModal(null);
+            void saveToDatabase({ skipLoadingGuard: true });
         };
 
         return (
