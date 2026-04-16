@@ -49,6 +49,12 @@ const VALID_PRODUCTION_ORDER_STATUSES = new Set([
   'cancelled'
 ])
 
+function httpError(status, message) {
+  const err = new Error(message)
+  err.httpStatus = status
+  return err
+}
+
 function normalizeProductionOrderStatus(status, fallback = 'requested') {
   if (status === undefined || status === null || String(status).trim() === '') return fallback
   const normalized = String(status).trim().toLowerCase().replace(/\s+/g, '_')
@@ -1202,7 +1208,7 @@ async function handler(req, res) {
           let movementQuantity = qty
           // Adjust per type
           if (type === 'receipt') {
-            if (!body.toLocationId) return badRequest(res, 'toLocationId required for receipt')
+            if (!body.toLocationId) throw httpError(400, 'toLocationId required for receipt')
             const toLi = await upsertLocationSku(body.toLocationId)
             const newQtyTo = (toLi.quantity || 0) + qty
             await tx.locationInventory.update({ where: { id: toLi.id }, data: {
@@ -1229,7 +1235,9 @@ async function handler(req, res) {
           }
 
           if (type === 'transfer') {
-            if (!body.fromLocationId || !body.toLocationId) return badRequest(res, 'fromLocationId and toLocationId required for transfer')
+            if (!body.fromLocationId || !body.toLocationId) {
+              throw httpError(400, 'fromLocationId and toLocationId required for transfer')
+            }
             const fromLi = await upsertLocationSku(body.fromLocationId)
             if ((fromLi.quantity || 0) < qty) throw new Error('Insufficient stock at source location')
             const toLi = await upsertLocationSku(body.toLocationId)
@@ -1264,7 +1272,12 @@ async function handler(req, res) {
                 toStr: body.toLocation
               })
             }
-            if (!locationId) return badRequest(res, 'locationId required for sale/adjustment (create a stock location if none exist)')
+            if (!locationId) {
+              throw httpError(
+                400,
+                'locationId required for sale/adjustment (create a stock location if none exist)'
+              )
+            }
             const fromLi = await upsertLocationSku(locationId)
             // For adjustments, use quantity directly (can be positive or negative)
             // For sales, always make it negative
@@ -1324,6 +1337,7 @@ async function handler(req, res) {
       } catch (e) {
         const msg = e?.message || 'Failed to process stock transaction'
         console.error('❌ Stock transaction error:', e)
+        if (e?.httpStatus === 400) return badRequest(res, msg)
         return serverError(res, msg, msg)
       }
     }
@@ -4020,6 +4034,42 @@ async function handler(req, res) {
                   
                   if (!inventoryItem) continue
                   
+                  async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
+                    if (!locationId) return null
+
+                    let li = await tx.locationInventory.findUnique({
+                      where: { locationId_sku: { locationId, sku } }
+                    })
+
+                    if (!li) {
+                      li = await tx.locationInventory.create({
+                        data: {
+                          locationId,
+                          sku,
+                          itemName,
+                          quantity: 0,
+                          unitCost: unitCost || 0,
+                          reorderPoint: reorderPoint || 0,
+                          status: 'out_of_stock'
+                        }
+                      })
+                    }
+
+                    const newQty = (li.quantity || 0) + quantityDelta
+                    const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
+                    return await tx.locationInventory.update({
+                      where: { id: li.id },
+                      data: {
+                        quantity: newQty,
+                        unitCost: unitCost !== undefined ? unitCost : li.unitCost,
+                        reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
+                        status,
+                        itemName: itemName || li.itemName,
+                        lastRestocked: quantityDelta > 0 ? now : li.lastRestocked
+                      }
+                    })
+                  }
+
                   const updateData = {}
                   
                   if (orderToDelete.status === 'in_production') {
@@ -4040,11 +4090,34 @@ async function handler(req, res) {
                       where: { id: inventoryItem.id },
                       data: updateData
                     })
+
+                    if (orderToDelete.status === 'in_production') {
+                      let locationId = inventoryItem.locationId || null
+                      if (!locationId) {
+                        const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
+                        locationId = mainWarehouse?.id || null
+                      }
+                      if (locationId) {
+                        await upsertLocationInventory(
+                          locationId,
+                          component.sku,
+                          component.name || component.sku,
+                          returnQty,
+                          inventoryItem.unitCost || 0,
+                          inventoryItem.reorderPoint || 0
+                        )
+                      }
+                    }
                     
                     // Update status
                     const updated = await tx.inventoryItem.findFirst({ where: { sku: component.sku } })
                     if (updated) {
-                      const newQty = updated.quantity
+                      const totalAtLocations = await tx.locationInventory.aggregate({
+                        _sum: { quantity: true },
+                        where: { sku: component.sku }
+                      })
+                      const aggQty = totalAtLocations._sum.quantity || 0
+                      const newQty = aggQty
                       const newAllocatedQty = updated.allocatedQuantity || 0
                       const availableQty = newQty - newAllocatedQty
                       const reorderPoint = updated.reorderPoint || 0
@@ -4053,6 +4126,7 @@ async function handler(req, res) {
                       await tx.inventoryItem.update({
                         where: { id: updated.id },
                         data: {
+                          quantity: newQty,
                           totalValue: computedInventoryTotalValue(newQty, updated.unitCost),
                           status: status
                         }
@@ -4819,11 +4893,104 @@ async function handler(req, res) {
     // DELETE ONE (DELETE /api/manufacturing/stock-movements/:id)
     if (req.method === 'DELETE' && id) {
       try {
-        await prisma.stockMovement.delete({ where: { id } })
+        await prisma.$transaction(async (tx) => {
+          const movement = await tx.stockMovement.findUnique({ where: { id } })
+          if (!movement) throw httpError(404, 'Stock movement not found')
+
+          const reverseQty = -1 * (parseFloat(movement.quantity) || 0)
+          const sku = movement.sku
+          const itemName = movement.itemName
+          const now = new Date()
+          const movementSeq = { n: await nextMovementSeqStartTx(tx) }
+
+          const master = await findCanonicalInventoryItemBySkuTx(tx, sku)
+          const locationId = await resolveAdjustmentLocationIdTx(tx, {
+            fromLocationId: movement.fromLocation || null,
+            toLocationId: movement.toLocation || null,
+            itemLocationId: master?.locationId || null,
+            fromStr: movement.fromLocation || '',
+            toStr: movement.toLocation || ''
+          })
+
+          if (!locationId) {
+            throw httpError(400, 'No stock location configured. Cannot safely reverse this movement.')
+          }
+
+          let li = await tx.locationInventory.findUnique({
+            where: { locationId_sku: { locationId, sku } }
+          })
+          if (!li) {
+            li = await tx.locationInventory.create({
+              data: {
+                locationId,
+                sku,
+                itemName: itemName || sku,
+                quantity: 0,
+                unitCost: master?.unitCost || 0,
+                reorderPoint: master?.reorderPoint || 0,
+                status: 'out_of_stock'
+              }
+            })
+          }
+
+          const newLocQty = (li.quantity || 0) + reverseQty
+          if (newLocQty < 0) {
+            throw httpError(
+              400,
+              `Cannot delete movement ${movement.movementId || id}: reversal would make stock negative at location`
+            )
+          }
+
+          await tx.locationInventory.update({
+            where: { id: li.id },
+            data: {
+              quantity: newLocQty,
+              status: getStatusFromQuantity(newLocQty, li.reorderPoint || 0),
+              lastRestocked: reverseQty > 0 ? now : li.lastRestocked
+            }
+          })
+
+          if (master) {
+            const totalAtLocations = await tx.locationInventory.aggregate({
+              _sum: { quantity: true },
+              where: { sku }
+            })
+            const aggQty = totalAtLocations._sum.quantity || 0
+            await tx.inventoryItem.update({
+              where: { id: master.id },
+              data: {
+                quantity: aggQty,
+                totalValue: computedInventoryTotalValue(aggQty, master.unitCost || 0),
+                status: getStatusFromQuantity(aggQty, master.reorderPoint || 0)
+              }
+            })
+          }
+
+          await tx.stockMovement.create({
+            data: {
+              movementId: `MOV${String(movementSeq.n).padStart(4, '0')}`,
+              date: now,
+              type: 'adjustment',
+              itemName: movement.itemName,
+              sku: movement.sku,
+              quantity: reverseQty,
+              fromLocation: movement.fromLocation || '',
+              toLocation: movement.toLocation || '',
+              reference: movement.reference || '',
+              performedBy: req.user?.name || 'System',
+              notes: `Auto-reversal for deleted movement ${movement.movementId || id}`,
+              ownerId: null
+            }
+          })
+
+          await tx.stockMovement.delete({ where: { id } })
+        })
         auditManufacturing('delete', 'stock-movements', id, { summary: `Deleted stock movement ${id}` })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete stock movement:', error)
+        if (error?.httpStatus === 404) return notFound(res, error.message || 'Stock movement not found')
+        if (error?.httpStatus === 400) return badRequest(res, error.message || 'Invalid stock movement reversal')
         if (error.code === 'P2025') {
           return notFound(res, 'Stock movement not found')
         }
