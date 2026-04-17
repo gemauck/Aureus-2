@@ -474,13 +474,14 @@ const SearchableSelect = ({
   const renderDropdown = () => {
     if (!open || disabled) return null;
 
-    const menuShellClass = 'rounded-lg border border-gray-200 bg-white shadow-lg';
+    const menuShellClass =
+      'job-card-public-select-menu rounded-lg border border-gray-200 bg-white shadow-lg';
 
     if (listOptions.length === 0) {
       return (
         <div
           ref={menuRef}
-          className={`${menuShellClass} fixed z-[10050] px-3 py-2 text-sm text-gray-500`}
+          className={`${menuShellClass} fixed z-[10050] px-3 py-2 text-sm text-gray-500 job-card-public-select-menu-empty`}
           style={menuFixedStyle || undefined}
         >
           No options available
@@ -492,7 +493,7 @@ const SearchableSelect = ({
       return (
         <div
           ref={menuRef}
-          className={`${menuShellClass} fixed z-[10050] px-3 py-2 text-sm text-gray-500`}
+          className={`${menuShellClass} fixed z-[10050] px-3 py-2 text-sm text-gray-500 job-card-public-select-menu-empty`}
           style={menuFixedStyle || undefined}
         >
           No matches
@@ -612,7 +613,7 @@ const SearchableSelect = ({
               id={listId}
               role="listbox"
               ref={menuRef}
-              className="absolute z-[60] mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+              className="job-card-public-select-menu absolute z-[60] mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
             >
               {filtered.map(opt => {
                 const isOptSelected = String(opt.value) === String(value);
@@ -642,7 +643,7 @@ const SearchableSelect = ({
           {open && !disabled && listOptions.length === 0 && (
             <div
               ref={menuRef}
-              className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg"
+              className="job-card-public-select-menu job-card-public-select-menu-empty absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg"
             >
               No options available
             </div>
@@ -650,7 +651,7 @@ const SearchableSelect = ({
           {open && !disabled && listOptions.length > 0 && filtered.length === 0 && (
             <div
               ref={menuRef}
-              className="absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg"
+              className="job-card-public-select-menu job-card-public-select-menu-empty absolute z-[60] mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 shadow-lg"
             >
               No matches
             </div>

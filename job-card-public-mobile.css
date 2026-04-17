@@ -739,3 +739,42 @@ body.job-card-public .job-card-public-wrapper button.bg-blue-600:focus-visible,
 body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600']:focus-visible {
   -webkit-text-fill-color: #ffffff !important;
 }
+
+/* --------------------------------------------------------------------------
+   SearchableSelect lists are portaled to document.body (outside the wrapper).
+   Global .dark rules remap .bg-white / .text-gray-* with !important, which can
+   make option rows effectively invisible. Force a light “paper” menu surface.
+   -------------------------------------------------------------------------- */
+body.job-card-public .job-card-public-select-menu {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border-color: #e5e7eb !important;
+  -webkit-text-fill-color: #111827 !important;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.08),
+    0 4px 6px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.job-card-public .job-card-public-select-menu.job-card-public-select-menu-empty {
+  color: #6b7280 !important;
+  -webkit-text-fill-color: #6b7280 !important;
+}
+
+body.job-card-public .job-card-public-select-menu [role='option'] {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background-color: transparent !important;
+}
+
+body.job-card-public .job-card-public-select-menu [role='option'][aria-selected='true'] {
+  background-color: #dbeafe !important;
+  color: #1e3a8a !important;
+  -webkit-text-fill-color: #1e3a8a !important;
+}
+
+@media (hover: hover) {
+  body.job-card-public .job-card-public-select-menu [role='option']:hover {
+    background-color: #eff6ff !important;
+  }
+}
