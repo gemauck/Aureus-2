@@ -75,7 +75,8 @@
   }
 
   /* Fixed Header — override global mobile-responsive.css (56px ERP shell header).
-     Use flex column (not plain block) so inner rows + horizontal step scroller layout correctly. */
+     Use flex column (not plain block) so inner rows + horizontal step scroller layout correctly.
+     Wizard ribbon stays at top of the fixed shell; only .job-card-scrollable-content scrolls below. */
   body.job-card-public .job-card-public-wrapper > header {
     flex-shrink: 0 !important;
     position: relative !important;
@@ -95,6 +96,12 @@
     align-items: stretch !important;
     justify-content: flex-start !important;
     gap: 0 !important;
+    isolation: isolate !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper > header.job-card-mobile-wizard-ribbon {
+    z-index: 30 !important;
+    flex-shrink: 0 !important;
   }
 
   /* Scrollable Content Area - MUST BE VISIBLE */
@@ -311,12 +318,6 @@
     padding: 2px 6px !important;
     font-size: 8px !important;
     line-height: 1.2 !important;
-  }
-
-  body.job-card-public .job-card-public-wrapper > header .job-card-header-collapsed button {
-    min-height: 28px !important;
-    min-width: 28px !important;
-    padding: 0 !important;
   }
 
   /* Keep primary actions readable on tap (WebKit / sticky-hover quirks on phones) */
