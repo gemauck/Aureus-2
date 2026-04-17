@@ -674,6 +674,51 @@ function removeLocalPendingJobCard(id) {
   writeLocalPendingJobCards(readLocalPendingJobCards().filter(c => c && String(c.id) !== sid));
 }
 
+/** Searchable text for unsynced local drafts (mirrors server `q` coverage as far as stored fields allow). */
+function priorListLocalSearchHay(jc) {
+  if (!jc || typeof jc !== 'object') return '';
+  const asJson = v => {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return '';
+    }
+  };
+  const parts = [
+    jc.id,
+    jc.jobCardNumber,
+    jc.clientId,
+    jc.clientName,
+    jc.siteId,
+    jc.siteName,
+    jc.agentName,
+    jc.location,
+    jc.locationLatitude,
+    jc.locationLongitude,
+    jc.latitude,
+    jc.longitude,
+    jc.vehicleUsed,
+    jc.reasonForVisit,
+    jc.diagnosis,
+    jc.futureWorkRequired,
+    jc.actionsTaken,
+    jc.otherComments,
+    jc.status,
+    asJson(jc.otherTechnicians),
+    asJson(jc.stockUsed),
+    asJson(jc.materialsBought),
+    asJson(jc.photos),
+    asJson(jc.serviceForms)
+  ];
+  return parts
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
 /** Merge server/public API rows with unsynced local copies (local wins on id collision). */
 function buildMergedWizardJobCardRows(serverList) {
   const token = typeof window !== 'undefined' ? getJobCardAuthToken() : null;
@@ -1511,18 +1556,7 @@ const JobCardFormPublic = () => {
       if (!isLocalPending) return true;
       if (priorClientId && String(jc.clientId || '') !== priorClientId) return false;
       if (!priorSearchDebounced) return true;
-      const hay = [
-        jc.jobCardNumber,
-        jc.clientName,
-        jc.agentName,
-        jc.siteName,
-        jc.reasonForVisit,
-        jc.diagnosis
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(q);
+      return priorListLocalSearchHay(jc).includes(q);
     });
   }, [wizardFlow, serverPriorList, localDraftsTick, priorSearchDebounced, priorClientId]);
 
@@ -4428,7 +4462,7 @@ const JobCardFormPublic = () => {
                   id="jobcard-prior-search"
                   type="search"
                   autoComplete="off"
-                  placeholder="Job number, client, site, technician, notes…"
+                  placeholder="Search everything: client, site, notes, stock, materials, vehicle…"
                   value={priorSearchInput}
                   onChange={e => setPriorSearchInput(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
@@ -4485,9 +4519,9 @@ const JobCardFormPublic = () => {
                       timeStyle: 'short'
                     })
                   : '';
-                const title =
-                  jc.jobCardNumber ||
-                  (jc.clientName ? `${jc.clientName}` : 'Job card draft');
+                const num = jc.jobCardNumber || (jc.clientName ? 'Job card' : 'Job card draft');
+                const clientLine = (jc.clientName && String(jc.clientName).trim()) || '—';
+                const siteLine = (jc.siteName && String(jc.siteName).trim()) || '—';
                 const isLocalPending = jc.source === 'local' || jc.synced === false;
                 return (
                   <li key={`${jc.source || 'local'}-${String(jc.id)}`}>
@@ -4498,9 +4532,21 @@ const JobCardFormPublic = () => {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-gray-900 truncate">{title}</p>
-                          <p className="text-sm text-gray-600 mt-1 truncate">
-                            {[jc.agentName, jc.siteName].filter(Boolean).join(' · ') || 'No site'}
+                          <p className="font-semibold text-gray-900 truncate">{num}</p>
+                          <p className="text-sm text-gray-700 mt-1.5 leading-snug">
+                            <span className="text-gray-500">Client</span>{' '}
+                            <span className="text-gray-900">{clientLine}</span>
+                          </p>
+                          <p className="text-sm text-gray-700 mt-0.5 leading-snug">
+                            <span className="text-gray-500">Site</span>{' '}
+                            <span className="text-gray-900">{siteLine}</span>
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1.5 truncate">
+                            {jc.agentName ? (
+                              <span>{jc.agentName}</span>
+                            ) : (
+                              <span className="text-gray-400">Technician not set</span>
+                            )}
                           </p>
                           {whenLabel && (
                             <p className="text-xs text-gray-500 mt-2">{whenLabel}</p>

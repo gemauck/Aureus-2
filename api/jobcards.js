@@ -164,14 +164,29 @@ async function handler(req, res) {
 
         let whereClause = {}
         if (searchQ) {
+          // Match any substantive text on the job card (string columns + JSON-as-text fields)
           const searchOr = {
             OR: [
               { jobCardNumber: { contains: searchQ, mode: 'insensitive' } },
+              { status: { contains: searchQ, mode: 'insensitive' } },
               { agentName: { contains: searchQ, mode: 'insensitive' } },
+              { otherTechnicians: { contains: searchQ, mode: 'insensitive' } },
+              { clientId: { contains: searchQ, mode: 'insensitive' } },
               { clientName: { contains: searchQ, mode: 'insensitive' } },
+              { siteId: { contains: searchQ, mode: 'insensitive' } },
               { siteName: { contains: searchQ, mode: 'insensitive' } },
+              { location: { contains: searchQ, mode: 'insensitive' } },
+              { locationLatitude: { contains: searchQ, mode: 'insensitive' } },
+              { locationLongitude: { contains: searchQ, mode: 'insensitive' } },
+              { vehicleUsed: { contains: searchQ, mode: 'insensitive' } },
               { reasonForVisit: { contains: searchQ, mode: 'insensitive' } },
-              { diagnosis: { contains: searchQ, mode: 'insensitive' } }
+              { diagnosis: { contains: searchQ, mode: 'insensitive' } },
+              { futureWorkRequired: { contains: searchQ, mode: 'insensitive' } },
+              { actionsTaken: { contains: searchQ, mode: 'insensitive' } },
+              { otherComments: { contains: searchQ, mode: 'insensitive' } },
+              { photos: { contains: searchQ, mode: 'insensitive' } },
+              { materialsBought: { contains: searchQ, mode: 'insensitive' } },
+              { stockUsed: { contains: searchQ, mode: 'insensitive' } }
             ]
           }
           if (Object.keys(baseFilters).length === 0) {
