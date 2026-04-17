@@ -506,9 +506,9 @@ const SearchableSelect = ({
           aria-expanded={open}
           aria-autocomplete="list"
           aria-controls={listId}
-          disabled={disabled}
-          required={required}
+          aria-required={required}
           aria-label={ariaLabel}
+          disabled={disabled}
           autoComplete="off"
           value={open ? filter : (selected ? selected.label : '')}
           onChange={e => {
@@ -518,18 +518,38 @@ const SearchableSelect = ({
           }}
           onFocus={() => {
             setOpen(true);
-            setFilter(selected ? selected.label : '');
+            // When opening from a closed list, clear the query so all options show (previously
+            // we prefilled the filter with the selected label, which hid every other row).
+            if (!open) {
+              setFilter('');
+            }
           }}
           placeholder={placeholder}
           className="w-full pl-4 pr-11 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed touch-manipulation"
           style={{ fontSize: '16px' }}
         />
-        <span
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-          aria-hidden
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          aria-label={open ? 'Close list' : 'Open list'}
+          className="absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 active:bg-gray-200 touch-manipulation"
+          onMouseDown={e => {
+            e.preventDefault();
+          }}
+          onClick={() => {
+            if (disabled) return;
+            if (open) {
+              setOpen(false);
+            } else {
+              setFilter('');
+              setOpen(true);
+              inputRef.current?.focus();
+            }
+          }}
         >
-          <i className="fas fa-chevron-down text-sm" />
-        </span>
+          <i className={`fas fa-chevron-down text-sm transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+        </button>
       </div>
       {canPortal ? (
         portaledDropdown
