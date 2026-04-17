@@ -81,6 +81,46 @@ async function insertJobCardActivity(prismaClient, { jobCardId, req, action, met
   }
 }
 
+/**
+ * Ensures at least one JobCardActivity row exists (legacy cards or edge cases with no events).
+ */
+async function ensureMinimumJobCardActivity(prismaClient, jobCardId) {
+  return prismaClient.$transaction(async tx => {
+    const n = await tx.jobCardActivity.count({ where: { jobCardId } })
+    if (n > 0) return
+
+    const jc = await tx.jobCard.findUnique({ where: { id: jobCardId } })
+    if (!jc) return
+
+    let actorName = ''
+    const aid = jc.ownerId
+    if (aid) {
+      const u = await tx.user.findUnique({
+        where: { id: String(aid) },
+        select: { name: true, email: true }
+      })
+      if (u) {
+        actorName = u.name && String(u.name).trim() ? u.name.trim() : u.email || ''
+      }
+    }
+
+    await tx.jobCardActivity.create({
+      data: {
+        jobCardId,
+        actorUserId: aid ? String(aid) : null,
+        actorName: actorName || (aid ? 'User' : '—'),
+        action: 'baseline_record',
+        source: 'system',
+        metadata: {
+          note:
+            'Baseline entry for this job card (no detailed activity was stored earlier, or the card predates activity logging).'
+        },
+        createdAt: jc.createdAt || new Date()
+      }
+    })
+  })
+}
+
 async function computeNextJobCardNumber() {
   const lastJobCard = await prisma.jobCard.findFirst({
     orderBy: { createdAt: 'desc' },
@@ -813,6 +853,8 @@ async function handler(req, res) {
         if (!jc) {
           return notFound(res, 'Job card not found')
         }
+
+        await ensureMinimumJobCardActivity(prisma, id)
 
         const rows = await prisma.jobCardActivity.findMany({
           where: { jobCardId: id },
