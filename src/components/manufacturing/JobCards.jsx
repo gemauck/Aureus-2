@@ -1173,16 +1173,46 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   </div>
 
-                  {(selectedJobCard.completedByName || selectedJobCard.completedByUserId) && (
-                    <div className="mt-4 border-t border-slate-800 pt-4">
-                      <div className="text-[11px] font-semibold uppercase text-slate-400">
-                        Completed by (ERP account)
-                      </div>
-                      <div className="mt-1 text-sm text-slate-100">
-                        {selectedJobCard.completedByName ||
-                          selectedJobCard.completedByUserId ||
-                          '—'}
-                      </div>
+                  {(selectedJobCard.recordedByName ||
+                    selectedJobCard.recordedByEmail ||
+                    selectedJobCard.ownerId ||
+                    selectedJobCard.completedByName ||
+                    selectedJobCard.completedByUserId) && (
+                    <div className="mt-4 border-t border-slate-800 pt-4 grid gap-4 sm:grid-cols-2 text-sm text-slate-100">
+                      {(selectedJobCard.recordedByName ||
+                        selectedJobCard.recordedByEmail ||
+                        selectedJobCard.ownerId) && (
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase text-slate-400">
+                            Recorded by (ERP account)
+                          </div>
+                          <div className="mt-1">
+                            {selectedJobCard.recordedByName ||
+                              selectedJobCard.recordedByEmail ||
+                              (selectedJobCard.ownerId
+                                ? `User id ${String(selectedJobCard.ownerId).slice(0, 10)}…`
+                                : '—')}
+                          </div>
+                          <p className="mt-1 text-[11px] text-slate-500 leading-snug">
+                            The signed-in user who created or owns this card in the system (not the on-site technician).
+                          </p>
+                        </div>
+                      )}
+                      {(selectedJobCard.completedByName || selectedJobCard.completedByUserId) && (
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase text-slate-400">
+                            Sign-off (ERP account)
+                          </div>
+                          <div className="mt-1">
+                            {selectedJobCard.completedByName ||
+                              selectedJobCard.completedByUserId ||
+                              '—'}
+                          </div>
+                          <p className="mt-1 text-[11px] text-slate-500 leading-snug">
+                            Set when the card is submitted or completed in the app.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 

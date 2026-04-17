@@ -96,6 +96,21 @@ function getJobCardAuthToken() {
   }
 }
 
+/** Logged-in ERP user — this name is stored on the server as job card owner / captured-by identity. */
+function getJobCardRecorderDisplayName() {
+  try {
+    const u = typeof window !== 'undefined' && window.storage?.getUser?.();
+    if (!u || typeof u !== 'object') return '';
+    const name = u.name || u.displayName;
+    const email = u.email;
+    if (name && String(name).trim()) return String(name).trim();
+    if (email && String(email).trim()) return String(email).trim();
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 function goToSignInForJobCardHistory() {
   try {
     sessionStorage.setItem(REDIRECT_AFTER_LOGIN_KEY, '/job-card');
@@ -3043,20 +3058,10 @@ const JobCardFormPublic = () => {
 
       if (serverReachOk) {
         removeLocalPendingJobCard(jobCardData.id);
-        const token = getJobCardAuthToken();
-        if (token && typeof window !== 'undefined') {
-          const openMain = window.confirm(
-            'Job card saved to the server.\n\nOpen Service & Maintenance (Job Cards list) now?'
-          );
-          if (openMain) {
-            setIsSubmitting(false);
-            window.location.assign('/service-maintenance');
-            return;
-          }
-        } else {
-          alert(
-            '✅ Job card saved to the server. Sign in to the main app and open Service & Maintenance → Job Cards to view it.'
-          );
+        try {
+          alert('Job card saved.');
+        } catch {
+          /* ignore */
         }
       } else {
         const q = [...(jobCardData.activityQueue || [])];
@@ -4273,6 +4278,10 @@ const JobCardFormPublic = () => {
         <div className="space-y-3">
           <SummaryRow label="Technician" value={formData.agentName} />
           <SummaryRow
+            label="Recorded as (ERP account)"
+            value={getJobCardRecorderDisplayName() || '—'}
+          />
+          <SummaryRow
             label="Project"
             value={
               formData.projectName ||
@@ -4746,6 +4755,15 @@ const JobCardFormPublic = () => {
               {editingMeta.synced ? ' (already submitted)' : ''}
             </p>
           )}
+          {getJobCardRecorderDisplayName() ? (
+            <p className="text-[11px] text-white/95 mt-2 rounded-lg bg-black/15 px-2 py-1.5 border border-white/10">
+              <span className="font-semibold text-white/80">You are signed in as</span>{' '}
+              {getJobCardRecorderDisplayName()}
+              <span className="block text-[10px] text-white/70 mt-0.5 font-normal">
+                This is who will appear as &quot;Recorded by&quot; on the job card in the ERP.
+              </span>
+            </p>
+          ) : null}
           <p className="text-xs text-white/80 mt-2">
             Capture job cards in minutes with a guided, offline-friendly flow.
           </p>
@@ -4913,6 +4931,15 @@ const JobCardFormPublic = () => {
                         {editingMeta.synced ? ' · submitted' : ''}
                       </p>
                     )}
+                    {getJobCardRecorderDisplayName() ? (
+                      <p
+                        className="text-[9px] sm:text-[10px] text-white/95 mt-0.5 truncate max-w-[85vw]"
+                        title={`Recorded in ERP as ${getJobCardRecorderDisplayName()}`}
+                      >
+                        <span className="text-white/65 font-semibold">ERP account</span>{' '}
+                        {getJobCardRecorderDisplayName()}
+                      </p>
+                    ) : null}
                     <p className="text-xs sm:text-sm text-white/80 mt-1 hidden sm:block">
                       Capture job cards in minutes with a guided, offline-friendly flow.
                     </p>

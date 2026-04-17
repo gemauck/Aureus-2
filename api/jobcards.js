@@ -347,10 +347,31 @@ async function handler(req, res) {
         // Never send SafetyCulture import blob to the job card editor — it can be megabytes and
         // blocks JSON parse / React hydration on mobile.
         const { safetyCultureSnapshotJson: _omitSafetyCultureBlob, ...jobCard } = row
-        
+
+        let recordedByName = ''
+        let recordedByEmail = ''
+        if (jobCard.ownerId) {
+          try {
+            const ownerUser = await prisma.user.findUnique({
+              where: { id: String(jobCard.ownerId) },
+              select: { name: true, email: true }
+            })
+            if (ownerUser) {
+              recordedByName = (ownerUser.name && String(ownerUser.name).trim())
+                ? ownerUser.name.trim()
+                : (ownerUser.email || '')
+              recordedByEmail = ownerUser.email || ''
+            }
+          } catch {
+            /* non-fatal */
+          }
+        }
+
         return ok(res, { 
           jobCard: {
             ...jobCard,
+            recordedByName,
+            recordedByEmail,
             otherTechnicians: parseJson(jobCard.otherTechnicians),
             photos: parseJson(jobCard.photos),
             stockUsed: parseJson(jobCard.stockUsed || '[]'),
