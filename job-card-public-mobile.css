@@ -655,3 +655,26 @@ body.job-card-public .job-card-prior-list button[type="button"] {
   touch-action: manipulation;
   cursor: pointer;
 }
+
+/* --------------------------------------------------------------------------
+   Wizard chrome (mobile header + desktop sidebar): solid blue + gradient
+   so step labels stay readable if Tailwind gradient fails or theme clashes.
+   -------------------------------------------------------------------------- */
+body.job-card-public .job-card-public-wrapper > header,
+body.job-card-public .job-card-public-wrapper > aside {
+  background-color: #1d4ed8 !important;
+  background-image: linear-gradient(to bottom right, #2563eb, #1d4ed8, #1e3a8a) !important;
+  color: #ffffff !important;
+}
+
+body.job-card-public .job-card-public-wrapper > header .jobcard-app-title,
+body.job-card-public .job-card-public-wrapper > aside .jobcard-app-title {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html.dark body.job-card-public .job-card-public-wrapper > header,
+html.dark body.job-card-public .job-card-public-wrapper > aside {
+  background-color: #1e40af !important;
+  background-image: linear-gradient(to bottom right, #2563eb, #1d4ed8, #172554) !important;
+}
