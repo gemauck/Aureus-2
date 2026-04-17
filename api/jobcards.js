@@ -277,13 +277,17 @@ async function handler(req, res) {
     // GET ONE (GET /api/jobcards/:id)
     if (req.method === 'GET' && id) {
       try {
-        const jobCard = await prisma.jobCard.findUnique({
+        const row = await prisma.jobCard.findUnique({
           where: { id }
         })
         
-        if (!jobCard) {
+        if (!row) {
           return notFound(res, 'Job card not found')
         }
+
+        // Never send SafetyCulture import blob to the job card editor — it can be megabytes and
+        // blocks JSON parse / React hydration on mobile.
+        const { safetyCultureSnapshotJson: _omitSafetyCultureBlob, ...jobCard } = row
         
         return ok(res, { 
           jobCard: {

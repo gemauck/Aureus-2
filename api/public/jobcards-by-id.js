@@ -27,15 +27,18 @@ async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const jobCard = await prisma.jobCard.findUnique({
+      const row = await prisma.jobCard.findUnique({
         where: { id }
       })
-      if (!jobCard) {
+      if (!row) {
         return notFound(res, 'Job card not found')
       }
-      if (jobCard.ownerId) {
+      if (row.ownerId) {
         return notFound(res, 'Job card not found')
       }
+
+      const { safetyCultureSnapshotJson: _omitSafetyCultureBlob, ...jobCard } = row
+
       return ok(res, {
         jobCard: {
           ...jobCard,

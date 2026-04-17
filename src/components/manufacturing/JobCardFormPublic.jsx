@@ -819,6 +819,8 @@ const JobCardFormPublic = () => {
   /** Prior list: server + public API; merged with readLocalPendingJobCards() for display */
   const [serverPriorList, setServerPriorList] = useState([]);
   const [serverPriorLoading, setServerPriorLoading] = useState(false);
+  /** Full-screen overlay while fetching job card detail for edit (large payloads). */
+  const [openingJobCard, setOpeningJobCard] = useState(false);
   /** Prior list: server search + client filter (authenticated) */
   const [priorSearchInput, setPriorSearchInput] = useState('');
   const [priorSearchDebounced, setPriorSearchDebounced] = useState('');
@@ -1469,7 +1471,11 @@ const JobCardFormPublic = () => {
   const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
 
   useEffect(() => {
-    if (wizardFlow !== 'prior_list' && wizardFlow !== 'landing') return;
+    // Only load while viewing the list. A separate fetch on `landing` (no `q`) could finish after a
+    // filtered `prior_list` request and overwrite results — that made search appear broken.
+    if (wizardFlow !== 'prior_list') return;
+
+    const controller = new AbortController();
     let cancelled = false;
     const token = getJobCardAuthToken();
 
@@ -1483,25 +1489,25 @@ const JobCardFormPublic = () => {
             sortField: 'updatedAt',
             sortDirection: 'desc'
           });
-          if (wizardFlow === 'prior_list') {
-            if (priorSearchDebounced) params.set('q', priorSearchDebounced);
-            if (priorClientId) params.set('clientId', priorClientId);
-          }
+          if (priorSearchDebounced) params.set('q', priorSearchDebounced);
+          if (priorClientId) params.set('clientId', priorClientId);
 
           const r = await fetch(`/api/jobcards?${params.toString()}`, {
             headers: {
               Authorization: `Bearer ${token}`,
               'Content-Type': 'application/json'
-            }
+            },
+            signal: controller.signal
           });
           if (!r.ok) {
             if (!cancelled) setServerPriorList([]);
             return;
           }
           const raw = await r.json();
-          const list = raw.jobCards || raw.data?.jobCards || [];
+          const list = raw?.data?.jobCards ?? raw?.jobCards ?? [];
           if (!cancelled) setServerPriorList(Array.isArray(list) ? list : []);
-        } catch {
+        } catch (e) {
+          if (e?.name === 'AbortError') return;
           if (!cancelled) setServerPriorList([]);
         } finally {
           if (!cancelled) setServerPriorLoading(false);
@@ -1520,7 +1526,8 @@ const JobCardFormPublic = () => {
       try {
         const q = encodeURIComponent(ids.join(','));
         const r = await fetch(`/api/public/jobcards?ids=${q}`, {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal
         });
         if (!r.ok) {
           if (!cancelled) {
@@ -1530,9 +1537,10 @@ const JobCardFormPublic = () => {
           return;
         }
         const raw = await r.json();
-        const list = raw.jobCards || raw.data?.jobCards || [];
+        const list = raw?.data?.jobCards ?? raw?.jobCards ?? [];
         if (!cancelled) setServerPriorList(Array.isArray(list) ? list : []);
-      } catch {
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
         if (!cancelled) setServerPriorList([]);
       } finally {
         if (!cancelled) setServerPriorLoading(false);
@@ -1541,19 +1549,17 @@ const JobCardFormPublic = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [wizardFlow, priorSearchDebounced, priorClientId, priorListRefreshTick]);
 
   const mergedPriorJobCards = useMemo(() => {
     if (wizardFlow !== 'prior_list') return [];
     const rows = buildMergedWizardJobCardRows(serverPriorList);
-    const token = getJobCardAuthToken();
-    if (!token || (!priorSearchDebounced && !priorClientId)) return rows;
+    if (!priorSearchDebounced && !priorClientId) return rows;
 
     const q = priorSearchDebounced.toLowerCase();
     return rows.filter(jc => {
-      const isLocalPending = jc.source === 'local' || jc.synced === false;
-      if (!isLocalPending) return true;
       if (priorClientId && String(jc.clientId || '') !== priorClientId) return false;
       if (!priorSearchDebounced) return true;
       return priorListLocalSearchHay(jc).includes(q);
@@ -2524,7 +2530,9 @@ const JobCardFormPublic = () => {
     if (!card || card.id == null) return;
     lastSignatureRestoreRef.current = null;
     clearSignature();
+    setOpeningJobCard(true);
 
+    try {
     let full = card;
     const token = getJobCardAuthToken();
     if (token) {
@@ -2537,7 +2545,7 @@ const JobCardFormPublic = () => {
         });
         if (r.ok) {
           const data = await r.json();
-          const apiCard = data.jobCard || data.data?.jobCard;
+          const apiCard = data?.data?.jobCard ?? data?.jobCard;
           if (apiCard && apiCard.id) {
             full = apiCard;
           }
@@ -2552,7 +2560,7 @@ const JobCardFormPublic = () => {
         });
         if (r.ok) {
           const data = await r.json();
-          const apiCard = data.jobCard || data.data?.jobCard;
+          const apiCard = data?.data?.jobCard ?? data?.jobCard;
           if (apiCard && apiCard.id) {
             full = apiCard;
           }
@@ -2678,6 +2686,9 @@ const JobCardFormPublic = () => {
     setCurrentStep(0);
     setStepError('');
     setWizardFlow('form');
+    } finally {
+      setOpeningJobCard(false);
+    }
   };
 
   const handleSave = async () => {
@@ -2950,7 +2961,7 @@ const JobCardFormPublic = () => {
         setLocalDraftsTick(t => t + 1);
         const hint = lastSyncError ? `\n\nDetails: ${lastSyncError}` : '';
         alert(
-          `⚠️ Saved on this device only (not synced).${hint}\n\nCheck your connection or try again with smaller photos. Open “Edit prior job card” to resubmit.`
+          `⚠️ Saved on this device only (not synced).${hint}\n\nCheck your connection or try again with smaller photos. Open “View or Edit Existing Job Card” to resubmit.`
         );
       }
       setEditingMeta(null);
@@ -4350,7 +4361,7 @@ const JobCardFormPublic = () => {
                   <i className="fa-solid fa-clock-rotate-left text-xl" aria-hidden />
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="block font-semibold text-base sm:text-lg">Edit prior job card</span>
+                  <span className="block font-semibold text-base sm:text-lg">View or Edit Existing Job Card</span>
                   <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
                     Search and filter when signed in; includes drafts not synced on this device.
                   </span>
@@ -4418,7 +4429,7 @@ const JobCardFormPublic = () => {
 
   if (wizardFlow === 'prior_list') {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-100 to-gray-50">
+      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-100 to-gray-50 relative">
         <header className="flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-blue-500 text-white shadow-md px-4 py-4 sm:px-6">
           <button
             type="button"
@@ -4576,6 +4587,22 @@ const JobCardFormPublic = () => {
             </ul>
           )}
         </div>
+        {openingJobCard ? (
+          <div
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/45 px-6"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <div className="rounded-2xl bg-white px-8 py-7 shadow-2xl flex flex-col items-center gap-4 max-w-sm text-center">
+              <i className="fa-solid fa-circle-notch fa-spin text-3xl text-blue-600" aria-hidden />
+              <div>
+                <p className="font-semibold text-gray-900">Opening job card…</p>
+                <p className="text-sm text-gray-600 mt-1">Loading details and attachments</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
