@@ -956,9 +956,18 @@ async function handler(req, res) {
 
         await ensureMinimumJobCardActivity(prisma, id)
 
+        let orderDir = 'asc'
+        try {
+          const u = new URL(req.url, 'http://localhost')
+          const o = (u.searchParams.get('order') || 'asc').toLowerCase()
+          if (o === 'desc') orderDir = 'desc'
+        } catch {
+          /* default asc */
+        }
+
         const rows = await prisma.jobCardActivity.findMany({
           where: { jobCardId: id },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: orderDir },
           take: 500
         })
 
@@ -993,7 +1002,7 @@ async function handler(req, res) {
 
         const events = Array.isArray(body.events) ? body.events : []
         let n = 0
-        for (const ev of events.slice(0, 200)) {
+        for (const ev of events.slice(0, 300)) {
           if (!ev || typeof ev.action !== 'string' || !ev.action.trim()) continue
           await insertJobCardActivity(prisma, {
             jobCardId: id,

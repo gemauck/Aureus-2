@@ -591,19 +591,20 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   };
 
   const formatJobCardActivityAction = (action) => {
+    const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+    if (h && typeof h.formatJobCardActivityAction === 'function') {
+      return h.formatJobCardActivityAction(action);
+    }
     if (!action || typeof action !== 'string') return '—';
-    const labels = {
-      baseline_record: 'Baseline record',
-      created: 'Created',
-      updated: 'Updated',
-      status_changed: 'Status changed',
-      created_public: 'Created (public)',
-      imported_from_safety_culture_audit: 'Imported (SafetyCulture audit)',
-      imported_from_safety_culture_issue: 'Imported (SafetyCulture issue)',
-      service_form_attached: 'Service form attached',
-      service_form_updated: 'Service form updated'
-    };
-    return labels[action] ?? action;
+    return action;
+  };
+
+  const formatJobCardActivityDetailLine = (action, metadata) => {
+    const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+    if (h && typeof h.formatJobCardActivityDetail === 'function') {
+      return h.formatJobCardActivityDetail(action, metadata);
+    }
+    return '';
   };
 
   const handleRowClick = async (jobCard) => {
@@ -629,7 +630,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       const [cardResponse, formsResponse, activityResponse] = await Promise.all([
         fetch(`/api/jobcards/${jobCard.id}?omitPhotos=1`, { headers }),
         fetch(`/api/jobcards/${jobCard.id}/forms`, { headers }),
-        fetch(`/api/jobcards/${jobCard.id}/activity`, { headers }),
+        fetch(`/api/jobcards/${jobCard.id}/activity?order=asc`, { headers }),
       ]);
       let shouldLoadPhotos = false;
       if (cardResponse.ok) {
@@ -1344,6 +1345,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                           {a.actorName ? ` — ${a.actorName}` : ''}
                           {a.source ? (
                             <span className="text-slate-500 text-xs"> ({a.source})</span>
+                          ) : null}
+                          {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
+                            <div className="text-slate-500 text-xs mt-0.5 pl-0">
+                              {formatJobCardActivityDetailLine(a.action, a.metadata)}
+                            </div>
                           ) : null}
                         </li>
                       ))}

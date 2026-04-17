@@ -678,3 +678,64 @@ html.dark body.job-card-public .job-card-public-wrapper > aside {
   background-color: #1e40af !important;
   background-image: linear-gradient(to bottom right, #2563eb, #1d4ed8, #172554) !important;
 }
+
+/* --------------------------------------------------------------------------
+   Step carousel active chip: header uses text-white; light-mode button rules
+   in dark-mode-fixes.css use !important. Force dark labels on the light-blue
+   surface so "selected" is never white-on-white. Icon circle stays white on blue.
+   -------------------------------------------------------------------------- */
+body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button.job-card-step-chip[aria-current='step'],
+body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button[aria-current='step'] {
+  background-color: #eff6ff !important;
+  border: 2px solid #2563eb !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button[aria-current='step']:hover,
+body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button[aria-current='step']:focus-visible {
+  background-color: #dbeafe !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button[aria-current='step'] > div:last-child span {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button[aria-current='step'] > div:first-child {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button[aria-current='step'] > div:first-child i {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html[data-theme='light'] body.job-card-public .job-card-public-wrapper > header .mobile-step-scroll > button[aria-current='step']:hover {
+  background-color: #dbeafe !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+/* Primary blue actions: keep label visible on tap/hover/focus (global light button:hover uses gray) */
+body.job-card-public .job-card-public-wrapper button.bg-blue-600,
+body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600'] {
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+@media (hover: hover) {
+  body.job-card-public .job-card-public-wrapper button.bg-blue-600:hover,
+  body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600']:hover {
+    -webkit-text-fill-color: #ffffff !important;
+  }
+}
+
+body.job-card-public .job-card-public-wrapper button.bg-blue-600:active,
+body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600']:active,
+body.job-card-public .job-card-public-wrapper button.bg-blue-600:focus-visible,
+body.job-card-public .job-card-public-wrapper button[class*='bg-blue-600']:focus-visible {
+  -webkit-text-fill-color: #ffffff !important;
+}

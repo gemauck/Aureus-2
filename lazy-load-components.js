@@ -102,6 +102,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/manufacturing/locations/StockLocations.jsx',
         './src/components/manufacturing/ManufacturingMovementsView.jsx',
         './src/components/manufacturing/StockCountView.jsx',
+        './src/components/manufacturing/jobCardActivityDisplay.js',
         './src/components/manufacturing/JobCards.jsx',
         './src/components/manufacturing/PurchaseOrderFromDocumentWizard.jsx',
         './src/components/manufacturing/PurchaseOrderFromDocumentStandalone.jsx',

@@ -1,6 +1,7 @@
 // Public GET/PATCH for job cards created via /job-card (no auth; id acts as capability URL).
 // Prefer authenticated /api/jobcards/:id when the user has permission.
 import { prisma } from '../_lib/prisma.js'
+import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { ok, serverError, badRequest, notFound, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 
@@ -237,10 +238,35 @@ async function handler(req, res) {
       }
     }
 
+    const prevStatus = existing.status
+
     const updated = await prisma.jobCard.update({
       where: { id },
       data
     })
+
+    if (prevStatus !== updated.status) {
+      await insertJobCardActivityRecord(prisma, {
+        jobCardId: id,
+        actorUserId: null,
+        actorName: 'Public',
+        action: 'status_changed',
+        metadata: { from: prevStatus, to: updated.status },
+        source: 'public_api'
+      })
+    }
+
+    const fieldKeys = Object.keys(data)
+    if (fieldKeys.length > 0) {
+      await insertJobCardActivityRecord(prisma, {
+        jobCardId: id,
+        actorUserId: null,
+        actorName: 'Public',
+        action: 'updated',
+        metadata: { fields: fieldKeys, status: updated.status },
+        source: 'public_api'
+      })
+    }
 
     return ok(res, {
       jobCard: {

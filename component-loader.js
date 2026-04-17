@@ -193,7 +193,8 @@
         'components/manufacturing/PurchaseOrderFromDocumentStandalone.jsx',
         'components/manufacturing/Manufacturing.jsx',
         
-        // Service and Maintenance
+        // Service and Maintenance (jobCardActivityDisplay must load before JobCards.jsx)
+        'components/manufacturing/jobCardActivityDisplay.js',
         'components/manufacturing/JobCards.jsx',
         'components/service-maintenance/ServiceAndMaintenance.jsx',
         'components/service-maintenance/ServiceFormsManager.jsx',
@@ -337,7 +338,7 @@
             }
 
             if (path.includes('components/manufacturing/JobCards.jsx')) {
-                applyDynamicCacheBust('jobcards-mobile-toggle-v20251111');
+                applyDynamicCacheBust('jobcards-activity-trail-v20260417');
             }
 
             // Force cache-bust for DashboardLive widget drag-drop and resize features

@@ -1,5 +1,11 @@
 // Mobile Job Card wizard — used at /job-card behind JobCardAppGate (login required).
 // Offline-friendly: drafts can be saved locally and synced when online.
+import {
+  formatJobCardActivityAction,
+  formatJobCardActivityDetail,
+  sortJobCardActivitiesChronological
+} from './jobCardActivityDisplay.js';
+
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
 
 const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
@@ -283,17 +289,20 @@ const StepBadge = ({
     variant === 'carousel'
       ? 'group flex flex-row items-center justify-start gap-1.5 rounded-lg px-2 py-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-700 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always] max-w-[11rem]'
       : 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-700 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
-  const stateClass = active
-    ? 'bg-white/95 text-blue-800 shadow-lg shadow-blue-600/25'
-    : complete
-      ? 'bg-white/35 text-white ring-1 ring-white/25'
-      : 'bg-white/15 text-blue-50 hover:bg-white/25';
+  const stateClass =
+    active && variant === 'carousel'
+      ? 'bg-blue-50 border-2 border-blue-600 text-slate-900 shadow-md shadow-blue-900/10'
+      : active
+        ? 'bg-white/95 text-blue-800 shadow-lg shadow-blue-600/25'
+        : complete
+          ? 'bg-white/35 text-white ring-1 ring-white/25'
+          : 'bg-white/15 text-blue-50 hover:bg-white/25';
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`${baseClasses} ${stateClass} ${className}`}
+      className={`${baseClasses} ${stateClass} ${variant === 'carousel' ? 'job-card-step-chip' : ''} ${className}`}
       aria-current={active ? 'step' : undefined}
     >
       <div
@@ -301,11 +310,13 @@ const StepBadge = ({
           variant === 'carousel'
             ? 'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition'
             : 'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
-          active
-            ? 'bg-white text-blue-600 border-white shadow'
-            : complete
-              ? 'bg-white/90 text-blue-600 border-transparent'
-              : 'bg-white/20 text-white border-white/30 group-hover:border-white/50'
+          active && variant === 'carousel'
+            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+            : active
+              ? 'bg-white text-blue-600 border-white shadow'
+              : complete
+                ? 'bg-white/90 text-blue-600 border-transparent'
+                : 'bg-white/20 text-white border-white/30 group-hover:border-white/50'
         ].join(' ')}
       >
         <i
@@ -320,12 +331,24 @@ const StepBadge = ({
         }
       >
         <span
-          className={`${variant === 'carousel' ? 'text-[10px]' : 'text-[11px]'} uppercase tracking-wide font-semibold ${active ? '!text-blue-700' : 'text-blue-50'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
+          className={`${variant === 'carousel' ? 'text-[10px]' : 'text-[11px]'} uppercase tracking-wide font-semibold ${
+            active && variant === 'carousel'
+              ? 'text-blue-800'
+              : active
+                ? '!text-blue-700'
+                : 'text-blue-50'
+          } ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
         >
           Step {index + 1}
         </span>
         <span
-          className={`${variant === 'carousel' ? 'text-xs' : 'text-sm'} font-semibold leading-tight ${active ? '!text-blue-950' : 'text-white'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
+          className={`${variant === 'carousel' ? 'text-xs' : 'text-sm'} font-semibold leading-tight ${
+            active && variant === 'carousel'
+              ? 'text-slate-900'
+              : active
+                ? '!text-blue-950'
+                : 'text-white'
+          } ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
         >
           {meta.title || stepId}
         </span>
@@ -924,6 +947,10 @@ const JobCardFormPublic = () => {
   const [priorListRefreshTick, setPriorListRefreshTick] = useState(0);
   /** Bump after local pending queue changes so landing / prior list re-read storage */
   const [localDraftsTick, setLocalDraftsTick] = useState(0);
+  /** Activity trail when editing a card opened from prior list (server GET). */
+  const [priorLoadedActivities, setPriorLoadedActivities] = useState([]);
+  const [priorActivityLoading, setPriorActivityLoading] = useState(false);
+  const [priorActivityOpen, setPriorActivityOpen] = useState(true);
   /** For offline warning when there is no cached auth */
   const [networkOnline, setNetworkOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -942,6 +969,17 @@ const JobCardFormPublic = () => {
     }
   });
   const lastSignatureRestoreRef = useRef(null);
+  /** New wizard events since this session opened (merged into activityQueue on save). */
+  const sessionActivityQueueRef = useRef([]);
+
+  const pushWizardActivity = useCallback((action, metadata) => {
+    const ev = {
+      action,
+      metadata: metadata && typeof metadata === 'object' ? metadata : {},
+      source: 'mobile'
+    };
+    sessionActivityQueueRef.current.push(ev);
+  }, []);
 
   const signatureCanvasRef = useRef(null);
   const signatureWrapperRef = useRef(null);
@@ -1026,15 +1064,22 @@ const JobCardFormPublic = () => {
       );
   }, [clients]);
 
-  const addVoiceClip = useCallback(clip => {
-    setVoiceAttachments(prev => [
-      ...prev,
-      {
-        ...clip,
-        id: `vn_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-      }
-    ]);
-  }, []);
+  const addVoiceClip = useCallback(
+    clip => {
+      pushWizardActivity('wizard_media_added', {
+        kind: 'voice',
+        section: clip?.section || 'unknown'
+      });
+      setVoiceAttachments(prev => [
+        ...prev,
+        {
+          ...clip,
+          id: `vn_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+        }
+      ]);
+    },
+    [pushWizardActivity]
+  );
 
   const updateVoiceClip = useCallback((clipId, patch) => {
     if (!clipId || !patch || typeof patch !== 'object') return;
@@ -2242,6 +2287,7 @@ const JobCardFormPublic = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result;
+        pushWizardActivity('wizard_media_added', { kind: 'photo' });
         setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: file.size }]);
         setFormData(prev => ({ ...prev, photos: [...prev.photos, dataUrl] }));
       };
@@ -2279,6 +2325,7 @@ const JobCardFormPublic = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result;
+        pushWizardActivity('wizard_media_added', { kind: 'sectionMedia', section });
         setSectionWorkMedia(prev => ({
           ...prev,
           [section]: [...(prev[section] || []), { name: file.name, url: dataUrl, size: file.size }]
@@ -2339,6 +2386,7 @@ const JobCardFormPublic = () => {
       ...prev,
       stockUsed: [...prev.stockUsed, stockItem]
     }));
+    pushWizardActivity('stock_line_added', { sku: stockItem.sku });
     setNewStockItem((prev) => ({ sku: '', quantity: 0, locationId: enforcedLocationId }));
   };
 
@@ -2367,6 +2415,9 @@ const JobCardFormPublic = () => {
       ...prev,
       materialsBought: [...prev.materialsBought, materialItem]
     }));
+    pushWizardActivity('material_line_added', {
+      itemName: String(materialItem.itemName || '').slice(0, 120)
+    });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
   };
 
@@ -2480,10 +2531,24 @@ const JobCardFormPublic = () => {
         ]
       };
     });
+    pushWizardActivity('service_form_attached_local', {
+      templateId: template.id,
+      templateName: template.name,
+      localFormId: formId
+    });
     setShowTemplateModal(false);
   };
 
   const handleRemoveForm = (formId) => {
+    const existing = ensureServiceFormsArray(formData);
+    const removed = existing.find(f => f.id === formId);
+    if (removed) {
+      pushWizardActivity('service_form_removed', {
+        formId,
+        templateId: removed.templateId,
+        templateName: removed.templateName
+      });
+    }
     setFormData(prev => ({
       ...prev,
       serviceForms: ensureServiceFormsArray(prev).filter(f => f.id !== formId)
@@ -2621,17 +2686,24 @@ const JobCardFormPublic = () => {
     setVoiceAttachments([]);
     setCurrentStep(0);
     lastSignatureRestoreRef.current = null;
+    sessionActivityQueueRef.current = [];
     clearSignature();
   };
 
   const exitToMenu = () => {
     setEditingMeta(null);
+    sessionActivityQueueRef.current = [];
+    setPriorLoadedActivities([]);
+    setPriorActivityLoading(false);
     resetForm();
     setWizardFlow('landing');
   };
 
   const startNewJobCard = () => {
     setEditingMeta(null);
+    sessionActivityQueueRef.current = [];
+    setPriorLoadedActivities([]);
+    setPriorActivityLoading(false);
     resetForm();
     setWizardFlow('form');
   };
@@ -2653,21 +2725,37 @@ const JobCardFormPublic = () => {
     }
     lastSignatureRestoreRef.current = null;
     clearSignature();
+    sessionActivityQueueRef.current = [];
     setOpeningJobCard(true);
 
     try {
     let full = card;
     const token = getJobCardAuthToken();
     if (token) {
+      setPriorLoadedActivities([]);
+      setPriorActivityLoading(true);
       try {
         const headers = {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         };
-        const r = await fetch(
-          `/api/jobcards/${encodeURIComponent(openId)}?omitPhotos=1`,
-          { headers }
-        );
+        const [r, actR] = await Promise.all([
+          fetch(`/api/jobcards/${encodeURIComponent(openId)}?omitPhotos=1`, { headers }),
+          fetch(`/api/jobcards/${encodeURIComponent(openId)}/activity?order=asc`, { headers })
+        ]);
+        if (actR.ok) {
+          try {
+            const aj = await actR.json();
+            const acts = aj?.data?.activities ?? aj?.activities;
+            setPriorLoadedActivities(
+              sortJobCardActivitiesChronological(Array.isArray(acts) ? acts : [])
+            );
+          } catch {
+            setPriorLoadedActivities([]);
+          }
+        } else {
+          setPriorLoadedActivities([]);
+        }
         if (r.ok) {
           const data = await r.json();
           const apiCard = data?.data?.jobCard ?? data?.jobCard;
@@ -2697,8 +2785,13 @@ const JobCardFormPublic = () => {
         }
       } catch (e) {
         console.warn('JobCardFormPublic: could not load full job card from server', e);
+        setPriorLoadedActivities([]);
+      } finally {
+        setPriorActivityLoading(false);
       }
     } else {
+      setPriorLoadedActivities([]);
+      setPriorActivityLoading(false);
       try {
         const r = await fetch(`/api/public/jobcards/${encodeURIComponent(openId)}`, {
           headers: { 'Content-Type': 'application/json' }
@@ -3104,6 +3197,7 @@ const JobCardFormPublic = () => {
       }
 
       if (serverReachOk) {
+        sessionActivityQueueRef.current = [];
         removeLocalPendingJobCard(jobCardData.id);
         try {
           alert('Job card saved.');
@@ -3157,6 +3251,7 @@ const JobCardFormPublic = () => {
       }
     }
     setStepError('');
+    pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[stepIndex] });
     setCurrentStep(stepIndex);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -3170,12 +3265,20 @@ const JobCardFormPublic = () => {
       }
     }
     setStepError('');
+    const nextIdx = Math.min(currentStep + 1, STEP_IDS.length - 1);
+    if (nextIdx !== currentStep) {
+      pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[nextIdx] });
+    }
     setCurrentStep(prev => Math.min(prev + 1, STEP_IDS.length - 1));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePrevious = () => {
     setStepError('');
+    const prevIdx = Math.max(currentStep - 1, 0);
+    if (prevIdx !== currentStep) {
+      pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[prevIdx] });
+    }
     setCurrentStep(prev => Math.max(prev - 1, 0));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -5017,6 +5120,71 @@ const JobCardFormPublic = () => {
                 <div className="leading-relaxed">{stepError}</div>
               </div>
             )}
+
+            {editingMeta && getJobCardAuthToken() ? (
+              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setPriorActivityOpen(o => !o)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-50 touch-manipulation"
+                >
+                  <span className="flex items-center gap-2">
+                    <i className="fa-regular fa-clock text-slate-500" aria-hidden />
+                    Activity trail
+                    {priorActivityLoading ? (
+                      <span className="text-xs font-normal text-slate-500">(loading…)</span>
+                    ) : (
+                      <span className="text-xs font-normal text-slate-500">
+                        ({priorLoadedActivities.length})
+                      </span>
+                    )}
+                  </span>
+                  <i className={`fa-solid fa-chevron-${priorActivityOpen ? 'up' : 'down'} text-slate-400 text-xs`} />
+                </button>
+                {priorActivityOpen ? (
+                  <div className="px-4 pb-4 border-t border-slate-100">
+                    {priorActivityLoading && priorLoadedActivities.length === 0 ? (
+                      <p className="text-sm text-slate-500 pt-3">Loading activity…</p>
+                    ) : priorLoadedActivities.length === 0 ? (
+                      <p className="text-sm text-slate-500 pt-3">
+                        No activity events yet, or this card has not been synced to the server.
+                      </p>
+                    ) : (
+                      <ul className="mt-3 space-y-2 text-sm text-slate-800 max-h-64 overflow-y-auto">
+                        {priorLoadedActivities.map(a => (
+                          <li
+                            key={a.id}
+                            className="border-b border-slate-100 pb-2 last:border-0"
+                          >
+                            <span className="text-slate-500 text-xs">
+                              {a.createdAt
+                                ? (() => {
+                                    const d = new Date(a.createdAt);
+                                    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+                                  })()
+                                : '—'}
+                            </span>
+                            {' · '}
+                            <span className="font-medium text-slate-900">
+                              {formatJobCardActivityAction(a.action)}
+                            </span>
+                            {a.actorName ? ` — ${a.actorName}` : ''}
+                            {a.source ? (
+                              <span className="text-slate-500 text-xs"> ({a.source})</span>
+                            ) : null}
+                            {formatJobCardActivityDetail(a.action, a.metadata) ? (
+                              <div className="text-slate-500 text-xs mt-0.5">
+                                {formatJobCardActivityDetail(a.action, a.metadata)}
+                              </div>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
 
             <form onSubmit={(event) => { event.preventDefault(); handleSave(); }} className="space-y-4 sm:space-y-5">
               {renderStepContent()}
