@@ -5122,8 +5122,12 @@ const JobCardFormPublic = () => {
               </div>
             )}
 
+            <form onSubmit={(event) => { event.preventDefault(); handleSave(); }} className="space-y-4 sm:space-y-5">
+              {renderStepContent()}
+            </form>
+
             {editingMeta && getJobCardAuthToken() ? (
-              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mt-4 sm:mt-5">
                 <button
                   type="button"
                   onClick={() => setPriorActivityOpen(o => !o)}
@@ -5186,10 +5190,6 @@ const JobCardFormPublic = () => {
                 ) : null}
               </section>
             ) : null}
-
-            <form onSubmit={(event) => { event.preventDefault(); handleSave(); }} className="space-y-4 sm:space-y-5">
-              {renderStepContent()}
-            </form>
           </div>
         </div>
 

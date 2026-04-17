@@ -1322,41 +1322,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 print:break-inside-avoid">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
-                    Activity
-                  </div>
-                  {detailLoading ? (
-                    <p className="text-sm text-slate-500">Loading…</p>
-                  ) : detailActivities.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      No activity events could be loaded. Refresh or reopen this card.
-                    </p>
-                  ) : (
-                    <ul className="space-y-2 text-sm text-slate-200">
-                      {detailActivities.map((a) => (
-                        <li
-                          key={a.id}
-                          className="border-b border-slate-800/80 pb-2 last:border-0"
-                        >
-                          <span className="text-slate-400 text-xs">{formatDate(a.createdAt)}</span>
-                          {' · '}
-                          <span className="font-medium">{formatJobCardActivityAction(a.action)}</span>
-                          {a.actorName ? ` — ${a.actorName}` : ''}
-                          {a.source ? (
-                            <span className="text-slate-500 text-xs"> ({a.source})</span>
-                          ) : null}
-                          {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
-                            <div className="text-slate-500 text-xs mt-0.5 pl-0">
-                              {formatJobCardActivityDetailLine(a.action, a.metadata)}
-                            </div>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-
                 {/* Narrative */}
                 <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
                   <header className="flex items-center gap-2">
@@ -1915,6 +1880,41 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 </section>
               </div>
             </div>
+
+            <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 print:break-inside-avoid">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                Activity
+              </div>
+              {detailLoading ? (
+                <p className="text-sm text-slate-500">Loading…</p>
+              ) : detailActivities.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No activity events could be loaded. Refresh or reopen this card.
+                </p>
+              ) : (
+                <ul className="space-y-2 text-sm text-slate-200">
+                  {detailActivities.map((a) => (
+                    <li
+                      key={a.id}
+                      className="border-b border-slate-800/80 pb-2 last:border-0"
+                    >
+                      <span className="text-slate-400 text-xs">{formatDate(a.createdAt)}</span>
+                      {' · '}
+                      <span className="font-medium">{formatJobCardActivityAction(a.action)}</span>
+                      {a.actorName ? ` — ${a.actorName}` : ''}
+                      {a.source ? (
+                        <span className="text-slate-500 text-xs"> ({a.source})</span>
+                      ) : null}
+                      {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
+                        <div className="text-slate-500 text-xs mt-0.5 pl-0">
+                          {formatJobCardActivityDetailLine(a.action, a.metadata)}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
             <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-4 text-xs text-slate-400">
               <div className="flex items-center gap-2">
