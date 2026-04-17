@@ -1,5 +1,6 @@
 // Public API: create job cards (POST) and list prior cards by id (GET ?ids=) — no auth
 import { prisma } from '../_lib/prisma.js'
+import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { ok, created, serverError, badRequest, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 
@@ -222,6 +223,15 @@ async function handler(req, res) {
         'Could not allocate a unique job card number'
       )
     }
+
+    await insertJobCardActivityRecord(prisma, {
+      jobCardId: jobCard.id,
+      actorUserId: null,
+      actorName: 'Public',
+      action: 'created_public',
+      metadata: { status: jobCard.status },
+      source: 'public_api'
+    })
 
     // Create service form instances if provided
     if (serviceForms.length > 0) {

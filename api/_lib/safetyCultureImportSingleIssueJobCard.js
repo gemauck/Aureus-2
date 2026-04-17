@@ -12,6 +12,7 @@ import {
   overlayIssueJobCardFieldsFromDetail
 } from './safetyCultureIssueJobCard.js'
 import { resolveSafetyCultureIssueTechnicianUser } from './safetyCultureIssueTechnicianMatch.js'
+import { insertJobCardActivityForUser } from './jobCardActivity.js'
 
 /**
  * @param {object} opts
@@ -113,7 +114,7 @@ export async function createJobCardFromSafetyCultureIssueImport(opts) {
     ? String(technicianUser.user.name || '').trim() || scAgentDisplay
     : scAgentDisplay
 
-  return prisma.jobCard.create({
+  const jobCard = await prisma.jobCard.create({
     data: {
       jobCardNumber,
       agentName: agentNameForCard,
@@ -178,6 +179,17 @@ export async function createJobCardFromSafetyCultureIssueImport(opts) {
       ownerId: ownerIdForCard
     }
   })
+
+  const importerId = reqUser?.sub || reqUser?.id || null
+  await insertJobCardActivityForUser(prisma, {
+    jobCardId: jobCard.id,
+    userId: importerId,
+    action: 'imported_from_safety_culture_issue',
+    metadata: { issueId },
+    source: 'safety_culture_import'
+  })
+
+  return jobCard
 }
 
 /**

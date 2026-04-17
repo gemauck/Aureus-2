@@ -27,6 +27,7 @@ import {
   normaliseFeedData
 } from '../_lib/safetyCultureClient.js'
 import { serializeSafetyCultureSnapshot } from '../_lib/safetyCultureSnapshot.js'
+import { insertJobCardActivityForUser } from '../_lib/jobCardActivity.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -137,7 +138,7 @@ async function handler(req, res) {
           const docNo = insp.document_no ? `\nDocument: ${insp.document_no}` : ''
           const templateLine = insp.template_id ? `\nTemplate ID: ${insp.template_id}` : ''
 
-          await prisma.jobCard.create({
+          const jc = await prisma.jobCard.create({
             data: {
               jobCardNumber,
               agentName: insp.owner_name || insp.author_name || insp.prepared_by || '',
@@ -166,6 +167,16 @@ async function handler(req, res) {
               safetyCultureSnapshotJson: snapshotJson,
               ownerId: req.user?.sub || null
             }
+          })
+          await insertJobCardActivityForUser(prisma, {
+            jobCardId: jc.id,
+            userId: req.user?.sub || req.user?.id || null,
+            action: 'imported_from_safety_culture_audit',
+            metadata: {
+              safetyCultureAuditId: auditId,
+              templateName: insp.template_name || null
+            },
+            source: 'safety_culture_import'
           })
           results.imported++
         } catch (err) {

@@ -4,6 +4,7 @@ import { ok, created, badRequest, notFound, serverError, forbidden } from './_li
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 import { isAdminRole } from './_lib/authRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
+import { insertJobCardActivityFromRequest } from './_lib/jobCardActivity.js'
 
 // Some deployments may not yet have the optional service form tables used by
 // the job card forms feature. When those tables are missing, Prisma throws
@@ -60,25 +61,7 @@ async function resolveActorDisplayName(prismaClient, req) {
 }
 
 async function insertJobCardActivity(prismaClient, { jobCardId, req, action, metadata, source = 'web' }) {
-  const uid = req.user?.sub || req.user?.id || null
-  let actorName = ''
-  try {
-    if (uid) {
-      actorName = await resolveActorDisplayName(prismaClient, req)
-    }
-    await prismaClient.jobCardActivity.create({
-      data: {
-        jobCardId,
-        actorUserId: uid ? String(uid) : null,
-        actorName,
-        action,
-        source,
-        metadata: metadata !== undefined && metadata !== null ? metadata : undefined
-      }
-    })
-  } catch (e) {
-    console.error('JobCardActivity insert failed (non-fatal):', e?.message || e)
-  }
+  return insertJobCardActivityFromRequest(prismaClient, req, { jobCardId, action, metadata, source })
 }
 
 /**
@@ -747,10 +730,43 @@ async function handler(req, res) {
           updateData.completedByName = await resolveActorDisplayName(prisma, req)
         }
 
+        if (Object.keys(updateData).length === 0) {
+          const jobCard = existing
+          /* No prisma update — audit not required for no-op PATCH (see eslint-rules/manufacturing-audit.mjs). */
+          // eslint-disable-next-line mfg-audit/require-audit-before-mutation-success
+          return ok(res, {
+            jobCard: {
+              ...jobCard,
+              otherTechnicians: parseJson(jobCard.otherTechnicians),
+              photos: parseJson(jobCard.photos),
+              stockUsed: parseJson(jobCard.stockUsed || '[]'),
+              materialsBought: parseJson(jobCard.materialsBought || '[]'),
+              futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
+              timeOfDeparture: formatDate(jobCard.timeOfDeparture),
+              timeOfArrival: formatDate(jobCard.timeOfArrival),
+              submittedAt: formatDate(jobCard.submittedAt),
+              completedAt: formatDate(jobCard.completedAt),
+              createdAt: formatDate(jobCard.createdAt),
+              updatedAt: formatDate(jobCard.updatedAt)
+            }
+          })
+        }
+
+        const prevStatus = existing.status
         const jobCard = await prisma.jobCard.update({
           where: { id },
           data: updateData
         })
+
+        if (prevStatus !== jobCard.status) {
+          await insertJobCardActivity(prisma, {
+            jobCardId: id,
+            req,
+            action: 'status_changed',
+            metadata: { from: prevStatus, to: jobCard.status },
+            source: 'web'
+          })
+        }
 
         await insertJobCardActivity(prisma, {
           jobCardId: id,

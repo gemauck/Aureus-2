@@ -585,8 +585,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 
   const formatJobCardActivityAction = (action) => {
     if (!action || typeof action !== 'string') return '—';
-    if (action === 'baseline_record') return 'Baseline record';
-    return action;
+    const labels = {
+      baseline_record: 'Baseline record',
+      created: 'Created',
+      updated: 'Updated',
+      status_changed: 'Status changed',
+      created_public: 'Created (public)',
+      imported_from_safety_culture_audit: 'Imported (SafetyCulture audit)',
+      imported_from_safety_culture_issue: 'Imported (SafetyCulture issue)',
+      service_form_attached: 'Service form attached',
+      service_form_updated: 'Service form updated'
+    };
+    return labels[action] ?? action;
   };
 
   const handleRowClick = async (jobCard) => {
