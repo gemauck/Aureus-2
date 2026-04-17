@@ -957,17 +957,6 @@ const JobCardFormPublic = () => {
   );
   /** When editing, keep stable id / createdAt / sync flags for save */
   const [editingMeta, setEditingMeta] = useState(null);
-  /** Mobile (< xl): collapse wizard header to maximize form area */
-  const [mobileHeaderCollapsed, setMobileHeaderCollapsed] = useState(() => {
-    try {
-      if (typeof sessionStorage === 'undefined') return true;
-      const v = sessionStorage.getItem('jobcard_wizard_header_collapsed');
-      if (v === '0') return false;
-      return true;
-    } catch {
-      return true;
-    }
-  });
   const lastSignatureRestoreRef = useRef(null);
   /** New wizard events since this session opened (merged into activityQueue on save). */
   const sessionActivityQueueRef = useRef([]);
@@ -1009,14 +998,6 @@ const JobCardFormPublic = () => {
       }
     };
   }, []);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem('jobcard_wizard_header_collapsed', mobileHeaderCollapsed ? '1' : '0');
-    } catch {
-      /* ignore */
-    }
-  }, [mobileHeaderCollapsed]);
 
   useEffect(() => {
     const t = setTimeout(() => setPriorSearchDebounced(priorSearchInput.trim()), 350);
@@ -4978,135 +4959,45 @@ const JobCardFormPublic = () => {
         </div>
       </aside>
 
-      {/* Mobile Header — defaults collapsed; expand for full step strip */}
+      {/* Mobile Header — compact ribbon only (step, progress, share, home) */}
       <header className="xl:hidden flex-shrink-0 relative z-10 overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-sm border-b border-blue-900/20">
-        {mobileHeaderCollapsed ? (
-          <div className="job-card-header-collapsed relative flex items-center gap-1.5 border-b border-white/10 px-2 py-1">
+        <div className="job-card-header-collapsed relative flex items-center gap-1.5 border-b border-white/10 px-2 py-1">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold leading-tight text-white">
+              {(STEP_META[STEP_IDS[currentStep]] || {}).title || STEP_IDS[currentStep]} · Step {currentStep + 1}/{STEP_IDS.length}
+            </p>
+            {editingMeta?.jobCardNumber && (
+              <p className="truncate text-[10px] text-amber-100/90">{editingMeta.jobCardNumber}</p>
+            )}
+          </div>
+          <div className="min-w-0 max-w-[4.5rem] sm:max-w-[6rem]">
+            <div className="h-0.5 w-full rounded-full bg-white/20">
+              <div
+                className="h-full rounded-full bg-white transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+          <span className="flex-shrink-0 text-[10px] tabular-nums text-white/90 w-7 text-right">{progressPercent}%</span>
+          <div className="job-card-header-toolbar flex flex-shrink-0 items-center gap-0.5">
             <button
               type="button"
-              onClick={() => setMobileHeaderCollapsed(false)}
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-white/15 text-white hover:bg-white/25 touch-manipulation"
-              aria-expanded={false}
-              aria-label="Show wizard header and steps"
+              onClick={handleShareLink}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
+              aria-label="Share job card link"
             >
-              <i className="fa-solid fa-chevron-down text-[11px]" aria-hidden />
+              <i className="fa-regular fa-share-from-square text-[11px]" aria-hidden />
             </button>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[11px] font-semibold leading-tight text-white">
-                {(STEP_META[STEP_IDS[currentStep]] || {}).title || STEP_IDS[currentStep]} · Step {currentStep + 1}/{STEP_IDS.length}
-              </p>
-              {editingMeta?.jobCardNumber && (
-                <p className="truncate text-[10px] text-amber-100/90">{editingMeta.jobCardNumber}</p>
-              )}
-            </div>
-            <div className="min-w-0 max-w-[4.5rem] sm:max-w-[6rem]">
-              <div className="h-0.5 w-full rounded-full bg-white/20">
-                <div
-                  className="h-full rounded-full bg-white transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-            </div>
-            <span className="flex-shrink-0 text-[10px] tabular-nums text-white/90 w-7 text-right">{progressPercent}%</span>
-            <div className="job-card-header-toolbar flex flex-shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                onClick={handleShareLink}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
-                aria-label="Share job card link"
-              >
-                <i className="fa-regular fa-share-from-square text-[11px]" aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={exitToMenu}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
-                aria-label="Back to menu"
-              >
-                <i className="fa-solid fa-house text-[11px]" aria-hidden />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={exitToMenu}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
+              aria-label="Back to menu"
+            >
+              <i className="fa-solid fa-house text-[11px]" aria-hidden />
+            </button>
           </div>
-        ) : (
-          <div className="relative px-2 py-1.5">
-            <div className="max-w-4xl mx-auto space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <h1 className="jobcard-app-title text-sm font-bold leading-none text-white truncate">
-                    Job cards
-                    {editingMeta?.jobCardNumber ? (
-                      <span className="font-normal text-amber-100/95"> · {editingMeta.jobCardNumber}</span>
-                    ) : null}
-                  </h1>
-                </div>
-                <div className="job-card-header-toolbar relative z-10 inline-flex flex-nowrap items-center gap-0.5 shrink-0">
-                  <span
-                    className={`job-card-online-badge inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none whitespace-nowrap ${
-                      isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
-                    }`}
-                  >
-                    <span
-                      className={`h-1 w-1 flex-shrink-0 rounded-full ${
-                        isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
-                      }`}
-                    />
-                    {isOnline ? 'On' : 'Off'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setMobileHeaderCollapsed(true)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/30 touch-manipulation"
-                    aria-expanded={true}
-                    aria-label="Collapse header"
-                  >
-                    <i className="fa-solid fa-chevron-up text-[11px]" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={exitToMenu}
-                    className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
-                    aria-label="Back to menu"
-                  >
-                    <i className="fa-solid fa-house text-[11px]" aria-hidden />
-                  </button>
-                </div>
-              </div>
-              {getJobCardRecorderDisplayName() ? (
-                <p
-                  className="text-[10px] text-white/80 truncate"
-                  title={`Recorded in ERP as ${getJobCardRecorderDisplayName()}`}
-                >
-                  {getJobCardRecorderDisplayName()}
-                </p>
-              ) : null}
-              <div
-                className="mobile-step-scroll flex flex-nowrap gap-1 overflow-x-auto overflow-y-hidden pb-0.5 -mx-0.5 px-0.5 snap-x snap-mandatory scrollbar-hide touch-pan-x"
-                aria-label="Wizard steps — swipe sideways to choose a step"
-              >
-                {STEP_IDS.map((stepId, idx) => (
-                  <StepBadge
-                    key={`mobile-${stepId}`}
-                    variant="carousel"
-                    index={idx}
-                    stepId={stepId}
-                    active={idx === currentStep}
-                    complete={idx < currentStep}
-                    onClick={() => goToStep(idx)}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-2 pt-0.5">
-                <div className="flex-1 h-0.5 rounded-full bg-white/20 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-white transition-all duration-500 ease-out"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <span className="text-[10px] font-medium tabular-nums text-white/80 shrink-0">{progressPercent}%</span>
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
       </header>
 
       {/* Main Content Area - Scrollable */}
