@@ -257,7 +257,7 @@ const WizardStepPageHeader = ({ stepIndex, stepId }) => {
   const meta = STEP_META[stepId] || {};
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white shadow-md shadow-slate-200/40 px-4 py-4 sm:px-6 sm:py-5 ring-1 ring-slate-100">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600 mb-1">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 mb-1">
         Step {stepIndex + 1}
       </p>
       <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{meta.title || stepId}</h2>
@@ -281,13 +281,13 @@ const StepBadge = ({
   const meta = STEP_META[stepId] || {};
   const baseClasses =
     variant === 'carousel'
-      ? 'group flex flex-row items-center justify-start gap-2 rounded-xl px-2.5 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-indigo-700 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always]'
-      : 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-indigo-700 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
+      ? 'group flex flex-row items-center justify-start gap-2 rounded-xl px-2.5 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-700 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always]'
+      : 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-700 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
   const stateClass = active
-    ? 'bg-white/95 text-indigo-700 shadow-lg shadow-indigo-500/30'
+    ? 'bg-white/95 text-blue-800 shadow-lg shadow-blue-600/25'
     : complete
-      ? 'bg-white/30 text-white'
-      : 'bg-white/10 text-white/80 hover:bg-white/20';
+      ? 'bg-white/35 text-white ring-1 ring-white/25'
+      : 'bg-white/15 text-blue-50 hover:bg-white/25';
 
   return (
     <button
@@ -302,9 +302,9 @@ const StepBadge = ({
             ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition'
             : 'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
           active
-            ? 'bg-white text-indigo-600 border-white shadow'
+            ? 'bg-white text-blue-600 border-white shadow'
             : complete
-              ? 'bg-white/90 text-indigo-600 border-transparent'
+              ? 'bg-white/90 text-blue-600 border-transparent'
               : 'bg-white/20 text-white border-white/30 group-hover:border-white/50'
         ].join(' ')}
       >
@@ -320,18 +320,18 @@ const StepBadge = ({
         }
       >
         <span
-          className={`text-[11px] uppercase tracking-wide font-semibold ${active ? '!text-indigo-600' : 'text-white/80'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
+          className={`text-[11px] uppercase tracking-wide font-semibold ${active ? '!text-blue-700' : 'text-blue-50'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
         >
           Step {index + 1}
         </span>
         <span
-          className={`text-sm font-semibold leading-snug ${active ? '!text-indigo-900' : 'text-white'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
+          className={`text-sm font-semibold leading-snug ${active ? '!text-blue-950' : 'text-white'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
         >
           {meta.title || stepId}
         </span>
         {meta.subtitle && (
           <span
-            className={`text-[11px] sm:text-xs ${active ? '!text-indigo-600/90' : 'text-white/75'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
+            className={`text-[11px] sm:text-xs ${active ? '!text-blue-700/90' : 'text-blue-100/90'} ${variant === 'carousel' ? '' : 'sm:text-center lg:text-left'}`}
           >
             {meta.subtitle}
           </span>
@@ -484,12 +484,18 @@ const SearchableSelect = ({
         style={menuFixedStyle || undefined}
       >
         <ul id={listId} role="listbox" className="py-0">
-          {filtered.map(opt => (
+          {filtered.map(opt => {
+            const isOptSelected = String(opt.value) === String(value);
+            return (
             <li
               key={String(opt.value) + String(opt.label)}
               role="option"
-              aria-selected={String(opt.value) === String(value)}
-              className="cursor-pointer px-3 py-2.5 text-sm text-gray-900 hover:bg-indigo-50 active:bg-indigo-100 touch-manipulation"
+              aria-selected={isOptSelected}
+              className={`cursor-pointer px-3 py-2.5 text-sm touch-manipulation border-l-2 ${
+                isOptSelected
+                  ? 'bg-blue-100 text-blue-900 font-medium border-blue-600'
+                  : 'border-transparent text-gray-900 hover:bg-blue-50 active:bg-blue-100'
+              }`}
               onMouseDown={e => e.preventDefault()}
               onClick={() => {
                 onChange(opt.value);
@@ -499,7 +505,8 @@ const SearchableSelect = ({
             >
               {opt.label}
             </li>
-          ))}
+            );
+          })}
         </ul>
       </div>
     );
@@ -540,7 +547,12 @@ const SearchableSelect = ({
             }
           }}
           placeholder={placeholder}
-          className="w-full pl-4 pr-11 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white disabled:bg-gray-100 disabled:cursor-not-allowed touch-manipulation"
+          className={[
+            'w-full pl-4 pr-11 py-3 text-base rounded-lg bg-white disabled:bg-gray-100 disabled:cursor-not-allowed touch-manipulation transition-shadow',
+            open && !disabled
+              ? 'border-2 border-blue-600 ring-2 ring-blue-200 shadow-sm'
+              : 'border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+          ].join(' ')}
           style={{ fontSize: '16px' }}
         />
         <button
@@ -548,7 +560,9 @@ const SearchableSelect = ({
           tabIndex={-1}
           disabled={disabled}
           aria-label={open ? 'Close list' : 'Open list'}
-          className="absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 active:bg-gray-200 touch-manipulation"
+          className={`absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-md touch-manipulation ${
+            open && !disabled ? 'text-blue-700 bg-blue-50' : 'text-gray-500 hover:bg-gray-100 active:bg-gray-200'
+          }`}
           onMouseDown={e => {
             e.preventDefault();
           }}
@@ -577,12 +591,18 @@ const SearchableSelect = ({
               ref={menuRef}
               className="absolute z-[60] mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
             >
-              {filtered.map(opt => (
+              {filtered.map(opt => {
+                const isOptSelected = String(opt.value) === String(value);
+                return (
                 <li
                   key={String(opt.value) + String(opt.label)}
                   role="option"
-                  aria-selected={String(opt.value) === String(value)}
-                  className="cursor-pointer px-3 py-2.5 text-sm text-gray-900 hover:bg-indigo-50 active:bg-indigo-100 touch-manipulation"
+                  aria-selected={isOptSelected}
+                  className={`cursor-pointer px-3 py-2.5 text-sm touch-manipulation border-l-2 ${
+                    isOptSelected
+                      ? 'bg-blue-100 text-blue-900 font-medium border-blue-600'
+                      : 'border-transparent text-gray-900 hover:bg-blue-50 active:bg-blue-100'
+                  }`}
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => {
                     onChange(opt.value);
@@ -592,7 +612,8 @@ const SearchableSelect = ({
                 >
                   {opt.label}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           {open && !disabled && listOptions.length === 0 && (
@@ -1574,7 +1595,8 @@ const JobCardFormPublic = () => {
         try {
           const params = new URLSearchParams({
             page: '1',
-            pageSize: '500',
+            // Server caps list size; smaller batches keep the prior-card picker fast on phones.
+            pageSize: '120',
             sortField: 'updatedAt',
             sortDirection: 'desc'
           });
@@ -2635,17 +2657,39 @@ const JobCardFormPublic = () => {
     const token = getJobCardAuthToken();
     if (token) {
       try {
-        const r = await fetch(`/api/jobcards/${encodeURIComponent(openId)}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+        const r = await fetch(
+          `/api/jobcards/${encodeURIComponent(openId)}?omitPhotos=1`,
+          { headers }
+        );
         if (r.ok) {
           const data = await r.json();
           const apiCard = data?.data?.jobCard ?? data?.jobCard;
           if (apiCard && apiCard.id) {
             full = apiCard;
+            if (apiCard.attachmentsPending === true) {
+              try {
+                const pr = await fetch(`/api/jobcards/${encodeURIComponent(openId)}/photos`, {
+                  headers
+                });
+                if (pr.ok) {
+                  const pd = await pr.json();
+                  const photos = pd?.data?.photos ?? pd?.photos;
+                  full = {
+                    ...apiCard,
+                    photos: Array.isArray(photos) ? photos : [],
+                    attachmentsPending: false
+                  };
+                } else {
+                  full = { ...apiCard, photos: [], attachmentsPending: false };
+                }
+              } catch {
+                full = { ...apiCard, photos: [], attachmentsPending: false };
+              }
+            }
           }
         }
       } catch (e) {
@@ -3177,7 +3221,7 @@ const JobCardFormPublic = () => {
                 type="button"
                 onClick={handleAddTechnician}
                 disabled={!technicianInput}
-                className="px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
+                className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
               >
                 <i className="fas fa-plus mr-1"></i>Add
               </button>
@@ -3185,12 +3229,12 @@ const JobCardFormPublic = () => {
             {formData.otherTechnicians.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-3">
                 {formData.otherTechnicians.map((technician, idx) => (
-                  <span key={idx} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded text-sm">
+                  <span key={idx} className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded text-sm">
                     {technician}
                     <button
                       type="button"
                       onClick={() => handleRemoveTechnician(technician)}
-                      className="hover:text-indigo-950 ml-1"
+                      className="hover:text-blue-950 ml-1"
                       title="Remove"
                     >
                       <i className="fas fa-times text-xs"></i>
@@ -3233,7 +3277,7 @@ const JobCardFormPublic = () => {
                   name="clientName"
                   value={formData.clientName}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                   placeholder="Enter client name"
                   style={{ fontSize: '16px' }}
                 />
@@ -3247,7 +3291,7 @@ const JobCardFormPublic = () => {
                   name="siteName"
                   value={formData.siteName}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                   placeholder="Enter site / location"
                   style={{ fontSize: '16px' }}
                 />
@@ -3313,7 +3357,7 @@ const JobCardFormPublic = () => {
               name="projectName"
               value={formData.projectName}
               onChange={handleChange}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
               placeholder="Enter project name if not listed"
               style={{ fontSize: '16px' }}
             />
@@ -3342,14 +3386,14 @@ const JobCardFormPublic = () => {
                 name="location"
                 value={formData.location}
                 onChange={handleChange}
-                className="flex-1 px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Facility, area or coordinates"
                 style={{ fontSize: '16px' }}
               />
               <button
                 type="button"
                 onClick={handleOpenMap}
-                className="px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 active:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 touch-manipulation"
+                className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 touch-manipulation"
                 title="Select location on map"
               >
                 <i className="fas fa-map-marker-alt"></i>
@@ -3396,7 +3440,7 @@ const JobCardFormPublic = () => {
                   name="timeOfDeparture"
                   value={formData.timeOfDeparture}
                   onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 style={{ fontSize: '16px' }}
                 />
               </div>
@@ -3409,7 +3453,7 @@ const JobCardFormPublic = () => {
                   name="timeOfArrival"
                   value={formData.timeOfArrival}
                   onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 style={{ fontSize: '16px' }}
                 />
             </div>
@@ -3425,7 +3469,7 @@ const JobCardFormPublic = () => {
                   name="vehicleUsed"
                   value={formData.vehicleUsed}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g., AB12 CD GP"
                   style={{ fontSize: '16px' }}
                 />
@@ -3441,7 +3485,7 @@ const JobCardFormPublic = () => {
                   name="kmReadingBefore"
                   value={formData.kmReadingBefore}
                   onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0.0"
                 style={{ fontSize: '16px' }}
                 />
@@ -3457,7 +3501,7 @@ const JobCardFormPublic = () => {
                   name="kmReadingAfter"
                   value={formData.kmReadingAfter}
                   onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0.0"
                 style={{ fontSize: '16px' }}
                 />
@@ -3465,9 +3509,9 @@ const JobCardFormPublic = () => {
           </div>
 
           {travelKm > 0 && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center gap-2">
-              <i className="fas fa-road text-indigo-600"></i>
-              <p className="text-sm font-medium text-indigo-950">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+              <i className="fas fa-road text-blue-600"></i>
+              <p className="text-sm font-medium text-blue-950">
                 Travel Distance: {travelKm.toFixed(1)} km
               </p>
             </div>
@@ -3517,7 +3561,7 @@ const JobCardFormPublic = () => {
             <button
               type="button"
               onClick={() => setShowTemplateModal(true)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
             >
               <i className="fa-solid fa-list-check text-xs" />
               <span>Add a Checklist</span>
@@ -3586,7 +3630,7 @@ const JobCardFormPublic = () => {
               name="futureWorkScheduledAt"
               value={formData.futureWorkScheduledAt}
               onChange={handleChange}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               style={{ fontSize: '16px' }}
             />
           </div>
@@ -3619,7 +3663,7 @@ const JobCardFormPublic = () => {
             <p className="text-sm text-gray-500 mt-1">Add photos or short videos of the site, fault, or work completed (optional).</p>
           </div>
           {totalPhotoVideoCount > 0 && (
-            <span className="text-sm font-medium text-indigo-600">
+            <span className="text-sm font-medium text-blue-600">
               {totalPhotoVideoCount} attachment{totalPhotoVideoCount === 1 ? '' : 's'}
             </span>
           )}
@@ -3668,7 +3712,7 @@ const JobCardFormPublic = () => {
         <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
           <header className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                 <i className="fa-solid fa-list-check text-xs" />
               </span>
               Job Checklists & Forms
@@ -3766,7 +3810,7 @@ const JobCardFormPublic = () => {
                                 id={controlId}
                                 value={value}
                                 onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
                             ) : field.type === 'checkbox' ? (
                               <SearchableSelect
@@ -3793,7 +3837,7 @@ const JobCardFormPublic = () => {
                                 id={controlId}
                                 value={value}
                                 onChange={e => handleFormAnswerChange(form.id, fieldId, e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
                             )}
                             {field.helpText && (
@@ -3830,7 +3874,7 @@ const JobCardFormPublic = () => {
             <div className="p-4">
               {loadingTemplates ? (
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mx-auto mb-2" />
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2" />
                   <p className="text-sm text-gray-500">Loading forms...</p>
                 </div>
               ) : formTemplates.length === 0 ? (
@@ -3846,7 +3890,7 @@ const JobCardFormPublic = () => {
                       key={template.id}
                       type="button"
                       onClick={() => handleAddForm(template.id)}
-                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition"
+                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition"
                     >
                       <div className="font-medium text-sm text-gray-900">{template.name}</div>
                       {template.description && (
@@ -3877,7 +3921,7 @@ const JobCardFormPublic = () => {
             <p className="text-sm text-gray-500 mt-1">Record components issued from inventory for this job.</p>
           </div>
           {formData.stockUsed.length > 0 && (
-            <span className="text-sm font-medium text-indigo-600">
+            <span className="text-sm font-medium text-blue-600">
               {formData.stockUsed.length} item{formData.stockUsed.length === 1 ? '' : 's'}
             </span>
           )}
@@ -3933,7 +3977,7 @@ const JobCardFormPublic = () => {
                 <button
                   type="button"
                   onClick={handleAddStockItem}
-                  className="w-full px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 active:bg-indigo-800 text-sm font-medium touch-manipulation"
+                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium touch-manipulation"
                 >
                   <i className="fas fa-plus mr-1"></i>Add
                 </button>
@@ -3983,7 +4027,7 @@ const JobCardFormPublic = () => {
             <p className="text-sm text-gray-500 mt-1">Capture purchases not taken from stock (cash, card, etc.).</p>
           </div>
           {totalMaterialCost > 0 && (
-            <span className="text-sm font-semibold text-indigo-600">
+            <span className="text-sm font-semibold text-blue-600">
               R {totalMaterialCost.toFixed(2)}
             </span>
           )}
@@ -4029,7 +4073,7 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={handleAddMaterialItem}
-                className="w-full px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 active:bg-indigo-800 text-sm font-medium touch-manipulation"
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium touch-manipulation"
               >
                 <i className="fas fa-plus mr-1"></i>Add Material
               </button>
@@ -4062,7 +4106,7 @@ const JobCardFormPublic = () => {
                 ))}
             <div className="border-t border-gray-200 pt-3 mt-3 flex justify-between items-center">
               <span className="text-sm font-semibold text-gray-900">Total Cost</span>
-              <span className="text-lg font-bold text-indigo-600">R {totalMaterialCost.toFixed(2)}</span>
+              <span className="text-lg font-bold text-blue-600">R {totalMaterialCost.toFixed(2)}</span>
                   </div>
                 </div>
         ) : (
@@ -4083,7 +4127,7 @@ const JobCardFormPublic = () => {
             <p className="text-sm text-gray-500 mt-1">Capture supporting photos or videos from site.</p>
           </div>
           {totalPhotoVideoCount > 0 && (
-            <span className="text-sm font-medium text-indigo-600">
+            <span className="text-sm font-medium text-blue-600">
               {totalPhotoVideoCount} attachment{totalPhotoVideoCount === 1 ? '' : 's'}
             </span>
           )}
@@ -4145,7 +4189,7 @@ const JobCardFormPublic = () => {
                 name="customerName"
                 value={formData.customerName}
                 onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Full name"
                 style={{ fontSize: '16px' }}
               />
@@ -4159,7 +4203,7 @@ const JobCardFormPublic = () => {
                 name="customerTitle"
                 value={formData.customerTitle}
                 onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Role at site"
                 style={{ fontSize: '16px' }}
               />
@@ -4193,7 +4237,7 @@ const JobCardFormPublic = () => {
                 name="customerSignDate"
                 value={formData.customerSignDate}
                 onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 style={{ fontSize: '16px' }}
               />
             </div>
@@ -4226,7 +4270,7 @@ const JobCardFormPublic = () => {
               ref={signatureWrapperRef}
               className={[
                 'signature-wrapper border-2 rounded-lg overflow-hidden relative bg-white',
-                hasSignature ? 'border-indigo-500' : 'border-gray-300'
+                hasSignature ? 'border-blue-500' : 'border-gray-300'
               ].join(' ')}
             >
               <canvas
@@ -4261,7 +4305,7 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={clearSignature}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-900"
+                className="text-sm font-medium text-blue-600 hover:text-blue-900"
               >
                 Clear signature
               </button>
@@ -4380,7 +4424,7 @@ const JobCardFormPublic = () => {
               type="button"
               onClick={handleNext}
               disabled={isSubmitting}
-              className="min-h-[48px] px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:bg-indigo-800 text-sm font-semibold shadow-md shadow-indigo-900/10 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+              className="min-h-[48px] px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-md shadow-blue-900/10 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
             </button>
@@ -4389,7 +4433,7 @@ const JobCardFormPublic = () => {
               type="submit"
               onClick={(event) => { event.preventDefault(); handleSave(); }}
               disabled={isSubmitting}
-              className="min-h-[48px] px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:bg-indigo-800 text-sm font-semibold shadow-md shadow-indigo-900/10 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+              className="min-h-[48px] px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-md shadow-blue-900/10 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting
                 ? 'Saving...'
@@ -4424,9 +4468,9 @@ const JobCardFormPublic = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 px-6">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 px-6">
         <div className="text-center rounded-3xl border border-white/10 bg-white/5 px-8 py-10 backdrop-blur-sm max-w-sm w-full">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-white/20 border-t-indigo-400 mx-auto mb-5" />
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-white/20 border-t-blue-400 mx-auto mb-5" />
           <p className="text-white font-semibold">Loading Job Card</p>
           <p className="text-slate-400 text-sm mt-2">Preparing your form…</p>
         </div>
@@ -4436,7 +4480,7 @@ const JobCardFormPublic = () => {
 
   if (wizardFlow === 'landing') {
     return (
-      <div className="job-card-landing-root min-h-[100dvh] flex flex-col items-center justify-start overflow-y-auto bg-gradient-to-b from-slate-50 via-indigo-50/35 to-slate-200/90 text-slate-900 px-4 sm:px-6">
+      <div className="job-card-landing-root min-h-[100dvh] flex flex-col items-center justify-start overflow-y-auto bg-gradient-to-b from-slate-50 via-blue-50/35 to-slate-200/90 text-slate-900 px-4 sm:px-6">
         <div className="w-full max-w-md space-y-8 pb-8">
           {!networkOnline && !getJobCardAuthToken() && (
             <div className="rounded-2xl border border-amber-300/90 bg-amber-50 px-4 py-3.5 text-sm text-amber-950 shadow-sm">
@@ -4445,10 +4489,10 @@ const JobCardFormPublic = () => {
             </div>
           )}
           <div className="text-center space-y-4 pt-2">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 text-white shadow-lg shadow-indigo-900/25 ring-4 ring-white/80">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-900/25 ring-4 ring-white/80">
               <i className="fa-solid fa-clipboard-check text-2xl" aria-hidden />
             </div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-indigo-600/90 font-semibold">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-blue-600/90 font-semibold">
               Field service
             </p>
             <h1 className="text-3xl sm:text-4xl font-bold leading-tight text-slate-900 tracking-tight">
@@ -4466,7 +4510,7 @@ const JobCardFormPublic = () => {
               className="w-full rounded-2xl bg-white text-slate-900 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
             >
               <span className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
                   <i className="fa-solid fa-plus text-xl" aria-hidden />
                 </span>
                 <span className="flex-1 min-w-0">
@@ -4475,7 +4519,7 @@ const JobCardFormPublic = () => {
                     Start the guided wizard for a new visit.
                   </span>
                 </span>
-                <i className="fa-solid fa-chevron-right text-indigo-300 flex-shrink-0" aria-hidden />
+                <i className="fa-solid fa-chevron-right text-blue-300 flex-shrink-0" aria-hidden />
               </span>
             </button>
             <button
@@ -4484,7 +4528,7 @@ const JobCardFormPublic = () => {
               className="w-full rounded-2xl bg-white text-slate-900 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
             >
               <span className="flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
                   <i className="fa-solid fa-clock-rotate-left text-xl" aria-hidden />
                 </span>
                 <span className="flex-1 min-w-0">
@@ -4493,7 +4537,7 @@ const JobCardFormPublic = () => {
                     Search and filter when signed in; includes drafts not synced on this device.
                   </span>
                 </span>
-                <i className="fa-solid fa-chevron-right text-indigo-300 flex-shrink-0" aria-hidden />
+                <i className="fa-solid fa-chevron-right text-blue-300 flex-shrink-0" aria-hidden />
               </span>
             </button>
           </div>
@@ -4533,7 +4577,7 @@ const JobCardFormPublic = () => {
                 type="button"
                 onClick={handleSubscribeCalendar}
                 disabled={!getJobCardAuthToken()}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i className="fa-regular fa-calendar-plus" aria-hidden />
                 Subscribe calendar
@@ -4556,8 +4600,8 @@ const JobCardFormPublic = () => {
 
   if (wizardFlow === 'prior_list') {
     return (
-      <div className="job-card-prior-list min-h-[100dvh] flex flex-col bg-gradient-to-b from-slate-100 via-white to-indigo-50/30 relative">
-        <header className="flex-shrink-0 bg-gradient-to-br from-indigo-700 via-violet-600 to-indigo-900 text-white shadow-md px-4 py-4 sm:px-6">
+      <div className="job-card-prior-list min-h-[100dvh] flex flex-col bg-gradient-to-b from-slate-100 via-white to-blue-50/30 relative">
+        <header className="flex-shrink-0 bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-md px-4 py-4 sm:px-6">
           <button
             type="button"
             onClick={() => setWizardFlow('landing')}
@@ -4603,7 +4647,7 @@ const JobCardFormPublic = () => {
                   placeholder="Search everything: client, site, notes, stock, materials, vehicle…"
                   value={priorSearchInput}
                   onChange={e => setPriorSearchInput(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 touch-manipulation"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
                 />
               </div>
               <div>
@@ -4614,7 +4658,7 @@ const JobCardFormPublic = () => {
                   id="jobcard-prior-client"
                   value={priorClientId}
                   onChange={e => setPriorClientId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 touch-manipulation"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
                 >
                   <option value="">All clients</option>
                   {priorClientSelectOptions.map(c => (
@@ -4637,14 +4681,14 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={startNewJobCard}
-                className="mt-4 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 touch-manipulation"
+                className="mt-4 inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 touch-manipulation"
               >
                 Create new job card
               </button>
             </div>
           ) : mergedPriorJobCards.length === 0 && serverPriorLoading ? (
             <div className="max-w-lg mx-auto mt-12 flex flex-col items-center text-gray-500">
-              <i className="fa-solid fa-circle-notch fa-spin text-2xl mb-3 text-indigo-500" aria-hidden />
+              <i className="fa-solid fa-circle-notch fa-spin text-2xl mb-3 text-blue-500" aria-hidden />
               <p className="text-sm font-medium">Loading job cards…</p>
             </div>
           ) : (
@@ -4670,7 +4714,7 @@ const JobCardFormPublic = () => {
                         e.stopPropagation();
                         void handleSelectPriorCard(jc);
                       }}
-                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition touch-manipulation cursor-pointer relative z-[1]"
+                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation cursor-pointer relative z-[1]"
                       style={{ touchAction: 'manipulation' }}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -4727,7 +4771,7 @@ const JobCardFormPublic = () => {
             aria-busy="true"
           >
             <div className="rounded-2xl bg-white px-8 py-7 shadow-2xl flex flex-col items-center gap-4 max-w-sm text-center">
-              <i className="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-600" aria-hidden />
+              <i className="fa-solid fa-circle-notch fa-spin text-3xl text-blue-600" aria-hidden />
               <div>
                 <p className="font-semibold text-gray-900">Opening job card…</p>
                 <p className="text-sm text-gray-600 mt-1">Loading details and attachments</p>
@@ -4740,9 +4784,9 @@ const JobCardFormPublic = () => {
   }
 
   return (
-    <div className="job-card-public-wrapper fixed inset-0 flex flex-col xl:flex-row bg-gradient-to-br from-slate-100 via-white to-indigo-50/30 overflow-hidden">
+    <div className="job-card-public-wrapper fixed inset-0 flex flex-col xl:flex-row bg-gradient-to-br from-slate-100 via-white to-blue-50/30 overflow-hidden">
       {/* Desktop Sidebar - Vertical Steps */}
-      <aside className="hidden xl:flex xl:flex-col xl:w-56 flex-shrink-0 bg-gradient-to-br from-indigo-700 via-violet-600 to-indigo-900 text-white shadow-xl z-10 overflow-y-auto overflow-x-hidden">
+      <aside className="hidden xl:flex xl:flex-col xl:w-56 flex-shrink-0 bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-xl z-10 overflow-y-auto overflow-x-hidden">
         <div className="p-4 pb-2 border-b border-white/20">
           <p className="text-[10px] uppercase tracking-wide text-white/75 font-semibold mb-1">
             Field service
@@ -4829,7 +4873,7 @@ const JobCardFormPublic = () => {
       </aside>
 
       {/* Mobile Header — collapsible to maximize form space */}
-      <header className="xl:hidden flex-shrink-0 relative z-10 overflow-hidden bg-gradient-to-br from-indigo-700 via-violet-600 to-indigo-900 text-white shadow-md">
+      <header className="xl:hidden flex-shrink-0 relative z-10 overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-md">
         {mobileHeaderCollapsed ? (
           <div className="job-card-header-collapsed relative flex items-center gap-2 border-b border-white/10 px-2 py-2">
             <button
@@ -5041,7 +5085,7 @@ const JobCardFormPublic = () => {
                 <button
                   type="button"
                   onClick={handleCloseMap}
-                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 active:bg-indigo-800 font-semibold touch-manipulation"
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold touch-manipulation"
                 >
                   Use This Location
                 </button>

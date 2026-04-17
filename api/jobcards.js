@@ -129,6 +129,71 @@ const LIST_SORT_WHITELIST = {
   reasonForVisit: true
 }
 
+/** List responses only: keeps mobile list/search payloads small (full text comes from GET /api/jobcards/:id). */
+const LIST_TEXT_PREVIEW_MAX = 420
+
+function truncateJobCardListText(value, max = LIST_TEXT_PREVIEW_MAX) {
+  if (value == null) return ''
+  const s = String(value)
+  if (s.length <= max) return s
+  return `${s.slice(0, max)}…`
+}
+
+/**
+ * Prisma select for GET one — all JobCard scalars except safetyCultureSnapshotJson
+ * (import blob; never needed by the client and can be multi‑MB from DB).
+ */
+const JOB_CARD_GET_ONE_SELECT = {
+  id: true,
+  jobCardNumber: true,
+  agentName: true,
+  otherTechnicians: true,
+  clientId: true,
+  clientName: true,
+  siteId: true,
+  siteName: true,
+  location: true,
+  timeOfDeparture: true,
+  timeOfArrival: true,
+  vehicleUsed: true,
+  kmReadingBefore: true,
+  kmReadingAfter: true,
+  travelKilometers: true,
+  reasonForVisit: true,
+  diagnosis: true,
+  futureWorkRequired: true,
+  futureWorkScheduledAt: true,
+  otherComments: true,
+  photos: true,
+  status: true,
+  submittedAt: true,
+  completedAt: true,
+  ownerId: true,
+  createdAt: true,
+  updatedAt: true,
+  actionsTaken: true,
+  materialsBought: true,
+  stockUsed: true,
+  totalMaterialsCost: true,
+  arrivalBackAtOffice: true,
+  departureFromSite: true,
+  locationLatitude: true,
+  locationLongitude: true,
+  totalTimeMinutes: true,
+  vehicleId: true,
+  safetyCultureAuditId: true,
+  safetyCultureIssueId: true,
+  completedByUserId: true,
+  completedByName: true
+}
+
+/** Same as JOB_CARD_GET_ONE_SELECT but skips `photos` (multi‑MB JSON) for fast detail shell loads. */
+const JOB_CARD_GET_ONE_LITE_SELECT = (() => {
+  const s = { ...JOB_CARD_GET_ONE_SELECT }
+  delete s.photos
+  return s
+})()
+
 async function handler(req, res) {
   // Strip query parameters before splitting
   const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
@@ -264,7 +329,8 @@ async function handler(req, res) {
               { futureWorkRequired: { contains: searchQ, mode: 'insensitive' } },
               { actionsTaken: { contains: searchQ, mode: 'insensitive' } },
               { otherComments: { contains: searchQ, mode: 'insensitive' } },
-              { photos: { contains: searchQ, mode: 'insensitive' } },
+              // Intentionally exclude `photos`: values are often huge (base64 JSON) and
+              // `contains` on that column makes list/search unusably slow on mobile.
               { materialsBought: { contains: searchQ, mode: 'insensitive' } },
               { stockUsed: { contains: searchQ, mode: 'insensitive' } }
             ]
@@ -330,6 +396,8 @@ async function handler(req, res) {
         // Note: We only selected minimal fields above, so we don't need to parse JSON fields
         const formatted = jobCards.map(jobCard => ({
           ...jobCard,
+          reasonForVisit: truncateJobCardListText(jobCard.reasonForVisit),
+          diagnosis: truncateJobCardListText(jobCard.diagnosis),
           // Return full ISO strings for datetime fields
           createdAt: formatDate(jobCard.createdAt),
           updatedAt: formatDate(jobCard.updatedAt)
@@ -359,17 +427,21 @@ async function handler(req, res) {
     // GET ONE (GET /api/jobcards/:id)
     if (req.method === 'GET' && id) {
       try {
+        const reqUrl = new URL(req.url, 'http://localhost')
+        const omitPhotos =
+          reqUrl.searchParams.get('omitPhotos') === '1' ||
+          reqUrl.searchParams.get('omitPhotos') === 'true'
+
         const row = await prisma.jobCard.findUnique({
-          where: { id }
+          where: { id },
+          select: omitPhotos ? JOB_CARD_GET_ONE_LITE_SELECT : JOB_CARD_GET_ONE_SELECT
         })
         
         if (!row) {
           return notFound(res, 'Job card not found')
         }
 
-        // Never send SafetyCulture import blob to the job card editor — it can be megabytes and
-        // blocks JSON parse / React hydration on mobile.
-        const { safetyCultureSnapshotJson: _omitSafetyCultureBlob, ...jobCard } = row
+        const jobCard = row
 
         let recordedByName = ''
         let recordedByEmail = ''
@@ -390,23 +462,35 @@ async function handler(req, res) {
           }
         }
 
+        const common = {
+          ...jobCard,
+          recordedByName,
+          recordedByEmail,
+          otherTechnicians: parseJson(jobCard.otherTechnicians),
+          stockUsed: parseJson(jobCard.stockUsed || '[]'),
+          materialsBought: parseJson(jobCard.materialsBought || '[]'),
+          futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
+          timeOfDeparture: formatDate(jobCard.timeOfDeparture),
+          timeOfArrival: formatDate(jobCard.timeOfArrival),
+          submittedAt: formatDate(jobCard.submittedAt),
+          completedAt: formatDate(jobCard.completedAt),
+          createdAt: formatDate(jobCard.createdAt),
+          updatedAt: formatDate(jobCard.updatedAt)
+        }
+
+        if (omitPhotos) {
+          return ok(res, {
+            jobCard: {
+              ...common,
+              attachmentsPending: true
+            }
+          })
+        }
+
         return ok(res, { 
           jobCard: {
-            ...jobCard,
-            recordedByName,
-            recordedByEmail,
-            otherTechnicians: parseJson(jobCard.otherTechnicians),
-            photos: parseJson(jobCard.photos),
-            stockUsed: parseJson(jobCard.stockUsed || '[]'),
-            materialsBought: parseJson(jobCard.materialsBought || '[]'),
-            // Return full ISO strings for datetime fields
-            futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
-            timeOfDeparture: formatDate(jobCard.timeOfDeparture),
-            timeOfArrival: formatDate(jobCard.timeOfArrival),
-            submittedAt: formatDate(jobCard.submittedAt),
-            completedAt: formatDate(jobCard.completedAt),
-            createdAt: formatDate(jobCard.createdAt),
-            updatedAt: formatDate(jobCard.updatedAt)
+            ...common,
+            photos: parseJson(jobCard.photos)
           }
         })
       } catch (error) {
@@ -1118,6 +1202,32 @@ async function handler(req, res) {
     }
 
     return badRequest(res, 'Invalid job card forms endpoint')
+  }
+
+  // JOB CARD PHOTOS (GET /api/jobcards/:id/photos) — attachments JSON only (split from GET one for performance)
+  if (resourceType === 'jobcards' && subResource === 'photos' && id) {
+    if (req.method !== 'GET') {
+      return badRequest(res, 'Method not allowed')
+    }
+    try {
+      const row = await prisma.jobCard.findUnique({
+        where: { id },
+        select: { id: true, photos: true }
+      })
+      if (!row) {
+        return notFound(res, 'Job card not found')
+      }
+      return ok(res, {
+        jobCardId: id,
+        photos: parseJson(row.photos)
+      })
+    } catch (error) {
+      console.error('❌ Failed to get job card photos:', error)
+      if (isConnectionError(error)) {
+        return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+      }
+      return serverError(res, 'Failed to get job card photos', error.message)
+    }
   }
 
   return badRequest(res, 'Invalid job cards endpoint')

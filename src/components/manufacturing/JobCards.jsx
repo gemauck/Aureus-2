@@ -214,11 +214,13 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
       ) : null}
       {canRender && !isVideo ? (
         <figure className="group relative overflow-hidden bg-slate-800">
-          <img
-            src={mediaSrc}
-            alt={`SafetyCulture attachment ${idx + 1}`}
-            className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
-            onError={() => {
+                          <img
+                            src={mediaSrc}
+                            alt={`SafetyCulture attachment ${idx + 1}`}
+                            className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => {
               if (retryTick < 2) {
                 setRetryTick((n) => n + 1);
                 return;
@@ -270,7 +272,7 @@ function JobCardInlineSectionMediaStrip({ items, issueId }) {
           }
           return (
             <figure key={key} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
-              <img src={url} alt="" className="h-28 w-full object-cover" />
+              <img src={url} alt="" className="h-28 w-full object-cover" loading="lazy" decoding="async" />
             </figure>
           );
         })}
@@ -380,6 +382,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       }),
     [selectedJobCard?.photos, selectedJobCard?.safetyCultureIssueId]
   );
+
+  /** Detail shell vs heavy `photos` JSON (loaded in a follow-up request when using omitPhotos=1). */
+  const detailAttachmentsLoading =
+    (detailLoading && !Array.isArray(selectedJobCard?.photos)) ||
+    selectedJobCard?.attachmentsPending === true;
 
   /** Keys like `form_<instanceId>_<fieldId>` for checklist fields we can place next to answers. */
   const checklistFieldVoiceKeys = useMemo(() => {
@@ -620,14 +627,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       const token = window.storage?.getToken?.();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const [cardResponse, formsResponse, activityResponse] = await Promise.all([
-        fetch(`/api/jobcards/${jobCard.id}`, { headers }),
+        fetch(`/api/jobcards/${jobCard.id}?omitPhotos=1`, { headers }),
         fetch(`/api/jobcards/${jobCard.id}/forms`, { headers }),
         fetch(`/api/jobcards/${jobCard.id}/activity`, { headers }),
       ]);
+      let shouldLoadPhotos = false;
       if (cardResponse.ok) {
         const data = await cardResponse.json();
         const full = data?.data?.jobCard ?? data?.jobCard ?? data;
-        if (full && full.id) setSelectedJobCard(full);
+        if (full && full.id) {
+          setSelectedJobCard(full);
+          shouldLoadPhotos = full.attachmentsPending === true;
+        }
       }
       if (formsResponse.ok) {
         try {
@@ -645,6 +656,34 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         } catch {
           setDetailActivities([]);
         }
+      }
+      if (shouldLoadPhotos && jobCard.id) {
+        void (async () => {
+          try {
+            const pr = await fetch(`/api/jobcards/${jobCard.id}/photos`, { headers });
+            if (!pr.ok) {
+              setSelectedJobCard((prev) =>
+                prev?.id === jobCard.id ? { ...prev, photos: [], attachmentsPending: false } : prev
+              );
+              return;
+            }
+            const pd = await pr.json();
+            const photos = pd?.data?.photos ?? pd?.photos;
+            setSelectedJobCard((prev) =>
+              prev?.id === jobCard.id
+                ? {
+                    ...prev,
+                    photos: Array.isArray(photos) ? photos : [],
+                    attachmentsPending: false
+                  }
+                : prev
+            );
+          } catch {
+            setSelectedJobCard((prev) =>
+              prev?.id === jobCard.id ? { ...prev, photos: [], attachmentsPending: false } : prev
+            );
+          }
+        })();
       }
     } catch (e) {
       console.warn('Failed to load full job card details, showing list data', e);
@@ -1789,7 +1828,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                           Photos &amp; videos
                         </div>
                         <div className="text-sm text-slate-100">
-                          {detailLoading && !Array.isArray(selectedJobCard.photos) ? (
+                          {detailAttachmentsLoading ? (
                             <span className="text-slate-400">Loading…</span>
                           ) : (
                             <>
@@ -1801,7 +1840,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       </div>
                     </div>
                   </header>
-                  {detailLoading && !Array.isArray(selectedJobCard.photos) ? (
+                  {detailAttachmentsLoading ? (
                     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-8 text-center">
                       <i className="fa-solid fa-spinner fa-spin text-slate-500 text-xl mb-2" />
                       <p className="text-sm text-slate-400">Loading attachments…</p>
@@ -1849,6 +1888,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                               src={url}
                               alt={`Job card photo ${idx + 1}`}
                               className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                              loading="lazy"
+                              decoding="async"
                             />
                           </figure>
                         );

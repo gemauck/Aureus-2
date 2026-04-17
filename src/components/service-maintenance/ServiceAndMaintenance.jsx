@@ -63,6 +63,8 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
             src={mediaSrc}
             alt={`SafetyCulture attachment ${idx + 1}`}
             className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+            loading="lazy"
+            decoding="async"
             onError={() => {
               if (retryTick < 2) {
                 setRetryTick((n) => n + 1);
@@ -125,7 +127,7 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId }) {
               key={key}
               className={`overflow-hidden rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
             >
-              <img src={url} alt="" className="h-28 w-full object-cover" />
+              <img src={url} alt="" className="h-28 w-full object-cover" loading="lazy" decoding="async" />
             </figure>
           );
         })}
@@ -327,12 +329,14 @@ const ServiceAndMaintenance = () => {
       }
 
       try {
-        const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+        const response = await fetch(
+          `/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`,
+          { headers }
+        );
 
         if (isCancelled) {
           setLoadingJobCard(false);
@@ -345,6 +349,36 @@ const ServiceAndMaintenance = () => {
           if (jobCard && jobCard.id) {
             setSelectedJobCard(jobCard);
             setShowJobCardDetail(true);
+            if (jobCard.attachmentsPending === true && !isCancelled) {
+              void (async () => {
+                try {
+                  const pr = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}/photos`, {
+                    headers
+                  });
+                  if (!pr.ok) {
+                    setSelectedJobCard((prev) =>
+                      prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
+                    );
+                    return;
+                  }
+                  const pd = await pr.json();
+                  const photos = pd?.data?.photos ?? pd?.photos;
+                  setSelectedJobCard((prev) =>
+                    prev?.id === jobCardId
+                      ? {
+                          ...prev,
+                          photos: Array.isArray(photos) ? photos : [],
+                          attachmentsPending: false
+                        }
+                      : prev
+                  );
+                } catch {
+                  setSelectedJobCard((prev) =>
+                    prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
+                  );
+                }
+              })();
+            }
           }
         } else if (response.status === 404) {
           setShowJobCardDetail(false);
@@ -460,13 +494,49 @@ const ServiceAndMaintenance = () => {
     setLoadingJobCard(true);
     try {
       const token = window.storage?.getToken?.();
-      const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCard.id)}`, {
-        headers: token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : {},
-      });
+      const headers = token
+        ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        : { 'Content-Type': 'application/json' };
+      const response = await fetch(
+        `/api/jobcards/${encodeURIComponent(jobCard.id)}?omitPhotos=1`,
+        { headers }
+      );
       if (response.ok) {
         const data = await response.json();
         const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
-        if (full && full.id) setSelectedJobCard(full);
+        if (full && full.id) {
+          setSelectedJobCard(full);
+          if (full.attachmentsPending === true && jobCard.id) {
+            void (async () => {
+              try {
+                const pr = await fetch(`/api/jobcards/${encodeURIComponent(jobCard.id)}/photos`, {
+                  headers
+                });
+                if (!pr.ok) {
+                  setSelectedJobCard((prev) =>
+                    prev?.id === jobCard.id ? { ...prev, photos: [], attachmentsPending: false } : prev
+                  );
+                  return;
+                }
+                const pd = await pr.json();
+                const photos = pd?.data?.photos ?? pd?.photos;
+                setSelectedJobCard((prev) =>
+                  prev?.id === jobCard.id
+                    ? {
+                        ...prev,
+                        photos: Array.isArray(photos) ? photos : [],
+                        attachmentsPending: false
+                      }
+                    : prev
+                );
+              } catch {
+                setSelectedJobCard((prev) =>
+                  prev?.id === jobCard.id ? { ...prev, photos: [], attachmentsPending: false } : prev
+                );
+              }
+            })();
+          }
+        }
       }
     } catch (e) {
       console.warn('Failed to load full job card details (photos etc.), showing list data', e);
@@ -551,6 +621,10 @@ const ServiceAndMaintenance = () => {
       visualItemsBySection: { diagnosis: [], actionsTaken: [], futureWorkRequired: [] }
     };
   }, [selectedJobCard?.photos, selectedJobCard?.safetyCultureIssueId]);
+
+  const jobCardAttachmentsLoading =
+    (loadingJobCard && !Array.isArray(selectedJobCard?.photos)) ||
+    selectedJobCard?.attachmentsPending === true;
 
   const DetailVoice =
     typeof window.JobCardVoiceClips === 'function' ? window.JobCardVoiceClips : null;
@@ -1973,7 +2047,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                           Photos &amp; videos
                         </div>
                         <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                          {loadingJobCard && !Array.isArray(selectedJobCard.photos) ? (
+                          {jobCardAttachmentsLoading ? (
                             <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading…</span>
                           ) : (
                             <>
@@ -1985,7 +2059,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       </div>
                     </div>
                   </header>
-                  {loadingJobCard && !Array.isArray(selectedJobCard.photos) ? (
+                  {jobCardAttachmentsLoading ? (
                     <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
                       <i className="fa-solid fa-spinner fa-spin text-xl mb-2" />
                       <p className="text-sm">Loading attachments…</p>
@@ -2037,6 +2111,8 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                               src={url}
                               alt={`Job card photo ${idx + 1}`}
                               className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                              loading="lazy"
+                              decoding="async"
                             />
                           </figure>
                         );
