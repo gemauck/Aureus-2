@@ -78,6 +78,33 @@ function rememberPublicPriorJobCardId(id) {
   }
 }
 
+/** Set before navigating to `/` to log in; LoginPage reads and redirects back here. */
+const REDIRECT_AFTER_LOGIN_KEY = 'redirectAfterLogin';
+
+function getJobCardAuthToken() {
+  try {
+    const t =
+      (typeof window !== 'undefined' && window.storage?.getToken?.()) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('abcotronics_token')) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('authToken')) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('auth_token')) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('token'));
+    if (!t || t === 'undefined' || t === 'null') return null;
+    return t;
+  } catch {
+    return null;
+  }
+}
+
+function goToSignInForJobCardHistory() {
+  try {
+    sessionStorage.setItem(REDIRECT_AFTER_LOGIN_KEY, '/job-card');
+  } catch {
+    /* ignore */
+  }
+  window.location.assign('/');
+}
+
 function jobCardMediaIsVideoDataUrl(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
@@ -649,7 +676,7 @@ function removeLocalPendingJobCard(id) {
 
 /** Merge server/public API rows with unsynced local copies (local wins on id collision). */
 function buildMergedWizardJobCardRows(serverList) {
-  const token = typeof window !== 'undefined' ? window.storage?.getToken?.() : null;
+  const token = typeof window !== 'undefined' ? getJobCardAuthToken() : null;
   const localPending = readLocalPendingJobCards().filter(j => j && j.synced === false);
   const pendingIdSet = new Set(localPending.map(j => String(j.id)));
   const serverRows = (serverList || [])
@@ -747,6 +774,12 @@ const JobCardFormPublic = () => {
   /** Prior list: server + public API; merged with readLocalPendingJobCards() for display */
   const [serverPriorList, setServerPriorList] = useState([]);
   const [serverPriorLoading, setServerPriorLoading] = useState(false);
+  /** Prior list: server search + client filter (authenticated) */
+  const [priorSearchInput, setPriorSearchInput] = useState('');
+  const [priorSearchDebounced, setPriorSearchDebounced] = useState('');
+  const [priorClientId, setPriorClientId] = useState('');
+  /** Bump when returning from login (another tab) or visibility — refetch job card list */
+  const [priorListRefreshTick, setPriorListRefreshTick] = useState(0);
   /** Bump after local pending queue changes so landing / prior list re-read storage */
   const [localDraftsTick, setLocalDraftsTick] = useState(0);
   /** When editing, keep stable id / createdAt / sync flags for save */
@@ -798,10 +831,40 @@ const JobCardFormPublic = () => {
     }
   }, [mobileHeaderCollapsed]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setPriorSearchDebounced(priorSearchInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [priorSearchInput]);
+
+  useEffect(() => {
+    const bump = () => setPriorListRefreshTick(x => x + 1);
+    const onStorage = e => {
+      if (e.key === 'abcotronics_token') bump();
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'visible') bump();
+    };
+    window.addEventListener('storage', onStorage);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
   const availableTechnicians = useMemo(
     () => users.filter(u => u.status !== 'inactive' && u.status !== 'suspended'),
     [users]
   );
+
+  const priorClientSelectOptions = useMemo(() => {
+    const list = Array.isArray(clients) ? clients : [];
+    return [...list]
+      .filter(c => c && c.id)
+      .sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+      );
+  }, [clients]);
 
   const addVoiceClip = useCallback(clip => {
     setVoiceAttachments(prev => [
@@ -978,7 +1041,7 @@ const JobCardFormPublic = () => {
       } catch (e) {
         console.warn('⚠️ JobCardFormPublic: location inventory fetch failed:', e?.message || e);
       }
-      const token = window.storage?.getToken?.();
+      const token = getJobCardAuthToken();
       if (token && window.DatabaseAPI?.getInventory) {
         try {
           const response = await window.DatabaseAPI.getInventory(locId, { forceRefresh: true });
@@ -1041,7 +1104,7 @@ const JobCardFormPublic = () => {
       return '/api/public/jobcards-calendar.ics';
     }
     const base = `${window.location.origin}/api/public/jobcards-calendar.ics`;
-    const token = window.storage?.getToken?.();
+    const token = getJobCardAuthToken();
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }, []);
 
@@ -1363,21 +1426,29 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     if (wizardFlow !== 'prior_list' && wizardFlow !== 'landing') return;
     let cancelled = false;
-    const token = window.storage?.getToken?.();
+    const token = getJobCardAuthToken();
 
     (async () => {
       if (!cancelled) setServerPriorLoading(true);
       if (token) {
         try {
-          const r = await fetch(
-            '/api/jobcards?page=1&pageSize=500&sortField=updatedAt&sortDirection=desc',
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              }
+          const params = new URLSearchParams({
+            page: '1',
+            pageSize: '500',
+            sortField: 'updatedAt',
+            sortDirection: 'desc'
+          });
+          if (wizardFlow === 'prior_list') {
+            if (priorSearchDebounced) params.set('q', priorSearchDebounced);
+            if (priorClientId) params.set('clientId', priorClientId);
+          }
+
+          const r = await fetch(`/api/jobcards?${params.toString()}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
             }
-          );
+          });
           if (!r.ok) {
             if (!cancelled) setServerPriorList([]);
             return;
@@ -1426,12 +1497,34 @@ const JobCardFormPublic = () => {
     return () => {
       cancelled = true;
     };
-  }, [wizardFlow]);
+  }, [wizardFlow, priorSearchDebounced, priorClientId, priorListRefreshTick]);
 
   const mergedPriorJobCards = useMemo(() => {
     if (wizardFlow !== 'prior_list') return [];
-    return buildMergedWizardJobCardRows(serverPriorList);
-  }, [wizardFlow, serverPriorList, localDraftsTick]);
+    const rows = buildMergedWizardJobCardRows(serverPriorList);
+    const token = getJobCardAuthToken();
+    if (!token || (!priorSearchDebounced && !priorClientId)) return rows;
+
+    const q = priorSearchDebounced.toLowerCase();
+    return rows.filter(jc => {
+      const isLocalPending = jc.source === 'local' || jc.synced === false;
+      if (!isLocalPending) return true;
+      if (priorClientId && String(jc.clientId || '') !== priorClientId) return false;
+      if (!priorSearchDebounced) return true;
+      const hay = [
+        jc.jobCardNumber,
+        jc.clientName,
+        jc.agentName,
+        jc.siteName,
+        jc.reasonForVisit,
+        jc.diagnosis
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [wizardFlow, serverPriorList, localDraftsTick, priorSearchDebounced, priorClientId]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -1622,7 +1715,7 @@ const JobCardFormPublic = () => {
         }
 
         if (!isOnline) return;
-        const token = window.storage?.getToken?.();
+        const token = getJobCardAuthToken();
         if (!token) return;
 
         try {
@@ -1705,7 +1798,7 @@ const JobCardFormPublic = () => {
             } else {
               console.warn('⚠️ JobCardFormPublic: Public inventory API returned error:', response.status);
               // Try authenticated API as fallback
-              const token = window.storage?.getToken?.();
+              const token = getJobCardAuthToken();
               if (token && window.DatabaseAPI?.getInventory) {
                 try {
                   const response = await window.DatabaseAPI.getInventory();
@@ -1776,7 +1869,7 @@ const JobCardFormPublic = () => {
             } else {
               console.warn('⚠️ JobCardFormPublic: Public locations API returned error:', response.status);
               // Try authenticated API as fallback
-              const token = window.storage?.getToken?.();
+              const token = getJobCardAuthToken();
               if (token && window.DatabaseAPI?.getStockLocations) {
                 try {
                   const response = await window.DatabaseAPI.getStockLocations();
@@ -2399,7 +2492,7 @@ const JobCardFormPublic = () => {
     clearSignature();
 
     let full = card;
-    const token = window.storage?.getToken?.();
+    const token = getJobCardAuthToken();
     if (token) {
       try {
         const r = await fetch(`/api/jobcards/${encodeURIComponent(card.id)}`, {
@@ -2745,7 +2838,7 @@ const JobCardFormPublic = () => {
 
       if (serverJobCardId) {
         const payloadJson = JSON.stringify(jobCardData);
-        const token = window.storage?.getToken?.();
+        const token = getJobCardAuthToken();
         if (token) {
           try {
             const authRes = await fetch(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
@@ -2803,7 +2896,7 @@ const JobCardFormPublic = () => {
 
       if (serverReachOk) {
         removeLocalPendingJobCard(jobCardData.id);
-        const token = window.storage?.getToken?.();
+        const token = getJobCardAuthToken();
         if (token && typeof window !== 'undefined') {
           const openMain = window.confirm(
             'Job card saved to the server.\n\nOpen Service & Maintenance (Job Cards list) now?'
@@ -4047,6 +4140,58 @@ const JobCardFormPublic = () => {
           />
           <SummaryRow label="Customer Signature" value={hasSignature ? 'Captured' : 'Pending'} />
         </div>
+        <div className="mt-5 pt-5 border-t border-gray-200 space-y-4">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Stock used</h3>
+            {formData.stockUsed.length > 0 ? (
+              <ul className="space-y-2">
+                {formData.stockUsed.map((item) => (
+                  <li
+                    key={item.id}
+                    className="text-sm text-gray-900 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2"
+                  >
+                    <div className="font-medium">{item.itemName || item.sku || 'Item'}</div>
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      Qty {item.quantity}
+                      {item.sku ? ` • SKU ${item.sku}` : ''}
+                      {item.locationName ? ` • ${item.locationName}` : ''}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">None recorded.</p>
+            )}
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Purchases</h3>
+            {formData.materialsBought.length > 0 ? (
+              <ul className="space-y-2">
+                {formData.materialsBought.map((item) => (
+                  <li
+                    key={item.id}
+                    className="text-sm text-gray-900 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2"
+                  >
+                    <div className="flex justify-between gap-2 items-start">
+                      <span className="font-medium">{item.itemName || 'Purchase'}</span>
+                      <span className="font-semibold text-gray-900 shrink-0">
+                        R {(Number(item.cost) || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    {item.description ? (
+                      <div className="text-xs text-gray-600 mt-1">{item.description}</div>
+                    ) : null}
+                    {item.reason ? (
+                      <div className="text-xs text-gray-500 mt-0.5">Reason: {item.reason}</div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">None recorded.</p>
+            )}
+          </div>
+        </div>
       </section>
       {renderNavigationButtons()}
     </div>
@@ -4138,7 +4283,7 @@ const JobCardFormPublic = () => {
               JobCard App
             </h1>
             <p className="text-sm text-slate-600">
-              Open job cards from the server or drafts stored on this device, or start a new card.
+              Start a new card, or open prior cards. Full server history requires signing in once on this device.
             </p>
           </div>
 
@@ -4173,7 +4318,7 @@ const JobCardFormPublic = () => {
                 <span className="flex-1 min-w-0">
                   <span className="block font-semibold text-base sm:text-lg">Edit prior job card</span>
                   <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
-                    Full list: server job cards plus not synced drafts on this device, newest first.
+                    Search and filter when signed in; includes drafts not synced on this device.
                   </span>
                 </span>
                 <i className="fa-solid fa-chevron-right text-blue-400 flex-shrink-0" aria-hidden />
@@ -4181,13 +4326,31 @@ const JobCardFormPublic = () => {
             </button>
           </div>
 
+          {!getJobCardAuthToken() ? (
+            <section className="rounded-2xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm space-y-2">
+              <p className="text-sm font-semibold text-amber-950">See all job cards on this phone</p>
+              <p className="text-xs text-amber-900/90 leading-snug">
+                The public link only remembers cards submitted in this browser until you sign in. Use your ERP login to
+                load the full history everywhere, including search and filter by client.
+              </p>
+              <button
+                type="button"
+                onClick={goToSignInForJobCardHistory}
+                className="w-full mt-1 inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm font-semibold text-amber-950 hover:bg-amber-100/80 touch-manipulation"
+              >
+                <i className="fa-solid fa-right-to-bracket" aria-hidden />
+                Sign in for full history
+              </button>
+            </section>
+          ) : null}
+
           <section className="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm space-y-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Follow-up calendar</p>
               <p className="text-xs text-slate-600 mt-0.5 leading-snug">
                 Subscribe to an ICS feed for scheduled future-work job card events.
               </p>
-              {!window.storage?.getToken?.() && (
+              {!getJobCardAuthToken() && (
                 <p className="text-[11px] text-amber-700 mt-1">
                   Sign in first to generate a personal calendar URL.
                 </p>
@@ -4197,7 +4360,7 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={handleSubscribeCalendar}
-                disabled={!window.storage?.getToken?.()}
+                disabled={!getJobCardAuthToken()}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i className="fa-regular fa-calendar-plus" aria-hidden />
@@ -4206,7 +4369,7 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={handleCopyCalendarLink}
-                disabled={!window.storage?.getToken?.()}
+                disabled={!getJobCardAuthToken()}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i className="fa-regular fa-copy" aria-hidden />
@@ -4233,11 +4396,64 @@ const JobCardFormPublic = () => {
           </button>
           <h1 className="text-xl font-bold">Prior job cards</h1>
           <p className="text-sm text-white/80 mt-1">
-            Newest first — tap a card to continue. Includes server cards (when signed in or submitted from this
-            browser) and any not synced drafts stored on this device.
+            {getJobCardAuthToken()
+              ? 'Search and filter below, newest first — tap a card to open. Local drafts not yet synced are included.'
+              : 'Sign in to load the full server list on any device. Without signing in, only cards submitted from this browser are listed, plus offline drafts on this device.'}
           </p>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-8">
+          {!getJobCardAuthToken() ? (
+            <div className="max-w-2xl mx-auto mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm">
+              <p className="text-sm font-semibold">No server history on this device yet?</p>
+              <p className="text-xs mt-1 text-amber-900/90 leading-snug">
+                Sign in once with your ERP account to load every submitted job card and use search and client filter.
+              </p>
+              <button
+                type="button"
+                onClick={goToSignInForJobCardHistory}
+                className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-amber-100 border border-amber-300 px-3 py-2.5 text-sm font-semibold text-amber-950 hover:bg-amber-200/80 touch-manipulation"
+              >
+                <i className="fa-solid fa-right-to-bracket" aria-hidden />
+                Sign in for full history
+              </button>
+            </div>
+          ) : null}
+          {getJobCardAuthToken() ? (
+            <div className="max-w-2xl mx-auto mb-4 space-y-3">
+              <div>
+                <label htmlFor="jobcard-prior-search" className="block text-xs font-semibold text-gray-600 mb-1">
+                  Search
+                </label>
+                <input
+                  id="jobcard-prior-search"
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Job number, client, site, technician, notes…"
+                  value={priorSearchInput}
+                  onChange={e => setPriorSearchInput(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+              </div>
+              <div>
+                <label htmlFor="jobcard-prior-client" className="block text-xs font-semibold text-gray-600 mb-1">
+                  Client
+                </label>
+                <select
+                  id="jobcard-prior-client"
+                  value={priorClientId}
+                  onChange={e => setPriorClientId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                >
+                  <option value="">All clients</option>
+                  {priorClientSelectOptions.map(c => (
+                    <option key={String(c.id)} value={String(c.id)}>
+                      {c.name || c.companyName || c.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
           {mergedPriorJobCards.length === 0 && !serverPriorLoading ? (
             <div className="max-w-lg mx-auto mt-8 rounded-xl border border-gray-200 bg-white p-6 text-center text-gray-600 shadow-sm">
               <i className="fa-regular fa-folder-open text-3xl text-gray-400 mb-3" aria-hidden />

@@ -52,6 +52,22 @@ const LoginPage = () => {
         try {
             setSubmitting(true);
             await login(email, password);
+            // Optional redirect (e.g. public Job Card app sets sessionStorage before navigating to login)
+            try {
+                const next = sessionStorage.getItem('redirectAfterLogin');
+                if (
+                    next &&
+                    typeof next === 'string' &&
+                    next.startsWith('/') &&
+                    !next.startsWith('//')
+                ) {
+                    sessionStorage.removeItem('redirectAfterLogin');
+                    window.location.assign(next);
+                    return;
+                }
+            } catch (_) {
+                /* ignore */
+            }
             // Save email for next time if remember me is checked, otherwise clear it
             try {
                 if (rememberMe && storage?.setLastLoginEmail) {

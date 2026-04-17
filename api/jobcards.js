@@ -135,30 +135,52 @@ async function handler(req, res) {
         const clientId = url.searchParams.get('clientId')
         const clientName = url.searchParams.get('clientName')
         const statusParam = url.searchParams.get('status')
+        const searchQ = (url.searchParams.get('q') || url.searchParams.get('search') || '').trim()
         const sortFieldRaw = url.searchParams.get('sortField') || 'createdAt'
         const sortDirectionRaw =
           url.searchParams.get('sortDirection') === 'asc' ? 'asc' : 'desc'
 
-        // Allow larger page sizes when filtering by client (for client detail views)
-        const allowLargePageSize = !!(clientId || clientName)
+        // Allow larger page sizes when filtering by client (for client detail views) or text search
+        const allowLargePageSize = !!(clientId || clientName || searchQ)
         const { page, pageSize } = getPagination(allowLargePageSize)
         const owner = req.user?.sub
 
         // Build where clause for filtering
         // For clientName, use case-insensitive partial matching
-        let whereClause = {}
+        const baseFilters = {}
         if (clientId) {
-          whereClause.clientId = clientId
+          baseFilters.clientId = clientId
         } else if (clientName) {
           // Use case-insensitive contains search for clientName to catch variations
           // e.g., "AccuFarm" matches "AccuFarm (Pty) Ltd" and vice versa
-          whereClause.clientName = {
+          baseFilters.clientName = {
             contains: clientName,
             mode: 'insensitive'
           }
         }
         if (statusParam && statusParam !== 'all') {
-          whereClause.status = statusParam
+          baseFilters.status = statusParam
+        }
+
+        let whereClause = {}
+        if (searchQ) {
+          const searchOr = {
+            OR: [
+              { jobCardNumber: { contains: searchQ, mode: 'insensitive' } },
+              { agentName: { contains: searchQ, mode: 'insensitive' } },
+              { clientName: { contains: searchQ, mode: 'insensitive' } },
+              { siteName: { contains: searchQ, mode: 'insensitive' } },
+              { reasonForVisit: { contains: searchQ, mode: 'insensitive' } },
+              { diagnosis: { contains: searchQ, mode: 'insensitive' } }
+            ]
+          }
+          if (Object.keys(baseFilters).length === 0) {
+            whereClause = searchOr
+          } else {
+            whereClause = { AND: [baseFilters, searchOr] }
+          }
+        } else {
+          whereClause = baseFilters
         }
 
         const sortField = LIST_SORT_WHITELIST[sortFieldRaw] ? sortFieldRaw : 'createdAt'
@@ -198,6 +220,7 @@ async function handler(req, res) {
           pageSize,
           totalItems,
           clientId: clientId || clientName || 'all',
+          q: searchQ || null,
           whereClause,
           sampleJobCard: jobCards[0] ? {
             jobCardNumber: jobCards[0].jobCardNumber,
