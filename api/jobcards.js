@@ -3,6 +3,7 @@ import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError, forbidden } from './_lib/response.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 import { isAdminRole } from './_lib/authRoles.js'
+import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 
 // Some deployments may not yet have the optional service form tables used by
 // the job card forms feature. When those tables are missing, Prisma throws
@@ -39,6 +40,47 @@ function canMutateJobCard(jobCard, user) {
   return false
 }
 
+function isTerminalJobCardStatus(s) {
+  return s === 'submitted' || s === 'completed'
+}
+
+async function resolveActorDisplayName(prismaClient, req) {
+  const uid = req.user?.sub || req.user?.id
+  if (!uid) return req.user?.name || req.user?.email || 'User'
+  try {
+    const u = await prismaClient.user.findUnique({
+      where: { id: String(uid) },
+      select: { name: true, email: true }
+    })
+    if (u) return u.name || u.email || 'User'
+  } catch {
+    /* non-fatal */
+  }
+  return req.user?.name || req.user?.email || 'User'
+}
+
+async function insertJobCardActivity(prismaClient, { jobCardId, req, action, metadata, source = 'web' }) {
+  const uid = req.user?.sub || req.user?.id || null
+  let actorName = ''
+  try {
+    if (uid) {
+      actorName = await resolveActorDisplayName(prismaClient, req)
+    }
+    await prismaClient.jobCardActivity.create({
+      data: {
+        jobCardId,
+        actorUserId: uid ? String(uid) : null,
+        actorName,
+        action,
+        source,
+        metadata: metadata !== undefined && metadata !== null ? metadata : undefined
+      }
+    })
+  } catch (e) {
+    console.error('JobCardActivity insert failed (non-fatal):', e?.message || e)
+  }
+}
+
 async function computeNextJobCardNumber() {
   const lastJobCard = await prisma.jobCard.findFirst({
     orderBy: { createdAt: 'desc' },
@@ -71,6 +113,21 @@ async function handler(req, res) {
   const resourceType = pathSegments[0] // jobcards (direct endpoint, not nested like /api/manufacturing/*)
   const id = pathSegments[1]
   const subResource = pathSegments[2]
+  const urlPathRaw = req.url.split('?')[0].split('#')[0]
+
+  const auditManufacturing = (action, resource, entityId, details = {}) => {
+    void logAuditFromRequest(prisma, req, {
+      action,
+      entity: 'manufacturing',
+      entityId: entityId != null && String(entityId) !== '' ? String(entityId) : String(resource),
+      details: {
+        resource,
+        method: req.method,
+        path: urlPathRaw,
+        ...details
+      }
+    })
+  }
 
   // Helper to read pagination params from the query string
   const getPagination = (allowLargePageSize = false) => {
@@ -219,6 +276,8 @@ async function handler(req, res) {
               reasonForVisit: true,
               diagnosis: true,
               ownerId: true,
+              completedByUserId: true,
+              completedByName: true,
               createdAt: true,
               updatedAt: true
             },
@@ -386,6 +445,16 @@ async function handler(req, res) {
 
         const otherCommentsForCreate = mergeJobCardOtherComments(body)
 
+        const rawStatus = body.status || 'draft'
+        const statusForCreate = ['draft', 'submitted', 'completed'].includes(rawStatus) ? rawStatus : 'draft'
+
+        let completedByUserId = null
+        let completedByName = ''
+        if (isTerminalJobCardStatus(statusForCreate)) {
+          completedByUserId = req.user?.sub ? String(req.user.sub) : null
+          completedByName = await resolveActorDisplayName(prisma, req)
+        }
+
         const buildCreateArgs = jobCardNumber => ({
           data: {
             jobCardNumber,
@@ -414,10 +483,12 @@ async function handler(req, res) {
             totalMaterialsCost,
             otherComments: otherCommentsForCreate,
             photos,
-            status: body.status || 'draft',
+            status: statusForCreate,
             submittedAt: body.submittedAt ? new Date(body.submittedAt) : null,
             completedAt: body.completedAt ? new Date(body.completedAt) : null,
-            ownerId: req.user?.sub || null
+            ownerId: req.user?.sub || null,
+            completedByUserId,
+            completedByName
           }
         })
 
@@ -444,7 +515,19 @@ async function handler(req, res) {
             'Could not allocate a unique job card number'
           )
         }
-        
+
+        await insertJobCardActivity(prisma, {
+          jobCardId: jobCard.id,
+          req,
+          action: 'created',
+          metadata: { status: jobCard.status },
+          source: 'web'
+        })
+        auditManufacturing('create', 'job-cards', jobCard.id, {
+          summary: `Created job card ${jobCard.jobCardNumber}`,
+          jobCardNumber: jobCard.jobCardNumber
+        })
+
         return created(res, { 
           jobCard: {
             ...jobCard,
@@ -595,12 +678,34 @@ async function handler(req, res) {
           const materials = Array.isArray(body.materialsBought) ? body.materialsBought : parseJson(body.materialsBought || '[]')
           updateData.totalMaterialsCost = materials.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
         }
-        
+
+        const nextStatus =
+          updateData.status !== undefined ? updateData.status : existing.status
+        if (isTerminalJobCardStatus(nextStatus) && !existing.completedByUserId) {
+          updateData.completedByUserId = req.user?.sub ? String(req.user.sub) : null
+          updateData.completedByName = await resolveActorDisplayName(prisma, req)
+        }
+
         const jobCard = await prisma.jobCard.update({
           where: { id },
           data: updateData
         })
-        
+
+        await insertJobCardActivity(prisma, {
+          jobCardId: id,
+          req,
+          action: 'updated',
+          metadata: {
+            fields: Object.keys(updateData),
+            status: jobCard.status
+          },
+          source: 'web'
+        })
+        auditManufacturing('update', 'job-cards', id, {
+          summary: `Updated job card ${jobCard.jobCardNumber}`,
+          jobCardNumber: jobCard.jobCardNumber
+        })
+
         return ok(res, { 
           jobCard: {
             ...jobCard,
@@ -646,8 +751,13 @@ async function handler(req, res) {
           return forbidden(res, 'You do not have permission to delete this job card');
         }
         
+        auditManufacturing('delete', 'job-cards', id, {
+          summary: `Deleted job card ${existing.jobCardNumber}`,
+          jobCardNumber: existing.jobCardNumber
+        })
+
         await prisma.jobCard.delete({ where: { id } });
-        
+
         // Return simple deletion confirmation
         return ok(res, { deleted: true, id });
       } catch (error) {
@@ -666,6 +776,84 @@ async function handler(req, res) {
         return serverError(res, 'Failed to delete job card', error.message)
       }
     }
+  }
+
+  // JOB CARD ACTIVITY (nested resource)
+  if (resourceType === 'jobcards' && subResource === 'activity') {
+    const activitySub = pathSegments[3]
+
+    if (!id) {
+      return badRequest(res, 'Job card id is required')
+    }
+
+    if (req.method === 'GET' && !activitySub) {
+      try {
+        const jc = await prisma.jobCard.findUnique({ where: { id } })
+        if (!jc) {
+          return notFound(res, 'Job card not found')
+        }
+
+        const rows = await prisma.jobCardActivity.findMany({
+          where: { jobCardId: id },
+          orderBy: { createdAt: 'desc' },
+          take: 500
+        })
+
+        const formatted = rows.map(r => ({
+          id: r.id,
+          jobCardId: r.jobCardId,
+          actorUserId: r.actorUserId,
+          actorName: r.actorName,
+          action: r.action,
+          source: r.source,
+          metadata: r.metadata,
+          createdAt: formatDate(r.createdAt)
+        }))
+
+        return ok(res, { activities: formatted })
+      } catch (error) {
+        console.error('❌ Failed to list job card activity:', error)
+        return serverError(res, 'Failed to list job card activity', error.message)
+      }
+    }
+
+    if (activitySub === 'sync' && req.method === 'POST') {
+      const body = req.body || {}
+      try {
+        const parentJob = await prisma.jobCard.findUnique({ where: { id } })
+        if (!parentJob) {
+          return notFound(res, 'Job card not found')
+        }
+        if (!canMutateJobCard(parentJob, req.user)) {
+          return forbidden(res, 'You do not have permission to sync activity for this job card')
+        }
+
+        const events = Array.isArray(body.events) ? body.events : []
+        let n = 0
+        for (const ev of events.slice(0, 200)) {
+          if (!ev || typeof ev.action !== 'string' || !ev.action.trim()) continue
+          await insertJobCardActivity(prisma, {
+            jobCardId: id,
+            req,
+            action: ev.action.trim(),
+            metadata: ev.metadata,
+            source: typeof ev.source === 'string' && ev.source ? ev.source : 'sync'
+          })
+          n += 1
+        }
+
+        auditManufacturing('sync', 'job-card-activity', id, {
+          summary: `Synced ${n} job card activity event(s)`,
+          count: n
+        })
+        return ok(res, { synced: n })
+      } catch (error) {
+        console.error('❌ Job card activity sync failed:', error)
+        return serverError(res, 'Failed to sync job card activity', error.message)
+      }
+    }
+
+    return badRequest(res, 'Invalid job card activity endpoint')
   }
 
   // JOB CARD FORMS (nested resource)
@@ -742,6 +930,18 @@ async function handler(req, res) {
           }
         })
 
+        await insertJobCardActivity(prisma, {
+          jobCardId: id,
+          req,
+          action: 'service_form_attached',
+          metadata: { templateId: template.id, instanceId: instance.id },
+          source: 'web'
+        })
+        auditManufacturing('create', 'job-card-service-form', instance.id, {
+          summary: `Attached form ${template.name} to job card ${parentJob.jobCardNumber}`,
+          jobCardId: id
+        })
+
         return created(res, {
           form: {
             ...instance,
@@ -801,6 +1001,18 @@ async function handler(req, res) {
         const updated = await prisma.serviceFormInstance.update({
           where: { id: formInstanceId },
           data
+        })
+
+        await insertJobCardActivity(prisma, {
+          jobCardId: id,
+          req,
+          action: 'service_form_updated',
+          metadata: { instanceId: formInstanceId, fields: Object.keys(data) },
+          source: 'web'
+        })
+        auditManufacturing('update', 'job-card-service-form', formInstanceId, {
+          summary: `Updated service form on job card ${parentJob.jobCardNumber}`,
+          jobCardId: id
         })
 
         return ok(res, {

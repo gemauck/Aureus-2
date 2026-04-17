@@ -5,6 +5,7 @@ const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 const PRECACHE_URLS = [
   '/job-card',
   '/jobcard',
+  '/job-cards',
   '/index.html',
   '/fast-loader.js',
   '/dist/core-bundle.js',
@@ -43,7 +44,12 @@ self.addEventListener('activate', event => {
 
 function isJobCardNavigation(url, mode) {
   if (mode !== 'navigate') return false;
-  return url.pathname === '/job-card' || url.pathname === '/jobcard' || url.pathname === '/';
+  return (
+    url.pathname === '/job-card' ||
+    url.pathname === '/jobcard' ||
+    url.pathname === '/job-cards' ||
+    url.pathname === '/'
+  );
 }
 
 self.addEventListener('fetch', event => {

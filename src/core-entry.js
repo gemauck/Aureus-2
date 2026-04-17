@@ -80,6 +80,7 @@ import './components/layout/MainLayout.jsx';
 // Public access modules
 import './components/manufacturing/JobCardVoiceNoteTextarea.jsx';
 import './components/manufacturing/JobCardFormPublic.jsx';
+import './components/manufacturing/JobCardAppGate.jsx';
 
 // Application entry point
 import './App.jsx';

@@ -43,7 +43,7 @@
     "test:projects": "node tests/projects-functionality-persistence-tests.js",
     "stress:poa": "node scripts/stress-test-poa-review.js",
     "predeploy": "npm run test:safety",
-    "lint:audit": "eslint api/manufacturing.js api/sales-orders.js api/purchase-orders.js",
+    "lint:audit": "eslint api/manufacturing.js api/sales-orders.js api/purchase-orders.js api/jobcards.js",
     "repair:inventory-location-costs": "node scripts/repair-location-unit-costs-from-catalog.js",
     "validate:deps": "node scripts/validate-component-deps.js",
     "precommit": "npm run validate:deps",

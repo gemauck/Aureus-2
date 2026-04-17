@@ -90,6 +90,8 @@ model User {
   commentThreadSubscriptions CommentThreadSubscription[] @relation("CommentThreadSubscriber")
   projectCommentsAuthored   ProjectComment[]             @relation("ProjectCommentAuthor")
   projectDocumentsUploaded  ProjectDocument[]            @relation("ProjectDocumentUploader")
+  jobCardsCompletedAsUser   JobCard[]                    @relation("JobCardCompletedBy")
+  jobCardActivitiesAuthored JobCardActivity[]            @relation("JobCardActivityActor")
   projectTeamMemberships   ProjectTeamMember[]          @relation("ProjectTeamMemberUser")
   projectTeamMembersAdded   ProjectTeamMember[]          @relation("ProjectTeamMemberAdder")
   projectActivityLogs       ProjectActivityLog[]         @relation("ProjectActivityLogUser")
@@ -1993,12 +1995,35 @@ model JobCard {
   safetyCultureIssueId String?              @unique // Links to Safety Culture issue for import deduplication
   /// Full JSON snapshot from SafetyCulture (feed row + API detail + optional answers) for imports; can be large.
   safetyCultureSnapshotJson String?
+  completedByUserId         String?
+  completedByName           String                       @default("")
+  completedBy               User?                        @relation("JobCardCompletedBy", fields: [completedByUserId], references: [id])
+  activities                JobCardActivity[]
 
   @@index([clientId])
   @@index([ownerId])
   @@index([status])
   @@index([createdAt])
   @@index([vehicleId])
+  @@index([completedByUserId])
+}
+
+/// Per job card activity trail (authenticated app + sync); complements global AuditLog.
+model JobCardActivity {
+  id          String   @id @default(cuid())
+  jobCardId   String
+  jobCard     JobCard  @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  actorName   String   @default("")
+  action      String
+  source      String   @default("web")
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("JobCardActivityActor", fields: [actorUserId], references: [id])
+
+  @@index([jobCardId])
+  @@index([createdAt])
+  @@index([actorUserId])
 }
 
 /// Local cache of SafetyCulture inspection feed rows (optional detailJson for modal/answers).

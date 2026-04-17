@@ -13,7 +13,12 @@ export default [
     ]
   },
   {
-    files: ['api/manufacturing.js', 'api/sales-orders.js', 'api/purchase-orders.js'],
+    files: [
+      'api/manufacturing.js',
+      'api/sales-orders.js',
+      'api/purchase-orders.js',
+      'api/jobcards.js'
+    ],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

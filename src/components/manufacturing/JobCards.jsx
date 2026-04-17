@@ -370,6 +370,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   /** Checklist / service form instances for the open detail view (GET /api/jobcards/:id/forms). */
   const [detailServiceForms, setDetailServiceForms] = useState([]);
+  /** Activity trail (GET /api/jobcards/:id/activity). */
+  const [detailActivities, setDetailActivities] = useState([]);
 
   const attachmentParts = useMemo(
     () =>
@@ -589,6 +591,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     if (!jobCard?.id) {
       setSelectedJobCard(jobCard);
       setDetailServiceForms([]);
+      setDetailActivities([]);
       setShowDetail(true);
       return;
     }
@@ -596,16 +599,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     setShowDetail(true);
     setSelectedJobCard(jobCard);
     setDetailServiceForms([]);
+    setDetailActivities([]);
     try {
       const token = window.storage?.getToken?.();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const [cardResponse, formsResponse] = await Promise.all([
+      const [cardResponse, formsResponse, activityResponse] = await Promise.all([
         fetch(`/api/jobcards/${jobCard.id}`, { headers }),
         fetch(`/api/jobcards/${jobCard.id}/forms`, { headers }),
+        fetch(`/api/jobcards/${jobCard.id}/activity`, { headers }),
       ]);
       if (cardResponse.ok) {
         const data = await cardResponse.json();
-        const full = data?.jobCard ?? data;
+        const full = data?.data?.jobCard ?? data?.jobCard ?? data;
         if (full && full.id) setSelectedJobCard(full);
       }
       if (formsResponse.ok) {
@@ -614,6 +619,15 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           setDetailServiceForms(Array.isArray(fr.forms) ? fr.forms : []);
         } catch {
           setDetailServiceForms([]);
+        }
+      }
+      if (activityResponse.ok) {
+        try {
+          const ar = await activityResponse.json();
+          const acts = ar?.data?.activities ?? ar?.activities;
+          setDetailActivities(Array.isArray(acts) ? acts : []);
+        } catch {
+          setDetailActivities([]);
         }
       }
     } catch (e) {
@@ -1159,6 +1173,19 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   </div>
 
+                  {(selectedJobCard.completedByName || selectedJobCard.completedByUserId) && (
+                    <div className="mt-4 border-t border-slate-800 pt-4">
+                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                        Completed by (ERP account)
+                      </div>
+                      <div className="mt-1 text-sm text-slate-100">
+                        {selectedJobCard.completedByName ||
+                          selectedJobCard.completedByUserId ||
+                          '—'}
+                      </div>
+                    </div>
+                  )}
+
                   {parseJsonArrayLoose(selectedJobCard.otherTechnicians).length > 0 && (
                     <div className="mt-4 border-t border-slate-800 pt-4">
                       <div className="text-[11px] font-semibold uppercase text-slate-400">
@@ -1208,6 +1235,30 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   </div>
                 </section>
+
+                {detailActivities.length > 0 && (
+                  <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 print:break-inside-avoid">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                      Activity
+                    </div>
+                    <ul className="space-y-2 text-sm text-slate-200">
+                      {detailActivities.map((a) => (
+                        <li
+                          key={a.id}
+                          className="border-b border-slate-800/80 pb-2 last:border-0"
+                        >
+                          <span className="text-slate-400 text-xs">{formatDate(a.createdAt)}</span>
+                          {' · '}
+                          <span className="font-medium">{a.action}</span>
+                          {a.actorName ? ` — ${a.actorName}` : ''}
+                          {a.source ? (
+                            <span className="text-slate-500 text-xs"> ({a.source})</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
 
                 {/* Narrative */}
                 <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">

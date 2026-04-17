@@ -534,6 +534,10 @@ const ServiceAndMaintenance = () => {
     }
   };
 
+  /** Stock / purchases are stored as JSON arrays of objects; avoid join() which prints [object Object]. */
+  const stockRowsForDisplay = (jobCard) => parseJobCardList(jobCard?.stockUsed);
+  const materialsRowsForDisplay = (jobCard) => parseJobCardList(jobCard?.materialsBought);
+
   const attachmentParts = useMemo(() => {
     const part = window.JobCardAttachmentUtils?.partitionJobCardAttachments;
     if (typeof part === 'function') {
@@ -1737,28 +1741,107 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Materials and stock</div>
                       <div className="mt-1 text-xs space-y-1">
-                        <div>Materials bought: {parseJobCardList(selectedJobCard.materialsBought).length}</div>
-                        <div>Stock used: {parseJobCardList(selectedJobCard.stockUsed).length}</div>
+                        <div>Materials bought: {materialsRowsForDisplay(selectedJobCard).length}</div>
+                        <div>Stock used: {stockRowsForDisplay(selectedJobCard).length}</div>
                         <div>Total materials cost: {Number.isFinite(Number(selectedJobCard.totalMaterialsCost)) ? Number(selectedJobCard.totalMaterialsCost).toFixed(2) : '0.00'}</div>
                       </div>
                     </div>
                   </div>
 
-                  {parseJobCardList(selectedJobCard.materialsBought).length > 0 ? (
+                  {stockRowsForDisplay(selectedJobCard).length > 0 ? (
                     <div>
-                      <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Materials bought list</div>
-                      <div className={`rounded-xl border border-dashed p-3 text-xs whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                        {parseJobCardList(selectedJobCard.materialsBought).join('\n')}
-                      </div>
+                      <div className={`text-[11px] font-semibold uppercase mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Stock used</div>
+                      <ul className="space-y-2">
+                        {stockRowsForDisplay(selectedJobCard).map((item, idx) => {
+                          const key =
+                            typeof item === 'object' && item != null && item.id != null
+                              ? item.id
+                              : `stock-${idx}`;
+                          if (typeof item === 'string' || typeof item === 'number') {
+                            return (
+                              <li
+                                key={key}
+                                className={`rounded-xl border border-dashed px-3 py-2 text-xs ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}
+                              >
+                                {String(item)}
+                              </li>
+                            );
+                          }
+                          if (typeof item === 'object' && item !== null) {
+                            const meta = [
+                              item.locationName,
+                              item.sku ? `SKU ${item.sku}` : null,
+                              item.quantity != null ? `Qty ${item.quantity}` : null
+                            ]
+                              .filter(Boolean)
+                              .join(' · ');
+                            return (
+                              <li
+                                key={key}
+                                className={`rounded-xl border border-dashed px-3 py-2 text-xs ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}
+                              >
+                                <div className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                  {item.itemName || item.sku || 'Item'}
+                                </div>
+                                {meta ? (
+                                  <div className={`mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{meta}</div>
+                                ) : null}
+                              </li>
+                            );
+                          }
+                          return null;
+                        })}
+                      </ul>
                     </div>
                   ) : null}
 
-                  {parseJobCardList(selectedJobCard.stockUsed).length > 0 ? (
+                  {materialsRowsForDisplay(selectedJobCard).length > 0 ? (
                     <div>
-                      <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Stock used list</div>
-                      <div className={`rounded-xl border border-dashed p-3 text-xs whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                        {parseJobCardList(selectedJobCard.stockUsed).join('\n')}
-                      </div>
+                      <div className={`text-[11px] font-semibold uppercase mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Purchases</div>
+                      <ul className="space-y-2">
+                        {materialsRowsForDisplay(selectedJobCard).map((item, idx) => {
+                          const key =
+                            typeof item === 'object' && item != null && item.id != null
+                              ? item.id
+                              : `mat-${idx}`;
+                          if (typeof item === 'string' || typeof item === 'number') {
+                            return (
+                              <li
+                                key={key}
+                                className={`rounded-xl border border-dashed px-3 py-2 text-xs ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}
+                              >
+                                {String(item)}
+                              </li>
+                            );
+                          }
+                          if (typeof item === 'object' && item !== null) {
+                            return (
+                              <li
+                                key={key}
+                                className={`rounded-xl border border-dashed px-3 py-2 text-xs ${isDark ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}
+                              >
+                                <div className="flex justify-between gap-2 items-start">
+                                  <span className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                    {item.itemName || 'Purchase'}
+                                  </span>
+                                  {item.cost != null && item.cost !== '' ? (
+                                    <span className={`font-semibold shrink-0 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                      R {Number(item.cost).toFixed(2)}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {item.description ? (
+                                  <div className={`mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{item.description}</div>
+                                ) : null}
+                                {item.reason ? (
+                                  <div className={`mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Reason: {item.reason}</div>
+                                ) : null}
+                              </li>
+                            );
+                          }
+                          return null;
+                        })}
+                      </ul>
                     </div>
                   ) : null}
                 </section>

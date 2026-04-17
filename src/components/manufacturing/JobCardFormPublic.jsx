@@ -1,5 +1,5 @@
-// Public Job Card Form - Accessible without login
-// Standalone form for technicians to submit job cards offline with a mobile-first experience
+// Mobile Job Card wizard — used at /job-card behind JobCardAppGate (login required).
+// Offline-friendly: drafts can be saved locally and synced when online.
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
 
 const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
@@ -674,6 +674,36 @@ function removeLocalPendingJobCard(id) {
   writeLocalPendingJobCards(readLocalPendingJobCards().filter(c => c && String(c.id) !== sid));
 }
 
+async function flushJobCardActivityQueue(serverJobCardId, events) {
+  if (!serverJobCardId || !Array.isArray(events) || events.length === 0) return;
+  const token = getJobCardAuthToken();
+  if (!token) return;
+  try {
+    const res = await fetch(
+      `/api/jobcards/${encodeURIComponent(serverJobCardId)}/activity/sync`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          events: events.map(e => ({
+            action: e.action,
+            metadata: e.metadata,
+            source: e.source || 'mobile'
+          }))
+        })
+      }
+    );
+    if (!res.ok) {
+      console.warn('JobCardFormPublic: activity sync HTTP', res.status);
+    }
+  } catch (e) {
+    console.warn('JobCardFormPublic: activity sync failed', e);
+  }
+}
+
 /** Searchable text for unsynced local drafts (mirrors server `q` coverage as far as stored fields allow). */
 function priorListLocalSearchHay(jc) {
   if (!jc || typeof jc !== 'object') return '';
@@ -717,6 +747,15 @@ function priorListLocalSearchHay(jc) {
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
+}
+
+/** Id used to open a row (GET detail). Prefer `id`; merged rows also set `serverJobCardId`. */
+function getPriorCardOpenId(card) {
+  if (!card || typeof card !== 'object') return '';
+  const raw = card.id != null ? card.id : card.serverJobCardId;
+  if (raw == null) return '';
+  const s = String(raw).trim();
+  return s || '';
 }
 
 /** Merge server/public API rows with unsynced local copies (local wins on id collision). */
@@ -829,6 +868,10 @@ const JobCardFormPublic = () => {
   const [priorListRefreshTick, setPriorListRefreshTick] = useState(0);
   /** Bump after local pending queue changes so landing / prior list re-read storage */
   const [localDraftsTick, setLocalDraftsTick] = useState(0);
+  /** For offline warning when there is no cached auth */
+  const [networkOnline, setNetworkOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
   /** When editing, keep stable id / createdAt / sync flags for save */
   const [editingMeta, setEditingMeta] = useState(null);
   /** Mobile (< xl): collapse wizard header to maximize form area */
@@ -882,6 +925,17 @@ const JobCardFormPublic = () => {
     const t = setTimeout(() => setPriorSearchDebounced(priorSearchInput.trim()), 350);
     return () => clearTimeout(t);
   }, [priorSearchInput]);
+
+  useEffect(() => {
+    const up = () => setNetworkOnline(true);
+    const down = () => setNetworkOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
 
   useEffect(() => {
     const bump = () => setPriorListRefreshTick(x => x + 1);
@@ -2527,7 +2581,16 @@ const JobCardFormPublic = () => {
   };
 
   const handleSelectPriorCard = async card => {
-    if (!card || card.id == null) return;
+    const openId = getPriorCardOpenId(card);
+    if (!openId) {
+      console.warn('JobCardFormPublic: prior card missing id', card);
+      try {
+        alert('This job card could not be opened (missing reference). Refresh the page or sign in again.');
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     lastSignatureRestoreRef.current = null;
     clearSignature();
     setOpeningJobCard(true);
@@ -2537,7 +2600,7 @@ const JobCardFormPublic = () => {
     const token = getJobCardAuthToken();
     if (token) {
       try {
-        const r = await fetch(`/api/jobcards/${encodeURIComponent(card.id)}`, {
+        const r = await fetch(`/api/jobcards/${encodeURIComponent(openId)}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -2555,7 +2618,7 @@ const JobCardFormPublic = () => {
       }
     } else {
       try {
-        const r = await fetch(`/api/public/jobcards/${encodeURIComponent(card.id)}`, {
+        const r = await fetch(`/api/public/jobcards/${encodeURIComponent(openId)}`, {
           headers: { 'Content-Type': 'application/json' }
         });
         if (r.ok) {
@@ -2570,10 +2633,12 @@ const JobCardFormPublic = () => {
       }
     }
 
-    const localId = String(full.id);
+    const localId = String(full.id != null ? full.id : openId);
     const serverJobCardId =
       full.serverJobCardId ||
-      (isLikelyServerJobCardId(full.id) ? String(full.id) : null) ||
+      (isLikelyServerJobCardId(full.id != null ? full.id : openId)
+        ? String(full.id != null ? full.id : openId)
+        : null) ||
       null;
     const createdAt = full.createdAt || new Date().toISOString();
     const synced =
@@ -2686,6 +2751,13 @@ const JobCardFormPublic = () => {
     setCurrentStep(0);
     setStepError('');
     setWizardFlow('form');
+    } catch (err) {
+      console.error('JobCardFormPublic: failed to open prior job card', err);
+      try {
+        alert('Could not open this job card. Try again, or refresh the page.');
+      } catch {
+        /* ignore */
+      }
     } finally {
       setOpeningJobCard(false);
     }
@@ -2791,6 +2863,13 @@ const JobCardFormPublic = () => {
         jobCardData.clientId = null;
       }
 
+      const prevPending = readLocalPendingJobCards().find(
+        c => c && String(c.id) === String(jobCardData.id)
+      );
+      jobCardData.activityQueue = Array.isArray(prevPending?.activityQueue)
+        ? [...prevPending.activityQueue]
+        : [];
+
       if (formData.stockUsed && formData.stockUsed.length > 0) {
         const jobCardReference = `Job Card ${jobCardData.id}`;
         for (const stockItem of formData.stockUsed) {
@@ -2824,6 +2903,7 @@ const JobCardFormPublic = () => {
 
       let serverReachOk = false;
       let lastSyncError = '';
+      let resolvedServerId = null;
 
       const parseSyncFailureMessage = (status, text) => {
         if (status === 413) {
@@ -2845,21 +2925,28 @@ const JobCardFormPublic = () => {
 
       const attemptPostCreate = async () => {
         const createPayload = { ...jobCardData };
-        // Let the backend allocate canonical ids (cuid/uuid) so subsequent
-        // "edit prior job card" lookups and id heuristics remain consistent.
         delete createPayload.id;
         delete createPayload.serverJobCardId;
+        delete createPayload.activityQueue;
+        const token = getJobCardAuthToken();
+        if (!token) {
+          lastSyncError = 'Sign in is required to save the job card to the server.';
+          return { ok: false, serverId: null };
+        }
         try {
-          const response = await fetch('/api/public/jobcards', {
+          const response = await fetch('/api/jobcards', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
             body: JSON.stringify(createPayload)
           });
           const text = await response.text().catch(() => '');
           if (!response.ok) {
             lastSyncError = parseSyncFailureMessage(response.status, text);
-            console.warn('⚠️ JobCardFormPublic: Public POST error', response.status, text);
-            return false;
+            console.warn('⚠️ JobCardFormPublic: POST /api/jobcards error', response.status, text);
+            return { ok: false, serverId: null };
           }
           let result = {};
           try {
@@ -2867,23 +2954,26 @@ const JobCardFormPublic = () => {
           } catch {
             result = {};
           }
-          const jc = result?.data?.jobCard || result?.jobCard;
-          if (jc?.id) {
-            rememberPublicPriorJobCardId(String(jc.id));
+          const jc = result?.data?.jobCard ?? result?.jobCard;
+          const sid = jc?.id ? String(jc.id) : null;
+          if (sid) {
+            rememberPublicPriorJobCardId(sid);
           }
-          return true;
+          return { ok: true, serverId: sid };
         } catch (error) {
           lastSyncError = error.message || 'Network error';
-          console.warn('⚠️ JobCardFormPublic: Public POST failed:', error.message);
-          return false;
+          console.warn('⚠️ JobCardFormPublic: POST /api/jobcards failed:', error.message);
+          return { ok: false, serverId: null };
         }
       };
 
-      let publicPatchStatus = -1;
-
       if (serverJobCardId) {
-        const payloadJson = JSON.stringify(jobCardData);
+        resolvedServerId = serverJobCardId;
+        const payloadObj = { ...jobCardData };
+        delete payloadObj.activityQueue;
+        const payloadJson = JSON.stringify(payloadObj);
         const token = getJobCardAuthToken();
+        let patchStatus = 0;
         if (token) {
           try {
             const authRes = await fetch(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
@@ -2894,49 +2984,41 @@ const JobCardFormPublic = () => {
               },
               body: payloadJson
             });
+            patchStatus = authRes.status;
             if (authRes.ok) {
               serverReachOk = true;
               const authData = await authRes.json().catch(() => ({}));
               const ac = authData.data?.jobCard || authData.jobCard;
-              if (ac?.id && (ac.ownerId == null || ac.ownerId === '')) {
+              if (ac?.id) {
                 rememberPublicPriorJobCardId(String(ac.id));
+                resolvedServerId = String(ac.id);
               }
             } else {
               const text = await authRes.text().catch(() => '');
               lastSyncError = parseSyncFailureMessage(authRes.status, text);
             }
           } catch (e) {
-            console.warn('JobCardFormPublic: authenticated PATCH failed, trying public PATCH', e);
+            console.warn('JobCardFormPublic: authenticated PATCH failed', e);
             lastSyncError = e.message || 'Network error';
           }
+        } else {
+          lastSyncError = 'Sign in is required to update this job card on the server.';
         }
-        if (!serverReachOk) {
-          try {
-            const pubRes = await fetch(`/api/public/jobcards/${encodeURIComponent(serverJobCardId)}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: payloadJson
-            });
-            publicPatchStatus = pubRes.status;
-            if (pubRes.ok) {
-              serverReachOk = true;
-              await pubRes.json().catch(() => ({}));
-              rememberPublicPriorJobCardId(String(serverJobCardId));
-            } else {
-              const text = await pubRes.text().catch(() => '');
-              lastSyncError = parseSyncFailureMessage(pubRes.status, text);
-              console.warn('⚠️ JobCardFormPublic: public PATCH failed', pubRes.status, text);
-            }
-          } catch (e) {
-            console.warn('⚠️ JobCardFormPublic: public PATCH error', e);
-            lastSyncError = e.message || 'Network error';
+        if (!serverReachOk && patchStatus === 404) {
+          const postResult = await attemptPostCreate();
+          serverReachOk = postResult.ok;
+          if (postResult.serverId) {
+            resolvedServerId = postResult.serverId;
           }
-        }
-        if (!serverReachOk && publicPatchStatus === 404) {
-          serverReachOk = await attemptPostCreate();
         }
       } else {
-        serverReachOk = await attemptPostCreate();
+        const postResult = await attemptPostCreate();
+        serverReachOk = postResult.ok;
+        resolvedServerId = postResult.serverId;
+      }
+
+      if (serverReachOk && resolvedServerId && jobCardData.activityQueue?.length) {
+        await flushJobCardActivityQueue(resolvedServerId, jobCardData.activityQueue);
       }
 
       if (serverReachOk) {
@@ -2957,7 +3039,13 @@ const JobCardFormPublic = () => {
           );
         }
       } else {
-        upsertLocalPendingJobCard(jobCardData);
+        const q = [...(jobCardData.activityQueue || [])];
+        q.push({
+          action: normalizedStatus === 'draft' ? 'draft_saved_local' : 'saved_local_pending_sync',
+          metadata: { status: normalizedStatus },
+          source: 'mobile'
+        });
+        upsertLocalPendingJobCard({ ...jobCardData, activityQueue: q });
         setLocalDraftsTick(t => t + 1);
         const hint = lastSyncError ? `\n\nDetails: ${lastSyncError}` : '';
         alert(
@@ -4320,6 +4408,12 @@ const JobCardFormPublic = () => {
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-start overflow-y-auto bg-gradient-to-b from-slate-50 via-blue-50/80 to-slate-100 text-slate-900 px-4 py-10">
         <div className="w-full max-w-md space-y-8">
+          {!networkOnline && !getJobCardAuthToken() && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm">
+              You are offline and there is no saved sign-in on this device. Connect to the internet and open this page
+              once to log in; after that you can keep working offline with your cached account.
+            </div>
+          )}
           <div className="text-center space-y-2">
             <p className="text-[11px] uppercase tracking-widest text-slate-500 font-semibold">
               Mobile Job Card
@@ -4429,7 +4523,7 @@ const JobCardFormPublic = () => {
 
   if (wizardFlow === 'prior_list') {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-100 to-gray-50 relative">
+      <div className="job-card-prior-list min-h-screen flex flex-col bg-gradient-to-b from-gray-100 to-gray-50 relative">
         <header className="flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-blue-500 text-white shadow-md px-4 py-4 sm:px-6">
           <button
             type="button"
@@ -4535,11 +4629,16 @@ const JobCardFormPublic = () => {
                 const siteLine = (jc.siteName && String(jc.siteName).trim()) || '—';
                 const isLocalPending = jc.source === 'local' || jc.synced === false;
                 return (
-                  <li key={`${jc.source || 'local'}-${String(jc.id)}`}>
+                  <li key={`${jc.source || 'local'}-${getPriorCardOpenId(jc) || String(jc.id ?? 'row')}`}>
                     <button
                       type="button"
-                      onClick={() => handleSelectPriorCard(jc)}
-                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation"
+                      onClick={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleSelectPriorCard(jc);
+                      }}
+                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation cursor-pointer relative z-[1]"
+                      style={{ touchAction: 'manipulation' }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -4906,6 +5005,11 @@ const JobCardFormPublic = () => {
 
 try {
   window.JobCardFormPublic = JobCardFormPublic;
+  try {
+    window.dispatchEvent(new Event('jobCardFormPublicReady'));
+  } catch {
+    /* ignore */
+  }
   if (window.debug && !window.debug.performanceMode) {
   }
 } catch (error) {

@@ -1,12 +1,16 @@
 // Public API: create job cards (POST) and list prior cards by id (GET ?ids=) — no auth
 import { prisma } from '../_lib/prisma.js'
-import { ok, created, serverError, badRequest } from '../_lib/response.js'
+import { ok, created, serverError, badRequest, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 
 function formatDate(date) {
   if (!date) return null
   if (date instanceof Date) return date.toISOString()
   return new Date(date).toISOString()
+}
+
+function allowPublicJobCardWrites() {
+  return String(process.env.ALLOW_PUBLIC_JOBCARDS || '').toLowerCase() === 'true'
 }
 
 /** GET /api/public/jobcards?ids=id1,id2 — only unowned cards whose ids are requested (capability URLs). */
@@ -81,6 +85,13 @@ async function handler(req, res) {
   }
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (!allowPublicJobCardWrites()) {
+    return unauthorized(
+      res,
+      'Public job card creation is disabled. Sign in and use /api/jobcards, or set ALLOW_PUBLIC_JOBCARDS=true for break-glass use.'
+    )
   }
 
   try {

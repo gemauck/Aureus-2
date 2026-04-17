@@ -1,7 +1,7 @@
 // Public GET/PATCH for job cards created via /job-card (no auth; id acts as capability URL).
 // Prefer authenticated /api/jobcards/:id when the user has permission.
 import { prisma } from '../_lib/prisma.js'
-import { ok, serverError, badRequest, notFound } from '../_lib/response.js'
+import { ok, serverError, badRequest, notFound, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 
 function parseJson(str, defaultValue = []) {
@@ -17,6 +17,10 @@ function formatDate(date) {
   if (!date) return null
   if (date instanceof Date) return date.toISOString()
   return new Date(date).toISOString()
+}
+
+function allowPublicJobCardWrites() {
+  return String(process.env.ALLOW_PUBLIC_JOBCARDS || '').toLowerCase() === 'true'
 }
 
 async function handler(req, res) {
@@ -63,6 +67,13 @@ async function handler(req, res) {
 
   if (req.method !== 'PATCH') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (!allowPublicJobCardWrites()) {
+    return unauthorized(
+      res,
+      'Public job card updates are disabled. Sign in and use /api/jobcards/:id, or set ALLOW_PUBLIC_JOBCARDS=true for break-glass use.'
+    )
   }
 
   try {

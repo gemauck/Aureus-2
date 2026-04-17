@@ -643,3 +643,15 @@
     }
   }
 }
+
+/* Prior job cards list (landing → View existing) — ensure taps reach row buttons */
+body.job-card-public .job-card-prior-list {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
+
+body.job-card-public .job-card-prior-list button[type="button"] {
+  touch-action: manipulation;
+  cursor: pointer;
+}

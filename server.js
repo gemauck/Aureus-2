@@ -1797,9 +1797,10 @@ app.all('/api/clients/:id', async (req, res, next) => {
   }
 })
 
-// Explicit mapping for jobcards endpoints (GET, POST /api/jobcards)
+// Job cards: nested paths (/api/jobcards/:id/forms, .../activity) require a broad match.
+// `/api/jobcards/:id?` does not match `/api/jobcards/abc/forms` in Express 4.
 // IMPORTANT: This must come BEFORE the catch-all route
-app.all('/api/jobcards/:id?', async (req, res, next) => {
+app.all(/^\/api\/jobcards(?:\/.*)?$/, async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'jobcards.js'))
     if (!handler) {

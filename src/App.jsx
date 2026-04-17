@@ -59,10 +59,10 @@ const AppContent = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const isInvitationPage = pathname === '/accept-invitation' && urlParams.get('token');
     const isResetPage = pathname === '/reset-password' && urlParams.get('token');
-    const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
+    const isPublicJobCardPage =
+        pathname === '/job-card' || pathname === '/jobcard' || pathname === '/job-cards';
 
     // Call ALL useState hooks first (must be in same order every render)
-    const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
     const [loginPageReady, setLoginPageReady] = window.React.useState(!!window.LoginPage);
     // Safety: after 30s, stop showing loading so user is never stuck
     const [loadingEscape, setLoadingEscape] = window.React.useState(false);
@@ -185,20 +185,6 @@ const AppContent = () => {
         };
     }, [user]);
     
-    // Job card form loading effect
-    window.React.useEffect(() => {
-        if (isPublicJobCardPage && !window.JobCardFormPublic) {
-            const checkInterval = setInterval(() => {
-                if (window.JobCardFormPublic) {
-                    setJobCardFormLoaded(true);
-                    clearInterval(checkInterval);
-                }
-            }, 100);
-            setTimeout(() => clearInterval(checkInterval), 5000);
-            return () => clearInterval(checkInterval);
-        }
-    }, [isPublicJobCardPage, setJobCardFormLoaded]);
-
     window.React.useEffect(() => {
         const bump = () => setRouteTick((t) => t + 1);
         window.addEventListener('popstate', bump);
@@ -357,20 +343,7 @@ const AppContent = () => {
         }
     }
     
-    if (isPublicJobCardPage) {
-        if (window.JobCardFormPublic && jobCardFormLoaded) {
-            return <window.JobCardFormPublic />;
-        } else {
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                        <p className="text-gray-600">Loading job card form...</p>
-                    </div>
-                </div>
-            );
-        }
-    }
+    // /job-card is handled at App root with AuthProvider + JobCardAppGate (not here).
 
     // Show loading screen during auth check OR initial data load (only if user exists)
     // DataContext handles no-user case by setting initialLoadComplete=true immediately
@@ -494,12 +467,14 @@ const App = () => {
     const isResetPage = pathname === '/reset-password' && urlParams.get('token');
     
     // If public job card page, render it directly without providers (no auth needed)
-    const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
+    const isPublicJobCardPage =
+        pathname === '/job-card' || pathname === '/jobcard' || pathname === '/job-cards';
 
     // Track readiness of the public job card component so we can
     // re-render when it becomes available on window.JobCardFormPublic.
     const [publicJobCardReady, setPublicJobCardReady] = window.React.useState(
-        !!(window.JobCardFormPublic && typeof window.JobCardFormPublic === 'function')
+        () =>
+            !!(window.JobCardAppGate && typeof window.JobCardAppGate === 'function')
     );
 
     window.React.useEffect(() => {
@@ -508,7 +483,7 @@ const App = () => {
         }
 
         const checkReady = () => {
-            if (window.JobCardFormPublic && typeof window.JobCardFormPublic === 'function') {
+            if (window.JobCardAppGate && typeof window.JobCardAppGate === 'function') {
                 setPublicJobCardReady(true);
                 return true;
             }
@@ -548,17 +523,19 @@ const App = () => {
     if (isPublicJobCardPage) {
         return (
             <window.ThemeProvider>
-                {window.JobCardFormPublic && publicJobCardReady ? (
-                    <window.JobCardFormPublic />
-                ) : (
-                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                        <div className="text-center">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                            <p className="text-gray-600">Loading job card form...</p>
-                            <p className="text-xs text-gray-500 mt-2">If this doesn't load, check browser console</p>
+                <window.AuthProvider>
+                    {window.JobCardAppGate && publicJobCardReady ? (
+                        <window.JobCardAppGate />
+                    ) : (
+                        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                            <div className="text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                                <p className="text-gray-600">Loading job card app…</p>
+                                <p className="text-xs text-gray-500 mt-2">If this doesn&apos;t load, check the browser console</p>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </window.AuthProvider>
             </window.ThemeProvider>
         );
     }
