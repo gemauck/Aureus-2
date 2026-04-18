@@ -156,6 +156,7 @@ const ServiceAndMaintenance = () => {
   const [formsManagerReady, setFormsManagerReady] = useState(
     typeof window !== 'undefined' && !!window.ServiceFormsManager
   );
+  const [adminExtrasOpen, setAdminExtrasOpen] = useState(false);
 
   // Load clients and users for JobCards
   useEffect(() => {
@@ -1187,23 +1188,23 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
   return (
     <div className="erp-module-root relative min-w-0 max-w-full px-3 py-4 sm:p-6">
       <div className="flex flex-col gap-6 mb-6">
-        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                <i className={`fa-solid fa-screwdriver-wrench ${isDark ? 'text-gray-300' : 'text-gray-600'}`}></i>
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 sm:p-5 shadow-sm`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex shrink-0 items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                <i className={`fa-solid fa-screwdriver-wrench ${isDark ? 'text-gray-300' : 'text-gray-600'}`} />
               </div>
-              <div>
-                <h1 className={`text-xl sm:text-2xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+              <div className="min-w-0">
+                <h1 className={`text-lg sm:text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                   Service &amp; Maintenance
                 </h1>
                 <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Choose between classic scheduling and the mobile-first capture flow. Both work offline and sync when connectivity returns.
+                  Capture on your phone, then review and search job cards below. Mobile form saves offline and syncs when you are back online.
                 </p>
               </div>
             </div>
             <span
-              className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+              className={`inline-flex shrink-0 items-center gap-2 self-start px-3 py-1 rounded-full text-xs font-semibold ${
                 isOnline
                   ? isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-100 text-emerald-700'
                   : isDark ? 'bg-amber-500/10 text-amber-200' : 'bg-amber-100 text-amber-700'
@@ -1217,90 +1218,121 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               {isOnline ? 'Online' : 'Offline mode'}
             </span>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} border rounded-xl shadow-sm overflow-hidden`}>
-            <div className="p-5 sm:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Classic View
-                  </p>
-                  <h2 className={`text-xl font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                    Job Card Manager
-                  </h2>
-                  <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Full dashboard view with scheduling, timelines, history, and advanced filters. Use when you need the high-level overview.
-                  </p>
-                </div>
-                <div className={`hidden sm:flex items-center justify-center h-12 w-12 rounded-full ${isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-50 text-blue-600'}`}>
-                  <i className="fa-regular fa-clipboard-list text-lg" />
-                </div>
-              </div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch">
+            <a
+              href="/job-card"
+              className={`inline-flex flex-1 min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:max-w-xs ${isDark ? 'bg-primary-500 text-white hover:bg-primary-600 focus-visible:ring-offset-gray-900' : 'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-offset-white'}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <i className="fa-solid fa-mobile-screen-button text-sm" />
+              Open mobile job card
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.JobCards?.openNewJobCardModal) {
+                  window.JobCards.openNewJobCardModal();
+                } else {
+                  window.dispatchEvent(new Event('jobcards:open'));
+                }
+              }}
+              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors ${isDark ? 'border-gray-700 bg-gray-800/80 text-gray-100 hover:bg-gray-800' : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'}`}
+            >
+              <i className="fa-solid fa-plus text-xs" />
+              New job card
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenClassic}
+              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+            >
+              <i className="fa-solid fa-table-columns text-xs" />
+              Classic manager
+            </button>
+          </div>
 
-              <div className={`mt-4 flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                  <i className="fa-solid fa-laptop text-[11px]" />
-                  Desktop optimised
-                </span>
-                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                  <i className="fa-solid fa-cloud-arrow-up text-[11px]" />
-                  Auto-sync offline data
-                </span>
-              </div>
+          {!jobCardsReady || !window.JobCards ? (
+            <p className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Loading job cards list&hellip;
+            </p>
+          ) : null}
 
-              <div className="mt-5 flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={handleOpenClassic}
-                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 active:bg-blue-700 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-all ${isDark ? 'focus-visible:ring-offset-gray-900' : 'focus-visible:ring-offset-white'}`}
-                >
-                  <i className="fa-solid fa-table-columns text-xs" />
-                  Open Classic Manager
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.JobCards?.openNewJobCardModal) {
-                      window.JobCards.openNewJobCardModal();
-                    } else {
-                      window.dispatchEvent(new Event('jobcards:open'));
-                    }
-                  }}
-                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${isDark ? 'text-blue-200 bg-blue-500/10 hover:bg-blue-500/20' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
-                >
-                  <i className="fa-solid fa-plus text-xs" />
-                  New job card
-                </button>
-                {!jobCardsReady || !window.JobCards ? (
-                  <span className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Loading job cards module&hellip;
-                  </span>
-                ) : null}
-              </div>
+          <div className={`mt-4 flex flex-wrap items-center gap-2 border-t pt-4 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <span className={`text-[11px] font-medium uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              Links
+            </span>
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              title="Copy share link"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+            >
+              <i className="fa-regular fa-copy" />
+              {copyStatus}
+            </button>
+            <button
+              type="button"
+              onClick={handleSubscribeCalendar}
+              disabled={!window.storage?.getToken?.()}
+              title="Subscribe to calendar"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+            >
+              <i className="fa-regular fa-calendar-plus" />
+              Calendar
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyCalendarLink}
+              disabled={!window.storage?.getToken?.()}
+              title="Copy calendar link"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+            >
+              <i className="fa-regular fa-copy" />
+              {calendarCopyStatus}
+            </button>
+          </div>
+          {!window.storage?.getToken?.() ? (
+            <p className={`mt-2 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+              Sign in to use calendar subscription and copy your personal feed link.
+            </p>
+          ) : null}
 
-              {/* Admin-only: Service forms & checklists builder */}
-              <PermissionGate
-                permission={window.PERMISSIONS?.ACCESS_SERVICE_MAINTENANCE}
-              >
-                {(() => {
-                  const user = window.storage?.getUser?.();
-                  const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
-                  if (!isAdmin) return null;
-                  return (
-                    <div className={`mt-4 rounded-xl border border-dashed px-3 py-3 text-xs ${isDark ? 'border-gray-800 bg-gray-900/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+          <PermissionGate
+            permission={window.PERMISSIONS?.ACCESS_SERVICE_MAINTENANCE}
+          >
+            {(() => {
+              const user = window.storage?.getUser?.();
+              const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
+              if (!isAdmin) return null;
+              return (
+                <div className={`mt-4 border-t pt-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setAdminExtrasOpen((o) => !o)}
+                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${isDark ? 'text-gray-300 hover:bg-gray-800/80' : 'text-gray-700 hover:bg-gray-50'}`}
+                    aria-expanded={adminExtrasOpen}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <i className="fa-solid fa-gear text-[11px]" />
+                      Admin: forms &amp; checklists
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] transition-transform ${adminExtrasOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {adminExtrasOpen ? (
+                    <div className={`mt-2 rounded-xl border border-dashed px-3 py-3 text-xs ${isDark ? 'border-gray-800 bg-gray-900/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-100 text-blue-700'}`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-100 text-blue-700'}`}>
                             <i className="fa-solid fa-list-check text-[11px]" />
                           </span>
-                          <div>
+                          <div className="min-w-0">
                             <div className="text-[11px] font-semibold uppercase tracking-wide">
-                              Forms &amp; checklists
+                              Form builder
                             </div>
                             <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              Design reusable service forms and attach them to job cards.
+                              Design reusable service forms for job cards.
                             </div>
                           </div>
                         </div>
@@ -1310,7 +1342,6 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                             try {
                               const hasManager = !!window.ServiceFormsManager;
 
-                              // If the manager script has not been registered yet, try to load it
                               if (!hasManager) {
                                 const isProduction =
                                   typeof window.USE_PRODUCTION_BUILD !== 'undefined'
@@ -1343,10 +1374,8 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                                     );
                                   };
                                   document.body.appendChild(script);
-                                } else {
                                 }
 
-                                // Give the loader a moment to register the component
                                 setTimeout(() => {
                                   if (window.ServiceFormsManager) {
                                     setFormsManagerReady(true);
@@ -1371,98 +1400,18 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                               );
                             }
                           }}
-                          className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold shadow-sm ring-1 transition-all ${isDark ? 'bg-blue-500/10 text-blue-200 ring-blue-900/60 hover:bg-blue-500/20' : 'bg-white text-blue-700 ring-blue-100 hover:bg-blue-50'}`}
+                          className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold shadow-sm ring-1 transition-all ${isDark ? 'bg-blue-500/10 text-blue-200 ring-blue-900/60 hover:bg-blue-500/20' : 'bg-white text-blue-700 ring-blue-100 hover:bg-blue-50'}`}
                         >
                           <i className="fa-solid fa-pen-to-square text-[10px]" />
                           Open form builder
                         </button>
                       </div>
                     </div>
-                  );
-                })()}
-              </PermissionGate>
-            </div>
-          </div>
-
-          <div className={`relative overflow-hidden rounded-xl border shadow-sm ${isDark ? 'border-gray-800 bg-gradient-to-br from-primary-600 via-primary-500 to-blue-500 text-white' : 'border-primary-200 bg-gradient-to-br from-primary-50 via-white to-blue-50/80 text-gray-900'}`}>
-            {isDark ? (
-              <>
-                <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-                <div className="absolute -bottom-24 -left-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
-              </>
-            ) : null}
-            <div className="relative p-5 sm:p-6">
-              <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-white/80' : 'text-primary-600'}`}>
-                Mobile View
-              </p>
-              <h2 className={`text-xl font-semibold mt-1 ${isDark ? '' : 'text-gray-900'}`}>
-                Field Tech Form
-              </h2>
-              <p className={`text-sm mt-2 ${isDark ? 'text-white/80' : 'text-gray-600'}`}>
-                Tap-friendly wizard with photo uploads, smart checklists, customer sign-off, and offline save. Perfect for technicians on site.
-              </p>
-
-              <div className={`mt-4 flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-white/80' : 'text-gray-600'}`}>
-                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-white/15' : 'bg-primary-100/80 text-primary-700'}`}>
-                  <i className="fa-solid fa-mobile-screen text-[11px]" />
-                  Optimised for touch
-                </span>
-                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-white/15' : 'bg-primary-100/80 text-primary-700'}`}>
-                  <i className="fa-solid fa-pen-nib text-[11px]" />
-                  Signature capture
-                </span>
-                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-white/15' : 'bg-primary-100/80 text-primary-700'}`}>
-                  <i className="fa-solid fa-wifi-slash text-[11px]" />
-                  Works offline
-                </span>
-              </div>
-
-              <div className="mt-5 flex flex-col sm:flex-row gap-3">
-                <a
-                  href="/job-card"
-                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all ${isDark ? 'text-primary-600 bg-white hover:bg-white/90 focus-visible:ring-primary-400 focus-visible:ring-offset-primary-600' : 'text-white bg-primary-600 hover:bg-primary-700 focus-visible:ring-primary-400 focus-visible:ring-offset-white'}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
-                  Open mobile form
-                </a>
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all ${isDark ? 'bg-white/10 hover:bg-white/20 focus-visible:ring-white/60' : 'bg-primary-100 text-primary-700 hover:bg-primary-200 focus-visible:ring-primary-300'}`}
-                >
-                  <i className="fa-regular fa-copy text-xs" />
-                  {copyStatus}
-                </button>
-              </div>
-              <div className="mt-3 flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={handleSubscribeCalendar}
-                  disabled={!window.storage?.getToken?.()}
-                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed ${isDark ? 'bg-white/10 hover:bg-white/20 focus-visible:ring-white/60' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 focus-visible:ring-blue-300'}`}
-                >
-                  <i className="fa-regular fa-calendar-plus text-xs" />
-                  Subscribe calendar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCopyCalendarLink}
-                  disabled={!window.storage?.getToken?.()}
-                  className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed ${isDark ? 'bg-white/10 hover:bg-white/20 focus-visible:ring-white/60' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 focus-visible:ring-blue-300'}`}
-                >
-                  <i className="fa-regular fa-copy text-xs" />
-                  {calendarCopyStatus}
-                </button>
-              </div>
-              {!window.storage?.getToken?.() ? (
-                <p className={`mt-2 text-[11px] ${isDark ? 'text-white/70' : 'text-blue-700/80'}`}>
-                  Sign in to generate your calendar feed link with all scheduled job card follow-up entries.
-                </p>
-              ) : null}
-            </div>
-          </div>
+                  ) : null}
+                </div>
+              );
+            })()}
+          </PermissionGate>
         </div>
       </div>
 

@@ -341,6 +341,59 @@ function JobCardVoiceClips({ items, tone = 'auto' }) {
   );
 }
 
+/** Compact metric chips for list / card rows (uses GET /api/jobcards extended fields). */
+function JobCardListMetricChips({ jc, isDark }) {
+  const parts = [];
+  if (typeof jc.totalTimeMinutes === 'number' && jc.totalTimeMinutes > 0) {
+    parts.push({ key: 't', text: `${jc.totalTimeMinutes} min`, icon: 'fa-clock' });
+  }
+  if (
+    typeof jc.travelKilometers === 'number' &&
+    Number.isFinite(jc.travelKilometers) &&
+    jc.travelKilometers > 0
+  ) {
+    parts.push({
+      key: 'km',
+      text: `${jc.travelKilometers.toFixed(1)} km`,
+      icon: 'fa-route'
+    });
+  }
+  if (typeof jc.totalMaterialsCost === 'number' && jc.totalMaterialsCost > 0) {
+    parts.push({
+      key: 'cost',
+      text: `R ${jc.totalMaterialsCost.toFixed(2)}`,
+      icon: 'fa-coins'
+    });
+  }
+  if (typeof jc.serviceFormsCount === 'number' && jc.serviceFormsCount > 0) {
+    parts.push({
+      key: 'forms',
+      text: `${jc.serviceFormsCount} checklist${jc.serviceFormsCount === 1 ? '' : 's'}`,
+      icon: 'fa-list-check'
+    });
+  }
+  if (jc.safetyCultureIssueId) {
+    parts.push({ key: 'sc', text: 'SafetyCulture', icon: 'fa-shield-halved' });
+  }
+  if (parts.length === 0) return null;
+  const chipBase = isDark
+    ? 'border-slate-600 bg-slate-800/80 text-slate-200'
+    : 'border-slate-200 bg-slate-50 text-slate-700';
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {parts.map((p) => (
+        <span
+          key={p.key}
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${chipBase}`}
+        >
+          <i className={`fa-solid ${p.icon} text-[9px] opacity-80`} aria-hidden />
+          {p.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const isDark = (typeof window !== 'undefined' && window.useTheme) ? (window.useTheme().isDark) : false;
   if (!useState || !useEffect || !useMemo || !useCallback) {
@@ -374,6 +427,12 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [detailServiceForms, setDetailServiceForms] = useState([]);
   /** Activity trail (GET /api/jobcards/:id/activity). */
   const [detailActivities, setDetailActivities] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [mineOnly, setMineOnly] = useState(false);
+  const [technicianOwnerId, setTechnicianOwnerId] = useState('');
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
 
   const attachmentParts = useMemo(
     () =>
@@ -407,11 +466,43 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   }, [attachmentParts, checklistFieldVoiceKeys]);
 
   const pageSize = 25;
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedSearch,
+    statusFilter,
+    clientFilter,
+    mineOnly,
+    technicianOwnerId,
+    createdFrom,
+    createdTo
+  ]);
+
   const currentUser = useMemo(
     () => (typeof window !== 'undefined' && window.storage?.getUser ? window.storage.getUser() : null),
     []
   );
   const canDeleteJobCards = isAdminOrSuperAdminRole(currentUser?.role);
+
+  const technicianOptions = useMemo(() => {
+    const list = Array.isArray(users) ? [...users] : [];
+    list.sort((a, b) => {
+      const na = (a.name || a.email || '').toString().toLowerCase();
+      const nb = (b.name || b.email || '').toString().toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return 0;
+    });
+    return list;
+  }, [users]);
 
   /** Match Prisma cuid or UUID so we query by clientId; otherwise filter by clientName (contains). */
   const clientFilterLooksLikeId = (value) => {
@@ -436,6 +527,20 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           params.set('clientName', clientFilter.trim());
         }
       }
+      if (debouncedSearch) {
+        params.set('q', debouncedSearch);
+      }
+      if (mineOnly) {
+        params.set('mine', '1');
+      } else if (technicianOwnerId) {
+        params.set('ownerId', technicianOwnerId);
+      }
+      if (createdFrom) {
+        params.set('createdFrom', createdFrom);
+      }
+      if (createdTo) {
+        params.set('createdTo', createdTo);
+      }
       const apiSortField =
         sortField === 'client'
           ? 'clientName'
@@ -450,7 +555,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       params.set('sortDirection', sortDirection);
       return `/api/jobcards?${params.toString()}`;
     },
-    [pageSize, statusFilter, clientFilter, sortField, sortDirection]
+    [
+      pageSize,
+      statusFilter,
+      clientFilter,
+      sortField,
+      sortDirection,
+      debouncedSearch,
+      mineOnly,
+      technicianOwnerId,
+      createdFrom,
+      createdTo
+    ]
   );
 
   const fetchJobCardsPage = useCallback(
@@ -857,23 +973,61 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 
   return (
     <div className={`relative mt-6 rounded-2xl shadow-sm overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-      <div className={`px-4 py-4 sm:px-6 sm:py-5 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-        <div>
-          <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-            Job Cards
-          </h2>
-          <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Recent job cards captured from the field and classic workflows.
-          </p>
+      <div className={`px-4 py-4 sm:px-6 sm:py-5 border-b space-y-4 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+              Job Cards
+            </h2>
+            <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Search and filter field captures; open a row for the full report.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs">
+
+        <div className="flex flex-col gap-2">
+          <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`} htmlFor="jobcards-search-q">
+            Search job cards
+          </label>
+          <div className="relative">
+            <i
+              className={`fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
+              aria-hidden
+            />
+            <input
+              id="jobcards-search-q"
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Job number, client, site, technician, summary…"
+              className={`w-full rounded-lg border py-2 pl-8 pr-3 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-800 placeholder:text-slate-400'}`}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-2 py-1.5 ${isDark ? 'border-slate-600 bg-slate-800/80' : 'border-slate-200 bg-slate-50'}`}>
+            <input
+              type="checkbox"
+              checked={mineOnly}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setMineOnly(on);
+                if (on) setTechnicianOwnerId('');
+              }}
+              className="rounded border-slate-400 text-primary-600 focus:ring-primary-500"
+            />
+            <span className={isDark ? 'text-slate-200' : 'text-slate-700'}>My job cards</span>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <select
-            className={`rounded-lg px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            aria-label="Filter by status"
+            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
             value={statusFilter}
-            onChange={(e) => {
-              setPage(1);
-              setStatusFilter(e.target.value);
-            }}
+            onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="all">All statuses</option>
             <option value="draft">Draft</option>
@@ -883,12 +1037,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <option value="cancelled">Cancelled</option>
           </select>
           <select
-            className={`rounded-lg px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            aria-label="Filter by client"
+            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
             value={clientFilter}
-            onChange={(e) => {
-              setPage(1);
-              setClientFilter(e.target.value);
-            }}
+            onChange={(e) => setClientFilter(e.target.value)}
           >
             <option value="">All clients</option>
             {clientOptions.map((c) => (
@@ -897,6 +1049,60 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               </option>
             ))}
           </select>
+          <select
+            aria-label="Filter by technician owner"
+            disabled={mineOnly}
+            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            value={technicianOwnerId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setTechnicianOwnerId(v);
+              if (v) setMineOnly(false);
+            }}
+          >
+            <option value="">All technicians</option>
+            {technicianOptions.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name || u.email || u.id}
+              </option>
+            ))}
+          </select>
+          <div className="flex flex-col gap-0.5">
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Created from</span>
+            <input
+              type="date"
+              value={createdFrom}
+              onChange={(e) => setCreatedFrom(e.target.value)}
+              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Created to</span>
+            <input
+              type="date"
+              value={createdTo}
+              onChange={(e) => setCreatedTo(e.target.value)}
+              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput('');
+                setDebouncedSearch('');
+                setMineOnly(false);
+                setTechnicianOwnerId('');
+                setCreatedFrom('');
+                setCreatedTo('');
+                setStatusFilter('all');
+                setClientFilter('');
+              }}
+              className={`w-full rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${isDark ? 'border-slate-600 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              Clear filters
+            </button>
+          </div>
         </div>
       </div>
 
@@ -935,7 +1141,92 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           No job cards found for the selected filters.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className={`sm:hidden divide-y border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          {displayJobCards.map((jc) => {
+            const technicianName =
+              jc.agentName ||
+              users.find((u) => u.id === jc.ownerId)?.name ||
+              '';
+            const status =
+              (jc.status || 'draft').toString().toLowerCase();
+            const statusClasses =
+              status === 'completed'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : status === 'open'
+                  ? 'bg-sky-50 text-sky-700 border-sky-200'
+                  : status === 'cancelled'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-slate-50 text-slate-700 border-slate-200';
+            return (
+              <div
+                key={jc.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleRowClick(jc)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleRowClick(jc);
+                  }
+                }}
+                className={`cursor-pointer px-4 py-4 text-left ${isDark ? 'hover:bg-slate-800/80' : 'hover:bg-slate-50'}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className={`font-semibold ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
+                      {jc.jobCardNumber || '–'}
+                    </div>
+                    <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {jc.clientName || '–'}
+                      {jc.siteName ? ` · ${jc.siteName}` : ''}
+                    </div>
+                    <div className={`mt-1 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      {jc.reasonForVisit || jc.diagnosis || 'No summary'}
+                    </div>
+                    <JobCardListMetricChips jc={jc} isDark={isDark} />
+                  </div>
+                  <span
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses}`}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </span>
+                </div>
+                <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <span>{technicianName || '–'}</span>
+                  <span>{formatDate(jc.createdAt)}</span>
+                </div>
+                {canDeleteJobCards ? (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteJobCard(jc);
+                      }}
+                      disabled={deletingJobCardId === jc.id}
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                        deletingJobCardId === jc.id
+                          ? isDark
+                            ? 'border-slate-700 text-slate-500 cursor-not-allowed'
+                            : 'border-slate-200 text-slate-300 cursor-not-allowed'
+                          : isDark
+                            ? 'border-rose-500/40 text-rose-300 hover:bg-rose-500/10'
+                            : 'border-rose-300 text-rose-700 hover:bg-rose-50'
+                      }`}
+                    >
+                      <i className="fa-solid fa-trash-can" />
+                      {deletingJobCardId === jc.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden sm:block overflow-x-auto">
           <table className={`min-w-full divide-y text-xs ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
             <thead className={`text-xs ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-50 text-slate-500'}`}>
               <tr>
@@ -1021,13 +1312,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     className={`cursor-pointer ${isDark ? 'hover:bg-slate-800/80' : 'hover:bg-slate-50'}`}
                     onClick={() => handleRowClick(jc)}
                   >
-                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
-                      <div className="font-semibold">
+                    <td className={`px-4 py-2 align-top ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
+                      <div className="font-semibold whitespace-nowrap">
                         {jc.jobCardNumber || '–'}
                       </div>
                       <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         {jc.reasonForVisit || jc.diagnosis || 'No summary'}
                       </div>
+                      <JobCardListMetricChips jc={jc} isDark={isDark} />
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {jc.clientName || '–'}
@@ -1081,6 +1373,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               })}
             </tbody>
           </table>
+        </div>
           {pagination && (
             <div className={`flex items-center justify-between px-4 py-3 border-t text-[11px] ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
               <div>
@@ -1130,7 +1423,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               </div>
             </div>
           )}
-        </div>
+        </>
       )}
       {/* Immersive job card viewer overlayed on this card block (within content area, not whole app shell) */}
       {showDetail && selectedJobCard && (
@@ -1317,6 +1610,65 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {selectedJobCard.timeOfArrival
                           ? formatDate(selectedJobCard.timeOfArrival)
                           : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 border-t border-slate-800 pt-4">
+                    <div className="text-[11px] font-semibold uppercase text-slate-400 mb-3">
+                      Timing &amp; totals (app)
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-300">
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase text-slate-500">
+                          Total time on job
+                        </div>
+                        <div className="mt-1">
+                          {typeof selectedJobCard.totalTimeMinutes === 'number' &&
+                          selectedJobCard.totalTimeMinutes > 0
+                            ? `${selectedJobCard.totalTimeMinutes} min`
+                            : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase text-slate-500">
+                          Left site
+                        </div>
+                        <div className="mt-1">
+                          {selectedJobCard.departureFromSite
+                            ? formatDate(selectedJobCard.departureFromSite)
+                            : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase text-slate-500">
+                          Back at office
+                        </div>
+                        <div className="mt-1">
+                          {selectedJobCard.arrivalBackAtOffice
+                            ? formatDate(selectedJobCard.arrivalBackAtOffice)
+                            : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase text-slate-500">
+                          Submitted
+                        </div>
+                        <div className="mt-1">
+                          {selectedJobCard.submittedAt
+                            ? formatDate(selectedJobCard.submittedAt)
+                            : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase text-slate-500">
+                          Completed
+                        </div>
+                        <div className="mt-1">
+                          {selectedJobCard.completedAt
+                            ? formatDate(selectedJobCard.completedAt)
+                            : '—'}
+                        </div>
                       </div>
                     </div>
                   </div>

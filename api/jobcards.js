@@ -285,8 +285,30 @@ async function handler(req, res) {
         const sortDirectionRaw =
           url.searchParams.get('sortDirection') === 'asc' ? 'asc' : 'desc'
 
-        // Allow larger page sizes when filtering by client (for client detail views) or text search
-        const allowLargePageSize = !!(clientId || clientName || searchQ)
+        const mineParam =
+          url.searchParams.get('mine') === '1' ||
+          String(url.searchParams.get('mine') || '').toLowerCase() === 'true'
+        const ownerIdParamRaw = (url.searchParams.get('ownerId') || '').trim()
+        const createdFromRaw = (url.searchParams.get('createdFrom') || '').trim()
+        const createdToRaw = (url.searchParams.get('createdTo') || '').trim()
+
+        function looksLikeJobCardOwnerId(value) {
+          if (!value || typeof value !== 'string') return false
+          const v = value.trim()
+          if (v.length < 8 || v.length > 128) return false
+          return /^[a-zA-Z0-9_-]+$/.test(v)
+        }
+
+        // Allow larger page sizes when filtering by client (for client detail views), text search, or narrow filters
+        const allowLargePageSize = !!(
+          clientId ||
+          clientName ||
+          searchQ ||
+          mineParam ||
+          ownerIdParamRaw ||
+          createdFromRaw ||
+          createdToRaw
+        )
         const { page, pageSize } = getPagination(allowLargePageSize)
         const owner = req.user?.sub
 
@@ -305,6 +327,25 @@ async function handler(req, res) {
         }
         if (statusParam && statusParam !== 'all') {
           baseFilters.status = statusParam
+        }
+
+        if (mineParam && owner) {
+          baseFilters.ownerId = String(owner)
+        } else if (ownerIdParamRaw && looksLikeJobCardOwnerId(ownerIdParamRaw)) {
+          baseFilters.ownerId = ownerIdParamRaw
+        }
+
+        const createdRange = {}
+        if (createdFromRaw) {
+          const d = new Date(createdFromRaw)
+          if (!Number.isNaN(d.getTime())) createdRange.gte = d
+        }
+        if (createdToRaw) {
+          const d = new Date(createdToRaw)
+          if (!Number.isNaN(d.getTime())) createdRange.lte = d
+        }
+        if (Object.keys(createdRange).length > 0) {
+          baseFilters.createdAt = createdRange
         }
 
         let whereClause = {}
@@ -349,32 +390,68 @@ async function handler(req, res) {
 
         // Limit the number of job cards returned and support simple pagination
         // to keep the dashboard fast even as history grows.
-        // Only select fields needed for list view to improve performance
-        const [totalItems, jobCards] = await Promise.all([
-          prisma.jobCard.count({ where: whereClause }),
-          prisma.jobCard.findMany({
+        const listSelectBase = {
+          id: true,
+          jobCardNumber: true,
+          agentName: true,
+          clientId: true,
+          clientName: true,
+          siteName: true,
+          location: true,
+          status: true,
+          reasonForVisit: true,
+          diagnosis: true,
+          ownerId: true,
+          completedByUserId: true,
+          completedByName: true,
+          createdAt: true,
+          updatedAt: true,
+          totalTimeMinutes: true,
+          travelKilometers: true,
+          kmReadingBefore: true,
+          kmReadingAfter: true,
+          totalMaterialsCost: true,
+          vehicleUsed: true,
+          timeOfDeparture: true,
+          timeOfArrival: true,
+          departureFromSite: true,
+          arrivalBackAtOffice: true,
+          submittedAt: true,
+          completedAt: true,
+          safetyCultureIssueId: true,
+          safetyCultureAuditId: true
+        }
+
+        const totalItems = await prisma.jobCard.count({ where: whereClause })
+
+        let jobCards
+        try {
+          jobCards = await prisma.jobCard.findMany({
             where: whereClause,
             select: {
-              id: true,
-              jobCardNumber: true,
-              agentName: true,
-              clientId: true,
-              clientName: true,
-              siteName: true,
-              status: true,
-              reasonForVisit: true,
-              diagnosis: true,
-              ownerId: true,
-              completedByUserId: true,
-              completedByName: true,
-              createdAt: true,
-              updatedAt: true
+              ...listSelectBase,
+              _count: {
+                select: { serviceForms: true }
+              }
             },
             orderBy,
             skip: (page - 1) * pageSize,
             take: pageSize
           })
-        ])
+        } catch (err) {
+          if (!isMissingServiceFormInstanceTables(err)) throw err
+          jobCards = await prisma.jobCard.findMany({
+            where: whereClause,
+            select: { ...listSelectBase },
+            orderBy,
+            skip: (page - 1) * pageSize,
+            take: pageSize
+          })
+          jobCards = jobCards.map((row) => ({
+            ...row,
+            _count: { serviceForms: 0 }
+          }))
+        }
 
         console.log('📋 List job cards', {
           owner,
@@ -392,16 +469,25 @@ async function handler(req, res) {
           } : null
         })
         
-        // Format dates for response
-        // Note: We only selected minimal fields above, so we don't need to parse JSON fields
-        const formatted = jobCards.map(jobCard => ({
-          ...jobCard,
-          reasonForVisit: truncateJobCardListText(jobCard.reasonForVisit),
-          diagnosis: truncateJobCardListText(jobCard.diagnosis),
-          // Return full ISO strings for datetime fields
-          createdAt: formatDate(jobCard.createdAt),
-          updatedAt: formatDate(jobCard.updatedAt)
-        }))
+        // Format dates for response; flatten checklist count for clients
+        const formatted = jobCards.map((jobCard) => {
+          const { _count, ...rest } = jobCard
+          return {
+            ...rest,
+            serviceFormsCount: typeof _count?.serviceForms === 'number' ? _count.serviceForms : 0,
+            reasonForVisit: truncateJobCardListText(rest.reasonForVisit),
+            diagnosis: truncateJobCardListText(rest.diagnosis),
+            location: truncateJobCardListText(rest.location),
+            createdAt: formatDate(rest.createdAt),
+            updatedAt: formatDate(rest.updatedAt),
+            submittedAt: formatDate(rest.submittedAt),
+            completedAt: formatDate(rest.completedAt),
+            timeOfDeparture: formatDate(rest.timeOfDeparture),
+            timeOfArrival: formatDate(rest.timeOfArrival),
+            departureFromSite: formatDate(rest.departureFromSite),
+            arrivalBackAtOffice: formatDate(rest.arrivalBackAtOffice)
+          }
+        })
         
         return ok(res, { 
           jobCards: formatted,
