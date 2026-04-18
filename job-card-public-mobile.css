@@ -779,3 +779,77 @@ body.job-card-public .job-card-public-select-menu [role='option'][aria-selected=
     background-color: #eff6ff !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Fix white-on-white / invisible hovers: global dark-mode-fixes.css applies
+   [data-theme="light"] button:hover { background #f9fafb; color #111827 } and
+   button.text-white:hover { color #fff }, which yields white text on a near-
+   white background on blue wizard chrome. mobile-ux-enhancement.css also sets
+   aside button:hover { background #f3f4f6 } inside max-width 1024px.
+   -------------------------------------------------------------------------- */
+html[data-theme='light'] body.job-card-public .job-card-public-wrapper > aside button:hover:not([aria-current='step']),
+html[data-theme='light'] body.job-card-public .job-card-public-wrapper > header button:hover:not([aria-current='step']) {
+  background-color: rgba(255, 255, 255, 0.24) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  transform: none !important;
+}
+
+html[data-theme='light']
+  body.job-card-public
+  .job-card-public-wrapper
+  > aside
+  button.job-card-wizard-step[aria-current='step']:hover,
+html[data-theme='light']
+  body.job-card-public
+  .job-card-public-wrapper
+  > aside
+  button.job-card-wizard-step[aria-current='step']:focus-visible {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  transform: none !important;
+}
+
+html[data-theme='light']
+  body.job-card-public
+  .job-card-public-wrapper
+  > aside
+  button.job-card-wizard-step[aria-current='step']:hover
+  span,
+html[data-theme='light']
+  body.job-card-public
+  .job-card-public-wrapper
+  > aside
+  button.job-card-wizard-step[aria-current='step']:hover
+  i {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+/* Main scroll area: keep soft blue / gray hovers readable vs global button:hover */
+html[data-theme='light']
+  body.job-card-public
+  .job-card-scrollable-content
+  button[class*='bg-blue-50']:hover,
+html[data-theme='light']
+  body.job-card-public
+  .job-card-scrollable-content
+  button[class*='bg-blue-50']:focus-visible {
+  background-color: #dbeafe !important;
+  color: #1d4ed8 !important;
+  -webkit-text-fill-color: #1d4ed8 !important;
+}
+
+html[data-theme='light']
+  body.job-card-public
+  .job-card-scrollable-content
+  label.cursor-pointer:hover,
+html[data-theme='light']
+  body.job-card-public
+  .job-card-scrollable-content
+  label.cursor-pointer:focus-within {
+  background-color: #e5e7eb !important;
+  color: #1f2937 !important;
+  -webkit-text-fill-color: #1f2937 !important;
+}

@@ -302,7 +302,7 @@ const StepBadge = ({
     <button
       type="button"
       onClick={onClick}
-      className={`${baseClasses} ${stateClass} ${variant === 'carousel' ? 'job-card-step-chip' : ''} ${className}`}
+      className={`${baseClasses} ${stateClass} job-card-wizard-step ${variant === 'carousel' ? 'job-card-step-chip' : ''} ${className}`}
       aria-current={active ? 'step' : undefined}
     >
       <div

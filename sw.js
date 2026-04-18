@@ -1,4 +1,4 @@
-const SW_VERSION = 'jobcard-offline-v4';
+const SW_VERSION = 'jobcard-offline-v5';
 const APP_CACHE = `${SW_VERSION}-app`;
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 
