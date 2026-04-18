@@ -5113,7 +5113,7 @@ const JobCardFormPublic = () => {
                               </span>
                             ) : null}
                             {formatJobCardActivityDetail(a.action, a.metadata) ? (
-                              <div className="text-slate-500 text-xs mt-0.5">
+                              <div className="text-slate-500 text-xs mt-0.5 whitespace-pre-wrap break-words">
                                 {formatJobCardActivityDetail(a.action, a.metadata)}
                               </div>
                             ) : null}

@@ -2272,7 +2272,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         </span>
                       ) : null}
                       {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
-                        <div className="text-slate-500 text-xs mt-0.5 pl-0">
+                        <div className="text-slate-500 text-xs mt-0.5 pl-0 whitespace-pre-wrap break-words">
                           {formatJobCardActivityDetailLine(a.action, a.metadata)}
                         </div>
                       ) : null}

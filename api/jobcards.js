@@ -5,6 +5,7 @@ import { isConnectionError } from './_lib/dbErrorHandler.js'
 import { isAdminRole } from './_lib/authRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { insertJobCardActivityFromRequest } from './_lib/jobCardActivity.js'
+import { buildJobCardUpdateChanges, buildServiceFormInstanceChanges } from './_lib/jobCardActivityDiff.js'
 
 // Some deployments may not yet have the optional service form tables used by
 // the job card forms feature. When those tables are missing, Prisma throws
@@ -734,7 +735,12 @@ async function handler(req, res) {
           jobCardId: jobCard.id,
           req,
           action: 'created',
-          metadata: { status: jobCard.status },
+          metadata: {
+            status: jobCard.status,
+            jobCardNumber: jobCard.jobCardNumber,
+            clientName: jobCard.clientName || '',
+            siteName: jobCard.siteName || ''
+          },
           source: 'web'
         })
         auditManufacturing('create', 'job-cards', jobCard.id, {
@@ -938,16 +944,24 @@ async function handler(req, res) {
           })
         }
 
-        await insertJobCardActivity(prisma, {
-          jobCardId: id,
-          req,
-          action: 'updated',
-          metadata: {
-            fields: Object.keys(updateData),
-            status: jobCard.status
-          },
-          source: 'web'
-        })
+        let changeRows = buildJobCardUpdateChanges(existing, updateData)
+        if (prevStatus !== jobCard.status) {
+          changeRows = changeRows.filter((c) => c.field !== 'status')
+        }
+        if (changeRows.length > 0) {
+          await insertJobCardActivity(prisma, {
+            jobCardId: id,
+            req,
+            action: 'updated',
+            metadata: {
+              fields: Object.keys(updateData),
+              changes: changeRows,
+              changeCount: changeRows.length,
+              status: jobCard.status
+            },
+            source: 'web'
+          })
+        }
         auditManufacturing('update', 'job-cards', id, {
           summary: `Updated job card ${jobCard.jobCardNumber}`,
           jobCardNumber: jobCard.jobCardNumber
@@ -1261,11 +1275,19 @@ async function handler(req, res) {
           data
         })
 
+        const formChanges = buildServiceFormInstanceChanges(existing, data)
         await insertJobCardActivity(prisma, {
           jobCardId: id,
           req,
           action: 'service_form_updated',
-          metadata: { instanceId: formInstanceId, fields: Object.keys(data) },
+          metadata: {
+            instanceId: formInstanceId,
+            templateId: existing.templateId,
+            templateName: existing.templateName,
+            fields: Object.keys(data),
+            changes: formChanges,
+            changeCount: formChanges.length
+          },
           source: 'web'
         })
         auditManufacturing('update', 'job-card-service-form', formInstanceId, {

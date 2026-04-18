@@ -2473,7 +2473,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         </span>
                       ) : null}
                       {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
-                        <div className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                        <div className={`text-xs mt-0.5 whitespace-pre-wrap break-words ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
                           {formatJobCardActivityDetailLine(a.action, a.metadata)}
                         </div>
                       ) : null}

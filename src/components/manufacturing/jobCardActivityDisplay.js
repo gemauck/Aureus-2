@@ -50,7 +50,13 @@ export const JOB_CARD_FIELD_LABELS = {
   jobCardNumber: 'Job card number',
   safetyCultureAuditId: 'SafetyCulture audit link',
   safetyCultureIssueId: 'SafetyCulture issue link',
-  safetyCultureSnapshotJson: 'SafetyCulture snapshot'
+  safetyCultureSnapshotJson: 'SafetyCulture snapshot',
+  /** Service form instance (nested checklist) */
+  answers: 'Form answers',
+  templateName: 'Form template name',
+  templateVersion: 'Form template version',
+  templateId: 'Form template id',
+  instanceId: 'Form instance id'
 };
 
 /**
@@ -83,6 +89,27 @@ function humanizeUpdatedFields(fields) {
     return unique.join(' · ');
   }
   return `${unique.slice(0, max).join(' · ')} · +${unique.length - max} more`;
+}
+
+const MAX_CHANGE_DETAIL_LINES = 32;
+
+/**
+ * @param {Array<{ field?: string, from?: unknown, to?: unknown }>} changes
+ * @returns {string}
+ */
+function formatFieldChangeLines(changes) {
+  if (!Array.isArray(changes) || changes.length === 0) return '';
+  const lines = changes.map((c) => {
+    const field = typeof c.field === 'string' ? c.field : '';
+    const label = field && JOB_CARD_FIELD_LABELS[field] ? JOB_CARD_FIELD_LABELS[field] : field || 'Field';
+    const from = c.from != null ? String(c.from) : '(empty)';
+    const to = c.to != null ? String(c.to) : '(empty)';
+    return `${label}: ${from} → ${to}`;
+  });
+  if (lines.length > MAX_CHANGE_DETAIL_LINES) {
+    return `${lines.slice(0, MAX_CHANGE_DETAIL_LINES).join('\n')}\n… +${lines.length - MAX_CHANGE_DETAIL_LINES} more`;
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -151,12 +178,35 @@ export function formatJobCardActivityDetail(action, metadata) {
   if (action === 'status_changed' && m.from != null && m.to != null) {
     return `Status: ${String(m.from)} → ${String(m.to)}`;
   }
-  if (action === 'created' && m.status != null && String(m.status).trim() !== '') {
-    return `Starting status: ${String(m.status)}`;
+  if (action === 'created') {
+    const parts = [];
+    if (typeof m.jobCardNumber === 'string' && m.jobCardNumber.trim()) {
+      parts.push(`Card #${m.jobCardNumber.trim()}`);
+    }
+    if (typeof m.clientName === 'string' && m.clientName.trim()) {
+      parts.push(m.clientName.trim());
+    }
+    if (typeof m.siteName === 'string' && m.siteName.trim()) {
+      parts.push(`Site: ${m.siteName.trim()}`);
+    }
+    if (m.status != null && String(m.status).trim() !== '') {
+      parts.push(`Status: ${String(m.status)}`);
+    }
+    return parts.length ? parts.join(' · ') : '';
+  }
+  if (action === 'service_form_updated' && Array.isArray(m.changes) && m.changes.length > 0) {
+    const formLabel =
+      typeof m.templateName === 'string' && m.templateName.trim()
+        ? `${m.templateName.trim()}\n`
+        : '';
+    return formLabel + formatFieldChangeLines(m.changes);
+  }
+  if (action === 'updated' && Array.isArray(m.changes) && m.changes.length > 0) {
+    return formatFieldChangeLines(m.changes);
   }
   if (action === 'updated' && Array.isArray(m.fields)) {
     const summary = humanizeUpdatedFields(m.fields);
-    return summary ? `Updated: ${summary}` : '';
+    return summary ? `Updated fields (no value diff stored): ${summary}` : '';
   }
   return '';
 }
