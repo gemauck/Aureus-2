@@ -858,6 +858,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 
       // Refresh list after save
       await reloadJobCards();
+      if (savedId && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jobcards:saved', { detail: { id: savedId } }));
+      }
       return { id: savedId };
     } catch (e) {
       console.error('❌ Failed to save job card from classic manager:', e);

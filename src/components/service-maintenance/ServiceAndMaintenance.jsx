@@ -1,6 +1,62 @@
 // Use React from window (fallback to global React if needed)
 const ReactGlobal = (typeof window !== 'undefined' && window.React) || (typeof React !== 'undefined' && React) || {};
-const { useState, useEffect, useMemo } = ReactGlobal;
+const { useState, useEffect, useMemo, useCallback } = ReactGlobal;
+
+/** Same convention as mobile job card wizard — project line embedded in `otherComments`. */
+const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
+
+function parseProjectAssociationFromComments(rawComments) {
+  if (!rawComments || typeof rawComments !== 'string') {
+    return { projectId: '', projectName: '' };
+  }
+  const lines = rawComments.split('\n');
+  const line = lines.find((l) => typeof l === 'string' && l.startsWith(PROJECT_ASSOCIATION_PREFIX));
+  if (!line) return { projectId: '', projectName: '' };
+  const raw = line.slice(PROJECT_ASSOCIATION_PREFIX.length).trim();
+  if (!raw) return { projectId: '', projectName: '' };
+  const idMatch = raw.match(/\(([^)]+)\)\s*$/);
+  if (idMatch && idMatch[1]) {
+    const projectId = String(idMatch[1]).trim();
+    const projectName = raw.slice(0, idMatch.index).trim();
+    return { projectId, projectName };
+  }
+  return { projectId: '', projectName: raw };
+}
+
+/** Split merged technician notes + customer lines (API merges these into `otherComments`). */
+function splitJobCardOtherCommentsForReport(rawComments) {
+  const project = parseProjectAssociationFromComments(rawComments);
+  const customer = { name: '', position: '', feedback: '', signatureLabel: '' };
+  const kept = [];
+  const lines = String(rawComments || '').split('\n');
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.startsWith(PROJECT_ASSOCIATION_PREFIX)) continue;
+    if (t.startsWith('Customer:')) {
+      customer.name = t.slice('Customer:'.length).trim();
+      continue;
+    }
+    if (t.startsWith('Position:')) {
+      customer.position = t.slice('Position:'.length).trim();
+      continue;
+    }
+    if (t.startsWith('Feedback:')) {
+      customer.feedback = t.slice('Feedback:'.length).trim();
+      continue;
+    }
+    if (t.startsWith('Signature:')) {
+      customer.signatureLabel = t.slice('Signature:'.length).trim();
+      continue;
+    }
+    kept.push(line);
+  }
+  return {
+    project,
+    customer,
+    technicianNotes: kept.join('\n').trim()
+  };
+}
 
 /** Same as manufacturing JobCards: SC binary via sign-url (no ES imports — build is non-bundled IIFE). */
 function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filename, idx, isDark, issueId }) {
@@ -152,6 +208,8 @@ const ServiceAndMaintenance = () => {
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showJobCardDetail, setShowJobCardDetail] = useState(false);
   const [loadingJobCard, setLoadingJobCard] = useState(false);
+  const [jobCardActivities, setJobCardActivities] = useState([]);
+  const [jobCardActivitiesLoading, setJobCardActivitiesLoading] = useState(false);
   const [showFormsManager, setShowFormsManager] = useState(false);
   const [formsManagerReady, setFormsManagerReady] = useState(
     typeof window !== 'undefined' && !!window.ServiceFormsManager
@@ -549,7 +607,105 @@ const ServiceAndMaintenance = () => {
   const handleCloseJobCardDetail = () => {
     setShowJobCardDetail(false);
     setSelectedJobCard(null);
+    setJobCardActivities([]);
+    setJobCardActivitiesLoading(false);
   };
+
+  useEffect(() => {
+    if (!showJobCardDetail || !selectedJobCard?.id) {
+      setJobCardActivities([]);
+      setJobCardActivitiesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const id = selectedJobCard.id;
+    (async () => {
+      setJobCardActivitiesLoading(true);
+      try {
+        const token = window.storage?.getToken?.();
+        if (!token || cancelled) return;
+        const res = await fetch(`/api/jobcards/${encodeURIComponent(id)}/activity?order=asc`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok || cancelled) {
+          if (!cancelled) setJobCardActivities([]);
+          return;
+        }
+        const data = await res.json();
+        const acts = data?.data?.activities ?? data?.activities;
+        if (!cancelled) setJobCardActivities(Array.isArray(acts) ? acts : []);
+      } catch {
+        if (!cancelled) setJobCardActivities([]);
+      } finally {
+        if (!cancelled) setJobCardActivitiesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showJobCardDetail, selectedJobCard?.id]);
+
+  const refetchJobCardDetailAfterSave = useCallback(async (jobCardId) => {
+    const token = window.storage?.getToken?.();
+    if (!token || !jobCardId) return;
+    try {
+      const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
+      if (full && full.id) {
+        setSelectedJobCard(full);
+        if (full.attachmentsPending === true) {
+          void (async () => {
+            try {
+              const pr = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}/photos`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (!pr.ok) {
+                setSelectedJobCard((prev) =>
+                  prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
+                );
+                return;
+              }
+              const pd = await pr.json();
+              const photos = pd?.data?.photos ?? pd?.photos;
+              setSelectedJobCard((prev) =>
+                prev?.id === jobCardId
+                  ? { ...prev, photos: Array.isArray(photos) ? photos : [], attachmentsPending: false }
+                  : prev
+              );
+            } catch {
+              setSelectedJobCard((prev) =>
+                prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
+              );
+            }
+          })();
+        }
+      }
+      const ar = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}/activity?order=asc`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (ar.ok) {
+        const ad = await ar.json();
+        const acts = ad?.data?.activities ?? ad?.activities;
+        setJobCardActivities(Array.isArray(acts) ? acts : []);
+      }
+    } catch (e) {
+      console.warn('ServiceAndMaintenance: refetch after save failed', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onSaved = (ev) => {
+      const sid = ev?.detail?.id;
+      if (!sid || !selectedJobCard?.id || sid !== selectedJobCard.id) return;
+      void refetchJobCardDetailAfterSave(sid);
+    };
+    window.addEventListener('jobcards:saved', onSaved);
+    return () => window.removeEventListener('jobcards:saved', onSaved);
+  }, [selectedJobCard?.id, refetchJobCardDetailAfterSave]);
 
   // Safely parse GPS coordinates from a job card record
   const getJobCardCoordinates = (jobCard) => {
@@ -622,6 +778,59 @@ const ServiceAndMaintenance = () => {
       visualItemsBySection: { diagnosis: [], actionsTaken: [], futureWorkRequired: [] }
     };
   }, [selectedJobCard?.photos, selectedJobCard?.safetyCultureIssueId]);
+
+  const otherCommentsReport = useMemo(
+    () => splitJobCardOtherCommentsForReport(selectedJobCard?.otherComments),
+    [selectedJobCard?.otherComments]
+  );
+
+  const signatureAttachmentItems = useMemo(() => {
+    const photos = selectedJobCard?.photos;
+    if (!Array.isArray(photos)) return [];
+    return photos
+      .map((p, idx) => ({ p, idx }))
+      .filter(
+        ({ p }) =>
+          p &&
+          typeof p === 'object' &&
+          p.kind === 'signature' &&
+          typeof p.url === 'string' &&
+          p.url.trim()
+      )
+      .map(({ p, idx }) => ({ url: p.url, idx }));
+  }, [selectedJobCard?.photos]);
+
+  const galleryVisualItems = useMemo(() => {
+    const items = attachmentParts.visualItems || [];
+    return items.filter((item) => {
+      const raw = item?.raw;
+      return !(raw && typeof raw === 'object' && raw.kind === 'signature');
+    });
+  }, [attachmentParts.visualItems]);
+
+  const formatJobCardActivityAction = (action) => {
+    const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+    if (h && typeof h.formatJobCardActivityAction === 'function') {
+      return h.formatJobCardActivityAction(action);
+    }
+    if (!action || typeof action !== 'string') return '—';
+    return action;
+  };
+
+  const formatJobCardActivityDetailLine = (action, metadata) => {
+    const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+    if (h && typeof h.formatJobCardActivityDetail === 'function') {
+      return h.formatJobCardActivityDetail(action, metadata);
+    }
+    return '';
+  };
+
+  const hasCustomerSignoffBlock =
+    otherCommentsReport.customer.name ||
+    otherCommentsReport.customer.position ||
+    otherCommentsReport.customer.feedback ||
+    otherCommentsReport.customer.signatureLabel ||
+    signatureAttachmentItems.length > 0;
 
   const jobCardAttachmentsLoading =
     (loadingJobCard && !Array.isArray(selectedJobCard?.photos)) ||
@@ -1483,23 +1692,27 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (window.JobCards?.openEditJobCardModal) {
-                  window.JobCards.openEditJobCardModal(selectedJobCard);
-                } else if (window.JobCardModal) {
-                  // Fallback: dispatch event for JobCards to handle
-                  window.dispatchEvent(
-                    new CustomEvent('jobcards:edit', { detail: { jobCard: selectedJobCard } })
-                  );
-                }
-              }}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600"
-            >
-              <i className="fa-solid fa-pen" />
-              Edit job card
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.JobCards?.openEditJobCardModal) {
+                    window.JobCards.openEditJobCardModal(selectedJobCard);
+                  } else if (window.JobCardModal) {
+                    window.dispatchEvent(
+                      new CustomEvent('jobcards:edit', { detail: { jobCard: selectedJobCard } })
+                    );
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600"
+              >
+                <i className="fa-solid fa-pen" />
+                Edit full job card
+              </button>
+              <p className={`max-w-xs text-right text-[10px] leading-snug ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                Same fields as the mobile capture form: client, site, visit, work, stock, photos, customer sign-off, and checklists.
+              </p>
+            </div>
           </div>
 
           {/* Content */}
@@ -1509,7 +1722,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               <div className="xl:col-span-2 space-y-6">
                 {/* Key info */}
                 <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 shadow-sm`}>
-                  <div className={`grid gap-4 md:grid-cols-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                  <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Client
@@ -1535,6 +1748,44 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       </div>
                       <div className="mt-1">{formatDate(selectedJobCard.createdAt)}</div>
                     </div>
+                    {otherCommentsReport.project.projectName ? (
+                      <div>
+                        <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Project
+                        </div>
+                        <div className="mt-1">
+                          {otherCommentsReport.project.projectName}
+                          {otherCommentsReport.project.projectId ? (
+                            <span className={`ml-1 text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                              ({otherCommentsReport.project.projectId})
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                    {selectedJobCard.recordedByName || selectedJobCard.recordedByEmail ? (
+                      <div>
+                        <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Recorded by
+                        </div>
+                        <div className="mt-1">
+                          {selectedJobCard.recordedByName || '—'}
+                          {selectedJobCard.recordedByEmail ? (
+                            <span className={`ml-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                              ({selectedJobCard.recordedByEmail})
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                    {selectedJobCard.completedByName ? (
+                      <div>
+                        <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Completed by
+                        </div>
+                        <div className="mt-1">{selectedJobCard.completedByName}</div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className={`mt-4 grid gap-4 sm:grid-cols-3 text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
@@ -1644,16 +1895,16 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     </div>
                   </div>
 
-                  {(selectedJobCard.otherComments ||
+                  {(otherCommentsReport.technicianNotes ||
                     (attachmentParts.voicesBySection.otherComments &&
                       attachmentParts.voicesBySection.otherComments.length > 0)) && (
                     <div>
                       <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                        Additional notes
+                        Additional notes (technician)
                       </div>
-                      {selectedJobCard.otherComments ? (
+                      {otherCommentsReport.technicianNotes ? (
                         <div className={`rounded-xl border border-dashed p-3 text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'border-gray-800 bg-gray-950 text-gray-100' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                          {selectedJobCard.otherComments}
+                          {otherCommentsReport.technicianNotes}
                         </div>
                       ) : null}
                       {DetailVoice ? (
@@ -1666,7 +1917,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                   attachmentParts.voicesBySection.customerFeedback.length > 0 ? (
                     <div>
                       <div className={`text-[11px] font-semibold uppercase mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                        Customer feedback
+                        Customer feedback (voice)
                       </div>
                       {DetailVoice ? (
                         <DetailVoice items={attachmentParts.voicesBySection.customerFeedback} />
@@ -1674,6 +1925,89 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     </div>
                   ) : null}
                 </section>
+
+                {hasCustomerSignoffBlock ? (
+                  <section
+                    className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-3`}
+                  >
+                    <header className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700'}`}
+                      >
+                        <i className="fa-solid fa-signature text-sm" />
+                      </span>
+                      <div>
+                        <div
+                          className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                        >
+                          Customer sign-off
+                        </div>
+                        <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                          Name, role, feedback, and signature from the capture form
+                        </div>
+                      </div>
+                    </header>
+                    <div className={`grid gap-3 sm:grid-cols-2 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {otherCommentsReport.customer.name ? (
+                        <div>
+                          <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Customer name
+                          </div>
+                          <div className="mt-1">{otherCommentsReport.customer.name}</div>
+                        </div>
+                      ) : null}
+                      {otherCommentsReport.customer.position ? (
+                        <div>
+                          <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Role / title
+                          </div>
+                          <div className="mt-1">{otherCommentsReport.customer.position}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                    {otherCommentsReport.customer.feedback ? (
+                      <div>
+                        <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                          Customer feedback (text)
+                        </div>
+                        <p className={`mt-1 leading-relaxed whitespace-pre-wrap ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                          {otherCommentsReport.customer.feedback}
+                        </p>
+                      </div>
+                    ) : null}
+                    {otherCommentsReport.customer.signatureLabel ? (
+                      <div>
+                        <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                          Signature status
+                        </div>
+                        <div className="mt-1">{otherCommentsReport.customer.signatureLabel}</div>
+                      </div>
+                    ) : null}
+                    {signatureAttachmentItems.length > 0 ? (
+                      <div>
+                        <div className={`text-[11px] font-semibold uppercase mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                          Signature image
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {signatureAttachmentItems.map((s) => (
+                            <figure
+                              key={`sig-${s.idx}`}
+                              className={`overflow-hidden rounded-xl border ${isDark ? 'border-gray-700 bg-gray-950' : 'border-gray-200 bg-white'}`}
+                            >
+                              <img
+                                src={s.url}
+                                alt="Customer signature"
+                                className="max-h-40 max-w-full object-contain"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            </figure>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
 
                 {/* Travel */}
                 <section className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-4`}>
@@ -1982,6 +2316,20 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       </div>
                     )}
                   </div>
+                  {getJobCardCoordinates(selectedJobCard) ? (
+                    <p className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Coordinates:{' '}
+                      {getJobCardCoordinates(selectedJobCard).lat.toFixed(6)},{' '}
+                      {getJobCardCoordinates(selectedJobCard).lng.toFixed(6)}
+                    </p>
+                  ) : (
+                    (selectedJobCard.locationLatitude || selectedJobCard.locationLongitude) && (
+                      <p className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Raw GPS fields: {String(selectedJobCard.locationLatitude || '—')},{' '}
+                        {String(selectedJobCard.locationLongitude || '—')}
+                      </p>
+                    )
+                  )}
                 </section>
 
                 {/* Photos & videos only (voice notes appear under their fields above) */}
@@ -2000,8 +2348,13 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                             <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading…</span>
                           ) : (
                             <>
-                              {attachmentParts.visualItems.length} visual attachment
-                              {attachmentParts.visualItems.length === 1 ? '' : 's'}
+                              {galleryVisualItems.length} visual attachment
+                              {galleryVisualItems.length === 1 ? '' : 's'}
+                              {signatureAttachmentItems.length > 0 ? (
+                                <span className={`ml-1 text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                  (signature shown under Customer sign-off)
+                                </span>
+                              ) : null}
                             </>
                           )}
                         </div>
@@ -2013,9 +2366,9 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       <i className="fa-solid fa-spinner fa-spin text-xl mb-2" />
                       <p className="text-sm">Loading attachments…</p>
                     </div>
-                  ) : attachmentParts.visualItems.length > 0 ? (
+                  ) : galleryVisualItems.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {attachmentParts.visualItems.map((item) => {
+                      {galleryVisualItems.map((item) => {
                         const { idx } = item;
                         if (item.safetyCulture) {
                           return (
@@ -2079,6 +2432,45 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                 </section>
               </div>
             </div>
+
+            <section
+              className={`mt-6 rounded-xl border p-5 print:break-inside-avoid ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}
+            >
+              <div className={`text-xs font-semibold uppercase tracking-wide mb-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                Job card activity
+              </div>
+              {jobCardActivitiesLoading ? (
+                <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Loading…</p>
+              ) : jobCardActivities.length === 0 ? (
+                <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                  No activity events yet for this job card.
+                </p>
+              ) : (
+                <ul className={`space-y-2 text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                  {jobCardActivities.map((a) => (
+                    <li
+                      key={a.id}
+                      className={`border-b pb-2 last:border-0 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}
+                    >
+                      <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                        {formatDate(a.createdAt)}
+                      </span>
+                      {' · '}
+                      <span className="font-medium">{formatJobCardActivityAction(a.action)}</span>
+                      {a.actorName ? ` — ${a.actorName}` : ''}
+                      {a.source ? (
+                        <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}> ({a.source})</span>
+                      ) : null}
+                      {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
+                        <div className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                          {formatJobCardActivityDetailLine(a.action, a.metadata)}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
             <div className={`mt-4 flex items-center justify-between border-t pt-4 text-xs ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-100 text-gray-500'}`}>
               <div className="flex items-center gap-2">
