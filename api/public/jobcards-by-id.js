@@ -261,7 +261,7 @@ async function handler(req, res) {
     if (prevStatus !== updated.status) {
       changeRows = changeRows.filter((c) => c.field !== 'status')
     }
-    if (changeRows.length > 0) {
+    if (Object.keys(data).length > 0) {
       await insertJobCardActivityRecord(prisma, {
         jobCardId: id,
         actorUserId: null,
@@ -269,9 +269,10 @@ async function handler(req, res) {
         action: 'updated',
         metadata: {
           fields: Object.keys(data),
-          changes: changeRows,
-          changeCount: changeRows.length,
-          status: updated.status
+          status: updated.status,
+          ...(changeRows.length > 0
+            ? { changes: changeRows, changeCount: changeRows.length }
+            : {})
         },
         source: 'public_api'
       })

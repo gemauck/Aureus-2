@@ -948,16 +948,19 @@ async function handler(req, res) {
         if (prevStatus !== jobCard.status) {
           changeRows = changeRows.filter((c) => c.field !== 'status')
         }
-        if (changeRows.length > 0) {
+        // Always log an "updated" row when Prisma persisted changes. The diff builder can
+        // legitimately return no rows (normalized equality), but users still expect an activity entry.
+        if (Object.keys(updateData).length > 0) {
           await insertJobCardActivity(prisma, {
             jobCardId: id,
             req,
             action: 'updated',
             metadata: {
               fields: Object.keys(updateData),
-              changes: changeRows,
-              changeCount: changeRows.length,
-              status: jobCard.status
+              status: jobCard.status,
+              ...(changeRows.length > 0
+                ? { changes: changeRows, changeCount: changeRows.length }
+                : {})
             },
             source: 'web'
           })
@@ -1054,7 +1057,11 @@ async function handler(req, res) {
           return notFound(res, 'Job card not found')
         }
 
-        await ensureMinimumJobCardActivity(prisma, id)
+        try {
+          await ensureMinimumJobCardActivity(prisma, id)
+        } catch (baselineErr) {
+          console.warn('ensureMinimumJobCardActivity (non-fatal):', baselineErr?.message || baselineErr)
+        }
 
         let orderDir = 'asc'
         try {
@@ -1071,6 +1078,17 @@ async function handler(req, res) {
           take: 500
         })
 
+        const safeActivityCreatedAt = (d) => {
+          if (!d) return null
+          try {
+            const x = d instanceof Date ? d : new Date(d)
+            if (Number.isNaN(x.getTime())) return null
+            return x.toISOString()
+          } catch {
+            return null
+          }
+        }
+
         const formatted = rows.map(r => ({
           id: r.id,
           jobCardId: r.jobCardId,
@@ -1079,7 +1097,7 @@ async function handler(req, res) {
           action: r.action,
           source: r.source,
           metadata: r.metadata,
-          createdAt: formatDate(r.createdAt)
+          createdAt: safeActivityCreatedAt(r.createdAt)
         }))
 
         return ok(res, { activities: formatted })
