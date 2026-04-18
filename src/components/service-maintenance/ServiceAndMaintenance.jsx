@@ -825,6 +825,14 @@ const ServiceAndMaintenance = () => {
     return '';
   };
 
+  const formatJobCardActivitySourceLine = (source) => {
+    const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+    if (h && typeof h.formatJobCardActivitySource === 'function') {
+      return h.formatJobCardActivitySource(source);
+    }
+    return source ? String(source) : '';
+  };
+
   const hasCustomerSignoffBlock =
     otherCommentsReport.customer.name ||
     otherCommentsReport.customer.position ||
@@ -2458,8 +2466,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       {' · '}
                       <span className="font-medium">{formatJobCardActivityAction(a.action)}</span>
                       {a.actorName ? ` — ${a.actorName}` : ''}
-                      {a.source ? (
-                        <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}> ({a.source})</span>
+                      {formatJobCardActivitySourceLine(a.source) ? (
+                        <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                          {' '}
+                          · {formatJobCardActivitySourceLine(a.source)}
+                        </span>
                       ) : null}
                       {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
                         <div className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>

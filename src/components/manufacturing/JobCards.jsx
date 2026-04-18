@@ -723,6 +723,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     return '';
   };
 
+  const formatJobCardActivitySourceLine = (source) => {
+    const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+    if (h && typeof h.formatJobCardActivitySource === 'function') {
+      return h.formatJobCardActivitySource(source);
+    }
+    return source ? String(source) : '';
+  };
+
   const handleRowClick = async (jobCard) => {
     if (typeof onOpenDetail === 'function') {
       onOpenDetail(jobCard);
@@ -2257,8 +2265,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       {' · '}
                       <span className="font-medium">{formatJobCardActivityAction(a.action)}</span>
                       {a.actorName ? ` — ${a.actorName}` : ''}
-                      {a.source ? (
-                        <span className="text-slate-500 text-xs"> ({a.source})</span>
+                      {formatJobCardActivitySourceLine(a.source) ? (
+                        <span className="text-slate-500 text-xs">
+                          {' '}
+                          · {formatJobCardActivitySourceLine(a.source)}
+                        </span>
                       ) : null}
                       {formatJobCardActivityDetailLine(a.action, a.metadata) ? (
                         <div className="text-slate-500 text-xs mt-0.5 pl-0">

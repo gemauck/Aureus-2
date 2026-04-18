@@ -10,6 +10,81 @@ export const JOB_CARD_ACTIVITY_STEP_LABELS = {
   signoff: 'Customer Sign-off'
 };
 
+/** Prisma/API field keys → short labels for activity "what changed" lines */
+export const JOB_CARD_FIELD_LABELS = {
+  agentName: 'Lead technician',
+  otherTechnicians: 'Other technicians',
+  clientId: 'Client (system id)',
+  clientName: 'Client name',
+  siteId: 'Site (id)',
+  siteName: 'Site name',
+  location: 'Location description',
+  locationLatitude: 'GPS latitude',
+  locationLongitude: 'GPS longitude',
+  timeOfDeparture: 'Departure time',
+  timeOfArrival: 'Arrival on site',
+  departureFromSite: 'Left site',
+  arrivalBackAtOffice: 'Back at office',
+  vehicleUsed: 'Vehicle',
+  vehicleId: 'Vehicle (id)',
+  kmReadingBefore: 'Odometer before',
+  kmReadingAfter: 'Odometer after',
+  travelKilometers: 'Travel distance',
+  totalTimeMinutes: 'Total time on job',
+  reasonForVisit: 'Reason for visit',
+  diagnosis: 'Diagnosis',
+  actionsTaken: 'Actions taken',
+  futureWorkRequired: 'Future work',
+  futureWorkScheduledAt: 'Future work scheduled',
+  otherComments: 'Notes / customer details',
+  photos: 'Photos & attachments',
+  stockUsed: 'Stock used',
+  materialsBought: 'Materials bought',
+  totalMaterialsCost: 'Materials total cost',
+  status: 'Status',
+  submittedAt: 'Submitted time',
+  completedAt: 'Completed time',
+  ownerId: 'Owner (ERP user)',
+  completedByUserId: 'Completed by (user id)',
+  completedByName: 'Completed by (name)',
+  jobCardNumber: 'Job card number',
+  safetyCultureAuditId: 'SafetyCulture audit link',
+  safetyCultureIssueId: 'SafetyCulture issue link',
+  safetyCultureSnapshotJson: 'SafetyCulture snapshot'
+};
+
+/**
+ * How the activity was recorded (ERP vs field app).
+ * @param {string} [source]
+ * @returns {string}
+ */
+export function formatJobCardActivitySource(source) {
+  if (!source || typeof source !== 'string') return '';
+  const s = source.trim().toLowerCase();
+  const map = {
+    web: 'ERP (web)',
+    'web_app': 'ERP (web)',
+    public_api: 'Job card app (online)',
+    sync: 'Job card app (synced)',
+    mobile: 'Job card app',
+    system: 'System'
+  };
+  return map[s] || source;
+}
+
+function humanizeUpdatedFields(fields) {
+  if (!Array.isArray(fields) || fields.length === 0) return '';
+  const labels = fields.map((f) =>
+    typeof f === 'string' && JOB_CARD_FIELD_LABELS[f] ? JOB_CARD_FIELD_LABELS[f] : String(f)
+  );
+  const unique = [...new Set(labels)];
+  const max = 16;
+  if (unique.length <= max) {
+    return unique.join(' · ');
+  }
+  return `${unique.slice(0, max).join(' · ')} · +${unique.length - max} more`;
+}
+
 /**
  * Human-readable primary line for a JobCardActivity.action value.
  * @param {string} action
@@ -74,10 +149,14 @@ export function formatJobCardActivityDetail(action, metadata) {
     if (tid) return `Template: ${tid.slice(0, 40)}`;
   }
   if (action === 'status_changed' && m.from != null && m.to != null) {
-    return `${String(m.from)} → ${String(m.to)}`;
+    return `Status: ${String(m.from)} → ${String(m.to)}`;
+  }
+  if (action === 'created' && m.status != null && String(m.status).trim() !== '') {
+    return `Starting status: ${String(m.status)}`;
   }
   if (action === 'updated' && Array.isArray(m.fields)) {
-    return m.fields.slice(0, 12).join(', ');
+    const summary = humanizeUpdatedFields(m.fields);
+    return summary ? `Updated: ${summary}` : '';
   }
   return '';
 }
@@ -99,8 +178,10 @@ export function sortJobCardActivitiesChronological(activities) {
 const jobCardActivityHelpers = {
   formatJobCardActivityAction,
   formatJobCardActivityDetail,
+  formatJobCardActivitySource,
   sortJobCardActivitiesChronological,
-  JOB_CARD_ACTIVITY_STEP_LABELS
+  JOB_CARD_ACTIVITY_STEP_LABELS,
+  JOB_CARD_FIELD_LABELS
 };
 
 if (typeof window !== 'undefined') {

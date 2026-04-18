@@ -3,6 +3,7 @@
 import {
   formatJobCardActivityAction,
   formatJobCardActivityDetail,
+  formatJobCardActivitySource,
   sortJobCardActivitiesChronological
 } from './jobCardActivityDisplay.js';
 
@@ -5105,8 +5106,11 @@ const JobCardFormPublic = () => {
                               {formatJobCardActivityAction(a.action)}
                             </span>
                             {a.actorName ? ` — ${a.actorName}` : ''}
-                            {a.source ? (
-                              <span className="text-slate-500 text-xs"> ({a.source})</span>
+                            {formatJobCardActivitySource(a.source) ? (
+                              <span className="text-slate-500 text-xs">
+                                {' '}
+                                · {formatJobCardActivitySource(a.source)}
+                              </span>
                             ) : null}
                             {formatJobCardActivityDetail(a.action, a.metadata) ? (
                               <div className="text-slate-500 text-xs mt-0.5">
