@@ -29,12 +29,12 @@ npm run android:open
 
 ## 📱 Development Workflow
 
-### After Making Web Changes:
+### After changing Capacitor config or `capacitor-web/`:
 ```bash
-npm run build          # Build web app
-npm run android:sync   # Copy to Android
+npm run android:sync   # Copy placeholder assets + config into Android
 # Then rebuild in Android Studio
 ```
+The job card UI itself is loaded from `server.url` (production); deploy web changes to the server—no local `npm run build` required for that.
 
 ### Quick Commands:
 ```bash
@@ -59,9 +59,8 @@ npx cap sync android
 ```
 
 ### App shows blank screen
-1. Check that `dist/` folder exists
-2. Run `npm run build`
-3. Run `npm run android:sync`
+1. Confirm the device can reach `server.url` in `capacitor.config.json` (HTTPS).
+2. Run `npm run android:sync` after any config change, then rebuild in Android Studio.
 
 ## 📦 Building for Release
 
@@ -78,7 +77,7 @@ cd android
 keytool -genkey -v -keystore release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias abcotronics
 ```
 
-2. Update `capacitor.config.js` with keystore details
+2. Update `capacitor.config.json` with keystore details
 
 3. Build:
 ```bash

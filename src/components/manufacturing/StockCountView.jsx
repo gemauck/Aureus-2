@@ -22,6 +22,11 @@
     const [lastResult, setLastResult] = React.useState(null);
     const [dryRun, setDryRun] = React.useState(true);
     const [forceDup, setForceDup] = React.useState(false);
+    const [submissions, setSubmissions] = React.useState([]);
+    const [submissionsLoading, setSubmissionsLoading] = React.useState(false);
+    const [submissionDetail, setSubmissionDetail] = React.useState(null);
+    const [detailLoading, setDetailLoading] = React.useState(false);
+    const [applyingSubmissionId, setApplyingSubmissionId] = React.useState('');
     const fileInputRef = React.useRef(null);
 
     const card = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100';
@@ -40,6 +45,31 @@
     };
 
     const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+
+    const loadSubmissions = React.useCallback(async () => {
+      setSubmissionsLoading(true);
+      try {
+        const res = await fetch(apiBase + '/api/manufacturing/stock-take-submissions?status=pending_review', {
+          method: 'GET',
+          headers: authHeaders()
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || res.statusText);
+        }
+        const data = await res.json();
+        const rows = data?.data?.submissions || data?.submissions || [];
+        setSubmissions(Array.isArray(rows) ? rows : []);
+      } catch (e) {
+        setError(e.message || 'Failed to load pending stock-take submissions');
+      } finally {
+        setSubmissionsLoading(false);
+      }
+    }, [apiBase]);
+
+    React.useEffect(() => {
+      void loadSubmissions();
+    }, [loadSubmissions]);
 
     const handleDownload = async () => {
       setError(null);
@@ -131,6 +161,63 @@
       e.target.value = '';
       if (!f) return;
       void runImport(f, { dryRun, forceDup });
+    };
+
+    const openSubmissionDetail = async (submissionId) => {
+      if (!submissionId) return;
+      setDetailLoading(true);
+      setSubmissionDetail(null);
+      try {
+        const res = await fetch(apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(submissionId), {
+          method: 'GET',
+          headers: authHeaders()
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || res.statusText);
+        }
+        const data = await res.json();
+        setSubmissionDetail(data?.data?.submission || data?.submission || null);
+      } catch (e) {
+        setError(e.message || 'Failed to load submission detail');
+      } finally {
+        setDetailLoading(false);
+      }
+    };
+
+    const applySubmission = async (submissionId) => {
+      if (!submissionId) return;
+      if (!window.confirm('Apply this stock-take submission to inventory now?')) return;
+      setApplyingSubmissionId(submissionId);
+      setError(null);
+      setMessage(null);
+      try {
+        const res = await fetch(apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(submissionId) + '/apply', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({})
+        });
+        const txt = await res.text();
+        let data = {};
+        try { data = JSON.parse(txt); } catch {}
+        if (!res.ok) {
+          const msg = data?.error?.message || data?.message || data?.error || txt || res.statusText;
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const payload = data?.data || {};
+        setMessage(
+          'Submission applied. Movements created: ' + (payload.movementsCreated ?? 0) + ', skipped: ' + (payload.skipped ?? 0) + '.'
+        );
+        if (submissionDetail?.id === submissionId) {
+          setSubmissionDetail((prev) => prev ? { ...prev, status: 'applied' } : prev);
+        }
+        await loadSubmissions();
+        if (typeof onApplied === 'function') onApplied();
+      } catch (e) {
+        setError(e.message || 'Failed to apply submission');
+      } finally {
+        setApplyingSubmissionId('');
+      }
     };
 
     return React.createElement(
@@ -250,7 +337,143 @@
               )
             )
           )
-        )
+        ),
+      React.createElement(
+        'div',
+        { className: 'rounded-xl border p-5 shadow-sm ' + card },
+        React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'Pending mobile stock-take submissions'),
+        React.createElement(
+          'p',
+          { className: 'mt-1 text-sm ' + muted },
+          'Counts submitted from the Job Cards app appear here for review before apply.'
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-3 flex items-center gap-2' },
+          React.createElement(
+            'button',
+            { type: 'button', disabled: submissionsLoading, className: btn, onClick: () => void loadSubmissions() },
+            submissionsLoading ? 'Refreshing…' : 'Refresh'
+          )
+        ),
+        submissionsLoading && submissions.length === 0
+          ? React.createElement('div', { className: 'mt-3 text-sm ' + muted }, 'Loading submissions…')
+          : null,
+        !submissionsLoading && submissions.length === 0
+          ? React.createElement('div', { className: 'mt-3 text-sm ' + muted }, 'No pending submissions.')
+          : null,
+        submissions.length > 0
+          ? React.createElement(
+              'div',
+              { className: 'mt-3 space-y-2' },
+              submissions.map((row) =>
+                React.createElement(
+                  'div',
+                  {
+                    key: row.id,
+                    className:
+                      'rounded-lg border px-3 py-2 ' + (isDark ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-white')
+                  },
+                  React.createElement(
+                    'div',
+                    { className: 'flex flex-wrap items-center justify-between gap-2' },
+                    React.createElement(
+                      'div',
+                      { className: 'min-w-0' },
+                      React.createElement('p', { className: 'text-sm font-semibold ' + text }, row.submissionRef || row.id),
+                      React.createElement(
+                        'p',
+                        { className: 'text-xs ' + muted },
+                        (row.locationName || 'Unknown location') +
+                          ' · ' +
+                          (row.lineCount || 0) +
+                          ' lines · by ' +
+                          (row.submittedBy || 'Unknown')
+                      )
+                    ),
+                    React.createElement(
+                      'div',
+                      { className: 'flex gap-2' },
+                      React.createElement(
+                        'button',
+                        { type: 'button', className: btn, onClick: () => void openSubmissionDetail(row.id) },
+                        'Review'
+                      ),
+                      React.createElement(
+                        'button',
+                        {
+                          type: 'button',
+                          className: btnPrimary,
+                          disabled: applyingSubmissionId === row.id,
+                          onClick: () => void applySubmission(row.id)
+                        },
+                        applyingSubmissionId === row.id ? 'Applying…' : 'Apply'
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          : null,
+        detailLoading
+          ? React.createElement('div', { className: 'mt-3 text-xs ' + muted }, 'Loading selected submission detail…')
+          : null,
+        submissionDetail
+          ? React.createElement(
+              'div',
+              {
+                className:
+                  'mt-4 rounded-lg border p-3 ' + (isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-200 bg-gray-50')
+              },
+              React.createElement(
+                'p',
+                { className: 'text-sm font-semibold ' + text },
+                'Review: ' + (submissionDetail.submissionRef || submissionDetail.id)
+              ),
+              React.createElement(
+                'p',
+                { className: 'text-xs mt-1 ' + muted },
+                (submissionDetail.locationName || '') +
+                  ' · submitted ' +
+                  new Date(submissionDetail.submittedAt || Date.now()).toLocaleString()
+              ),
+              React.createElement(
+                'div',
+                { className: 'mt-2 overflow-x-auto max-h-64' },
+                React.createElement(
+                  'table',
+                  { className: 'w-full text-xs' },
+                  React.createElement(
+                    'thead',
+                    null,
+                    React.createElement(
+                      'tr',
+                      { className: isDark ? 'bg-gray-800' : 'bg-gray-100' },
+                      ['SKU', 'Name', 'System', 'Counted', 'Delta'].map((h) =>
+                        React.createElement('th', { key: h, className: 'text-left px-2 py-1 font-medium ' + muted }, h)
+                      )
+                    )
+                  ),
+                  React.createElement(
+                    'tbody',
+                    null,
+                    (submissionDetail.lines || []).slice(0, 100).map((line) =>
+                      React.createElement(
+                        'tr',
+                        { key: line.id, className: isDark ? 'border-t border-gray-800' : 'border-t border-gray-200' },
+                        React.createElement('td', { className: 'px-2 py-1 ' + text }, line.sku),
+                        React.createElement('td', { className: 'px-2 py-1 ' + text }, (line.itemName || '').slice(0, 42)),
+                        React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.systemQty || 0).toFixed(2)),
+                        React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.countedQty || 0).toFixed(2)),
+                        React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.deltaQty || 0).toFixed(2))
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          : null
+      )
     );
   }
 

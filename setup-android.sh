@@ -30,12 +30,16 @@ echo "📦 Installing npm dependencies..."
 npm install
 
 echo ""
-echo "🏗️  Building web application..."
-npm run build
+echo "🏗️  Skipping full web build (Job Card wrapper uses remote server.url; see capacitor.config.json)."
+echo "    Run npm run build only if you switch to bundled webDir assets."
 
 echo ""
-echo "📱 Initializing Android platform..."
-npx cap add android
+echo "📱 Initializing Android platform (skip if android/ already exists)..."
+if [ ! -d "android" ]; then
+  npx cap add android
+else
+  echo "   android/ already present — skipping cap add android"
+fi
 
 echo ""
 echo "🔄 Syncing web assets to Android..."

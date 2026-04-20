@@ -159,6 +159,12 @@ function sanitizeExcelSheetName(name, maxLen = 31) {
   return s.length > maxLen ? s.slice(0, maxLen) : s
 }
 
+function stockTakeSubmissionRef() {
+  const stamp = Date.now().toString(36).toUpperCase()
+  const rand = Math.random().toString(36).slice(2, 7).toUpperCase()
+  return `STK-${stamp}-${rand}`
+}
+
 async function allocateStockCountSkuTx(tx) {
   for (let attempt = 0; attempt < 80; attempt++) {
     const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`.toUpperCase()
@@ -765,6 +771,7 @@ async function handler(req, res) {
     const pathSegments = urlPath.split('/').filter(Boolean)
     const resourceType = pathSegments[1] // inventory, boms, production-orders, stock-movements, locations, location-inventory, stock-transactions
     const id = pathSegments[2]
+    const action = pathSegments[3]
 
     // Helper to parse JSON fields
     const parseJson = (str, defaultValue = []) => {
@@ -1341,6 +1348,213 @@ async function handler(req, res) {
         return serverError(res, msg, msg)
       }
     }
+  }
+
+  // STOCK COUNT (admin): Excel export / import
+  if (resourceType === 'stock-take-submissions') {
+    if (req.method === 'POST' && !id) {
+      try {
+        const body = await parseJsonBody(req)
+        const locationId = String(body?.locationId || '').trim()
+        const linesInput = Array.isArray(body?.lines) ? body.lines : []
+        if (!locationId) return badRequest(res, 'locationId is required')
+        if (!linesInput.length) return badRequest(res, 'At least one line is required')
+
+        const location = await prisma.stockLocation.findUnique({
+          where: { id: locationId },
+          select: { id: true, code: true, name: true }
+        })
+        if (!location) return badRequest(res, 'Invalid locationId')
+
+        const cleanLines = linesInput
+          .map((line, idx) => {
+            const sku = String(line?.sku || '').trim()
+            const itemName = String(line?.itemName || sku).trim()
+            const systemQty = Number(line?.systemQty)
+            const countedQty = Number(line?.countedQty)
+            if (!sku || !itemName || !Number.isFinite(systemQty) || !Number.isFinite(countedQty)) return null
+            return {
+              row: idx + 1,
+              locationInventoryId: line?.locationInventoryId ? String(line.locationInventoryId) : null,
+              inventoryItemId: line?.inventoryItemId ? String(line.inventoryItemId) : null,
+              sku,
+              itemName,
+              unit: String(line?.unit || 'pcs').trim() || 'pcs',
+              systemQty,
+              countedQty,
+              deltaQty: countedQty - systemQty
+            }
+          })
+          .filter(Boolean)
+
+        if (!cleanLines.length) {
+          return badRequest(res, 'No valid stock-take lines found')
+        }
+
+        const submission = await prisma.stockTakeSubmission.create({
+          data: {
+            submissionRef: stockTakeSubmissionRef(),
+            locationId: location.id,
+            locationCode: location.code || '',
+            locationName: location.name || '',
+            status: 'pending_review',
+            submittedById: String(req.user?.sub || req.user?.id || ''),
+            submittedBy: String(req.user?.name || req.user?.email || 'User'),
+            notes: String(body?.notes || '').trim(),
+            startedAt: body?.startedAt ? new Date(body.startedAt) : null,
+            finishedAt: body?.finishedAt ? new Date(body.finishedAt) : null,
+            ownerId: req.user?.sub || null,
+            meta: JSON.stringify({
+              userAgent: req.headers?.['user-agent'] || '',
+              lineCount: cleanLines.length
+            }),
+            lines: {
+              create: cleanLines.map((line) => ({
+                locationInventoryId: line.locationInventoryId,
+                inventoryItemId: line.inventoryItemId,
+                sku: line.sku,
+                itemName: line.itemName,
+                unit: line.unit,
+                systemQty: line.systemQty,
+                countedQty: line.countedQty,
+                deltaQty: line.deltaQty
+              }))
+            }
+          },
+          include: { lines: true }
+        })
+        auditManufacturing('create', 'stock-take-submission', submission.id, {
+          submissionRef: submission.submissionRef,
+          locationId: submission.locationId,
+          lines: submission.lines.length
+        })
+        return created(res, { submission })
+      } catch (error) {
+        console.error('❌ Stock-take submission create failed:', error)
+        return serverError(res, 'Failed to create stock-take submission', error.message)
+      }
+    }
+
+    if (req.method === 'GET' && !id) {
+      if (!isAdminRole(req.user?.role)) {
+        return forbidden(res, 'Only administrators can review stock-take submissions.')
+      }
+      try {
+        const status = String(req.query?.status || '').trim()
+        const where = status ? { status } : {}
+        const rows = await prisma.stockTakeSubmission.findMany({
+          where,
+          include: {
+            _count: { select: { lines: true } }
+          },
+          orderBy: [{ submittedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 100
+        })
+        return ok(res, {
+          submissions: rows.map((row) => ({
+            ...row,
+            lineCount: row._count?.lines || 0
+          }))
+        })
+      } catch (error) {
+        console.error('❌ Stock-take submission list failed:', error)
+        return serverError(res, 'Failed to load stock-take submissions', error.message)
+      }
+    }
+
+    if (req.method === 'GET' && id) {
+      if (!isAdminRole(req.user?.role)) {
+        return forbidden(res, 'Only administrators can review stock-take submissions.')
+      }
+      try {
+        const submission = await prisma.stockTakeSubmission.findUnique({
+          where: { id },
+          include: {
+            lines: {
+              orderBy: [{ itemName: 'asc' }, { sku: 'asc' }]
+            }
+          }
+        })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        return ok(res, { submission })
+      } catch (error) {
+        console.error('❌ Stock-take submission detail failed:', error)
+        return serverError(res, 'Failed to load stock-take submission', error.message)
+      }
+    }
+
+    if (req.method === 'POST' && id && action === 'apply') {
+      if (!isAdminRole(req.user?.role)) {
+        return forbidden(res, 'Only administrators can apply stock-take submissions.')
+      }
+      try {
+        const body = await parseJsonBody(req)
+        const result = await prisma.$transaction(async (tx) => {
+          const submission = await tx.stockTakeSubmission.findUnique({
+            where: { id },
+            include: { lines: true }
+          })
+          if (!submission) throw httpError(404, 'Stock-take submission not found')
+          if (submission.status !== 'pending_review') {
+            throw httpError(400, `Submission is already ${submission.status}`)
+          }
+
+          const movementSeqRef = { n: await nextMovementSeqStartTx(tx) }
+          let movementsCreated = 0
+          let skipped = 0
+
+          for (const line of submission.lines) {
+            const delta = Number(line.deltaQty) || 0
+            if (Math.abs(delta) < 0.0001) {
+              skipped++
+              continue
+            }
+            const { movement } = await applyStockCountAdjustmentTx(tx, {
+              req,
+              movementSeqRef,
+              sku: line.sku,
+              itemName: line.itemName,
+              quantityDelta: delta,
+              locationId: submission.locationId,
+              reference: `Stock take ${submission.submissionRef}`,
+              notes: `Submitted stock-take apply (submission=${submission.id}, line=${line.id})`,
+              unit: line.unit || 'pcs',
+              unitCost: 0,
+              reorderPoint: 0,
+              needsCatalogReview: false,
+              importDate: new Date()
+            })
+            if (movement) movementsCreated++
+          }
+
+          const updated = await tx.stockTakeSubmission.update({
+            where: { id: submission.id },
+            data: {
+              status: 'applied',
+              appliedAt: new Date(),
+              appliedById: String(req.user?.sub || req.user?.id || ''),
+              appliedBy: String(req.user?.name || req.user?.email || 'System'),
+              applyNotes: String(body?.notes || '').trim()
+            }
+          })
+
+          return { submission: updated, movementsCreated, skipped }
+        })
+
+        auditManufacturing('update', 'stock-take-submission-apply', id, {
+          movementsCreated: result.movementsCreated,
+          skipped: result.skipped
+        })
+        return ok(res, result)
+      } catch (error) {
+        if (error?.httpStatus === 404) return notFound(res, error.message)
+        if (error?.httpStatus === 400) return badRequest(res, error.message)
+        console.error('❌ Stock-take submission apply failed:', error)
+        return serverError(res, 'Failed to apply stock-take submission', error.message)
+      }
+    }
+
+    return badRequest(res, 'Unsupported stock-take-submissions route')
   }
 
   // STOCK COUNT (admin): Excel export / import

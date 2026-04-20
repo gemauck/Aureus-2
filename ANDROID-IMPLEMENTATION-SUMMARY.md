@@ -11,13 +11,12 @@ Your Abcotronics ERP web application has been configured to be converted into an
   - `@capacitor/android`
 
 ### 2. **Configuration Files**
-- **`capacitor.config.js`** - Main Capacitor configuration
-  - App ID: `com.abcotronics.erp`
-  - App Name: `Abcotronics ERP`
-  - Configured for Android with proper settings
+- **`capacitor.config.json`** - Main Capacitor configuration
+  - App ID: `com.abcotronics.jobcard`
+  - App Name: `Job Card`
+  - **`server.url`** loads the public form at `https://abcoafrica.co.za/job-card` (remote WebView wrapper)
+  - **`webDir`**: `capacitor-web/` (minimal placeholder for `cap sync`)
   - Splash screen and keyboard plugins configured
-
-- **`capacitor.config.ts`** - TypeScript version (for IDE support)
 
 ### 3. **Build Scripts**
 Added to `package.json`:
@@ -74,15 +73,15 @@ Added to `package.json`:
 ## 📱 App Configuration
 
 ### Current Settings:
-- **App ID**: `com.abcotronics.erp`
-- **App Name**: `Abcotronics ERP`
+- **App ID**: `com.abcotronics.jobcard`
+- **App Name**: `Job Card`
 - **Minimum Android Version**: API 22 (Android 5.1)
 - **Target Android Version**: API 33 (Android 13)
 - **Splash Screen**: Blue (#0284c7) with 2-second duration
 - **Keyboard**: Auto-resize enabled
 
 ### Customization:
-Edit `capacitor.config.js` to change:
+Edit `capacitor.config.json` to change:
 - App ID and name
 - Splash screen settings
 - Keyboard behavior
@@ -97,7 +96,7 @@ Edit `capacitor.config.js` to change:
 4. Rebuild in Android Studio
 
 ### For Live Development:
-1. Edit `capacitor.config.js`:
+1. Edit `capacitor.config.json`:
    ```javascript
    server: {
      url: 'http://YOUR_LOCAL_IP:5000',
@@ -117,7 +116,7 @@ cd android
 
 ### Release APK/AAB (Production):
 1. Create keystore (one time)
-2. Update `capacitor.config.js` with keystore details
+2. Update `capacitor.config.json` with keystore details (or configure signing in Android Studio / `gradle.properties`)
 3. Build: `./gradlew bundleRelease` (for Google Play)
 
 ## ⚠️ Important Notes

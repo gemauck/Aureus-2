@@ -1776,6 +1776,54 @@ model LocationInventory {
   @@index([locationId])
 }
 
+model StockTakeSubmission {
+  id             String                    @id @default(cuid())
+  submissionRef  String                    @unique
+  locationId     String
+  locationCode   String                    @default("")
+  locationName   String                    @default("")
+  status         String                    @default("pending_review")
+  submittedById  String                    @default("")
+  submittedBy    String                    @default("")
+  notes          String                    @default("")
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  submittedAt    DateTime                  @default(now())
+  appliedAt      DateTime?
+  appliedById    String?
+  appliedBy      String?
+  applyNotes     String                    @default("")
+  ownerId        String?
+  meta           String                    @default("{}")
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  lines          StockTakeSubmissionLine[]
+
+  @@index([status])
+  @@index([locationId])
+  @@index([submittedAt])
+  @@index([ownerId])
+}
+
+model StockTakeSubmissionLine {
+  id                  String              @id @default(cuid())
+  submissionId        String
+  locationInventoryId String?
+  inventoryItemId     String?
+  sku                 String
+  itemName            String
+  unit                String              @default("pcs")
+  systemQty           Float               @default(0)
+  countedQty          Float               @default(0)
+  deltaQty            Float               @default(0)
+  meta                String              @default("{}")
+  createdAt           DateTime            @default(now())
+  submission          StockTakeSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([sku])
+}
+
 model Supplier {
   id             String          @id @default(cuid())
   code           String          @default("")

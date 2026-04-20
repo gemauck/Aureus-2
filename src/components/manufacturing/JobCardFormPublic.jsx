@@ -1161,6 +1161,14 @@ const JobCardFormPublic = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   /** landing → pick create vs edit; prior_list → choose a saved card; form → wizard */
   const [wizardFlow, setWizardFlow] = useState('landing');
+  const [stockTakeLocationId, setStockTakeLocationId] = useState('');
+  const [stockTakeRows, setStockTakeRows] = useState([]);
+  const [stockTakeCounts, setStockTakeCounts] = useState({});
+  const [stockTakeNotes, setStockTakeNotes] = useState('');
+  const [stockTakeStartedAt, setStockTakeStartedAt] = useState('');
+  const [stockTakeSubmitting, setStockTakeSubmitting] = useState(false);
+  const [stockTakeStatus, setStockTakeStatus] = useState('');
+  const [stockTakeError, setStockTakeError] = useState('');
   /** Prior list: server + public API; merged with readLocalPendingJobCards() for display */
   const [serverPriorList, setServerPriorList] = useState([]);
   const [serverPriorLoading, setServerPriorLoading] = useState(false);
@@ -3023,6 +3031,85 @@ const JobCardFormPublic = () => {
     setWizardFlow('prior_list');
   };
 
+  const openStockTake = () => {
+    setStockTakeLocationId('');
+    setStockTakeRows([]);
+    setStockTakeCounts({});
+    setStockTakeNotes('');
+    setStockTakeStatus('');
+    setStockTakeError('');
+    setStockTakeStartedAt(new Date().toISOString());
+    setWizardFlow('stock_take');
+  };
+
+  const submitStockTake = async () => {
+    if (!stockTakeLocationId) {
+      setStockTakeError('Select a stock location first.');
+      return;
+    }
+    const lines = (stockTakeRows || [])
+      .map((row) => {
+        const sku = String(row?.sku || '').trim();
+        const raw = stockTakeCounts[sku];
+        if (raw === undefined || raw === null || raw === '') return null;
+        const countedQty = Number(raw);
+        if (!Number.isFinite(countedQty)) return null;
+        return {
+          locationInventoryId: row?.locationInventoryId || row?.id || null,
+          inventoryItemId: row?.inventoryItemId || null,
+          sku,
+          itemName: row?.name || row?.itemName || sku,
+          systemQty: Number(row?.quantity) || 0,
+          countedQty
+        };
+      })
+      .filter(Boolean);
+
+    if (lines.length === 0) {
+      setStockTakeError('Enter at least one counted quantity before submitting.');
+      return;
+    }
+
+    setStockTakeSubmitting(true);
+    setStockTakeError('');
+    setStockTakeStatus('');
+    try {
+      const token = getJobCardAuthToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch('/api/manufacturing/stock-take-submissions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          locationId: stockTakeLocationId,
+          notes: stockTakeNotes,
+          startedAt: stockTakeStartedAt || new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          lines
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg =
+          payload?.error?.message || payload?.message || payload?.error || 'Failed to submit stock take.';
+        throw new Error(String(msg));
+      }
+      const submissionId = payload?.data?.submission?.id || payload?.submission?.id;
+      setStockTakeStatus(
+        submissionId
+          ? `Stock take submitted for review (ref: ${submissionId}).`
+          : 'Stock take submitted for review.'
+      );
+      setTimeout(() => {
+        setWizardFlow('landing');
+      }, 1100);
+    } catch (error) {
+      setStockTakeError(error?.message || 'Failed to submit stock take.');
+    } finally {
+      setStockTakeSubmitting(false);
+    }
+  };
+
   const handleSelectPriorCard = async card => {
     const openId = getPriorCardOpenId(card);
     if (!openId) {
@@ -3217,6 +3304,42 @@ const JobCardFormPublic = () => {
       setOpeningJobCard(false);
     }
   };
+
+  useEffect(() => {
+    if (wizardFlow !== 'stock_take') return;
+    if (!stockTakeLocationId) {
+      setStockTakeRows([]);
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      if (!isOnline) {
+        const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId);
+        if (!cancelled) setStockTakeRows(rows);
+        return;
+      }
+      try {
+        const response = await fetch(
+          `/api/public/inventory?locationId=${encodeURIComponent(stockTakeLocationId)}`,
+          { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const rows = data?.data?.inventory || data?.inventory || [];
+          if (!cancelled) setStockTakeRows(Array.isArray(rows) ? rows : []);
+          return;
+        }
+      } catch (e) {
+        console.warn('⚠️ JobCardFormPublic: stock take location inventory fetch failed:', e?.message || e);
+      }
+      const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId);
+      if (!cancelled) setStockTakeRows(rows);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardFlow, stockTakeLocationId, isOnline, inventory]);
 
   const handleSave = async (options = {}) => {
     const forceDraft = options?.forceDraft === true;
@@ -3585,6 +3708,40 @@ const JobCardFormPublic = () => {
     const nextIdx = Math.min(currentStep + 1, STEP_IDS.length - 1);
     if (nextIdx !== currentStep) {
       pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[nextIdx] });
+    }
+    if (nextIdx >= 1) {
+      const nowIso = new Date().toISOString();
+      const draftLocalId = editingMeta?.localId ?? Date.now().toString();
+      const prevPending = readLocalPendingJobCards().find(
+        c => c && String(c.id) === String(draftLocalId)
+      );
+      const autoDraft = {
+        ...formData,
+        id: draftLocalId,
+        createdAt: editingMeta?.createdAt ?? nowIso,
+        updatedAt: nowIso,
+        synced: false,
+        status: 'draft',
+        submittedAt: null,
+        completedAt: null,
+        jobCardNumber: editingMeta?.jobCardNumber || '',
+        serverJobCardId: editingMeta?.serverJobCardId || null,
+        totalMaterialsCost,
+        travelKilometers: Math.max(
+          0,
+          (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
+        ),
+        activityQueue: Array.isArray(prevPending?.activityQueue) ? [...prevPending.activityQueue] : []
+      };
+      upsertLocalPendingJobCard(autoDraft);
+      setEditingMeta(prev => ({
+        localId: prev?.localId ?? draftLocalId,
+        serverJobCardId: prev?.serverJobCardId || null,
+        createdAt: prev?.createdAt ?? nowIso,
+        synced: false,
+        jobCardNumber: prev?.jobCardNumber || ''
+      }));
+      setLocalDraftsTick(t => t + 1);
     }
     setCurrentStep(prev => Math.min(prev + 1, STEP_IDS.length - 1));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -4984,6 +5141,24 @@ const JobCardFormPublic = () => {
                 <i className="fa-solid fa-chevron-right text-blue-300 flex-shrink-0" aria-hidden />
               </span>
             </button>
+            <button
+              type="button"
+              onClick={openStockTake}
+              className="w-full rounded-2xl bg-white text-slate-900 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                  <i className="fa-solid fa-clipboard-list text-xl" aria-hidden />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-base sm:text-lg">Stock-Take</span>
+                  <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
+                    Count stock by location on this device, then submit for review and system update.
+                  </span>
+                </span>
+                <i className="fa-solid fa-chevron-right text-blue-300 flex-shrink-0" aria-hidden />
+              </span>
+            </button>
           </div>
 
           {!getJobCardAuthToken() ? (
@@ -5223,6 +5398,139 @@ const JobCardFormPublic = () => {
             </div>
           </div>
         ) : null}
+      </div>
+    );
+  }
+
+  if (wizardFlow === 'stock_take') {
+    const countedLines = (stockTakeRows || []).filter((row) => {
+      const sku = String(row?.sku || '').trim();
+      return sku && stockTakeCounts[sku] !== undefined && stockTakeCounts[sku] !== '';
+    }).length;
+    return (
+      <div className="job-card-stock-take min-h-[100dvh] flex flex-col bg-gradient-to-b from-slate-100 via-white to-blue-50/30 relative">
+        <header className="flex-shrink-0 bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-md px-4 py-4 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setWizardFlow('landing')}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-white/90 hover:text-white mb-3 touch-manipulation"
+          >
+            <i className="fa-solid fa-arrow-left" aria-hidden />
+            Back
+          </button>
+          <h1 className="text-xl font-bold">Stock-Take</h1>
+          <p className="text-sm text-white/80 mt-1">
+            Select a location, enter counted quantities, then submit for admin review and apply.
+          </p>
+        </header>
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-8">
+          <div className="max-w-3xl mx-auto space-y-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <label htmlFor="stock-take-location" className="block text-xs font-semibold text-gray-600 mb-1">
+                Stock location
+              </label>
+              <select
+                id="stock-take-location"
+                value={stockTakeLocationId}
+                onChange={(e) => {
+                  setStockTakeLocationId(e.target.value);
+                  setStockTakeCounts({});
+                }}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+              >
+                <option value="">Select location</option>
+                {stockLocationOptions.map((loc) => (
+                  <option key={loc.value} value={loc.value}>
+                    {loc.label}
+                  </option>
+                ))}
+              </select>
+              <label htmlFor="stock-take-notes" className="block text-xs font-semibold text-gray-600 mt-3 mb-1">
+                Notes (optional)
+              </label>
+              <textarea
+                id="stock-take-notes"
+                rows={2}
+                value={stockTakeNotes}
+                onChange={(e) => setStockTakeNotes(e.target.value)}
+                placeholder="Anything the reviewer should know about this count..."
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+              />
+            </div>
+
+            {stockTakeLocationId ? (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900">Stock lines</p>
+                  <p className="text-xs text-gray-600">{countedLines} counted</p>
+                </div>
+                {stockTakeRows.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-gray-500">No stock lines found for this location.</div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {stockTakeRows.map((row) => {
+                      const sku = String(row?.sku || '').trim();
+                      const currentQty = Number(row?.quantity) || 0;
+                      return (
+                        <div key={`${stockTakeLocationId}-${sku}`} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center">
+                          <div className="sm:col-span-7 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {sku} · System: {currentQty}
+                            </p>
+                          </div>
+                          <div className="sm:col-span-5">
+                            <input
+                              type="number"
+                              step="0.01"
+                              inputMode="decimal"
+                              value={stockTakeCounts[sku] ?? ''}
+                              onChange={(e) => {
+                                const nextValue = e.target.value;
+                                setStockTakeCounts((prev) => ({ ...prev, [sku]: nextValue }));
+                              }}
+                              placeholder="Counted qty"
+                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {stockTakeError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm px-4 py-2">
+                {stockTakeError}
+              </div>
+            ) : null}
+            {stockTakeStatus ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm px-4 py-2">
+                {stockTakeStatus}
+              </div>
+            ) : null}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setWizardFlow('landing')}
+                className="flex-1 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitStockTake}
+                disabled={!stockTakeLocationId || stockTakeSubmitting}
+                className="flex-1 inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+              >
+                {stockTakeSubmitting ? 'Submitting...' : 'Submit stock take'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

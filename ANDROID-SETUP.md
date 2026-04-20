@@ -2,6 +2,8 @@
 
 This guide will help you convert your Abcotronics ERP web application into an Android app using Capacitor.
 
+**Current default:** The Capacitor app is configured as a **remote WebView** that opens the public job card form at `https://abcoafrica.co.za/job-card` (see `server.url` in `capacitor.config.json`). The `capacitor-web/` folder is only a minimal placeholder for `cap sync`; the WebView loads the remote URL. After changing `capacitor.config.json`, run `npm run android:sync` and rebuild in Android Studio.
+
 ## Prerequisites
 
 1. **Node.js** (v18 or higher) - Already installed
@@ -27,21 +29,11 @@ This will install:
 - `@capacitor/cli`
 - `@capacitor/android`
 
-### 2. Build Your Web Application
+### 2. Build Your Web Application (optional for remote URL)
 
-First, ensure your web app is built:
+The default setup uses **`server.url`** in `capacitor.config.json` to load `https://abcoafrica.co.za/job-card`. You do **not** need `npm run build` for that flow—only `npm run android:sync` after changing Capacitor config.
 
-```bash
-npm run build
-```
-
-Or if using the new frontend build:
-
-```bash
-npm run build:new
-```
-
-This creates the `dist/` directory that Capacitor will use.
+If you switch to **bundled** web assets (remove or clear `server.url`), build the app first so `webDir` is populated (e.g. `npm run build` if `webDir` points at `dist/`).
 
 ### 3. Initialize Android Platform
 
@@ -52,7 +44,7 @@ npm run android:init
 This command will:
 - Create the `android/` directory
 - Set up the Android project structure
-- Configure the app with your settings from `capacitor.config.js`
+- Configure the app with your settings from `capacitor.config.json`
 
 ### 4. Sync Web Assets to Android
 
@@ -62,7 +54,7 @@ After making changes to your web app, sync them to Android:
 npm run android:sync
 ```
 
-This copies your `dist/` files to the Android app's assets.
+This copies `capacitor-web/` into the Android app's assets and refreshes the embedded Capacitor config.
 
 ## Development Workflow
 
@@ -70,7 +62,7 @@ This copies your `dist/` files to the Android app's assets.
 
 For development with live reload, you can configure Capacitor to point to your development server:
 
-1. Edit `capacitor.config.js` and uncomment the server section:
+1. Edit `capacitor.config.json` and uncomment the server section:
 ```javascript
 server: {
   url: 'http://YOUR_LOCAL_IP:5000', // Replace with your local IP
@@ -96,7 +88,7 @@ npm run android:open
 
 For production, use the bundled files:
 
-1. Ensure `capacitor.config.js` has the server section commented out or removed
+1. Ensure `capacitor.config.json` has the server section commented out or removed
 2. Build your web app: `npm run build`
 3. Sync to Android: `npm run android:sync`
 4. Open in Android Studio: `npm run android:open`
@@ -127,7 +119,7 @@ The APK will be generated at: `android/app/build/outputs/apk/debug/app-debug.apk
 keytool -genkey -v -keystore abcotronics-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias abcotronics
 ```
 
-2. **Update `capacitor.config.js`** with your keystore details:
+2. **Update `capacitor.config.json`** with your keystore details:
 ```javascript
 android: {
   buildOptions: {
@@ -156,7 +148,7 @@ Release files will be at:
 
 ### App ID and Name
 
-Edit `capacitor.config.js` to change:
+Edit `capacitor.config.json` to change:
 - `appId`: Your unique app identifier (e.g., `com.abcotronics.erp`)
 - `appName`: Display name of your app
 
@@ -173,7 +165,7 @@ Edit `capacitor.config.js` to change:
 
 ### Splash Screen
 
-The splash screen is configured in `capacitor.config.js` under `plugins.SplashScreen`. You can customize:
+The splash screen is configured in `capacitor.config.json` under `plugins.SplashScreen`. You can customize:
 - Background color
 - Duration
 - Logo/image
@@ -237,9 +229,9 @@ Set the Android SDK path:
 
 ### App Not Loading Web Content
 
-1. Check that `dist/` directory exists and has files
+1. Check device/emulator has network access; confirm `server.url` in `capacitor.config.json`. For bundled mode, ensure `webDir` exists and has files
 2. Run `npm run android:sync` to copy files
-3. Check `capacitor.config.js` - ensure `webDir` is set to `'dist'`
+3. For bundled mode, check `webDir` in `capacitor.config.json` (default remote wrapper uses `capacitor-web/`)
 4. For development server, ensure URL is correct and device can reach it
 
 ### Network Issues (CORS, Mixed Content)
