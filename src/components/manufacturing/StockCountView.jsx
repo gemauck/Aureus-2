@@ -17,6 +17,7 @@
   }
 
   const STOCK_TAKE_DRAFT_KEY = 'erpStockCountView_stockTakeDraft_v1';
+  const STOCK_TAKE_PAGE_SIZE = 50;
 
   function toDatetimeLocalValue(ts) {
     const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
@@ -127,6 +128,7 @@
     const [stLocationId, setStLocationId] = React.useState('');
     const [stRows, setStRows] = React.useState([]);
     const [stRowsLoading, setStRowsLoading] = React.useState(false);
+    const [stPage, setStPage] = React.useState(1);
     const [stCounts, setStCounts] = React.useState({});
     const [stNotes, setStNotes] = React.useState('');
     const [stStartedLocal, setStStartedLocal] = React.useState('');
@@ -298,6 +300,7 @@
     const resetInlineStockTake = () => {
       setStLocationId('');
       setStRows([]);
+      setStPage(1);
       setStCounts({});
       setStNotes('');
       setStStartedLocal('');
@@ -360,6 +363,22 @@
         stLocations.filter((loc) => loc.status !== 'inactive' && loc.status !== 'suspended'),
       [stLocations]
     );
+
+    const stLineCount = stRows?.length ?? 0;
+    const stTotalPages = Math.max(1, Math.ceil(stLineCount / STOCK_TAKE_PAGE_SIZE));
+    const stPagedRows = React.useMemo(() => {
+      const start = (stPage - 1) * STOCK_TAKE_PAGE_SIZE;
+      return (stRows || []).slice(start, start + STOCK_TAKE_PAGE_SIZE);
+    }, [stRows, stPage]);
+
+    React.useEffect(() => {
+      setStPage((p) => {
+        const total = Math.max(1, Math.ceil((stRows?.length || 0) / STOCK_TAKE_PAGE_SIZE));
+        if (p > total) return total;
+        if (p < 1) return 1;
+        return p;
+      });
+    }, [stRows?.length]);
 
     const handleDownload = async () => {
       setError(null);
@@ -577,6 +596,7 @@
                 onChange: (e) => {
                   const v = e.target.value;
                   setStLocationId(v);
+                  setStPage(1);
                   setStCounts({});
                   setStStartedLocal((prev) => prev || toDatetimeLocalValue(Date.now()));
                 }
@@ -620,7 +640,13 @@
                 React.createElement(
                   'p',
                   { className: 'text-xs ' + muted },
-                  stRowsLoading ? 'Loading…' : stCountedTotal + ' counted · ' + stRows.length + ' lines'
+                  stRowsLoading
+                    ? 'Loading…'
+                    : stCountedTotal +
+                        ' counted · ' +
+                        stRows.length +
+                        ' lines' +
+                        (stTotalPages > 1 ? ' · page ' + stPage + ' of ' + stTotalPages : '')
                 )
               ),
               stRowsLoading
@@ -632,45 +658,101 @@
                       'No stock lines for this location.'
                     )
                   : React.createElement(
-                      'div',
-                      { className: 'divide-y ' + (isDark ? 'divide-gray-800' : 'divide-gray-100') },
-                      stRows.map((row) => {
-                        const sku = String(row?.sku || '').trim();
-                        const sys = Number(row?.quantity) || 0;
-                        return React.createElement(
-                          'div',
-                          {
-                            key: stLocationId + '-' + sku,
-                            className: 'px-3 py-2 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center'
-                          },
-                          React.createElement(
+                      React.Fragment,
+                      null,
+                      React.createElement(
+                        'div',
+                        { className: 'divide-y ' + (isDark ? 'divide-gray-800' : 'divide-gray-100') },
+                        stPagedRows.map((row) => {
+                          const sku = String(row?.sku || '').trim();
+                          const sys = Number(row?.quantity) || 0;
+                          return React.createElement(
                             'div',
-                            { className: 'sm:col-span-7 min-w-0' },
-                            React.createElement('p', { className: 'text-sm font-medium truncate ' + text }, row?.name || sku),
+                            {
+                              key: stLocationId + '-' + sku,
+                              className: 'px-3 py-2 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center'
+                            },
+                            React.createElement(
+                              'div',
+                              { className: 'sm:col-span-7 min-w-0' },
+                              React.createElement('p', { className: 'text-sm font-medium truncate ' + text }, row?.name || sku),
+                              React.createElement(
+                                'p',
+                                { className: 'text-xs ' + muted },
+                                sku + ' · System: ' + sys
+                              )
+                            ),
+                            React.createElement(
+                              'div',
+                              { className: 'sm:col-span-5' },
+                              React.createElement('input', {
+                                type: 'number',
+                                step: '0.01',
+                                inputMode: 'decimal',
+                                className: inputCls,
+                                placeholder: 'Counted qty',
+                                value: stCounts[sku] ?? '',
+                                onChange: (e) => {
+                                  const next = e.target.value;
+                                  setStCounts((prev) => ({ ...prev, [sku]: next }));
+                                }
+                              })
+                            )
+                          );
+                        })
+                      ),
+                      stTotalPages > 1
+                        ? React.createElement(
+                            'div',
+                            {
+                              className:
+                                'px-3 py-2 border-t flex flex-wrap items-center justify-between gap-2 ' +
+                                (isDark ? 'border-gray-800 bg-gray-950/50' : 'border-gray-100 bg-gray-50/80')
+                            },
                             React.createElement(
                               'p',
-                              { className: 'text-xs ' + muted },
-                              sku + ' · System: ' + sys
+                              { className: 'text-[11px] ' + muted },
+                              'Showing ' +
+                                ((stPage - 1) * STOCK_TAKE_PAGE_SIZE + 1) +
+                                '–' +
+                                Math.min(stPage * STOCK_TAKE_PAGE_SIZE, stLineCount) +
+                                ' of ' +
+                                stLineCount
+                            ),
+                            React.createElement(
+                              'div',
+                              { className: 'flex items-center gap-2' },
+                              React.createElement(
+                                'button',
+                                {
+                                  type: 'button',
+                                  className:
+                                    'rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ' +
+                                    (isDark
+                                      ? 'border-gray-600 bg-gray-900 text-gray-100 hover:bg-gray-800'
+                                      : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'),
+                                  disabled: stPage <= 1,
+                                  onClick: () => setStPage((p) => Math.max(1, p - 1))
+                                },
+                                'Previous'
+                              ),
+                              React.createElement(
+                                'button',
+                                {
+                                  type: 'button',
+                                  className:
+                                    'rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ' +
+                                    (isDark
+                                      ? 'border-gray-600 bg-gray-900 text-gray-100 hover:bg-gray-800'
+                                      : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'),
+                                  disabled: stPage >= stTotalPages,
+                                  onClick: () => setStPage((p) => Math.min(stTotalPages, p + 1))
+                                },
+                                'Next'
+                              )
                             )
-                          ),
-                          React.createElement(
-                            'div',
-                            { className: 'sm:col-span-5' },
-                            React.createElement('input', {
-                              type: 'number',
-                              step: '0.01',
-                              inputMode: 'decimal',
-                              className: inputCls,
-                              placeholder: 'Counted qty',
-                              value: stCounts[sku] ?? '',
-                              onChange: (e) => {
-                                const next = e.target.value;
-                                setStCounts((prev) => ({ ...prev, [sku]: next }));
-                              }
-                            })
                           )
-                        );
-                      })
+                        : null
                     )
             )
           : null,

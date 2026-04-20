@@ -36,6 +36,8 @@ function emptySectionWorkMedia() {
 const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
 const MAX_PUBLIC_PRIOR_IDS = 200;
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
+/** Stock-take lists can be large; show a page of lines at a time (full list still loads for submit/scan). */
+const STOCK_TAKE_PAGE_SIZE = 50;
 
 function sortJobCardStockLocations(list) {
   const fn = window.manufacturingStockLocations?.sortStockLocationsForManufacturing;
@@ -56,13 +58,26 @@ function jobCardQuantityAtLocation(item, locationId) {
   return 0;
 }
 
-/** Offline / fallback: build pick list from cached inventory for one location (qty on hand only). */
-function jobCardStockPickListFromCachedInventory(items, locationId) {
+/**
+ * Offline / fallback: build pick list from cached inventory for one location.
+ * Default: qty > 0 only (job card "stock used" picker).
+ * Stock-take: pass `{ includeZeroQty: true }` to include rows at this warehouse with zero on hand.
+ */
+function jobCardStockPickListFromCachedInventory(items, locationId, options = {}) {
   if (!locationId || !Array.isArray(items)) return [];
+  const includeZeroQty = options.includeZeroQty === true;
   const out = [];
   for (const item of items) {
+    const locs = Array.isArray(item.locations) ? item.locations : [];
+    const atWarehouse = locs.length
+      ? locs.some((l) => l.locationId === locationId)
+      : item.locationId === locationId;
     const q = jobCardQuantityAtLocation(item, locationId);
-    if (q <= 0) continue;
+    if (includeZeroQty) {
+      if (!atWarehouse || q < 0) continue;
+    } else if (q <= 0) {
+      continue;
+    }
     const sku = item.sku || item.id;
     if (!sku) continue;
     if (item.status === 'inactive') continue;
@@ -1192,6 +1207,7 @@ const JobCardFormPublic = () => {
   const [stockTakeError, setStockTakeError] = useState('');
   const [stockTakeScanOpen, setStockTakeScanOpen] = useState(false);
   const [stockTakeHighlightSku, setStockTakeHighlightSku] = useState('');
+  const [stockTakePage, setStockTakePage] = useState(1);
   const stockTakeScanVideoRef = useRef(null);
   const stockTakeScanCanvasRef = useRef(null);
   const stockTakeScanStreamRef = useRef(null);
@@ -1227,6 +1243,22 @@ const JobCardFormPublic = () => {
   /** New wizard events since this session opened (merged into activityQueue on save). */
   const sessionActivityQueueRef = useRef([]);
   const activeEditCardIdRef = useRef(null);
+
+  const stockTakeLineCount = stockTakeRows?.length ?? 0;
+  const stockTakeTotalPages = Math.max(1, Math.ceil(stockTakeLineCount / STOCK_TAKE_PAGE_SIZE));
+  const stockTakePagedRows = useMemo(() => {
+    const start = (stockTakePage - 1) * STOCK_TAKE_PAGE_SIZE;
+    return (stockTakeRows || []).slice(start, start + STOCK_TAKE_PAGE_SIZE);
+  }, [stockTakeRows, stockTakePage]);
+
+  useEffect(() => {
+    setStockTakePage((p) => {
+      const total = Math.max(1, Math.ceil((stockTakeRows?.length || 0) / STOCK_TAKE_PAGE_SIZE));
+      if (p > total) return total;
+      if (p < 1) return 1;
+      return p;
+    });
+  }, [stockTakeRows?.length]);
 
   const pushWizardActivity = useCallback((action, metadata) => {
     const ev = {
@@ -3087,6 +3119,7 @@ const JobCardFormPublic = () => {
     setStockTakeError('');
     setStockTakeScanOpen(false);
     setStockTakeHighlightSku('');
+    setStockTakePage(1);
     setStockTakeStartedAt(new Date().toISOString());
     setWizardFlow('stock_take');
   };
@@ -3394,13 +3427,17 @@ const JobCardFormPublic = () => {
     let cancelled = false;
     const run = async () => {
       if (!isOnline) {
-        const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId);
+        const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId, {
+          includeZeroQty: true
+        });
         if (!cancelled) setStockTakeRows(rows);
         return;
       }
       try {
         const response = await fetch(
-          `/api/public/inventory?locationId=${encodeURIComponent(stockTakeLocationId)}`,
+          `/api/public/inventory?locationId=${encodeURIComponent(
+            stockTakeLocationId
+          )}&includeZero=1`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
         if (response.ok) {
@@ -3412,7 +3449,9 @@ const JobCardFormPublic = () => {
       } catch (e) {
         console.warn('⚠️ JobCardFormPublic: stock take location inventory fetch failed:', e?.message || e);
       }
-      const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId);
+      const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId, {
+        includeZeroQty: true
+      });
       if (!cancelled) setStockTakeRows(rows);
     };
     void run();
@@ -5696,6 +5735,7 @@ const JobCardFormPublic = () => {
                 onChange={(e) => {
                   setStockTakeLocationId(e.target.value);
                   setStockTakeCounts({});
+                  setStockTakePage(1);
                 }}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
               >
@@ -5725,7 +5765,17 @@ const JobCardFormPublic = () => {
             {stockTakeLocationId ? (
               <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-gray-900">Stock lines</p>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Stock lines</p>
+                    {stockTakeLineCount > 0 ? (
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {stockTakeLineCount} line{stockTakeLineCount === 1 ? '' : 's'}
+                        {stockTakeTotalPages > 1
+                          ? ` · Page ${stockTakePage} of ${stockTakeTotalPages} (${STOCK_TAKE_PAGE_SIZE} per page)`
+                          : ''}
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -5745,41 +5795,69 @@ const JobCardFormPublic = () => {
                 {stockTakeRows.length === 0 ? (
                   <div className="px-4 py-6 text-sm text-gray-500">No stock lines found for this location.</div>
                 ) : (
-                  <div className="divide-y divide-gray-100">
-                    {stockTakeRows.map((row) => {
-                      const sku = String(row?.sku || '').trim();
-                      const currentQty = Number(row?.quantity) || 0;
-                      return (
-                        <div
-                          key={`${stockTakeLocationId}-${sku}`}
-                          className={`px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center transition-shadow ${
-                            stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
-                          }`}
-                        >
-                          <div className="sm:col-span-7 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {sku} · System: {currentQty}
-                            </p>
+                  <>
+                    <div className="divide-y divide-gray-100">
+                      {stockTakePagedRows.map((row) => {
+                        const sku = String(row?.sku || '').trim();
+                        const currentQty = Number(row?.quantity) || 0;
+                        return (
+                          <div
+                            key={`${stockTakeLocationId}-${sku}`}
+                            className={`px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center transition-shadow ${
+                              stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
+                            }`}
+                          >
+                            <div className="sm:col-span-7 min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {sku} · System: {currentQty}
+                              </p>
+                            </div>
+                            <div className="sm:col-span-5">
+                              <input
+                                type="number"
+                                step="0.01"
+                                inputMode="decimal"
+                                value={stockTakeCounts[sku] ?? ''}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value;
+                                  setStockTakeCounts((prev) => ({ ...prev, [sku]: nextValue }));
+                                }}
+                                placeholder="Counted qty"
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                              />
+                            </div>
                           </div>
-                          <div className="sm:col-span-5">
-                            <input
-                              type="number"
-                              step="0.01"
-                              inputMode="decimal"
-                              value={stockTakeCounts[sku] ?? ''}
-                              onChange={(e) => {
-                                const nextValue = e.target.value;
-                                setStockTakeCounts((prev) => ({ ...prev, [sku]: nextValue }));
-                              }}
-                              placeholder="Counted qty"
-                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
-                            />
-                          </div>
+                        );
+                      })}
+                    </div>
+                    {stockTakeTotalPages > 1 ? (
+                      <div className="px-4 py-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 bg-gray-50/80">
+                        <p className="text-[11px] text-gray-600">
+                          Showing {(stockTakePage - 1) * STOCK_TAKE_PAGE_SIZE + 1}–
+                          {Math.min(stockTakePage * STOCK_TAKE_PAGE_SIZE, stockTakeLineCount)} of {stockTakeLineCount}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setStockTakePage((p) => Math.max(1, p - 1))}
+                            disabled={stockTakePage <= 1}
+                            className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 touch-manipulation"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStockTakePage((p) => Math.min(stockTakeTotalPages, p + 1))}
+                            disabled={stockTakePage >= stockTakeTotalPages}
+                            className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 touch-manipulation"
+                          >
+                            Next
+                          </button>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
             ) : null}

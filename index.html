@@ -84,7 +84,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1776713633082'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1776714498480'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload (defer so it does not compete with first-paint resources) -->
     <script>
@@ -117,7 +117,7 @@
     <!-- VERSION: 20260129-doc-collection-cache-bust - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1776713633082';
+            var APP_VERSION = '1776714498480';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -704,10 +704,13 @@
     <!-- XLSX / ExcelJS: defer so they do not block parsing of the rest of the page (execute before core-bundle.js, same defer queue) -->
     <script defer crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" 
             onload="(function() {
+                     function xlsxReady(x) {
+                       return !!(x && (x.utils || typeof x.read === 'function'));
+                     }
                      function tryAssign() {
                        var g = typeof globalThis !== 'undefined' ? globalThis : window;
                        var x = g && g.XLSX;
-                       if (x && x.utils) {
+                       if (xlsxReady(x)) {
                          window.XLSX = x;
                          console.log('✅ XLSX library loaded from SheetJS CDN');
                          return true;
@@ -717,8 +720,12 @@
                      if (!tryAssign()) {
                        setTimeout(function() {
                          if (!tryAssign()) {
-                           console.warn('⚠️ XLSX loaded but not properly initialized');
-                           console.error('❌ XLSX failed to initialize - Excel export will be unavailable');
+                           setTimeout(function() {
+                             if (!tryAssign()) {
+                               console.warn('⚠️ XLSX loaded but not properly initialized');
+                               console.error('❌ XLSX failed to initialize - Excel export will be unavailable');
+                             }
+                           }, 50);
                          }
                        }, 0);
                      }
@@ -766,14 +773,17 @@
             } else {
                 console.error('❌ ReactDOM not loaded - check CDN connection');
             }
+            function xlsxReady(x) {
+                return !!(x && (x.utils || typeof x.read === 'function'));
+            }
             var xl = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
-            if (xl && xl.utils) {
+            if (xlsxReady(xl)) {
                 window.XLSX = xl;
                 console.log('✅ XLSX verified');
             } else {
                 setTimeout(function() {
                     var xl2 = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
-                    if (xl2 && xl2.utils) {
+                    if (xlsxReady(xl2)) {
                         window.XLSX = xl2;
                         console.log('✅ XLSX loaded (delayed)');
                     } else {
@@ -1195,8 +1205,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1776713633082" as="script">
-    <script defer src="/dist/core-bundle.js?v=1776713633082"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1776714498480" as="script">
+    <script defer src="/dist/core-bundle.js?v=1776714498480"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1567,8 +1577,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1776713633082" as="script">
-    <script defer src="/lazy-load-components.js?v=1776713633082"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1776714498480" as="script">
+    <script defer src="/lazy-load-components.js?v=1776714498480"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
