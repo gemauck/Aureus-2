@@ -2750,11 +2750,30 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (!fresh || cancelled) return;
         setViewingInventoryItemDetail(prev => {
           if (!prev || getInventoryItemId(prev) !== detailInventoryCanonicalId) return prev;
-          return normalizeInventoryItemRow({
+          const preserveLiveStockFields = Array.isArray(prev.locations) && prev.locations.length > 0;
+          const merged = {
             ...fresh,
-            locations: Array.isArray(prev.locations) && prev.locations.length ? prev.locations : fresh.locations || [],
             id: prev.id,
-            inventoryItemId: prev.inventoryItemId || fresh.id
+            inventoryItemId: prev.inventoryItemId || fresh.id,
+            locations: preserveLiveStockFields
+              ? prev.locations
+              : (Array.isArray(fresh.locations) ? fresh.locations : [])
+          };
+
+          // `GET /inventory/:id` is catalog-oriented and can lag behind location-aware stock
+          // figures used by the inventory list. Preserve currently displayed stock values to
+          // avoid detail view flashing to stale "low stock" values after initial render.
+          if (preserveLiveStockFields) {
+            merged.quantity = prev.quantity;
+            merged.status = prev.status;
+            merged.location = prev.location;
+            merged.locationId = prev.locationId;
+            merged.allocatedQuantity = prev.allocatedQuantity;
+            merged.inProductionQuantity = prev.inProductionQuantity;
+            merged.completedQuantity = prev.completedQuantity;
+          }
+          return normalizeInventoryItemRow({
+            ...merged
           });
         });
       } catch (e) {
