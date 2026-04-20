@@ -15,6 +15,82 @@
     });
   }
 
+  const STOCK_TAKE_DRAFT_KEY = 'erpStockCountView_stockTakeDraft_v1';
+
+  function toDatetimeLocalValue(ts) {
+    const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return (
+      d.getFullYear() +
+      '-' +
+      pad(d.getMonth() + 1) +
+      '-' +
+      pad(d.getDate()) +
+      'T' +
+      pad(d.getHours()) +
+      ':' +
+      pad(d.getMinutes())
+    );
+  }
+
+  function fromDatetimeLocalToIso(localStr) {
+    if (!localStr || typeof localStr !== 'string') return null;
+    const d = new Date(localStr);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
+  function buildStockTakeLines(rows, counts, newItems) {
+    const existingLines = (rows || [])
+      .map((row) => {
+        const sku = String(row?.sku || '').trim();
+        const raw = counts[sku];
+        if (raw === undefined || raw === null || raw === '') return null;
+        const countedQty = Number(raw);
+        if (!Number.isFinite(countedQty)) return null;
+        return {
+          locationInventoryId: row?.locationInventoryId || null,
+          inventoryItemId: row?.inventoryItemId || null,
+          sku,
+          itemName: row?.name || row?.itemName || sku,
+          systemQty: Number(row?.quantity) || 0,
+          countedQty
+        };
+      })
+      .filter(Boolean);
+    const newItemLines = (newItems || [])
+      .map((item) => {
+        const countedQty = Number(item?.countedQty);
+        if (!item?.itemName || !Number.isFinite(countedQty)) return null;
+        const parsedUnitCost = Number(item?.unitCost);
+        const parsedReorderPoint = Number(item?.reorderPoint);
+        return {
+          locationInventoryId: null,
+          inventoryItemId: null,
+          sku: item?.sku ? String(item.sku).trim() : '',
+          itemName: String(item.itemName).trim(),
+          unit: String(item?.unit || 'pcs').trim() || 'pcs',
+          systemQty: 0,
+          countedQty,
+          isNewItem: true,
+          proposedItemDetails: {
+            category: String(item?.category || 'components').trim() || 'components',
+            type: String(item?.type || 'raw_material').trim() || 'raw_material',
+            unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : 0,
+            reorderPoint: Number.isFinite(parsedReorderPoint) ? parsedReorderPoint : 0,
+            supplier: String(item?.supplier || '').trim(),
+            supplierPartNumber: String(item?.supplierPartNumber || '').trim(),
+            manufacturingPartNumber: String(item?.manufacturingPartNumber || '').trim(),
+            boxNumber: String(item?.boxNumber || '').trim(),
+            notes: String(item?.notes || '').trim()
+          }
+        };
+      })
+      .filter(Boolean);
+    return existingLines.concat(newItemLines);
+  }
+
   function StockCountView({ isDark = false, onApplied }) {
     const [busy, setBusy] = React.useState(false);
     const [message, setMessage] = React.useState(null);
@@ -28,6 +104,35 @@
     const [detailLoading, setDetailLoading] = React.useState(false);
     const [applyingSubmissionId, setApplyingSubmissionId] = React.useState('');
     const fileInputRef = React.useRef(null);
+
+    const defaultDraftNewItem = () => ({
+      itemName: '',
+      sku: '',
+      unit: 'pcs',
+      category: 'components',
+      type: 'raw_material',
+      unitCost: '',
+      reorderPoint: '',
+      supplier: '',
+      supplierPartNumber: '',
+      manufacturingPartNumber: '',
+      boxNumber: '',
+      countedQty: '',
+      notes: ''
+    });
+
+    const [stLocations, setStLocations] = React.useState([]);
+    const [stLocationsLoading, setStLocationsLoading] = React.useState(false);
+    const [stLocationId, setStLocationId] = React.useState('');
+    const [stRows, setStRows] = React.useState([]);
+    const [stRowsLoading, setStRowsLoading] = React.useState(false);
+    const [stCounts, setStCounts] = React.useState({});
+    const [stNotes, setStNotes] = React.useState('');
+    const [stStartedLocal, setStStartedLocal] = React.useState('');
+    const [stNewItems, setStNewItems] = React.useState([]);
+    const [stDraftNewItem, setStDraftNewItem] = React.useState(defaultDraftNewItem);
+    const [stSubmitting, setStSubmitting] = React.useState(false);
+    const [stDraftNotice, setStDraftNotice] = React.useState('');
 
     const card = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100';
     const text = isDark ? 'text-gray-100' : 'text-gray-900';
@@ -77,6 +182,183 @@
     React.useEffect(() => {
       void loadSubmissions();
     }, [loadSubmissions]);
+
+    const loadStockLocations = React.useCallback(async () => {
+      setStLocationsLoading(true);
+      try {
+        const res = await fetch(apiBase + '/api/manufacturing/locations', {
+          method: 'GET',
+          headers: authHeaders()
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || res.statusText);
+        }
+        const data = await res.json();
+        const locs = data?.data?.locations || data?.locations || [];
+        setStLocations(Array.isArray(locs) ? locs : []);
+      } catch (e) {
+        setError(e.message || 'Failed to load stock locations');
+      } finally {
+        setStLocationsLoading(false);
+      }
+    }, [apiBase]);
+
+    React.useEffect(() => {
+      void loadStockLocations();
+    }, [loadStockLocations]);
+
+    React.useEffect(() => {
+      if (!stLocationId) {
+        setStRows([]);
+        return;
+      }
+      let cancelled = false;
+      setStRowsLoading(true);
+      fetch(
+        apiBase + '/api/manufacturing/inventory?locationId=' + encodeURIComponent(stLocationId),
+        { method: 'GET', headers: authHeaders() }
+      )
+        .then(async (res) => {
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || res.statusText);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          const inv = data?.data?.inventory || data?.inventory || [];
+          if (!cancelled) setStRows(Array.isArray(inv) ? inv : []);
+        })
+        .catch((e) => {
+          if (!cancelled) setError(e.message || 'Failed to load inventory for this location');
+        })
+        .finally(() => {
+          if (!cancelled) setStRowsLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [stLocationId, apiBase]);
+
+    const persistStockTakeDraft = () => {
+      try {
+        const payload = {
+          locationId: stLocationId,
+          notes: stNotes,
+          startedLocal: stStartedLocal,
+          counts: stCounts,
+          newItems: stNewItems,
+          draftNewItem: stDraftNewItem,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(STOCK_TAKE_DRAFT_KEY, JSON.stringify(payload));
+        setStDraftNotice('Draft saved on this device (' + new Date().toLocaleString() + ').');
+        setMessage(null);
+      } catch (e) {
+        setError(e.message || 'Could not save draft');
+      }
+    };
+
+    const restoreStockTakeDraft = () => {
+      try {
+        const raw = localStorage.getItem(STOCK_TAKE_DRAFT_KEY);
+        if (!raw) {
+          setStDraftNotice('No saved draft found.');
+          return;
+        }
+        const d = JSON.parse(raw);
+        if (d.locationId) setStLocationId(String(d.locationId));
+        if (typeof d.notes === 'string') setStNotes(d.notes);
+        if (typeof d.startedLocal === 'string') setStStartedLocal(d.startedLocal);
+        if (d.counts && typeof d.counts === 'object') setStCounts(d.counts);
+        if (Array.isArray(d.newItems)) setStNewItems(d.newItems);
+        if (d.draftNewItem && typeof d.draftNewItem === 'object') {
+          setStDraftNewItem({ ...defaultDraftNewItem(), ...d.draftNewItem });
+        }
+        setStDraftNotice(
+          d.savedAt ? 'Restored draft from ' + new Date(d.savedAt).toLocaleString() + '.' : 'Draft restored.'
+        );
+        setError(null);
+      } catch (e) {
+        setError(e.message || 'Could not restore draft');
+      }
+    };
+
+    const clearStockTakeDraft = () => {
+      try {
+        localStorage.removeItem(STOCK_TAKE_DRAFT_KEY);
+        setStDraftNotice('Draft cleared.');
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const resetInlineStockTake = () => {
+      setStLocationId('');
+      setStRows([]);
+      setStCounts({});
+      setStNotes('');
+      setStStartedLocal('');
+      setStNewItems([]);
+      setStDraftNewItem(defaultDraftNewItem());
+      setStDraftNotice('');
+    };
+
+    const submitInlineStockTake = async () => {
+      if (!stLocationId) {
+        setError('Select a stock location first.');
+        return;
+      }
+      const lines = buildStockTakeLines(stRows, stCounts, stNewItems);
+      if (!lines.length) {
+        setError('Enter at least one counted quantity or add a new item before submitting.');
+        return;
+      }
+      const startedIso = fromDatetimeLocalToIso(stStartedLocal) || new Date().toISOString();
+      setStSubmitting(true);
+      setError(null);
+      setMessage(null);
+      try {
+        const res = await fetch(apiBase + '/api/manufacturing/stock-take-submissions', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            locationId: stLocationId,
+            notes: stNotes,
+            startedAt: startedIso,
+            finishedAt: new Date().toISOString(),
+            lines
+          })
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            payload?.error?.message || payload?.message || payload?.error || 'Failed to submit stock take.';
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const sub = payload?.data?.submission || payload?.submission;
+        const ref = sub?.submissionRef || sub?.id || '';
+        setMessage(
+          ref
+            ? 'Stock take submitted for review (ref: ' + ref + ').'
+            : 'Stock take submitted for review.'
+        );
+        clearStockTakeDraft();
+        resetInlineStockTake();
+        await loadSubmissions();
+      } catch (e) {
+        setError(e.message || 'Failed to submit stock take.');
+      } finally {
+        setStSubmitting(false);
+      }
+    };
+
+    const stLocationOptions = React.useMemo(
+      () =>
+        stLocations.filter((loc) => loc.status !== 'inactive' && loc.status !== 'suspended'),
+      [stLocations]
+    );
 
     const handleDownload = async () => {
       setError(null);
