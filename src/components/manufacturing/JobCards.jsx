@@ -8,7 +8,7 @@ const ReactGlobal =
   (typeof React !== 'undefined' && React) ||
   {};
 
-const { useState, useEffect, useMemo, useCallback } = ReactGlobal;
+const { useState, useEffect, useMemo, useCallback, useRef } = ReactGlobal;
 
 function normalizeRole(role) {
   if (!role) return '';
@@ -165,6 +165,8 @@ function partitionJobCardAttachments(photosInput, opts = {}) {
 function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, idx, issueId }) {
   const [retryTick, setRetryTick] = useState(0);
   const [err, setErr] = useState(null);
+  const [resolvedSrc, setResolvedSrc] = useState(null);
+  const blobUrlRef = useRef(null);
 
   useEffect(() => {
     setErr(null);
@@ -174,13 +176,77 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
   const isVideo =
     String(mediaType).includes('VIDEO') ||
     /\.(mp4|webm|mov|m4v)$/i.test(filename || '');
-  const mediaParams = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
-  if (mediaType) mediaParams.set('media_type', String(mediaType));
-  if (filename) mediaParams.set('filename', String(filename));
-  if (issueId) mediaParams.set('issue_id', String(issueId));
-  if (retryTick > 0) mediaParams.set('retry', String(retryTick));
-  const mediaSrc = `/api/safety-culture/media/proxy?${mediaParams.toString()}`;
+  const proxyUrl = useMemo(() => {
+    const mediaParams = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
+    if (mediaType) mediaParams.set('media_type', String(mediaType));
+    if (filename) mediaParams.set('filename', String(filename));
+    if (issueId) mediaParams.set('issue_id', String(issueId));
+    if (retryTick > 0) mediaParams.set('retry', String(retryTick));
+    return `/api/safety-culture/media/proxy?${mediaParams.toString()}`;
+  }, [mediaId, token, mediaType, filename, issueId, retryTick]);
   const canRender = Boolean(mediaId && token);
+
+  useEffect(() => {
+    if (!canRender) {
+      setResolvedSrc(null);
+      return;
+    }
+
+    let cancelled = false;
+    const ac = new AbortController();
+
+    const revokeBlob = () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+
+    setResolvedSrc(null);
+    revokeBlob();
+    setErr(null);
+
+    (async () => {
+      const authTok = typeof window !== 'undefined' && window.storage?.getToken?.();
+      if (!authTok) {
+        if (!cancelled) setErr('Sign in required to load media');
+        return;
+      }
+      try {
+        const res = await fetch(proxyUrl, {
+          headers: { Authorization: `Bearer ${authTok}` },
+          signal: ac.signal
+        });
+        if (!res.ok) {
+          if (!cancelled && retryTick < 2) {
+            setRetryTick((n) => n + 1);
+            return;
+          }
+          if (!cancelled) setErr('Could not load media');
+          return;
+        }
+        const blob = await res.blob();
+        if (cancelled || ac.signal.aborted) return;
+        const u = URL.createObjectURL(blob);
+        blobUrlRef.current = u;
+        setResolvedSrc(u);
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        if (!cancelled && retryTick < 2) {
+          setRetryTick((n) => n + 1);
+          return;
+        }
+        if (!cancelled) setErr('Could not load media');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+      revokeBlob();
+      setResolvedSrc(null);
+    };
+  }, [canRender, proxyUrl, retryTick]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950/50">
@@ -196,9 +262,9 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
           Missing media credentials
         </div>
       ) : null}
-      {canRender && isVideo ? (
+      {canRender && isVideo && resolvedSrc ? (
         <video
-          src={mediaSrc}
+          src={resolvedSrc}
           className="max-h-64 w-full object-contain bg-black"
           controls
           playsInline
@@ -212,10 +278,10 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
           }}
         />
       ) : null}
-      {canRender && !isVideo ? (
+      {canRender && !isVideo && resolvedSrc ? (
         <figure className="group relative overflow-hidden bg-slate-800">
                           <img
-                            src={mediaSrc}
+                            src={resolvedSrc}
                             alt={`SafetyCulture attachment ${idx + 1}`}
                             className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
                             loading="lazy"
@@ -229,6 +295,12 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
             }}
           />
         </figure>
+      ) : null}
+      {canRender && !resolvedSrc && !err ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+          <i className="fa-solid fa-spinner fa-spin text-sm" aria-hidden />
+          Loading&hellip;
+        </div>
       ) : null}
     </div>
   );
@@ -396,7 +468,7 @@ function JobCardListMetricChips({ jc, isDark }) {
 
 const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const isDark = (typeof window !== 'undefined' && window.useTheme) ? (window.useTheme().isDark) : false;
-  if (!useState || !useEffect || !useMemo || !useCallback) {
+  if (!useState || !useEffect || !useMemo || !useCallback || !useRef) {
     return (
       <div className="mt-6 flex items-center justify-center">
         <div className="text-center text-sm text-gray-500">

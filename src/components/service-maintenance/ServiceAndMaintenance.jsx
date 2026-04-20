@@ -58,10 +58,12 @@ function splitJobCardOtherCommentsForReport(rawComments) {
   };
 }
 
-/** Same as manufacturing JobCards: SC binary via sign-url (no ES imports — build is non-bundled IIFE). */
+/** Same as manufacturing JobCards: SC media via authenticated fetch (img/video cannot send Bearer headers). */
 function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filename, idx, isDark, issueId }) {
   const [retryTick, setRetryTick] = useState(0);
   const [err, setErr] = useState(null);
+  const [resolvedSrc, setResolvedSrc] = useState(null);
+  const blobUrlRef = useRef(null);
 
   useEffect(() => {
     setErr(null);
@@ -71,13 +73,77 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
   const isVideo =
     String(mediaType).includes('VIDEO') ||
     /\.(mp4|webm|mov|m4v)$/i.test(filename || '');
-  const mediaParams = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
-  if (mediaType) mediaParams.set('media_type', String(mediaType));
-  if (filename) mediaParams.set('filename', String(filename));
-  if (issueId) mediaParams.set('issue_id', String(issueId));
-  if (retryTick > 0) mediaParams.set('retry', String(retryTick));
-  const mediaSrc = `/api/safety-culture/media/proxy?${mediaParams.toString()}`;
+  const proxyUrl = useMemo(() => {
+    const mediaParams = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
+    if (mediaType) mediaParams.set('media_type', String(mediaType));
+    if (filename) mediaParams.set('filename', String(filename));
+    if (issueId) mediaParams.set('issue_id', String(issueId));
+    if (retryTick > 0) mediaParams.set('retry', String(retryTick));
+    return `/api/safety-culture/media/proxy?${mediaParams.toString()}`;
+  }, [mediaId, token, mediaType, filename, issueId, retryTick]);
   const canRender = Boolean(mediaId && token);
+
+  useEffect(() => {
+    if (!canRender) {
+      setResolvedSrc(null);
+      return;
+    }
+
+    let cancelled = false;
+    const ac = new AbortController();
+
+    const revokeBlob = () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+
+    setResolvedSrc(null);
+    revokeBlob();
+    setErr(null);
+
+    (async () => {
+      const authTok = typeof window !== 'undefined' && window.storage?.getToken?.();
+      if (!authTok) {
+        if (!cancelled) setErr('Sign in required to load media');
+        return;
+      }
+      try {
+        const res = await fetch(proxyUrl, {
+          headers: { Authorization: `Bearer ${authTok}` },
+          signal: ac.signal
+        });
+        if (!res.ok) {
+          if (!cancelled && retryTick < 2) {
+            setRetryTick((n) => n + 1);
+            return;
+          }
+          if (!cancelled) setErr('Could not load media');
+          return;
+        }
+        const blob = await res.blob();
+        if (cancelled || ac.signal.aborted) return;
+        const u = URL.createObjectURL(blob);
+        blobUrlRef.current = u;
+        setResolvedSrc(u);
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        if (!cancelled && retryTick < 2) {
+          setRetryTick((n) => n + 1);
+          return;
+        }
+        if (!cancelled) setErr('Could not load media');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+      revokeBlob();
+      setResolvedSrc(null);
+    };
+  }, [canRender, proxyUrl, retryTick]);
 
   const border = isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-200 bg-gray-50';
   const fnColor = isDark ? 'text-gray-400' : 'text-gray-500';
@@ -97,9 +163,9 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
           Missing media credentials
         </div>
       ) : null}
-      {canRender && isVideo ? (
+      {canRender && isVideo && resolvedSrc ? (
         <video
-          src={mediaSrc}
+          src={resolvedSrc}
           className="max-h-64 w-full object-contain bg-black"
           controls
           playsInline
@@ -113,10 +179,10 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
           }}
         />
       ) : null}
-      {canRender && !isVideo ? (
+      {canRender && !isVideo && resolvedSrc ? (
         <figure className={`group relative overflow-hidden ${figBg}`}>
           <img
-            src={mediaSrc}
+            src={resolvedSrc}
             alt={`SafetyCulture attachment ${idx + 1}`}
             className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
             loading="lazy"
@@ -130,6 +196,12 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
             }}
           />
         </figure>
+      ) : null}
+      {canRender && !resolvedSrc && !err ? (
+        <div className={`flex items-center justify-center gap-2 py-8 text-xs ${loadColor}`}>
+          <i className="fa-solid fa-spinner fa-spin text-sm" aria-hidden />
+          Loading&hellip;
+        </div>
       ) : null}
     </div>
   );
