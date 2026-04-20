@@ -12073,9 +12073,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const displayQuantity = selectedLocationInfo
       ? (parseFloat(selectedLocationInfo.quantity) || 0)
       : toSafeNumber(item.quantity);
+    // `allocatedQuantity` is catalog/global (not location-scoped). When viewing a single
+    // location, avoid subtracting global allocation from that location's on-hand stock.
+    const allocatedQtyForDisplay = selectedLocationInfo ? 0 : toSafeNumber(item.allocatedQuantity);
     const availableQty = selectedLocationInfo
-      ? (displayQuantity - toSafeNumber(item.allocatedQuantity))
+      ? displayQuantity
       : getAvailableInventoryQuantity(item);
+    const computedDetailStatus = (() => {
+      const reorderPoint = getItemReorderPoint(item);
+      if (availableQty <= 0) return 'out_of_stock';
+      if (availableQty <= reorderPoint) return 'low_stock';
+      return 'in_stock';
+    })();
 
     const handleSaveEdit = async () => {
       try {
@@ -12214,8 +12223,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <span className="ml-2 text-sm font-mono font-semibold text-gray-900">{item.sku}</span>
                 </div>
                 <div>
-                  <span className={`inline-flex items-center px-3 py-1 rounded text-sm font-medium capitalize ${getStatusColor(item.status)}`}>
-                    {(item.status || '').replace('_', ' ')}
+                  <span className={`inline-flex items-center px-3 py-1 rounded text-sm font-medium capitalize ${getStatusColor(computedDetailStatus)}`}>
+                    {computedDetailStatus.replace('_', ' ')}
                   </span>
                 </div>
                 <div>
@@ -12338,8 +12347,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </>
                 ) : null}
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Allocated</p>
-                  <p className="text-xl font-bold text-yellow-700">{item.allocatedQuantity || 0} {item.unit}</p>
+                  <p className="text-xs text-gray-500 mb-1">
+                    {selectedLocationInfo ? 'Allocated (all locations)' : 'Allocated'}
+                  </p>
+                  <p className="text-xl font-bold text-yellow-700">{allocatedQtyForDisplay} {item.unit}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Available</p>
@@ -12704,8 +12715,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <div className="space-y-3">
                 <div>
                   <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
-                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize mt-1 ${getStatusColor(item.status)}`}>
-                    {(item.status || '').replace('_', ' ')}
+                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize mt-1 ${getStatusColor(computedDetailStatus)}`}>
+                    {computedDetailStatus.replace('_', ' ')}
                   </span>
                 </div>
                 <div>
