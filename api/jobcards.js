@@ -161,6 +161,7 @@ const JOB_CARD_GET_ONE_SELECT = {
   kmReadingAfter: true,
   travelKilometers: true,
   reasonForVisit: true,
+  callOutCategory: true,
   diagnosis: true,
   futureWorkRequired: true,
   futureWorkScheduledAt: true,
@@ -367,6 +368,7 @@ async function handler(req, res) {
               { locationLongitude: { contains: searchQ, mode: 'insensitive' } },
               { vehicleUsed: { contains: searchQ, mode: 'insensitive' } },
               { reasonForVisit: { contains: searchQ, mode: 'insensitive' } },
+              { callOutCategory: { contains: searchQ, mode: 'insensitive' } },
               { diagnosis: { contains: searchQ, mode: 'insensitive' } },
               { futureWorkRequired: { contains: searchQ, mode: 'insensitive' } },
               { actionsTaken: { contains: searchQ, mode: 'insensitive' } },
@@ -692,6 +694,7 @@ async function handler(req, res) {
             kmReadingAfter: kmAfter,
             travelKilometers,
             reasonForVisit: body.reasonForVisit || '',
+            callOutCategory: body.callOutCategory || '',
             diagnosis: body.diagnosis || '',
             futureWorkRequired: body.futureWorkRequired || '',
             futureWorkScheduledAt: body.futureWorkScheduledAt ? new Date(body.futureWorkScheduledAt) : null,
@@ -820,6 +823,7 @@ async function handler(req, res) {
         if (body.kmReadingBefore !== undefined) updateData.kmReadingBefore = parseFloat(body.kmReadingBefore) || 0
         if (body.kmReadingAfter !== undefined) updateData.kmReadingAfter = parseFloat(body.kmReadingAfter) || 0
         if (body.reasonForVisit !== undefined) updateData.reasonForVisit = body.reasonForVisit
+        if (body.callOutCategory !== undefined) updateData.callOutCategory = body.callOutCategory
         if (body.diagnosis !== undefined) updateData.diagnosis = body.diagnosis
         if (body.futureWorkRequired !== undefined) updateData.futureWorkRequired = body.futureWorkRequired
         if (body.futureWorkScheduledAt !== undefined) {

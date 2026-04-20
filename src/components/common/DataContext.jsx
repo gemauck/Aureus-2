@@ -359,61 +359,47 @@ const DataProvider = ({ children }) => {
                     return;
                 }
 
-                // Load essential data sequentially to prevent rate limiting
-                // Stagger requests with delays to respect rate limits
+                // Load essential data in parallel. Server allows 450 req/min per IP (apiLimiter);
+                // four reads are far below that — the old 600ms stagger added ~1.8s artificial delay.
                 const dataTypes = [
-                    { key: 'clients', priority: 1 },
-                    { key: 'leads', priority: 2 },
-                    { key: 'projects', priority: 3 },
-                    { key: 'users', priority: 4 }
+                    { key: 'clients' },
+                    { key: 'leads' },
+                    { key: 'projects' },
+                    { key: 'users' }
                 ];
 
-                // Load data sequentially with delays between requests
-                for (let i = 0; i < dataTypes.length; i++) {
-                    const dataType = dataTypes[i];
-                    try {
-                        // Add delay between requests (except first one) to prevent rate limiting
-                        if (i > 0) {
-                            await new Promise(resolve => setTimeout(resolve, 600)); // 600ms delay between requests
+                const handleInitialFetchError = (key, err) => {
+                    const errorMessage = err?.message || String(err);
+                    const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                        errorMessage.includes('unreachable') ||
+                        errorMessage.includes('ECONNREFUSED') ||
+                        errorMessage.includes('connection refused') ||
+                        errorMessage.includes('econnrefused');
+                    const isRateLimitError = err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED';
+                    const isUnauthorized = err?.status === 401 || errorMessage.includes('401') ||
+                        errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
+
+                    if (isUnauthorized) {
+                        console.warn('⚠️ Unauthorized - stopping data load');
+                        if (window.storage?.removeToken) {
+                            window.storage.removeToken();
                         }
-
-                        await fetchData(dataType.key).catch(err => {
-                            const errorMessage = err?.message || String(err);
-                            const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                                  errorMessage.includes('unreachable') ||
-                                                  errorMessage.includes('ECONNREFUSED') ||
-                                                  errorMessage.includes('connection refused') ||
-                                                  errorMessage.includes('econnrefused');
-                            const isRateLimitError = err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED';
-                            const isUnauthorized = err?.status === 401 || errorMessage.includes('401') ||
-                                                  errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
-
-                            // If unauthorized, stop loading immediately - token is invalid
-                            if (isUnauthorized) {
-                                console.warn('⚠️ Unauthorized - stopping data load');
-                                if (window.storage?.removeToken) {
-                                    window.storage.removeToken();
-                                }
-                                setInitialLoadComplete(true);
-                                setGlobalLoading(false);
-                                return null;
-                            }
-
-                            // Don't log rate limit errors (they're handled by RateLimitManager)
-                            if (!isDatabaseError && !isRateLimitError) {
-                                console.error(`❌ Error fetching ${dataType.key}:`, err);
-                            }
-                            return null;
-                        });
-                    } catch (error) {
-                        // Continue with next data type even if one fails
-                        const errorMessage = error?.message || String(error);
-                        const isRateLimitError = error?.status === 429 || error?.code === 'RATE_LIMIT_EXCEEDED';
-                        if (!isRateLimitError) {
-                            console.error(`❌ Error loading ${dataType.key}:`, error);
-                        }
+                        setInitialLoadComplete(true);
+                        setGlobalLoading(false);
+                        return null;
                     }
-                }
+
+                    if (!isDatabaseError && !isRateLimitError) {
+                        console.error(`❌ Error fetching ${key}:`, err);
+                    }
+                    return null;
+                };
+
+                await Promise.all(
+                    dataTypes.map(({ key }) =>
+                        fetchData(key).catch((err) => handleInitialFetchError(key, err))
+                    )
+                );
 
             } catch (error) {
                 const errorMessage = error?.message || String(error);

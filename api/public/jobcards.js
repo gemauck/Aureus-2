@@ -175,6 +175,7 @@ async function handler(req, res) {
         kmReadingAfter: kmAfter,
         travelKilometers,
         reasonForVisit: body.reasonForVisit || '',
+        callOutCategory: body.callOutCategory || '',
         diagnosis: body.diagnosis || '',
         futureWorkRequired: body.futureWorkRequired || '',
         futureWorkScheduledAt: body.futureWorkScheduledAt ? new Date(body.futureWorkScheduledAt) : null,

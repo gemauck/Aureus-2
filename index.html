@@ -84,25 +84,32 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1776711446350'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1776712326961'; // Bumped to force reload and clear cache
     </script>
-    <!-- Stale HTML check: if server has a newer build, force reload so Chrome gets fresh JS (fixes cached bundle) -->
+    <!-- Stale HTML check: if server has a newer build, force reload (defer so it does not compete with first-paint resources) -->
     <script>
         (function() {
             var embedVersion = window.BUILD_VERSION;
             if (!embedVersion) return;
-            fetch('/dist/build-version.json?t=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })
-                .then(function(r) { return r.ok ? r.json() : null; })
-                .then(function(data) {
-                    if (data && data.version && String(data.version) !== String(embedVersion)) {
-                        var params = new URLSearchParams(location.search || '');
-                        params.delete('_purge');
-                        params.set('_purge', String(Date.now()));
-                        var q = params.toString();
-                        location.replace(location.pathname + (q ? '?' + q : '') + (location.hash || ''));
-                    }
-                })
-                .catch(function() {});
+            function runStaleCheck() {
+                fetch('/dist/build-version.json?t=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(data) {
+                        if (data && data.version && String(data.version) !== String(embedVersion)) {
+                            var params = new URLSearchParams(location.search || '');
+                            params.delete('_purge');
+                            params.set('_purge', String(Date.now()));
+                            var q = params.toString();
+                            location.replace(location.pathname + (q ? '?' + q : '') + (location.hash || ''));
+                        }
+                    })
+                    .catch(function() {});
+            }
+            if (window.requestIdleCallback) {
+                requestIdleCallback(runStaleCheck, { timeout: 4000 });
+            } else {
+                setTimeout(runStaleCheck, 2000);
+            }
         })();
     </script>
     
@@ -110,7 +117,7 @@
     <!-- VERSION: 20260129-doc-collection-cache-bust - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1776711446350';
+            var APP_VERSION = '1776712326961';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -687,12 +694,15 @@
     <!-- Preload critical React libraries for faster loading (local-first for offline support) -->
     <link rel="preload" href="/node_modules/react/umd/react.production.min.js" as="script">
     <link rel="preload" href="/node_modules/react-dom/umd/react-dom.production.min.js" as="script">
+    <!-- Excel libs load deferred; preloading starts the download in parallel with React -->
+    <link rel="preload" href="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" as="script" crossorigin>
+    <link rel="preload" href="https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js" as="script" crossorigin>
     
     <!-- React - Must load before dependent scripts, but preload helps -->
     <script src="/node_modules/react/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded (local)'); }" onerror="this.onerror=null; this.src='https://unpkg.com/react@18/umd/react.production.min.js';"></script>
     <script src="/node_modules/react-dom/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded (local)'); }" onerror="this.onerror=null; this.src='https://unpkg.com/react-dom@18/umd/react-dom.production.min.js';"></script>
-    <!-- XLSX library for Excel export - Load without defer to ensure proper initialization -->
-    <script crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" 
+    <!-- XLSX / ExcelJS: defer so they do not block parsing of the rest of the page (execute before core-bundle.js, same defer queue) -->
+    <script defer crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" 
             onload="(function() { 
                      if(typeof XLSX !== 'undefined' && XLSX && XLSX.utils) { 
                        window.XLSX = XLSX; 
@@ -704,8 +714,7 @@
                    })();" 
             onerror="console.error('❌ XLSX CDN load failed from SheetJS - Excel export will be unavailable');"></script>
     
-    <!-- ExcelJS library for Excel data validation support (dropdowns) - from unpkg (allowed by CSP) -->
-    <script crossorigin src="https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js" 
+    <script defer crossorigin src="https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js" 
             onload="(function() { 
                      if(typeof ExcelJS !== 'undefined') { 
                        window.ExcelJS = ExcelJS; 
@@ -716,10 +725,9 @@
                    })();" 
             onerror="console.warn('⚠️ ExcelJS CDN load failed - data validation dropdowns may not work');"></script>
     
-    <!-- Verify React loaded and expose globally (fallback) -->
+    <!-- Verify React loaded and expose globally (fallback); after DOMContentLoaded so deferred Excel scripts have run -->
     <script>
-        // Fallback check after scripts load
-        setTimeout(() => {
+        function verifyReactAndExcelLibs() {
             if (typeof React !== 'undefined') {
                 window.React = React;
                 console.log('✅ React verified');
@@ -728,7 +736,6 @@
             }
             if (typeof ReactDOM !== 'undefined') {
                 window.ReactDOM = ReactDOM;
-                // Dispatch ready event
                 if (!window.BabelReady) {
                     window.BabelReady = true;
                     window.dispatchEvent(new Event('babelready'));
@@ -737,25 +744,26 @@
             } else {
                 console.error('❌ ReactDOM not loaded - check CDN connection');
             }
-            // XLSX is deferred and not critical for initial load - check with longer timeout
-            // Components that use XLSX have their own retry logic, so we don't need to error here
             if (typeof XLSX !== 'undefined') {
                 window.XLSX = XLSX;
                 console.log('✅ XLSX verified');
             } else {
-                // XLSX is lazy-loaded and not critical - retry check after longer delay since it's deferred
-                setTimeout(() => {
+                setTimeout(function() {
                     if (typeof XLSX !== 'undefined') {
                         window.XLSX = XLSX;
                         console.log('✅ XLSX loaded (delayed)');
                     } else {
-                        // Log error if still not loaded after retry - helps diagnose CDN issues
                         console.error('❌ XLSX not loaded - check CDN connection');
                         console.warn('⚠️ Excel export features will be unavailable until XLSX library loads');
                     }
-                }, 3000); // Additional 3 seconds for deferred scripts
+                }, 2000);
             }
-        }, 1000);
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', verifyReactAndExcelLibs);
+        } else {
+            verifyReactAndExcelLibs();
+        }
     </script>
     
     <!-- Leaflet JavaScript - Lazy load (only needed for maps) -->
@@ -1163,8 +1171,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1776711446350" as="script">
-    <script defer src="/dist/core-bundle.js?v=1776711446350"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1776712326961" as="script">
+    <script defer src="/dist/core-bundle.js?v=1776712326961"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1535,8 +1543,8 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1776711446350" as="script">
-    <script defer src="/lazy-load-components.js?v=1776711446350"></script>
+    <link rel="prefetch" href="/lazy-load-components.js?v=1776712326961" as="script">
+    <script defer src="/lazy-load-components.js?v=1776712326961"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

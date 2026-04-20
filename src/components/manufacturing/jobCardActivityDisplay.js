@@ -10,6 +10,16 @@ export const JOB_CARD_ACTIVITY_STEP_LABELS = {
   signoff: 'Customer Sign-off'
 };
 
+/** Alphabetical options for JobCard.callOutCategory (Site Visit step). */
+export const JOB_CARD_CALL_OUT_CATEGORY_OPTIONS = [
+  'Air pump',
+  'Calibration',
+  'Maintenance',
+  'Near Miss',
+  'New Install',
+  'Observation'
+];
+
 /** Prisma/API field keys → short labels for activity "what changed" lines */
 export const JOB_CARD_FIELD_LABELS = {
   agentName: 'Lead technician',
@@ -32,6 +42,7 @@ export const JOB_CARD_FIELD_LABELS = {
   travelKilometers: 'Travel distance',
   totalTimeMinutes: 'Total time on job',
   reasonForVisit: 'Reason for visit',
+  callOutCategory: 'Call out category',
   diagnosis: 'Diagnosis',
   actionsTaken: 'Actions taken',
   futureWorkRequired: 'Future work',
@@ -231,7 +242,8 @@ const jobCardActivityHelpers = {
   formatJobCardActivitySource,
   sortJobCardActivitiesChronological,
   JOB_CARD_ACTIVITY_STEP_LABELS,
-  JOB_CARD_FIELD_LABELS
+  JOB_CARD_FIELD_LABELS,
+  JOB_CARD_CALL_OUT_CATEGORY_OPTIONS
 };
 
 if (typeof window !== 'undefined') {

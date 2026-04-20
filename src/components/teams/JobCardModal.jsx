@@ -5,6 +5,16 @@ const storage = window.storage;
 const JOB_CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 
+/** Same list as `JOB_CARD_CALL_OUT_CATEGORY_OPTIONS` in jobCardActivityDisplay.js (alphabetical). */
+const JOB_CARD_CALL_OUT_CATEGORY_OPTIONS = [
+  'Air pump',
+  'Calibration',
+  'Maintenance',
+  'Near Miss',
+  'New Install',
+  'Observation'
+];
+
 const parseJsonArrayField = (value) => {
     if (Array.isArray(value)) return value;
     if (typeof value === 'string' && value.trim()) {
@@ -85,6 +95,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         kmReadingBefore: '',
         kmReadingAfter: '',
         reasonForVisit: '',
+        callOutCategory: '',
         diagnosis: '',
         futureWorkRequired: '',
         futureWorkScheduledAt: '',
@@ -178,6 +189,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 kmReadingBefore: jobCard.kmReadingBefore ?? '',
                 kmReadingAfter: jobCard.kmReadingAfter ?? '',
                 reasonForVisit: jobCard.reasonForVisit || '',
+                callOutCategory: jobCard.callOutCategory || '',
                 diagnosis: jobCard.diagnosis || '',
                 futureWorkRequired: jobCard.futureWorkRequired || '',
                 futureWorkScheduledAt: jobCard.futureWorkScheduledAt
@@ -222,6 +234,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 kmReadingBefore: '',
                 kmReadingAfter: '',
                 reasonForVisit: '',
+                callOutCategory: '',
                 diagnosis: '',
                 futureWorkRequired: '',
                 futureWorkScheduledAt: '',
@@ -983,6 +996,25 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             </p>
                         </div>
                     )}
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
+                            Call Out Category
+                        </label>
+                        <select
+                            name="callOutCategory"
+                            value={formData.callOutCategory || ''}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        >
+                            <option value="">Select…</option>
+                            {JOB_CARD_CALL_OUT_CATEGORY_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>
+                                    {opt}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
                     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-600 dark:bg-slate-800/50">
                         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Visit narrative</h4>

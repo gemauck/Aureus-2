@@ -199,6 +199,7 @@ async function handler(req, res) {
     if (body.kmReadingAfter !== undefined) data.kmReadingAfter = parseFloat(body.kmReadingAfter) || 0
     data.travelKilometers = travelKilometers
     if (body.reasonForVisit !== undefined) data.reasonForVisit = body.reasonForVisit
+    if (body.callOutCategory !== undefined) data.callOutCategory = body.callOutCategory
     if (body.diagnosis !== undefined) data.diagnosis = body.diagnosis
     if (body.futureWorkRequired !== undefined) data.futureWorkRequired = body.futureWorkRequired
     if (body.futureWorkScheduledAt !== undefined) {

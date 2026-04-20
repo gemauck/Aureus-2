@@ -1695,6 +1695,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                         Visit summary
                       </div>
+                      {selectedJobCard.callOutCategory ? (
+                        <div className="text-xs font-medium text-primary-300 mt-0.5">
+                          {selectedJobCard.callOutCategory}
+                        </div>
+                      ) : null}
                       <div className="text-sm text-slate-100">
                         {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
                       </div>

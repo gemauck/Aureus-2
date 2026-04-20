@@ -4,7 +4,8 @@ import {
   formatJobCardActivityAction,
   formatJobCardActivityDetail,
   formatJobCardActivitySource,
-  sortJobCardActivitiesChronological
+  sortJobCardActivitiesChronological,
+  JOB_CARD_CALL_OUT_CATEGORY_OPTIONS
 } from './jobCardActivityDisplay.js';
 
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
@@ -1136,6 +1137,7 @@ function priorListLocalSearchHay(jc) {
     jc.longitude,
     jc.vehicleUsed,
     jc.reasonForVisit,
+    jc.callOutCategory,
     jc.diagnosis,
     jc.futureWorkRequired,
     jc.actionsTaken,
@@ -1210,6 +1212,7 @@ const JobCardFormPublic = () => {
     kmReadingBefore: '',
     kmReadingAfter: '',
     reasonForVisit: '',
+    callOutCategory: '',
     diagnosis: '',
     futureWorkRequired: '',
     futureWorkScheduledAt: '',
@@ -3134,6 +3137,7 @@ const JobCardFormPublic = () => {
         kmReadingBefore: '',
         kmReadingAfter: '',
         reasonForVisit: '',
+        callOutCategory: '',
         diagnosis: '',
         futureWorkRequired: '',
         futureWorkScheduledAt: '',
@@ -3766,6 +3770,7 @@ const JobCardFormPublic = () => {
       kmReadingBefore: full.kmReadingBefore != null ? String(full.kmReadingBefore) : '',
       kmReadingAfter: full.kmReadingAfter != null ? String(full.kmReadingAfter) : '',
       reasonForVisit: full.reasonForVisit || '',
+      callOutCategory: full.callOutCategory || '',
       diagnosis: full.diagnosis || '',
       futureWorkRequired: full.futureWorkRequired || '',
       futureWorkScheduledAt: toDatetimeLocalInput(full.futureWorkScheduledAt),
@@ -4458,6 +4463,33 @@ const JobCardFormPublic = () => {
 
   const renderVisitStep = () => (
     <div className="space-y-4 sm:space-y-6">
+      <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
+        <header className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Call Out Category</h2>
+          <p className="text-sm text-gray-500 mt-1">Choose the type of call-out or visit.</p>
+        </header>
+        <div>
+          <label htmlFor="jobcard-call-out-category" className="block text-sm font-medium text-gray-700 mb-2">
+            Call Out Category
+          </label>
+          <select
+            id="jobcard-call-out-category"
+            name="callOutCategory"
+            value={formData.callOutCategory || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+            style={{ fontSize: '16px' }}
+          >
+            <option value="">Select…</option>
+            {JOB_CARD_CALL_OUT_CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Visit Details</h2>

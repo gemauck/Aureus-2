@@ -1645,12 +1645,88 @@ async function handler(req, res) {
         const body = await parseJsonBody(req)
         const existing = await prisma.stockTakeSubmission.findUnique({
           where: { id },
-          select: { id: true, status: true, ownerId: true }
+          select: { id: true, status: true, ownerId: true, submissionRef: true, meta: true, locationId: true }
         })
         if (!existing) return notFound(res, 'Stock-take submission not found')
         const uid = String(req.user?.sub || req.user?.id || '').trim()
+        const isAdmin = isAdminRole(req.user?.role)
+
+        if (isAdmin && existing.status === 'pending_review' && body?.status === 'rejected') {
+          let prevMeta = {}
+          try {
+            prevMeta = existing.meta ? JSON.parse(existing.meta) : {}
+          } catch {
+            prevMeta = {}
+          }
+          const rejectionNote = String(body?.applyNotes ?? body?.rejectionReason ?? '').trim()
+          const submission = await prisma.stockTakeSubmission.update({
+            where: { id },
+            data: {
+              status: 'rejected',
+              applyNotes: rejectionNote,
+              meta: JSON.stringify({
+                ...prevMeta,
+                userAgent: req.headers?.['user-agent'] || '',
+                rejectedAt: new Date().toISOString(),
+                rejectedById: uid,
+                rejectedBy: String(req.user?.name || req.user?.email || 'Admin')
+              })
+            },
+            include: { lines: true }
+          })
+          auditManufacturing('update', 'stock-take-submission-reject', id, {
+            submissionRef: submission.submissionRef,
+            locationId: submission.locationId,
+            applyNotes: rejectionNote
+          })
+          return ok(res, { submission })
+        }
+
+        if (isAdmin && existing.status === 'pending_review' && Array.isArray(body?.lines)) {
+          const linesInput = body.lines
+          const cleanLines = normalizeStockTakeLinesFromInput(linesInput)
+          if (!linesInput.length) {
+            return badRequest(res, 'At least one line is required')
+          }
+          if (!cleanLines.length) {
+            return badRequest(res, 'No valid stock-take lines found')
+          }
+          let prevMeta = {}
+          try {
+            prevMeta = existing.meta ? JSON.parse(existing.meta) : {}
+          } catch {
+            prevMeta = {}
+          }
+          const submission = await prisma.$transaction(async (tx) => {
+            await tx.stockTakeSubmissionLine.deleteMany({ where: { submissionId: id } })
+            return tx.stockTakeSubmission.update({
+              where: { id },
+              data: {
+                meta: JSON.stringify({
+                  ...prevMeta,
+                  userAgent: req.headers?.['user-agent'] || '',
+                  lineCount: cleanLines.length,
+                  adminLastEditedAt: new Date().toISOString(),
+                  adminLastEditedById: uid,
+                  adminLastEditedBy: String(req.user?.name || req.user?.email || 'Admin')
+                }),
+                lines: {
+                  create: cleanLines.map((line) => prismaLineCreateFromNormalized(line))
+                }
+              },
+              include: { lines: true }
+            })
+          })
+          auditManufacturing('update', 'stock-take-submission-admin-edit', id, {
+            submissionRef: submission.submissionRef,
+            locationId: submission.locationId,
+            lines: submission.lines.length
+          })
+          return ok(res, { submission })
+        }
+
         if (existing.status !== 'draft' || String(existing.ownerId || '') !== uid) {
-          return forbidden(res, 'You can only update your own draft stock take.')
+          return forbidden(res, 'You cannot update this stock take.')
         }
         const linesInput = Array.isArray(body?.lines) ? body.lines : []
         const cleanLines = normalizeStockTakeLinesFromInput(linesInput)
@@ -1696,6 +1772,14 @@ async function handler(req, res) {
         })
         if (!existing) return notFound(res, 'Stock-take submission not found')
         const uid = String(req.user?.sub || req.user?.id || '').trim()
+        if (isAdminRole(req.user?.role) && (existing.status === 'pending_review' || existing.status === 'rejected')) {
+          await prisma.stockTakeSubmission.delete({ where: { id } })
+          auditManufacturing('delete', 'stock-take-submission-admin', id, {
+            submissionRef: existing.submissionRef,
+            priorStatus: existing.status
+          })
+          return ok(res, { deleted: true })
+        }
         if (existing.status !== 'draft' || String(existing.ownerId || '') !== uid) {
           return forbidden(res, 'You can only delete your own draft stock take.')
         }
