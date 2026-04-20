@@ -1595,7 +1595,7 @@ async function handler(req, res) {
       }
       try {
         const status = String(req.query?.status || '').trim()
-        const where = status ? { status } : {}
+        const where = status ? { status } : { status: { not: 'draft' } }
         const rows = await prisma.stockTakeSubmission.findMany({
           where,
           include: {
@@ -1720,7 +1720,7 @@ async function handler(req, res) {
         if (!existing) return notFound(res, 'Stock-take submission not found')
         const uid = String(req.user?.sub || req.user?.id || '').trim()
         const isOwner = String(existing.ownerId || '') === uid
-        if (existing.status !== 'draft' || (!isOwner && !isAdminRole(req.user?.role))) {
+        if (existing.status !== 'draft' || !isOwner) {
           return forbidden(res, 'Only the draft owner can submit this stock take.')
         }
         const linesInput = Array.isArray(body?.lines) ? body.lines : []
