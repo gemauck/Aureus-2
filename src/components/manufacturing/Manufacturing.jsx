@@ -2855,9 +2855,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   }, []);
 
   // Default inventory tab filter to PMB once locations are known (user can still choose "All locations").
+  // Do not auto-switch while an inventory detail page is open; that can reload list data with a
+  // different location scope and make detail values appear to "revert" after initial load.
   useEffect(() => {
     if (defaultInventoryLocationAppliedRef.current) return;
     if (!stockLocations.length) return;
+    if (viewingInventoryItemDetail) return;
     const pmb = window.manufacturingStockLocations?.isPmbStockLocation
       ? stockLocations.find((l) => window.manufacturingStockLocations.isPmbStockLocation(l))
       : null;
@@ -2865,7 +2868,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       defaultInventoryLocationAppliedRef.current = true;
       setSelectedLocationId(pmb.id);
     }
-  }, [stockLocations, selectedLocationId]);
+  }, [stockLocations, selectedLocationId, viewingInventoryItemDetail]);
 
   // Handle column sorting - memoized to prevent recreation
   const handleSort = useCallback((key, e) => {
