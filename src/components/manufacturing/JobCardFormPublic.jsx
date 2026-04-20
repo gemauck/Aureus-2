@@ -16,6 +16,7 @@ const JOB_CARD_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 const JOB_CARD_IMAGE_TARGET_BYTES = 1600 * 1024;
 const JOB_CARD_IMAGE_MAX_DIMENSION = 1920;
+const JOB_CARD_IMAGE_THUMB_MAX_DIMENSION = 360;
 const JOB_CARD_SYNC_WARN_PAYLOAD_BYTES = 18 * 1024 * 1024;
 const JOB_CARD_SYNC_HARD_PAYLOAD_BYTES = 28 * 1024 * 1024;
 const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 45000;
@@ -302,6 +303,66 @@ async function prepareJobCardImageDataUrl(file) {
   }
 }
 
+function loadImageFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Unable to decode image.'));
+    image.src = dataUrl;
+  });
+}
+
+async function buildJobCardImageThumbnailDataUrl(imageDataUrl) {
+  if (typeof imageDataUrl !== 'string' || !/^data:image\//i.test(imageDataUrl)) return '';
+  try {
+    const image = await loadImageFromDataUrl(imageDataUrl);
+    const sourceW = image.naturalWidth || image.width || 0;
+    const sourceH = image.naturalHeight || image.height || 0;
+    if (!sourceW || !sourceH) return '';
+    const maxSide = Math.max(sourceW, sourceH);
+    const scale = maxSide > JOB_CARD_IMAGE_THUMB_MAX_DIMENSION ? JOB_CARD_IMAGE_THUMB_MAX_DIMENSION / maxSide : 1;
+    const w = Math.max(1, Math.round(sourceW * scale));
+    const h = Math.max(1, Math.round(sourceH * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+    ctx.drawImage(image, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', 0.58);
+  } catch {
+    return '';
+  }
+}
+
+function extractVisualPhotoEntries(photosValue) {
+  const photosRaw = parseStoredJsonArray(photosValue, []);
+  const visualEntries = [];
+  photosRaw.forEach((p, idx) => {
+    if (typeof p === 'string') {
+      if (!p) return;
+      visualEntries.push({
+        stored: p,
+        url: p,
+        previewUrl: '',
+        name: `Photo ${idx + 1}`
+      });
+      return;
+    }
+    if (!p || typeof p !== 'object') return;
+    if (p.kind === 'voice' || p.kind === 'sectionMedia') return;
+    const url = typeof p.url === 'string' ? p.url : '';
+    if (!url) return;
+    visualEntries.push({
+      stored: p,
+      url,
+      previewUrl: typeof p.thumbUrl === 'string' ? p.thumbUrl : '',
+      name: p.name || `Photo ${idx + 1}`
+    });
+  });
+  return visualEntries;
+}
+
 function parseProjectAssociationFromComments(rawComments) {
   if (!rawComments || typeof rawComments !== 'string') {
     return { projectId: '', projectName: '' };
@@ -351,6 +412,7 @@ const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove }) 
             <JobCardWizardAttachmentPreview
               key={`${sectionKey}-m-${idx}`}
               url={photo.url}
+              previewUrl={photo.thumbUrl || ''}
               index={idx}
               onRemove={(i) => onRemove(sectionKey, i)}
             />
@@ -361,7 +423,7 @@ const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove }) 
   );
 };
 
-const JobCardWizardAttachmentPreview = ({ url, index, onRemove }) => {
+const JobCardWizardAttachmentPreview = ({ url, previewUrl, index, onRemove }) => {
   const isVideo = jobCardMediaIsVideoDataUrl(url);
   return (
     <div className="relative group rounded-lg overflow-hidden border border-gray-200">
@@ -375,7 +437,7 @@ const JobCardWizardAttachmentPreview = ({ url, index, onRemove }) => {
         />
       ) : (
         <img
-          src={url}
+          src={previewUrl || url}
           alt={`Attachment ${index + 1}`}
           loading="lazy"
           decoding="async"
@@ -1148,15 +1210,7 @@ const JobCardFormPublic = () => {
     const sectionMediaEntries = photosRaw.filter(
       p => p && typeof p === 'object' && p.kind === 'sectionMedia'
     );
-    const imageUrls = photosRaw
-      .filter(p => {
-        if (typeof p === 'string') return true;
-        if (!p || typeof p !== 'object') return false;
-        if (p.kind === 'voice' || p.kind === 'sectionMedia') return false;
-        return true;
-      })
-      .map(p => (typeof p === 'string' ? p : p && p.url))
-      .filter(Boolean);
+    const visualEntries = extractVisualPhotoEntries(photosRaw);
 
     const restoredSectionMedia = emptySectionWorkMedia();
     sectionMediaEntries.forEach(item => {
@@ -1164,7 +1218,8 @@ const JobCardFormPublic = () => {
       if (restoredSectionMedia[sec] != null) {
         restoredSectionMedia[sec].push({
           name: item.name || `Attachment ${restoredSectionMedia[sec].length + 1}`,
-          url: item.url
+          url: item.url,
+          thumbUrl: item.thumbUrl || ''
         });
       }
     });
@@ -1178,10 +1233,17 @@ const JobCardFormPublic = () => {
         noteNumber: i + 1
       }))
     );
-    setSelectedPhotos(imageUrls.map((url, i) => ({ name: `Photo ${i + 1}`, url })));
+    setSelectedPhotos(
+      visualEntries.map((item, i) => ({
+        name: item.name || `Photo ${i + 1}`,
+        url: item.url,
+        previewUrl: item.previewUrl || '',
+        entry: item.stored
+      }))
+    );
     setFormData(prev => {
       if (String(activeEditCardIdRef.current || '') !== String(targetLocalId)) return prev;
-      return { ...prev, photos: imageUrls };
+      return { ...prev, photos: visualEntries.map(item => item.stored) };
     });
   }, []);
 
@@ -2494,9 +2556,27 @@ const JobCardFormPublic = () => {
           alert(`This image is still too large after compression. Please choose a smaller photo.`);
           continue;
         }
+        const thumbUrl = !isVid ? await buildJobCardImageThumbnailDataUrl(dataUrl) : '';
+        const storedEntry = isVid
+          ? dataUrl
+          : {
+              kind: 'imageMedia',
+              name: file.name || '',
+              url: dataUrl,
+              thumbUrl: thumbUrl || ''
+            };
         pushWizardActivity('wizard_media_added', { kind: 'photo' });
-        setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: finalBytes || file.size }]);
-        setFormData(prev => ({ ...prev, photos: [...prev.photos, dataUrl] }));
+        setSelectedPhotos(prev => [
+          ...prev,
+          {
+            name: file.name,
+            url: dataUrl,
+            previewUrl: thumbUrl || '',
+            entry: storedEntry,
+            size: finalBytes || file.size
+          }
+        ]);
+        setFormData(prev => ({ ...prev, photos: [...prev.photos, storedEntry] }));
       } catch (error) {
         console.warn('JobCardFormPublic: media read failed', error);
         alert('Failed to read that file. Please try again.');
@@ -2508,7 +2588,13 @@ const JobCardFormPublic = () => {
   const handleRemovePhoto = (index) => {
     const newPhotos = selectedPhotos.filter((_, idx) => idx !== index);
     setSelectedPhotos(newPhotos);
-    setFormData(prev => ({ ...prev, photos: newPhotos.map(photo => typeof photo === 'string' ? photo : photo.url) }));
+    setFormData(prev => ({
+      ...prev,
+      photos: newPhotos.map(photo => {
+        if (photo && typeof photo === 'object' && photo.entry !== undefined) return photo.entry;
+        return typeof photo === 'string' ? photo : photo.url;
+      })
+    }));
   };
 
   const handleSectionWorkMediaUpload = async (section, event) => {
@@ -2540,10 +2626,14 @@ const JobCardFormPublic = () => {
           alert('This image is still too large after compression. Please choose a smaller photo.');
           continue;
         }
+        const thumbUrl = !isVid ? await buildJobCardImageThumbnailDataUrl(dataUrl) : '';
         pushWizardActivity('wizard_media_added', { kind: 'sectionMedia', section });
         setSectionWorkMedia(prev => ({
           ...prev,
-          [section]: [...(prev[section] || []), { name: file.name, url: dataUrl, size: finalBytes || file.size }]
+          [section]: [
+            ...(prev[section] || []),
+            { name: file.name, url: dataUrl, thumbUrl: thumbUrl || '', size: finalBytes || file.size }
+          ]
         }));
       } catch (error) {
         console.warn('JobCardFormPublic: section media read failed', error);
@@ -3098,14 +3188,7 @@ const JobCardFormPublic = () => {
       otherComments: full.otherComments || '',
       stockUsed: parseStoredJsonArray(full.stockUsed, []),
       materialsBought: parseStoredJsonArray(full.materialsBought, []),
-      photos: parseStoredJsonArray(full.photos, [])
-        .filter(p => {
-          if (typeof p === 'string') return true;
-          if (!p || typeof p !== 'object') return false;
-          return p.kind !== 'voice' && p.kind !== 'sectionMedia';
-        })
-        .map(p => (typeof p === 'string' ? p : p && p.url))
-        .filter(Boolean),
+      photos: extractVisualPhotoEntries(full.photos).map(item => item.stored),
       serviceForms: parseStoredJsonArray(full.serviceForms, []),
       status: full.status || 'draft',
       customerName: full.customerName || '',
@@ -3135,21 +3218,23 @@ const JobCardFormPublic = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!formData.clientId) {
+  const handleSave = async (options = {}) => {
+    const forceDraft = options?.forceDraft === true;
+    const normalizedStatus = forceDraft
+      ? 'draft'
+      : ['draft', 'submitted', 'completed'].includes(formData.status)
+        ? formData.status
+        : 'draft';
+    if (normalizedStatus !== 'draft' && !formData.clientId) {
       setStepError('Please select a client or choose "No Client" before submitting.');
       setCurrentStep(0);
       return;
     }
-    if (!formData.agentName) {
+    if (normalizedStatus !== 'draft' && !formData.agentName) {
       setStepError('Please select the attending technician.');
       setCurrentStep(0);
       return;
     }
-
-    const normalizedStatus = ['draft', 'submitted', 'completed'].includes(formData.status)
-      ? formData.status
-      : 'draft';
     const signatureForSave =
       exportSignature() ||
       (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
@@ -3215,7 +3300,8 @@ const JobCardFormPublic = () => {
           kind: 'sectionMedia',
           section: sec,
           url: item.url,
-          name: item.name || ''
+          name: item.name || '',
+          thumbUrl: item.thumbUrl || ''
         }))
       );
       jobCardData.photos = [...(formData.photos || []), ...sectionPhotoEntries, ...voicePhotoEntries];
@@ -3431,7 +3517,7 @@ const JobCardFormPublic = () => {
         sessionActivityQueueRef.current = [];
         removeLocalPendingJobCard(jobCardData.id);
         try {
-          alert('Job card saved.');
+          alert(normalizedStatus === 'draft' ? 'Draft saved.' : 'Job card saved.');
         } catch {
           /* ignore */
         }
@@ -4037,6 +4123,7 @@ const JobCardFormPublic = () => {
               <JobCardWizardAttachmentPreview
                 key={showAllSelectedPhotos ? idx : `${idx}-${hiddenSelectedPhotosCount}`}
                 url={typeof photo === 'string' ? photo : photo.url}
+                previewUrl={typeof photo === 'string' ? '' : (photo.previewUrl || photo.thumbUrl || '')}
                 index={idx}
                 onRemove={handleRemovePhoto}
               />
@@ -4511,6 +4598,7 @@ const JobCardFormPublic = () => {
                   <JobCardWizardAttachmentPreview
                     key={showAllSelectedPhotos ? idx : `${idx}-${hiddenSelectedPhotosCount}`}
                     url={typeof photo === 'string' ? photo : photo.url}
+                    previewUrl={typeof photo === 'string' ? '' : (photo.previewUrl || photo.thumbUrl || '')}
                     index={idx}
                     onRemove={handleRemovePhoto}
                   />
@@ -4767,6 +4855,14 @@ const JobCardFormPublic = () => {
             Back
           </button>
 
+          <button
+            type="button"
+            onClick={(event) => { event.preventDefault(); handleSave({ forceDraft: true }); }}
+            disabled={isSubmitting}
+            className="min-h-[48px] px-5 py-3 border border-blue-200 text-blue-700 rounded-xl hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
+          >
+            Save draft
+          </button>
           {currentStep < STEP_IDS.length - 1 ? (
             <button
               type="button"

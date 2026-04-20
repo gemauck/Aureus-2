@@ -223,6 +223,7 @@ const ServiceAndMaintenance = () => {
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showJobCardDetail, setShowJobCardDetail] = useState(false);
   const [loadingJobCard, setLoadingJobCard] = useState(false);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [jobCardActivities, setJobCardActivities] = useState([]);
   const [jobCardActivitiesLoading, setJobCardActivitiesLoading] = useState(false);
   const [showFormsManager, setShowFormsManager] = useState(false);
@@ -423,36 +424,8 @@ const ServiceAndMaintenance = () => {
           if (jobCard && jobCard.id) {
             setSelectedJobCard(jobCard);
             setShowJobCardDetail(true);
-            if (jobCard.attachmentsPending === true && !isCancelled) {
-              void (async () => {
-                try {
-                  const pr = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}/photos`, {
-                    headers
-                  });
-                  if (!pr.ok) {
-                    setSelectedJobCard((prev) =>
-                      prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
-                    );
-                    return;
-                  }
-                  const pd = await pr.json();
-                  const photos = pd?.data?.photos ?? pd?.photos;
-                  setSelectedJobCard((prev) =>
-                    prev?.id === jobCardId
-                      ? {
-                          ...prev,
-                          photos: Array.isArray(photos) ? photos : [],
-                          attachmentsPending: false
-                        }
-                      : prev
-                  );
-                } catch {
-                  setSelectedJobCard((prev) =>
-                    prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
-                  );
-                }
-              })();
-            }
+            // Do not auto-fetch heavy photo payloads here.
+            // Attachments are loaded on demand from the detail panel.
           }
         } else if (response.status === 404) {
           setShowJobCardDetail(false);
@@ -580,36 +553,8 @@ const ServiceAndMaintenance = () => {
         const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
         if (full && full.id) {
           setSelectedJobCard(full);
-          if (full.attachmentsPending === true && jobCard.id) {
-            void (async () => {
-              try {
-                const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCard.id)}/photos`, {
-                  headers
-                });
-                if (!pr.ok) {
-                  setSelectedJobCard((prev) =>
-                    prev?.id === jobCard.id ? { ...prev, photos: [], attachmentsPending: false } : prev
-                  );
-                  return;
-                }
-                const pd = await pr.json();
-                const photos = pd?.data?.photos ?? pd?.photos;
-                setSelectedJobCard((prev) =>
-                  prev?.id === jobCard.id
-                    ? {
-                        ...prev,
-                        photos: Array.isArray(photos) ? photos : [],
-                        attachmentsPending: false
-                      }
-                    : prev
-                );
-              } catch {
-                setSelectedJobCard((prev) =>
-                  prev?.id === jobCard.id ? { ...prev, photos: [], attachmentsPending: false } : prev
-                );
-              }
-            })();
-          }
+          // Do not auto-fetch heavy photo payloads here.
+          // Attachments are loaded on demand from the detail panel.
         }
       }
     } catch (e) {
@@ -622,9 +567,42 @@ const ServiceAndMaintenance = () => {
   const handleCloseJobCardDetail = () => {
     setShowJobCardDetail(false);
     setSelectedJobCard(null);
+    setLoadingAttachments(false);
     setJobCardActivities([]);
     setJobCardActivitiesLoading(false);
   };
+
+  const handleLoadAttachments = useCallback(async () => {
+    const id = selectedJobCard?.id;
+    if (!id || loadingAttachments) return;
+    const token = window.storage?.getToken?.();
+    if (!token) return;
+    setLoadingAttachments(true);
+    try {
+      const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(id)}/photos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!pr.ok) {
+        setSelectedJobCard((prev) =>
+          prev?.id === id ? { ...prev, photos: [], attachmentsPending: false } : prev
+        );
+        return;
+      }
+      const pd = await pr.json();
+      const photos = pd?.data?.photos ?? pd?.photos;
+      setSelectedJobCard((prev) =>
+        prev?.id === id
+          ? { ...prev, photos: Array.isArray(photos) ? photos : [], attachmentsPending: false }
+          : prev
+      );
+    } catch {
+      setSelectedJobCard((prev) =>
+        prev?.id === id ? { ...prev, photos: [], attachmentsPending: false } : prev
+      );
+    } finally {
+      setLoadingAttachments(false);
+    }
+  }, [selectedJobCard?.id, loadingAttachments]);
 
   useEffect(() => {
     if (!showJobCardDetail || !selectedJobCard?.id) {
@@ -672,32 +650,8 @@ const ServiceAndMaintenance = () => {
       const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
       if (full && full.id) {
         setSelectedJobCard(full);
-        if (full.attachmentsPending === true) {
-          void (async () => {
-            try {
-              const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}/photos`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              if (!pr.ok) {
-                setSelectedJobCard((prev) =>
-                  prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
-                );
-                return;
-              }
-              const pd = await pr.json();
-              const photos = pd?.data?.photos ?? pd?.photos;
-              setSelectedJobCard((prev) =>
-                prev?.id === jobCardId
-                  ? { ...prev, photos: Array.isArray(photos) ? photos : [], attachmentsPending: false }
-                  : prev
-              );
-            } catch {
-              setSelectedJobCard((prev) =>
-                prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
-              );
-            }
-          })();
-        }
+        // Do not auto-fetch heavy photo payloads here.
+        // Attachments are loaded on demand from the detail panel.
       }
       const ar = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}/activity?order=asc`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -857,7 +811,7 @@ const ServiceAndMaintenance = () => {
 
   const jobCardAttachmentsLoading =
     (loadingJobCard && !Array.isArray(selectedJobCard?.photos)) ||
-    selectedJobCard?.attachmentsPending === true;
+    loadingAttachments;
 
   const DetailVoice =
     typeof window.JobCardVoiceClips === 'function' ? window.JobCardVoiceClips : null;
@@ -2369,6 +2323,8 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                           {jobCardAttachmentsLoading ? (
                             <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Loading…</span>
+                          ) : selectedJobCard?.attachmentsPending === true ? (
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Ready to load</span>
                           ) : (
                             <>
                               {galleryVisualItems.length} visual attachment
@@ -2388,6 +2344,19 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
                       <i className="fa-solid fa-spinner fa-spin text-xl mb-2" />
                       <p className="text-sm">Loading attachments…</p>
+                    </div>
+                  ) : selectedJobCard?.attachmentsPending === true ? (
+                    <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center ${isDark ? 'border-gray-800 bg-gray-950 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                      <i className={`fa-regular fa-images text-xl mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                      <p className="text-sm mb-3">Attachments are available, but not loaded yet.</p>
+                      <button
+                        type="button"
+                        onClick={handleLoadAttachments}
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+                      >
+                        <i className="fa-solid fa-download" />
+                        Load attachments
+                      </button>
                     </div>
                   ) : galleryVisualItems.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -2433,7 +2402,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                             className={`group relative overflow-hidden rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
                           >
                             <img
-                              src={url}
+                              src={
+                                (item?.raw && typeof item.raw === 'object' && typeof item.raw.thumbUrl === 'string' && item.raw.thumbUrl.trim())
+                                  ? item.raw.thumbUrl
+                                  : url
+                              }
                               alt={`Job card photo ${idx + 1}`}
                               className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
                               loading="lazy"
