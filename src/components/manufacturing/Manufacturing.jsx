@@ -12114,16 +12114,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const selectedLocationInfo = selectedDetailLocationId && detailLocations.find(l => l.locationId === selectedDetailLocationId);
     const totalQuantityFromLocations = detailLocations.reduce((sum, loc) => sum + (parseFloat(loc?.quantity) || 0), 0);
     const hasLocationBreakdown = detailLocations.length > 0;
-    // Keep "all locations" quantity aligned with list rows (catalog quantity is canonical).
-    const displayQuantity = selectedLocationInfo
-      ? (parseFloat(selectedLocationInfo.quantity) || 0)
-      : toSafeNumber(item.quantity);
-    // `allocatedQuantity` is catalog/global (not location-scoped). When viewing a single
-    // location, avoid subtracting global allocation from that location's on-hand stock.
-    const allocatedQtyForDisplay = selectedLocationInfo ? 0 : toSafeNumber(item.allocatedQuantity);
-    const availableQty = selectedLocationInfo
-      ? displayQuantity
-      : getAvailableInventoryQuantity(item);
+    // Keep detail stock cards aligned with list rows: always use catalog/global quantities.
+    // Location selector is still used for location table + ledger filtering only.
+    const displayQuantity = toSafeNumber(item.quantity);
+    const allocatedQtyForDisplay = toSafeNumber(item.allocatedQuantity);
+    const availableQty = getAvailableInventoryQuantity(item);
     const computedDetailStatus = (() => {
       const reorderPoint = getItemReorderPoint(item);
       if (availableQty <= 0) return 'out_of_stock';
@@ -12374,7 +12369,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock Information</h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">{selectedDetailLocationId ? 'Quantity (selected location)' : 'Total Quantity'}</p>
+                  <p className="text-xs text-gray-500 mb-1">Total Quantity</p>
                   <p className={`text-xl font-bold ${displayQuantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                     {displayQuantity} {item.unit}
                   </p>
@@ -12392,9 +12387,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </>
                 ) : null}
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">
-                    {selectedLocationInfo ? 'Allocated (all locations)' : 'Allocated'}
-                  </p>
+                  <p className="text-xs text-gray-500 mb-1">Allocated</p>
                   <p className="text-xl font-bold text-yellow-700">{allocatedQtyForDisplay} {item.unit}</p>
                 </div>
                 <div>
