@@ -3474,7 +3474,7 @@ const JobCardFormPublic = () => {
       setStockTakeRows([]);
       return;
     }
-    // One row per SKU for the selected location (system qty = on-hand at that warehouse, including zeros).
+    // Full active catalog for the selected location (system qty = on-hand there; missing SKUs show 0).
     let cancelled = false;
     const run = async () => {
       if (!isOnline) {
@@ -3484,7 +3484,7 @@ const JobCardFormPublic = () => {
       }
       try {
         const response = await fetch(
-          `/api/public/inventory?locationId=${encodeURIComponent(stockTakeLocationId)}&includeZero=1`,
+          `/api/public/inventory?locationId=${encodeURIComponent(stockTakeLocationId)}&includeZero=1&allSkus=1`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
         if (response.ok) {
