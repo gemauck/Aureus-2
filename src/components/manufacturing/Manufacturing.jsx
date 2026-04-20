@@ -2717,10 +2717,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const detailInventoryCanonicalId = viewingInventoryItemDetail ? getInventoryItemId(viewingInventoryItemDetail) : null;
+  const isInventoryDetailOpen = Boolean(viewingInventoryItemDetail);
 
   // Merge list refetches into the open detail view (qty, locations). Do not depend on `viewingInventoryItemDetail`
   // or we overwrite a fresh GET /inventory/:id response before the list catches up.
   useEffect(() => {
+    if (isInventoryDetailOpen) return;
     if (!detailInventoryCanonicalId || !inventory.length) return;
     const viewedId = detailInventoryCanonicalId;
     const fromList = inventory.find(inv => getInventoryItemId(inv) === viewedId);
@@ -2750,10 +2752,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
       return normalizeInventoryItemRow(merged);
     });
-  }, [inventory, detailInventoryCanonicalId]);
+  }, [inventory, detailInventoryCanonicalId, isInventoryDetailOpen]);
 
   // Load canonical InventoryItem from the API so detail matches the database (list rows can be merged/stale).
   useEffect(() => {
+    if (isInventoryDetailOpen) return;
     if (!detailInventoryCanonicalId || typeof window.DatabaseAPI?.getInventoryItemById !== 'function') return;
     let cancelled = false;
     (async () => {
@@ -2796,10 +2799,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     return () => {
       cancelled = true;
     };
-  }, [detailInventoryCanonicalId]);
+  }, [detailInventoryCanonicalId, isInventoryDetailOpen]);
 
   // Reload inventory when location changes - BUT NOT if user is actively typing
   useEffect(() => {
+    if (isInventoryDetailOpen) return;
     // CRITICAL: Skip reload if user is actively typing in an input field
     if (isUserTypingRef.current) {
       return;
@@ -2808,7 +2812,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (activeTab === 'inventory') {
       reloadInventoryForLocation({ skipIfTyping: true });
     }
-  }, [selectedLocationId, activeTab, reloadInventoryForLocation]);
+  }, [selectedLocationId, activeTab, reloadInventoryForLocation, isInventoryDetailOpen]);
 
   // Reload stock locations when switching to inventory tab
   useEffect(() => {
@@ -2831,6 +2835,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   // Silent mode avoids loading flashes and skips updates while the user is typing.
   useEffect(() => {
     if (activeTab !== 'inventory' || !window.DatabaseAPI?.getInventory) {
+      if (inventoryAutoRefreshPollRef.current) {
+        clearInterval(inventoryAutoRefreshPollRef.current);
+        inventoryAutoRefreshPollRef.current = null;
+      }
+      return;
+    }
+    if (isInventoryDetailOpen) {
       if (inventoryAutoRefreshPollRef.current) {
         clearInterval(inventoryAutoRefreshPollRef.current);
         inventoryAutoRefreshPollRef.current = null;
@@ -2867,7 +2878,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         inventoryAutoRefreshPollRef.current = null;
       }
     };
-  }, [activeTab, selectedLocationId]);
+  }, [activeTab, selectedLocationId, isInventoryDetailOpen]);
 
   // Listen for location updates from StockLocations component
   useEffect(() => {
