@@ -90,8 +90,22 @@ function jobCardStockPickListAllLocationsFromCachedInventory(items) {
   return out;
 }
 
+/** One row per SKU from cached catalog (best-effort; matches server dedupe for offline stock-take). */
+function dedupeCachedInventoryBySku(items) {
+  if (!Array.isArray(items)) return [];
+  const bySku = new Map();
+  for (const item of items) {
+    if (!item || item.status === 'inactive') continue;
+    const sku = String(item.sku || item.id || '').trim();
+    if (!sku) continue;
+    if (!bySku.has(sku)) bySku.set(sku, { ...item, sku });
+  }
+  return Array.from(bySku.values());
+}
+
 /**
- * Stock-take list for one location: one row per SKU, quantity = on-hand at that location (sums duplicate catalog rows).
+ * Stock-take list for one location: every catalog SKU once, quantity = on-hand at that location
+ * (sums duplicate rows); SKUs with no stock at this location show as System: 0.
  */
 function jobCardStockTakeRowsFromCachedInventory(items, locationId) {
   if (!locationId || !Array.isArray(items)) return [];
@@ -108,11 +122,49 @@ function jobCardStockTakeRowsFromCachedInventory(items, locationId) {
       existing.quantity = (Number(existing.quantity) || 0) + q;
     }
   }
+  for (const row of dedupeCachedInventoryBySku(items)) {
+    const sku = String(row.sku || '').trim();
+    if (!sku || bySku.has(sku)) continue;
+    bySku.set(sku, { ...row, quantity: 0, sku });
+  }
   const out = Array.from(bySku.values());
   out.sort((a, b) =>
     String(a.name || a.sku || '').localeCompare(String(b.name || b.sku || ''), undefined, { sensitivity: 'base' })
   );
   return out;
+}
+
+/** Stable key for stock-take row state (counts / React); do not use SKU alone — duplicates break inputs. */
+function stockTakeRowStateKey(row, locationId) {
+  const loc = String(locationId || '').trim();
+  const li = row?.locationInventoryId != null && row?.locationInventoryId !== ''
+    ? String(row.locationInventoryId).trim()
+    : '';
+  if (li) return `li:${li}`;
+  const id = row?.id != null && row?.id !== '' ? String(row.id).trim() : '';
+  if (id) return `id:${id}`;
+  const invItem = row?.inventoryItemId != null && row?.inventoryItemId !== ''
+    ? String(row.inventoryItemId).trim()
+    : '';
+  if (invItem && loc) return `ii:${invItem}@${loc}`;
+  const sku = String(row?.sku || '').trim();
+  return `sku:${sku}@${loc}`;
+}
+
+function stockTakeRowMatchesSearch(row, queryLower) {
+  if (!queryLower) return true;
+  const blob = [
+    row?.sku,
+    row?.name,
+    row?.itemName,
+    row?.category,
+    row?.type,
+    row?.unit
+  ]
+    .filter((x) => x != null && String(x).trim() !== '')
+    .map((x) => String(x).toLowerCase())
+    .join(' ');
+  return blob.includes(queryLower);
 }
 
 function readPublicPriorJobCardIds() {
@@ -3130,7 +3182,8 @@ const JobCardFormPublic = () => {
     const existingLines = (stockTakeRows || [])
       .map((row) => {
         const sku = String(row?.sku || '').trim();
-        const raw = stockTakeCounts[sku];
+        const rowKey = stockTakeRowStateKey(row, stockTakeLocationId);
+        const raw = stockTakeCounts[rowKey] ?? stockTakeCounts[sku];
         if (raw === undefined || raw === null || raw === '') return null;
         const countedQty = Number(raw);
         if (!Number.isFinite(countedQty)) return null;
@@ -5523,15 +5576,13 @@ const JobCardFormPublic = () => {
   if (wizardFlow === 'stock_take') {
     const stockTakeSearchQuery = String(stockTakeSearch || '').trim().toLowerCase();
     const filteredStockTakeRows = stockTakeSearchQuery
-      ? (stockTakeRows || []).filter((row) => {
-          const sku = String(row?.sku || '').toLowerCase();
-          const name = String(row?.name || row?.itemName || '').toLowerCase();
-          return sku.includes(stockTakeSearchQuery) || name.includes(stockTakeSearchQuery);
-        })
+      ? (stockTakeRows || []).filter((row) => stockTakeRowMatchesSearch(row, stockTakeSearchQuery))
       : (stockTakeRows || []);
     const countedExistingLines = (stockTakeRows || []).filter((row) => {
       const sku = String(row?.sku || '').trim();
-      return sku && stockTakeCounts[sku] !== undefined && stockTakeCounts[sku] !== '';
+      const rowKey = stockTakeRowStateKey(row, stockTakeLocationId);
+      const raw = stockTakeCounts[rowKey] ?? (sku ? stockTakeCounts[sku] : undefined);
+      return (rowKey || sku) && raw !== undefined && raw !== '';
     }).length;
     const countedLines = countedExistingLines + stockTakeNewItems.length;
     return (
@@ -5597,7 +5648,12 @@ const JobCardFormPublic = () => {
                 </div>
                 <div className="px-4 py-3 border-b border-gray-100">
                   <input
-                    type="text"
+                    id="stock-take-search"
+                    type="search"
+                    name="stock-take-search"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={stockTakeSearch}
                     onChange={(e) => setStockTakeSearch(e.target.value)}
                     placeholder="Search parts by name or SKU..."
@@ -5612,9 +5668,12 @@ const JobCardFormPublic = () => {
                   <div className="divide-y divide-gray-100">
                     {filteredStockTakeRows.map((row) => {
                       const sku = String(row?.sku || '').trim();
+                      const rowKey = stockTakeRowStateKey(row, stockTakeLocationId);
+                      const countVal =
+                        stockTakeCounts[rowKey] ?? (sku ? stockTakeCounts[sku] : undefined) ?? '';
                       const currentQty = Number(row?.quantity) || 0;
                       return (
-                        <div key={`${stockTakeLocationId}-${sku}`} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center">
+                        <div key={rowKey} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center">
                           <div className="sm:col-span-7 min-w-0">
                             <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
                             <p className="text-xs text-gray-500 mt-0.5">
@@ -5623,13 +5682,12 @@ const JobCardFormPublic = () => {
                           </div>
                           <div className="sm:col-span-5">
                             <input
-                              type="number"
-                              step="0.01"
+                              type="text"
                               inputMode="decimal"
-                              value={stockTakeCounts[sku] ?? ''}
+                              value={countVal}
                               onChange={(e) => {
                                 const nextValue = e.target.value;
-                                setStockTakeCounts((prev) => ({ ...prev, [sku]: nextValue }));
+                                setStockTakeCounts((prev) => ({ ...prev, [rowKey]: nextValue }));
                               }}
                               placeholder="Counted qty"
                               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"

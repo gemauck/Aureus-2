@@ -2583,127 +2583,135 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         .sort((a, b) => b._value - a._value);
     }, [inventoryValueByLocationSummary]);
 
+    const inventoryByLocationDashboardPanel = (
+      <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border shadow-sm flex flex-col min-h-0 lg:min-h-[min(52vh,32rem)]`}>
+        <div className={`p-4 border-b flex items-start justify-between gap-3 shrink-0 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+          <div className="min-w-0">
+            <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+              <i className={`fas fa-map-marker-alt ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
+              Inventory value by location
+            </h3>
+            <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Stock value and share of total per warehouse or site
+            </p>
+          </div>
+          <div className={`p-2 rounded-lg shrink-0 ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
+            <i className={`fas fa-boxes ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
+          </div>
+        </div>
+        <div className="p-4 flex-1 flex flex-col min-h-0">
+          {showInventoryByLocation ? (
+            <>
+              <div
+                className={`rounded-lg border overflow-hidden flex-1 flex flex-col min-h-0 ${
+                  isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50/80'
+                }`}
+              >
+                <div
+                  className={`grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide border-b shrink-0 ${
+                    isDark ? 'border-gray-700 text-gray-500 bg-gray-900/40' : 'border-gray-200 text-gray-500 bg-white/60'
+                  }`}
+                >
+                  <span>Location</span>
+                  <span className="text-right">Value</span>
+                </div>
+                <div className="overflow-y-auto flex-1 min-h-[12rem] max-h-[min(48vh,26rem)]">
+                  {inventoryLocationValueRows.map((row) => {
+                    const code = (row.code || '').trim() || '—';
+                    const name = (row.name || '').trim();
+                    const title = [code, name].filter(Boolean).join(' — ') || row.locationId;
+                    const isZero = row._value <= 0;
+                    return (
+                      <div
+                        key={row.locationId}
+                        className={`border-b last:border-b-0 px-2.5 py-2 ${
+                          isDark ? 'border-gray-700/80' : 'border-gray-100'
+                        } ${isZero ? 'opacity-70' : ''}`}
+                      >
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 items-start">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`inline-flex max-w-full items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${
+                                  isDark ? 'bg-slate-700/80 text-slate-100' : 'bg-slate-100 text-slate-800'
+                                }`}
+                                title={code}
+                              >
+                                {code}
+                              </span>
+                            </div>
+                            {name ? (
+                              <p
+                                className={`mt-0.5 text-[11px] leading-snug line-clamp-2 ${
+                                  isDark ? 'text-gray-400' : 'text-gray-600'
+                                }`}
+                                title={title}
+                              >
+                                {name}
+                              </p>
+                            ) : null}
+                          </div>
+                          <span
+                            className={`text-sm font-semibold tabular-nums text-right whitespace-nowrap ${
+                              isDark ? 'text-gray-100' : 'text-gray-900'
+                            }`}
+                          >
+                            {formatCurrency(row.totalValue)}
+                          </span>
+                        </div>
+                        <div
+                          className={`mt-1.5 h-1 w-full overflow-hidden rounded-full ${
+                            isDark ? 'bg-gray-700' : 'bg-gray-200'
+                          }`}
+                          aria-hidden
+                        >
+                          <div
+                            className={`h-full rounded-full transition-[width] ${
+                              isDark ? 'bg-blue-500/80' : 'bg-blue-500/70'
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(0, row._pct))}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div
+                className={`mt-3 flex items-baseline justify-between gap-2 rounded-lg px-2.5 py-2 shrink-0 ${
+                  isDark ? 'bg-gray-800/80 text-gray-200' : 'bg-slate-100 text-slate-900'
+                }`}
+              >
+                <span className="text-xs font-semibold">Total (all locations)</span>
+                <span className="text-base font-bold tabular-nums tracking-tight">
+                  {formatCurrency(inventoryValueByLocationSummary.grandTotal)}
+                </span>
+              </div>
+              <p className={`text-xs mt-2 shrink-0 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <span className="font-medium text-gray-600 dark:text-gray-300">
+                  {Number(inventoryValueByLocationSummary.totalUnitsOnHand || 0).toLocaleString()}
+                </span>{' '}
+                units on hand across locations
+              </p>
+            </>
+          ) : (
+            <div className="py-6 text-center">
+              <p className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                {inventoryLoadedFromAPI ? formatCurrency(invStats.totalValue) : '—'}
+              </p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {inventoryLoadedFromAPI ? invStats.totalItems.toLocaleString() : '—'} units on hand (aggregate)
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+
     return (
       <div className="erp-module-root space-y-4 min-w-0">
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Inventory value by location</p>
-                {showInventoryByLocation ? (
-                  <>
-                    <div
-                      className={`mt-3 rounded-lg border overflow-hidden ${
-                        isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50/80'
-                      }`}
-                    >
-                      <div
-                        className={`grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide border-b ${
-                          isDark ? 'border-gray-700 text-gray-500 bg-gray-900/40' : 'border-gray-200 text-gray-500 bg-white/60'
-                        }`}
-                      >
-                        <span>Location</span>
-                        <span className="text-right">Value</span>
-                      </div>
-                      <div className="max-h-44 overflow-y-auto">
-                        {inventoryLocationValueRows.map((row) => {
-                          const code = (row.code || '').trim() || '—';
-                          const name = (row.name || '').trim();
-                          const title = [code, name].filter(Boolean).join(' — ') || row.locationId;
-                          const isZero = row._value <= 0;
-                          return (
-                            <div
-                              key={row.locationId}
-                              className={`border-b last:border-b-0 px-2.5 py-2 ${
-                                isDark ? 'border-gray-700/80' : 'border-gray-100'
-                              } ${isZero ? 'opacity-70' : ''}`}
-                            >
-                              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 items-start">
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span
-                                      className={`inline-flex max-w-full items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${
-                                        isDark
-                                          ? 'bg-slate-700/80 text-slate-100'
-                                          : 'bg-slate-100 text-slate-800'
-                                      }`}
-                                      title={code}
-                                    >
-                                      {code}
-                                    </span>
-                                  </div>
-                                  {name ? (
-                                    <p
-                                      className={`mt-0.5 text-[11px] leading-snug line-clamp-2 ${
-                                        isDark ? 'text-gray-400' : 'text-gray-600'
-                                      }`}
-                                      title={title}
-                                    >
-                                      {name}
-                                    </p>
-                                  ) : null}
-                                </div>
-                                <span
-                                  className={`text-sm font-semibold tabular-nums text-right whitespace-nowrap ${
-                                    isDark ? 'text-gray-100' : 'text-gray-900'
-                                  }`}
-                                >
-                                  {formatCurrency(row.totalValue)}
-                                </span>
-                              </div>
-                              <div
-                                className={`mt-1.5 h-1 w-full overflow-hidden rounded-full ${
-                                  isDark ? 'bg-gray-700' : 'bg-gray-200'
-                                }`}
-                                aria-hidden
-                              >
-                                <div
-                                  className={`h-full rounded-full transition-[width] ${
-                                    isDark ? 'bg-blue-500/80' : 'bg-blue-500/70'
-                                  }`}
-                                  style={{ width: `${Math.min(100, Math.max(0, row._pct))}%` }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div
-                      className={`mt-3 flex items-baseline justify-between gap-2 rounded-lg px-2.5 py-2 ${
-                        isDark ? 'bg-gray-800/80 text-gray-200' : 'bg-slate-100 text-slate-900'
-                      }`}
-                    >
-                      <span className="text-xs font-semibold">Total (all locations)</span>
-                      <span className="text-base font-bold tabular-nums tracking-tight">
-                        {formatCurrency(inventoryValueByLocationSummary.grandTotal)}
-                      </span>
-                    </div>
-                    <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      <span className="font-medium text-gray-600 dark:text-gray-300">
-                        {Number(inventoryValueByLocationSummary.totalUnitsOnHand || 0).toLocaleString()}
-                      </span>{' '}
-                      units on hand across locations
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                      {inventoryLoadedFromAPI ? formatCurrency(invStats.totalValue) : '—'}
-                    </p>
-                    <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {inventoryLoadedFromAPI ? invStats.totalItems.toLocaleString() : '—'} units on hand
-                    </p>
-                  </>
-                )}
-              </div>
-              <div className={`p-2 rounded-lg shrink-0 ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
-                <i className={`fas fa-boxes ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
-              </div>
-            </div>
-          </div>
-
+        {/* Summary Cards (compact KPIs — inventory-by-location is below, half width) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
             <div className="flex items-center justify-between">
               <div>
@@ -2788,10 +2796,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           </div>
         )}
 
-        {/* Recent Activity & Alerts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Half screen: low stock (left) + inventory value by location (right, was production orders) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
           {/* Low Stock Alerts */}
-          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border`}>
+          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border min-h-0`}>
             <div className={`p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
               <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                 <i className={`fas fa-exclamation-triangle ${isDark ? 'text-gray-300' : 'text-yellow-600'}`}></i>
@@ -2822,29 +2830,31 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
           </div>
 
-          {/* Active Production Orders */}
-          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border`}>
-            <div className={`p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-              <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                <i className={`fas fa-industry ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
-                Active Production Orders
-              </h3>
-            </div>
-            <div className="p-4">
-              <div className="space-y-2">
-                {productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').map(order => (
-                  <div key={order.id} className={`${isDark ? 'bg-blue-900/20 border-blue-800' : 'bg-blue-50 border-blue-200'} flex items-center justify-between p-3 rounded-lg border`}>
-                    <div className="flex-1">
-                      <p className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{order.productName}</p>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{order.id} • {order.assignedTo}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-semibold ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>{order.quantityProduced}/{order.quantity}</p>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Target: {order.targetDate}</p>
-                    </div>
+          {inventoryByLocationDashboardPanel}
+        </div>
+
+        {/* Active production list (full width; moved from former right column) */}
+        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border`}>
+          <div className={`p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+              <i className={`fas fa-industry ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
+              Active Production Orders
+            </h3>
+          </div>
+          <div className="p-4">
+            <div className="space-y-2">
+              {productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').map(order => (
+                <div key={order.id} className={`${isDark ? 'bg-blue-900/20 border-blue-800' : 'bg-blue-50 border-blue-200'} flex items-center justify-between p-3 rounded-lg border`}>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{order.productName}</p>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{order.id} • {order.assignedTo}</p>
                   </div>
-                ))}
-              </div>
+                  <div className="text-right">
+                    <p className={`text-sm font-semibold ${isDark ? 'text-blue-200' : 'text-blue-700'}`}>{order.quantityProduced}/{order.quantity}</p>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Target: {order.targetDate}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

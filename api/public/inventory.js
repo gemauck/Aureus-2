@@ -15,13 +15,30 @@ const TEMPLATE_SELECT = {
   quantity: true
 }
 
+/** One canonical template per SKU (newest row wins) for merging global catalog into a location view. */
+async function loadGlobalActiveInventoryTemplatesBySku() {
+  const items = await prisma.inventoryItem.findMany({
+    where: { status: { not: 'inactive' } },
+    select: TEMPLATE_SELECT,
+    orderBy: { updatedAt: 'desc' }
+  })
+  const bySku = new Map()
+  for (const item of items) {
+    const sku = item.sku?.trim()
+    if (!sku) continue
+    if (!bySku.has(sku)) bySku.set(sku, item)
+  }
+  return bySku
+}
+
 /**
  * Stock on hand at one warehouse (for public job card "Stock used" picker).
  * Read-only: does not seed LocationInventory rows.
- * @param {{ includeZero?: boolean }} [options] — when true, include SKUs with zero on-hand (e.g. stock-take).
+ * @param {{ includeZero?: boolean, allSystemSkus?: boolean }} [options] — includeZero: zero on-hand rows; allSystemSkus: every active catalog SKU at this location (qty 0 if none).
  */
 async function inventoryForLocation(locationId, options = {}) {
-  const includeZero = options.includeZero === true
+  const includeZero = options.includeZero === true || options.allSystemSkus === true
+  const allSystemSkus = options.allSystemSkus === true
   if (!locationId) {
     return []
   }
@@ -116,6 +133,21 @@ async function inventoryForLocation(locationId, options = {}) {
     }
   }
 
+  if (allSystemSkus) {
+    const globalTemplates = await loadGlobalActiveInventoryTemplatesBySku()
+    for (const [sku, template] of globalTemplates) {
+      if (bySkuAggregate.has(sku)) continue
+      bySkuAggregate.set(sku, {
+        template,
+        sku,
+        quantity: 0,
+        unitCost: template.unitCost ?? 0,
+        name: template.name || sku,
+        status: template.status || 'in_stock'
+      })
+    }
+  }
+
   const out = []
   for (const aggregate of bySkuAggregate.values()) {
     if (!includeZero && (Number(aggregate.quantity) || 0) <= 0) continue
@@ -176,9 +208,18 @@ async function handler(req, res) {
       String(rawIncludeZero || '')
         .trim()
         .toLowerCase() === 'true'
+    const rawAllSkus = req.query?.allSkus
+    const allSkus =
+      rawAllSkus === '1' ||
+      String(rawAllSkus || '')
+        .trim()
+        .toLowerCase() === 'true'
 
     if (locationId && locationId !== 'all') {
-      const rows = await inventoryForLocation(locationId, { includeZero })
+      const rows = await inventoryForLocation(locationId, {
+        includeZero: includeZero || allSkus,
+        allSystemSkus: allSkus
+      })
       return ok(res, {
         inventory: rows,
         count: rows.length
