@@ -1287,6 +1287,7 @@ const JobCardFormPublic = () => {
   /** Server-backed draft (one per signed-in user); persisted in StockTakeSubmission status=draft */
   const [stockTakeDraftId, setStockTakeDraftId] = useState(null);
   const [stockTakeDraftSaving, setStockTakeDraftSaving] = useState(false);
+  const [stockTakeDraftDeleting, setStockTakeDraftDeleting] = useState(false);
   const [stockTakeResumeLoading, setStockTakeResumeLoading] = useState(false);
   const [serverStockTakeDraft, setServerStockTakeDraft] = useState(null);
   const [serverStockTakeDraftLoading, setServerStockTakeDraftLoading] = useState(false);
@@ -3407,6 +3408,71 @@ const JobCardFormPublic = () => {
       })
       .filter(Boolean);
     return { lines: [...existingLines, ...newItemLines] };
+  };
+
+  const resetStockTakeFlowState = () => {
+    setStockTakeLocationId('');
+    setStockTakeRows([]);
+    setStockTakeCounts({});
+    setStockTakeSearch('');
+    setStockTakeNewItems([]);
+    setStockTakeDraftNewItem({
+      itemName: '',
+      sku: '',
+      unit: 'pcs',
+      category: 'components',
+      type: 'raw_material',
+      unitCost: '',
+      reorderPoint: '',
+      supplier: '',
+      supplierPartNumber: '',
+      manufacturingPartNumber: '',
+      boxNumber: '',
+      countedQty: '',
+      notes: ''
+    });
+    setStockTakeNotes('');
+    setStockTakeStatus('');
+    setStockTakeError('');
+    setStockTakeStartedAt(new Date().toISOString());
+    setStockTakeDraftId(null);
+  };
+
+  const deleteServerStockTakeDraft = async (draftId, { leaveToLanding = false } = {}) => {
+    const id = String(draftId || '').trim();
+    if (!id) return;
+    const token = getJobCardAuthToken();
+    if (!token) {
+      setStockTakeError('Sign in to delete this draft.');
+      return;
+    }
+    if (!window.confirm('Delete this draft stock take? This cannot be undone.')) return;
+    setStockTakeDraftDeleting(true);
+    setStockTakeError('');
+    setStockTakeStatus('');
+    try {
+      const response = await fetch(`/api/manufacturing/stock-take-submissions/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg =
+          payload?.error?.message || payload?.message || payload?.error || 'Failed to delete draft.';
+        throw new Error(String(msg));
+      }
+      setServerStockTakeDraft(prev => (String(prev?.id) === id ? null : prev));
+      setStockTakeDraftId(prev => (String(prev || '') === id ? null : prev));
+      setPriorListRefreshTick(t => t + 1);
+      if (leaveToLanding) {
+        resetStockTakeFlowState();
+        setWizardFlow('landing');
+      }
+    } catch (error) {
+      setStockTakeError(error?.message || 'Failed to delete draft.');
+    } finally {
+      setStockTakeDraftDeleting(false);
+    }
   };
 
   const saveStockTakeDraft = async () => {
@@ -5635,10 +5701,31 @@ const JobCardFormPublic = () => {
                     onClick={() => {
                       void loadStockTakeDraftAndContinue(serverStockTakeDraft);
                     }}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 touch-manipulation"
+                    disabled={stockTakeDraftDeleting}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 touch-manipulation"
                   >
                     <i className="fa-solid fa-play" aria-hidden />
                     Continue stock take
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void deleteServerStockTakeDraft(serverStockTakeDraft.id);
+                    }}
+                    disabled={stockTakeDraftDeleting}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-800 hover:bg-red-50 disabled:opacity-50 touch-manipulation"
+                  >
+                    {stockTakeDraftDeleting ? (
+                      <>
+                        <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />
+                        Deleting…
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-regular fa-trash-can" aria-hidden />
+                        Delete draft
+                      </>
+                    )}
                   </button>
                 </>
               ) : null}
@@ -5924,10 +6011,31 @@ const JobCardFormPublic = () => {
                   onClick={() => {
                     void loadStockTakeDraftAndContinue(serverStockTakeDraft);
                   }}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 touch-manipulation"
+                  disabled={stockTakeDraftDeleting}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 touch-manipulation"
                 >
                   <i className="fa-solid fa-play" aria-hidden />
                   Continue stock take
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void deleteServerStockTakeDraft(serverStockTakeDraft.id);
+                  }}
+                  disabled={stockTakeDraftDeleting}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-800 hover:bg-red-50 disabled:opacity-50 touch-manipulation"
+                >
+                  {stockTakeDraftDeleting ? (
+                    <>
+                      <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />
+                      Deleting…
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-regular fa-trash-can" aria-hidden />
+                      Delete draft
+                    </>
+                  )}
                 </button>
               </div>
             ) : null}
@@ -5995,7 +6103,9 @@ const JobCardFormPublic = () => {
                 onClick={() => {
                   void startStockTakeWithLocation();
                 }}
-                disabled={!stockTakeLocationId || stockTakeSubmitting || !getJobCardAuthToken()}
+                disabled={
+                  !stockTakeLocationId || stockTakeSubmitting || !getJobCardAuthToken() || stockTakeDraftDeleting
+                }
                 className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
               >
                 {stockTakeSubmitting ? (
@@ -6367,7 +6477,8 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={() => setWizardFlow('landing')}
-                className="flex-1 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 touch-manipulation"
+                disabled={stockTakeDraftDeleting}
+                className="flex-1 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 touch-manipulation"
               >
                 Back
               </button>
@@ -6377,7 +6488,7 @@ const JobCardFormPublic = () => {
                   onClick={() => {
                     void saveStockTakeDraft();
                   }}
-                  disabled={!stockTakeLocationId || stockTakeDraftSaving}
+                  disabled={!stockTakeLocationId || stockTakeDraftSaving || stockTakeDraftDeleting}
                   className="flex-1 inline-flex items-center justify-center rounded-lg border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                 >
                   {stockTakeDraftSaving ? 'Saving…' : 'Save draft'}
@@ -6386,12 +6497,34 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={submitStockTake}
-                disabled={!stockTakeLocationId || stockTakeSubmitting}
+                disabled={!stockTakeLocationId || stockTakeSubmitting || stockTakeDraftDeleting}
                 className="flex-1 inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
               >
                 {stockTakeSubmitting ? 'Submitting...' : 'Submit stock take'}
               </button>
             </div>
+            {stockTakeDraftId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void deleteServerStockTakeDraft(stockTakeDraftId, { leaveToLanding: true });
+                }}
+                disabled={stockTakeDraftDeleting}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-800 hover:bg-red-50 disabled:opacity-50 touch-manipulation"
+              >
+                {stockTakeDraftDeleting ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />
+                    Deleting…
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-regular fa-trash-can" aria-hidden />
+                    Delete draft
+                  </>
+                )}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
