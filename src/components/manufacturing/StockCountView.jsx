@@ -171,6 +171,21 @@
     const [stSubmitting, setStSubmitting] = React.useState(false);
     const [stDraftNotice, setStDraftNotice] = React.useState('');
 
+    const [stSessionId, setStSessionId] = React.useState('');
+    const [stSessionRevision, setStSessionRevision] = React.useState(0);
+    const [stParticipants, setStParticipants] = React.useState([]);
+    const [stSessionOwnerId, setStSessionOwnerId] = React.useState('');
+    const [stAddUserId, setStAddUserId] = React.useState('');
+    const [stUserOptions, setStUserOptions] = React.useState([]);
+    const stPollRef = React.useRef(null);
+    const stLocalEditSkusRef = React.useRef(new Set());
+    const stPatchTimerRef = React.useRef(null);
+    const stDirtySkusRef = React.useRef(new Set());
+    const stCountsRef = React.useRef({});
+    const stNotesRef = React.useRef('');
+    const stRowsRef = React.useRef([]);
+    const stSessionRevisionRef = React.useRef(0);
+
     const [qrLocationId, setQrLocationId] = React.useState('');
     const [qrOnlyInStock, setQrOnlyInStock] = React.useState(true);
     const [qrSizePreset, setQrSizePreset] = React.useState('medium');
@@ -202,6 +217,233 @@
         return {};
       }
     };
+
+    const getErpUserId = () => {
+      try {
+        const u = window.storage?.getUserInfo?.() || window.storage?.getUser?.();
+        return u?.id ? String(u.id) : '';
+      } catch {
+        return '';
+      }
+    };
+
+    React.useEffect(() => {
+      stCountsRef.current = stCounts;
+    }, [stCounts]);
+    React.useEffect(() => {
+      stNotesRef.current = stNotes;
+    }, [stNotes]);
+    React.useEffect(() => {
+      stRowsRef.current = stRows;
+    }, [stRows]);
+    React.useEffect(() => {
+      stSessionRevisionRef.current = stSessionRevision;
+    }, [stSessionRevision]);
+
+    const submissionToStockTakeState = (submission) => {
+      const lines = submission?.lines || [];
+      const rows = [];
+      const counts = {};
+      const newItems = [];
+      for (const line of lines) {
+        const meta = parseLineMeta(line);
+        if (meta.isNewItem) {
+          const pd = meta.proposedItemDetails || {};
+          newItems.push({
+            itemName: line.itemName,
+            sku: meta.proposedSku || '',
+            unit: line.unit || 'pcs',
+            category: pd.category || 'components',
+            type: pd.type || 'raw_material',
+            unitCost: pd.unitCost ?? '',
+            reorderPoint: pd.reorderPoint ?? '',
+            supplier: pd.supplier || '',
+            supplierPartNumber: pd.supplierPartNumber || '',
+            manufacturingPartNumber: pd.manufacturingPartNumber || '',
+            boxNumber: pd.boxNumber || '',
+            countedQty: Number(line.countedQty) || 0,
+            notes: pd.notes || '',
+            stockTakeLineId: line.id
+          });
+        } else {
+          const sku = String(line.sku || '').trim();
+          rows.push({
+            sku,
+            name: line.itemName,
+            itemName: line.itemName,
+            quantity: Number(line.systemQty) || 0,
+            locationInventoryId: line.locationInventoryId,
+            inventoryItemId: line.inventoryItemId,
+            stockTakeLineId: line.id
+          });
+          if (sku) counts[sku] = String(Number(line.countedQty));
+        }
+      }
+      return { rows, counts, newItems };
+    };
+
+    const loadStockTakeSession = React.useCallback(
+      async (sessionId, { silent } = {}) => {
+        if (!sessionId) return null;
+        try {
+          const res = await fetch(
+            apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(sessionId),
+            { method: 'GET', headers: authHeaders() }
+          );
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const msg = payload?.error?.message || payload?.message || res.statusText;
+            throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+          }
+          const submission = payload?.data?.submission || payload?.submission;
+          if (!submission) return null;
+          if (submission.status !== 'in_progress') {
+            if (!silent) {
+              setStSessionId('');
+              setMessage('This session was already submitted or closed.');
+            }
+            return submission;
+          }
+          setStSessionRevision(Number(submission.sessionRevision) || 0);
+          setStParticipants(Array.isArray(submission.participants) ? submission.participants : []);
+          setStSessionOwnerId(String(submission.ownerId || ''));
+          setStLocationId(submission.locationId || '');
+          if (!silent) {
+            const s = submissionToStockTakeState(submission);
+            setStRows(s.rows);
+            setStCounts(s.counts);
+            setStNewItems(s.newItems);
+            setStNotes(submission.notes || '');
+            setStStartedLocal(
+              submission.startedAt
+                ? toDatetimeLocalValue(submission.startedAt)
+                : toDatetimeLocalValue(Date.now())
+            );
+          } else {
+            setStParticipants(Array.isArray(submission.participants) ? submission.participants : []);
+            setStSessionRevision(Number(submission.sessionRevision) || 0);
+            const skip = stLocalEditSkusRef.current;
+            setStCounts((prev) => {
+              const next = { ...prev };
+              for (const line of submission.lines || []) {
+                const meta = parseLineMeta(line);
+                if (meta.isNewItem) continue;
+                const sku = String(line.sku || '').trim();
+                if (!sku || skip.has(sku)) continue;
+                next[sku] = String(Number(line.countedQty));
+              }
+              return next;
+            });
+          }
+          return submission;
+        } catch (e) {
+          if (!silent) setError(e.message || 'Failed to load stock take session');
+          return null;
+        }
+      },
+      [apiBase]
+    );
+
+    const flushCollaborativePatch = React.useCallback(async () => {
+      if (!stSessionId) return;
+      const dirty = Array.from(stDirtySkusRef.current);
+      if (!dirty.length) return;
+      const counts = stCountsRef.current;
+      const rows = stRowsRef.current;
+      const linePatches = [];
+      for (const sku of dirty) {
+        const raw = counts[sku];
+        if (raw === undefined || raw === null || raw === '') continue;
+        const countedQty = Number(raw);
+        if (!Number.isFinite(countedQty)) continue;
+        const row = rows.find((r) => String(r?.sku || '').trim() === sku);
+        linePatches.push({ id: row?.stockTakeLineId, sku, countedQty });
+      }
+      stDirtySkusRef.current.clear();
+      if (!linePatches.length) return;
+      try {
+        const res = await fetch(
+          apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(stSessionId),
+          {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({
+              sessionRevision: stSessionRevisionRef.current,
+              linePatches,
+              notes: stNotesRef.current
+            })
+          }
+        );
+        const payload = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          await loadStockTakeSession(stSessionId, { silent: false });
+          setError('Session was updated elsewhere — refreshed from server.');
+          return;
+        }
+        if (!res.ok) {
+          const msg = payload?.error?.message || payload?.message || payload?.error || 'Patch failed';
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const sub = payload?.data?.submission || payload?.submission;
+        if (sub) setStSessionRevision(Number(sub.sessionRevision) || 0);
+      } catch (e) {
+        setError(e.message || 'Failed to sync counts');
+      }
+    }, [stSessionId, apiBase, loadStockTakeSession]);
+
+    const scheduleCollaborativePatch = React.useCallback(() => {
+      if (!stSessionId) return;
+      if (stPatchTimerRef.current) window.clearTimeout(stPatchTimerRef.current);
+      stPatchTimerRef.current = window.setTimeout(() => {
+        stPatchTimerRef.current = null;
+        void flushCollaborativePatch();
+      }, 750);
+    }, [stSessionId, flushCollaborativePatch]);
+
+    React.useEffect(() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const sid = params.get('session');
+        if (!sid) return;
+        setStSessionId(sid);
+        void loadStockTakeSession(sid, { silent: false });
+      } catch {
+        /* ignore */
+      }
+    }, [loadStockTakeSession]);
+
+    React.useEffect(() => {
+      let cancelled = false;
+      fetch(apiBase + '/api/users', { headers: authHeaders() })
+        .then((r) => r.json())
+        .then((data) => {
+          const users = data?.data?.users || data?.users || [];
+          if (!cancelled) setStUserOptions(Array.isArray(users) ? users : []);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [apiBase]);
+
+    React.useEffect(() => {
+      if (!stSessionId) {
+        if (stPollRef.current) {
+          window.clearInterval(stPollRef.current);
+          stPollRef.current = null;
+        }
+        return;
+      }
+      stPollRef.current = window.setInterval(() => {
+        void loadStockTakeSession(stSessionId, { silent: true });
+      }, 3000);
+      return () => {
+        if (stPollRef.current) {
+          window.clearInterval(stPollRef.current);
+          stPollRef.current = null;
+        }
+      };
+    }, [stSessionId, loadStockTakeSession]);
 
     const loadSubmissions = React.useCallback(async () => {
       setSubmissionsLoading(true);
@@ -254,6 +496,7 @@
     }, [loadStockLocations]);
 
     React.useEffect(() => {
+      if (stSessionId) return;
       if (!stLocationId) {
         setStRows([]);
         return;
@@ -284,7 +527,7 @@
       return () => {
         cancelled = true;
       };
-    }, [stLocationId, apiBase]);
+    }, [stLocationId, apiBase, stSessionId]);
 
     const revokeAllQrBlobs = () => {
       qrBlobUrlsRef.current.forEach((u) => {
@@ -434,6 +677,11 @@
     };
 
     const resetInlineStockTake = () => {
+      setStSessionId('');
+      setStSessionRevision(0);
+      setStParticipants([]);
+      setStSessionOwnerId('');
+      setStAddUserId('');
       setStLocationId('');
       setStRows([]);
       setStPage(1);
@@ -443,9 +691,173 @@
       setStNewItems([]);
       setStDraftNewItem(defaultDraftNewItem());
       setStDraftNotice('');
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete('session');
+        window.history.replaceState({}, '', u.toString());
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const startStockTakeSession = async () => {
+      if (!stLocationId) {
+        setError('Select a stock location first.');
+        return;
+      }
+      setStSubmitting(true);
+      setError(null);
+      setMessage(null);
+      try {
+        const res = await fetch(apiBase + '/api/manufacturing/stock-take-submissions', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            mode: 'session',
+            locationId: stLocationId,
+            notes: stNotes,
+            startedAt: fromDatetimeLocalToIso(stStartedLocal) || new Date().toISOString()
+          })
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            payload?.error?.message || payload?.message || payload?.error || 'Failed to start shared session.';
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const sub = payload?.data?.submission || payload?.submission;
+        if (!sub?.id) throw new Error('Invalid session response');
+        setStSessionId(sub.id);
+        setMessage('Shared session started. Add people below; counts sync every few seconds.');
+        await loadStockTakeSession(sub.id, { silent: false });
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.set('session', sub.id);
+          window.history.replaceState({}, '', u.toString());
+        } catch {
+          /* ignore */
+        }
+      } catch (e) {
+        setError(e.message || 'Could not start shared session');
+      } finally {
+        setStSubmitting(false);
+      }
+    };
+
+    const submitCollaborativeForReview = async () => {
+      if (!stSessionId) return;
+      setStSubmitting(true);
+      setError(null);
+      setMessage(null);
+      try {
+        await flushCollaborativePatch();
+        const res = await fetch(
+          apiBase +
+            '/api/manufacturing/stock-take-submissions/' +
+            encodeURIComponent(stSessionId) +
+            '/submit-for-review',
+          { method: 'POST', headers: authHeaders(), body: JSON.stringify({}) }
+        );
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            payload?.error?.message || payload?.message || payload?.error || 'Failed to submit for review.';
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const sub = payload?.data?.submission || payload?.submission;
+        const ref = sub?.submissionRef || sub?.id || '';
+        setMessage(
+          ref
+            ? 'Stock take submitted for review (ref: ' + ref + ').'
+            : 'Stock take submitted for review.'
+        );
+        clearStockTakeDraft();
+        resetInlineStockTake();
+        await loadSubmissions();
+      } catch (e) {
+        setError(e.message || 'Failed to submit');
+      } finally {
+        setStSubmitting(false);
+      }
+    };
+
+    const addSessionParticipant = async () => {
+      if (!stSessionId || !stAddUserId) return;
+      setError(null);
+      try {
+        const res = await fetch(
+          apiBase +
+            '/api/manufacturing/stock-take-submissions/' +
+            encodeURIComponent(stSessionId) +
+            '/participants',
+          { method: 'POST', headers: authHeaders(), body: JSON.stringify({ userId: stAddUserId }) }
+        );
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            payload?.error?.message || payload?.message || payload?.error || 'Could not add person';
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        setStAddUserId('');
+        await loadStockTakeSession(stSessionId, { silent: true });
+        setMessage('Participant added.');
+      } catch (e) {
+        setError(e.message || 'Failed to add participant');
+      }
+    };
+
+    const removeSessionParticipant = async (userId) => {
+      if (!stSessionId || !userId) return;
+      if (!window.confirm('Remove this person from the session?')) return;
+      setError(null);
+      try {
+        const res = await fetch(
+          apiBase +
+            '/api/manufacturing/stock-take-submissions/' +
+            encodeURIComponent(stSessionId) +
+            '/participants?userId=' +
+            encodeURIComponent(userId),
+          { method: 'DELETE', headers: authHeaders() }
+        );
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            payload?.error?.message || payload?.message || payload?.error || 'Could not remove';
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        if (userId === getErpUserId()) {
+          resetInlineStockTake();
+          setMessage('You left the stock take session.');
+        } else {
+          await loadStockTakeSession(stSessionId, { silent: true });
+        }
+      } catch (e) {
+        setError(e.message || 'Failed to remove participant');
+      }
+    };
+
+    const leaveStockTakeSession = () => {
+      if (!stSessionId) return;
+      const self = getErpUserId();
+      if (self && stSessionOwnerId && self !== stSessionOwnerId) {
+        void removeSessionParticipant(self);
+        return;
+      }
+      if (
+        !window.confirm(
+          'Leave this shared session? You can re-open it with the same link if it is still active.'
+        )
+      ) {
+        return;
+      }
+      resetInlineStockTake();
     };
 
     const submitInlineStockTake = async () => {
+      if (stSessionId) {
+        await submitCollaborativeForReview();
+        return;
+      }
       if (!stLocationId) {
         setError('Select a stock location first.');
         return;
@@ -493,6 +905,42 @@
         setStSubmitting(false);
       }
     };
+
+    const handleStCountChange = (sku, next) => {
+      setStCounts((prev) => ({ ...prev, [sku]: next }));
+      if (stSessionId) {
+        stDirtySkusRef.current.add(sku);
+        scheduleCollaborativePatch();
+      }
+    };
+
+    const pushSessionNotes = React.useCallback(async () => {
+      if (!stSessionId) return;
+      try {
+        const res = await fetch(
+          apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(stSessionId),
+          {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({
+              sessionRevision: stSessionRevisionRef.current,
+              linePatches: [],
+              notes: stNotesRef.current
+            })
+          }
+        );
+        const payload = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          await loadStockTakeSession(stSessionId, { silent: false });
+          return;
+        }
+        if (!res.ok) return;
+        const sub = payload?.data?.submission || payload?.submission;
+        if (sub) setStSessionRevision(Number(sub.sessionRevision) || 0);
+      } catch {
+        /* ignore */
+      }
+    }, [stSessionId, apiBase, loadStockTakeSession]);
 
     const stLocationOptions = React.useMemo(
       () =>
@@ -690,8 +1138,144 @@
         React.createElement(
           'p',
           { className: 'mt-1 text-sm ' + muted },
-          'Match the Job Cards app: pick a location, set when the count started, enter quantities, save progress on this device, then submit for review (same API as the mobile stock-take).'
+          'Pick a location, set when the count started, enter quantities, then submit for review. Use a shared session so multiple people can count together with live sync (web and Job Cards app). You can still save a draft on this device only when not in a shared session.'
         ),
+        stSessionId
+          ? React.createElement(
+              'div',
+              {
+                className:
+                  'mt-4 rounded-lg border px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 ' +
+                  (isDark ? 'border-blue-900/60 bg-blue-950/30' : 'border-blue-200 bg-blue-50/80')
+              },
+              React.createElement(
+                'div',
+                { className: 'min-w-0' },
+                React.createElement(
+                  'p',
+                  { className: 'text-sm font-semibold ' + text },
+                  'Shared session active'
+                ),
+                React.createElement(
+                  'p',
+                  { className: 'text-xs ' + muted + ' break-all' },
+                  'Session ID: ' + stSessionId + ' · revision ' + stSessionRevision
+                )
+              ),
+              React.createElement(
+                'div',
+                { className: 'flex flex-wrap gap-2 shrink-0' },
+                React.createElement(
+                  'button',
+                  { type: 'button', className: btn, onClick: leaveStockTakeSession },
+                  'Leave session'
+                )
+              )
+            )
+          : null,
+        stSessionId
+          ? React.createElement(
+              'div',
+              { className: 'mt-3 rounded-lg border p-3 ' + (isDark ? 'border-gray-700' : 'border-gray-200') },
+              React.createElement('p', { className: 'text-xs font-semibold ' + muted + ' mb-2' }, 'People on this count'),
+              React.createElement(
+                'div',
+                { className: 'flex flex-wrap gap-2' },
+                stParticipants.map((p) => {
+                  const label = (p.userName || p.userId) + (p.role === 'owner' ? ' · owner' : '');
+                  const uid = getErpUserId();
+                  const imOwner = stSessionOwnerId && uid === stSessionOwnerId;
+                  const isSelf = uid === p.userId;
+                  return React.createElement(
+                    'span',
+                    {
+                      key: p.id || p.userId,
+                      className:
+                        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ' +
+                        (isDark ? 'border-gray-600 bg-gray-900' : 'border-gray-200 bg-white')
+                    },
+                    label,
+                    imOwner && p.userId !== stSessionOwnerId
+                      ? React.createElement(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'ml-1 text-red-500 hover:underline',
+                            onClick: () => removeSessionParticipant(p.userId)
+                          },
+                          'Remove'
+                        )
+                      : null,
+                    !imOwner && isSelf && p.userId !== stSessionOwnerId
+                      ? React.createElement(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'ml-1 text-red-500 hover:underline',
+                            onClick: () => removeSessionParticipant(p.userId)
+                          },
+                          'Leave'
+                        )
+                      : null
+                  );
+                })
+              ),
+              stSessionOwnerId && getErpUserId() === stSessionOwnerId
+                ? React.createElement(
+                    'div',
+                    { className: 'mt-3 flex flex-wrap items-end gap-2' },
+                    React.createElement(
+                      'div',
+                      { className: 'flex-1 min-w-[200px]' },
+                      React.createElement(
+                        'label',
+                        { className: 'block text-xs font-semibold ' + muted + ' mb-1' },
+                        'Add person (ERP user)'
+                      ),
+                      React.createElement(
+                        'select',
+                        {
+                          className: inputCls,
+                          value: stAddUserId,
+                          onChange: (e) => setStAddUserId(e.target.value)
+                        },
+                        React.createElement('option', { value: '' }, 'Select user…'),
+                        stUserOptions
+                          .filter(
+                            (u) =>
+                              u.id &&
+                              u.status !== 'inactive' &&
+                              !stParticipants.some((p) => p.userId === u.id)
+                          )
+                          .map((u) =>
+                            React.createElement(
+                              'option',
+                              { key: u.id, value: u.id },
+                              (u.name || u.email || u.id) + (u.email ? ' · ' + u.email : '')
+                            )
+                          )
+                      )
+                    ),
+                    React.createElement(
+                      'button',
+                      { type: 'button', className: btnPrimary, onClick: addSessionParticipant },
+                      'Add'
+                    )
+                  )
+                : null
+            )
+          : null,
+        !stSessionId && stLocationId
+          ? React.createElement(
+              'div',
+              { className: 'mt-3' },
+              React.createElement(
+                'button',
+                { type: 'button', className: btnPrimary, disabled: stSubmitting, onClick: startStockTakeSession },
+                'Start shared session for this location'
+              )
+            )
+          : null,
         React.createElement(
           'div',
           { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
@@ -734,7 +1318,7 @@
                 id: 'erp-st-location',
                 className: inputCls,
                 value: stLocationId,
-                disabled: stLocationsLoading,
+                disabled: stLocationsLoading || !!stSessionId,
                 onChange: (e) => {
                   const v = e.target.value;
                   setStLocationId(v);
@@ -765,6 +1349,9 @@
           className: inputCls,
           value: stNotes,
           onChange: (e) => setStNotes(e.target.value),
+          onBlur: () => {
+            if (stSessionId) void pushSessionNotes();
+          },
           placeholder: 'Anything reviewers should know about this count…'
         }),
         stLocationId
@@ -834,10 +1421,15 @@
                                 className: inputCls,
                                 placeholder: 'Counted qty',
                                 value: stCounts[sku] ?? '',
-                                onChange: (e) => {
-                                  const next = e.target.value;
-                                  setStCounts((prev) => ({ ...prev, [sku]: next }));
-                                }
+                                onFocus: () => {
+                                  stLocalEditSkusRef.current.add(sku);
+                                },
+                                onBlur: () => {
+                                  window.setTimeout(() => {
+                                    stLocalEditSkusRef.current.delete(sku);
+                                  }, 400);
+                                },
+                                onChange: (e) => handleStCountChange(sku, e.target.value)
                               })
                             )
                           );
@@ -968,6 +1560,60 @@
                     return;
                   }
                   setError(null);
+                  if (stSessionId) {
+                    setStSubmitting(true);
+                    void (async () => {
+                      try {
+                        const parsedUnitCost = Number(stDraftNewItem.unitCost);
+                        const parsedReorderPoint = Number(stDraftNewItem.reorderPoint);
+                        const newItems = [
+                          {
+                            itemName,
+                            sku: String(stDraftNewItem.sku || '').trim(),
+                            unit: String(stDraftNewItem.unit || 'pcs').trim() || 'pcs',
+                            countedQty,
+                            category: String(stDraftNewItem.category || 'components'),
+                            type: String(stDraftNewItem.type || 'raw_material'),
+                            unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : 0,
+                            reorderPoint: Number.isFinite(parsedReorderPoint) ? parsedReorderPoint : 0,
+                            supplier: String(stDraftNewItem.supplier || '').trim(),
+                            supplierPartNumber: String(stDraftNewItem.supplierPartNumber || '').trim(),
+                            manufacturingPartNumber: String(stDraftNewItem.manufacturingPartNumber || '').trim(),
+                            boxNumber: String(stDraftNewItem.boxNumber || '').trim(),
+                            notes: String(stDraftNewItem.notes || '').trim()
+                          }
+                        ];
+                        const res = await fetch(
+                          apiBase +
+                            '/api/manufacturing/stock-take-submissions/' +
+                            encodeURIComponent(stSessionId),
+                          {
+                            method: 'PATCH',
+                            headers: authHeaders(),
+                            body: JSON.stringify({
+                              sessionRevision: stSessionRevisionRef.current,
+                              linePatches: [],
+                              newItems
+                            })
+                          }
+                        );
+                        const payload = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                          const msg =
+                            payload?.error?.message || payload?.message || payload?.error || 'Failed to add item';
+                          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+                        }
+                        setStDraftNewItem(defaultDraftNewItem());
+                        await loadStockTakeSession(stSessionId, { silent: false });
+                        setMessage('New item added to the shared session.');
+                      } catch (e) {
+                        setError(e.message || 'Failed to add item');
+                      } finally {
+                        setStSubmitting(false);
+                      }
+                    })();
+                    return;
+                  }
                   setStNewItems((prev) => [...prev, { ...stDraftNewItem, itemName, countedQty }]);
                   setStDraftNewItem(defaultDraftNewItem());
                 }

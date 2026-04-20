@@ -1208,13 +1208,24 @@ const JobCardFormPublic = () => {
   const [stockTakeScanOpen, setStockTakeScanOpen] = useState(false);
   const [stockTakeHighlightSku, setStockTakeHighlightSku] = useState('');
   const [stockTakePage, setStockTakePage] = useState(1);
+  /** Collaborative stock-take session (same API as Manufacturing web) */
+  const [stockTakeSessionId, setStockTakeSessionId] = useState('');
+  const [stockTakeSessionRevision, setStockTakeSessionRevision] = useState(0);
+  const [stockTakeJoinInput, setStockTakeJoinInput] = useState('');
+  const stockTakePollRef = useRef(null);
+  const stockTakePatchTimerRef = useRef(null);
+  const stockTakeDirtySkusRef = useRef(new Set());
+  const stockTakeLocalEditSkusRef = useRef(new Set());
+  const stockTakeCountsRef = useRef({});
+  const stockTakeNotesRef = useRef('');
+  const stockTakeRowsRef = useRef([]);
+  const stockTakeSessionRevisionRef = useRef(0);
   const stockTakeScanVideoRef = useRef(null);
   const stockTakeScanCanvasRef = useRef(null);
   const stockTakeScanStreamRef = useRef(null);
   const stockTakeScanRafRef = useRef(null);
   const stockTakeScanActiveRef = useRef(false);
   const stockTakeScanLastRef = useRef({ text: '', t: 0 });
-  const stockTakeRowsRef = useRef([]);
   /** Prior list: server + public API; merged with readLocalPendingJobCards() for display */
   const [serverPriorList, setServerPriorList] = useState([]);
   const [serverPriorLoading, setServerPriorLoading] = useState(false);
@@ -1259,6 +1270,19 @@ const JobCardFormPublic = () => {
       return p;
     });
   }, [stockTakeRows?.length]);
+
+  useEffect(() => {
+    stockTakeCountsRef.current = stockTakeCounts;
+  }, [stockTakeCounts]);
+  useEffect(() => {
+    stockTakeNotesRef.current = stockTakeNotes;
+  }, [stockTakeNotes]);
+  useEffect(() => {
+    stockTakeRowsRef.current = stockTakeRows;
+  }, [stockTakeRows]);
+  useEffect(() => {
+    stockTakeSessionRevisionRef.current = stockTakeSessionRevision;
+  }, [stockTakeSessionRevision]);
 
   const pushWizardActivity = useCallback((action, metadata) => {
     const ev = {
@@ -3094,7 +3118,218 @@ const JobCardFormPublic = () => {
     setWizardFlow('prior_list');
   };
 
+  const parseStockTakeLineMeta = (line) => {
+    try {
+      return line?.meta ? JSON.parse(line.meta) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const stockTakeSubmissionToState = (submission) => {
+    const lines = submission?.lines || [];
+    const rows = [];
+    const counts = {};
+    const newItems = [];
+    for (const line of lines) {
+      const meta = parseStockTakeLineMeta(line);
+      if (meta.isNewItem) {
+        const pd = meta.proposedItemDetails || {};
+        newItems.push({
+          itemName: line.itemName,
+          sku: meta.proposedSku || '',
+          unit: line.unit || 'pcs',
+          category: pd.category || 'components',
+          type: pd.type || 'raw_material',
+          unitCost: pd.unitCost ?? '',
+          reorderPoint: pd.reorderPoint ?? '',
+          supplier: pd.supplier || '',
+          supplierPartNumber: pd.supplierPartNumber || '',
+          manufacturingPartNumber: pd.manufacturingPartNumber || '',
+          boxNumber: pd.boxNumber || '',
+          countedQty: Number(line.countedQty) || 0,
+          notes: pd.notes || '',
+          stockTakeLineId: line.id
+        });
+      } else {
+        const sku = String(line.sku || '').trim();
+        rows.push({
+          sku,
+          name: line.itemName,
+          itemName: line.itemName,
+          quantity: Number(line.systemQty) || 0,
+          locationInventoryId: line.locationInventoryId,
+          inventoryItemId: line.inventoryItemId,
+          stockTakeLineId: line.id
+        });
+        if (sku) counts[sku] = String(Number(line.countedQty));
+      }
+    }
+    return { rows, counts, newItems };
+  };
+
+  const loadJobCardStockTakeSession = async (sessionId, { silent } = {}) => {
+    if (!sessionId) return null;
+    const token = getJobCardAuthToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    try {
+      const res = await fetch(`/api/manufacturing/stock-take-submissions/${encodeURIComponent(sessionId)}`, {
+        headers
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(payload?.error?.message || payload?.message || res.statusText));
+      }
+      const submission = payload?.data?.submission || payload?.submission;
+      if (!submission) return null;
+      if (submission.status !== 'in_progress') {
+        if (!silent) {
+          setStockTakeSessionId('');
+          setStockTakeStatus('This session is no longer active.');
+        }
+        return submission;
+      }
+      setStockTakeSessionRevision(Number(submission.sessionRevision) || 0);
+      setStockTakeLocationId(submission.locationId || '');
+      if (!silent) {
+        const s = stockTakeSubmissionToState(submission);
+        setStockTakeRows(s.rows);
+        setStockTakeCounts(s.counts);
+        setStockTakeNewItems(s.newItems);
+        setStockTakeNotes(submission.notes || '');
+      } else {
+        const skip = stockTakeLocalEditSkusRef.current;
+        setStockTakeCounts((prev) => {
+          const next = { ...prev };
+          for (const line of submission.lines || []) {
+            const meta = parseStockTakeLineMeta(line);
+            if (meta.isNewItem) continue;
+            const sku = String(line.sku || '').trim();
+            if (!sku || skip.has(sku)) continue;
+            next[sku] = String(Number(line.countedQty));
+          }
+          return next;
+        });
+      }
+      return submission;
+    } catch (e) {
+      if (!silent) setStockTakeError(e?.message || 'Failed to load session');
+      return null;
+    }
+  };
+
+  const flushStockTakeSessionPatch = async () => {
+    if (!stockTakeSessionId) return;
+    const dirty = Array.from(stockTakeDirtySkusRef.current);
+    if (!dirty.length) return;
+    const counts = stockTakeCountsRef.current;
+    const rows = stockTakeRowsRef.current;
+    const linePatches = [];
+    for (const sku of dirty) {
+      const raw = counts[sku];
+      if (raw === undefined || raw === null || raw === '') continue;
+      const countedQty = Number(raw);
+      if (!Number.isFinite(countedQty)) continue;
+      const row = rows.find((r) => String(r?.sku || '').trim() === sku);
+      linePatches.push({ id: row?.stockTakeLineId, sku, countedQty });
+    }
+    stockTakeDirtySkusRef.current.clear();
+    if (!linePatches.length) return;
+    const token = getJobCardAuthToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    try {
+      const res = await fetch(`/api/manufacturing/stock-take-submissions/${encodeURIComponent(stockTakeSessionId)}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          sessionRevision: stockTakeSessionRevisionRef.current,
+          linePatches,
+          notes: stockTakeNotesRef.current
+        })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        await loadJobCardStockTakeSession(stockTakeSessionId, { silent: false });
+        setStockTakeError('Session updated elsewhere — refreshed.');
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(String(payload?.error?.message || payload?.message || res.statusText));
+      }
+      const sub = payload?.data?.submission || payload?.submission;
+      if (sub) setStockTakeSessionRevision(Number(sub.sessionRevision) || 0);
+    } catch (e) {
+      setStockTakeError(e?.message || 'Sync failed');
+    }
+  };
+
+  const scheduleStockTakeSessionPatch = () => {
+    if (!stockTakeSessionId) return;
+    if (stockTakePatchTimerRef.current) window.clearTimeout(stockTakePatchTimerRef.current);
+    stockTakePatchTimerRef.current = window.setTimeout(() => {
+      stockTakePatchTimerRef.current = null;
+      void flushStockTakeSessionPatch();
+    }, 800);
+  };
+
+  const startJobCardStockTakeSession = async () => {
+    if (!stockTakeLocationId) {
+      setStockTakeError('Select a location first.');
+      return;
+    }
+    setStockTakeSubmitting(true);
+    setStockTakeError('');
+    try {
+      const token = getJobCardAuthToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch('/api/manufacturing/stock-take-submissions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          mode: 'session',
+          locationId: stockTakeLocationId,
+          notes: stockTakeNotes,
+          startedAt: stockTakeStartedAt || new Date().toISOString()
+        })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(payload?.error?.message || payload?.message || 'Could not start session'));
+      }
+      const sub = payload?.data?.submission || payload?.submission;
+      if (!sub?.id) throw new Error('Invalid response');
+      setStockTakeSessionId(sub.id);
+      await loadJobCardStockTakeSession(sub.id, { silent: false });
+      setStockTakeStatus('Shared session started — counts sync with the team.');
+    } catch (e) {
+      setStockTakeError(e?.message || 'Could not start session');
+    } finally {
+      setStockTakeSubmitting(false);
+    }
+  };
+
+  const joinJobCardStockTakeSession = async () => {
+    const sid = String(stockTakeJoinInput || '').trim();
+    if (!sid) {
+      setStockTakeError('Paste a session ID.');
+      return;
+    }
+    setStockTakeSubmitting(true);
+    setStockTakeError('');
+    setStockTakeSessionId(sid);
+    const sub = await loadJobCardStockTakeSession(sid, { silent: false });
+    if (sub) setStockTakeStatus('Joined shared session.');
+    else setStockTakeSessionId('');
+    setStockTakeSubmitting(false);
+  };
+
   const openStockTake = () => {
+    setStockTakeSessionId('');
+    setStockTakeSessionRevision(0);
+    setStockTakeJoinInput('');
     setStockTakeLocationId('');
     setStockTakeRows([]);
     setStockTakeCounts({});
@@ -3125,6 +3360,42 @@ const JobCardFormPublic = () => {
   };
 
   const submitStockTake = async () => {
+    if (stockTakeSessionId) {
+      await flushStockTakeSessionPatch();
+      setStockTakeSubmitting(true);
+      setStockTakeError('');
+      try {
+        const token = getJobCardAuthToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch(
+          `/api/manufacturing/stock-take-submissions/${encodeURIComponent(stockTakeSessionId)}/submit-for-review`,
+          { method: 'POST', headers, body: JSON.stringify({}) }
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            String(payload?.error?.message || payload?.message || payload?.error || 'Submit failed')
+          );
+        }
+        const submissionId =
+          payload?.data?.submission?.id || payload?.submission?.id || stockTakeSessionId;
+        setStockTakeStatus(
+          submissionId
+            ? `Stock take submitted for review (ref: ${submissionId}).`
+            : 'Stock take submitted for review.'
+        );
+        setStockTakeSessionId('');
+        setTimeout(() => {
+          setWizardFlow('landing');
+        }, 1100);
+      } catch (error) {
+        setStockTakeError(error?.message || 'Failed to submit stock take.');
+      } finally {
+        setStockTakeSubmitting(false);
+      }
+      return;
+    }
     if (!stockTakeLocationId) {
       setStockTakeError('Select a stock location first.');
       return;
@@ -3420,6 +3691,7 @@ const JobCardFormPublic = () => {
 
   useEffect(() => {
     if (wizardFlow !== 'stock_take') return;
+    if (stockTakeSessionId) return;
     if (!stockTakeLocationId) {
       setStockTakeRows([]);
       return;
@@ -3458,11 +3730,26 @@ const JobCardFormPublic = () => {
     return () => {
       cancelled = true;
     };
-  }, [wizardFlow, stockTakeLocationId, isOnline, inventory]);
+  }, [wizardFlow, stockTakeLocationId, stockTakeSessionId, isOnline, inventory]);
 
   useEffect(() => {
-    stockTakeRowsRef.current = stockTakeRows;
-  }, [stockTakeRows]);
+    if (wizardFlow !== 'stock_take' || !stockTakeSessionId) {
+      if (stockTakePollRef.current) {
+        window.clearInterval(stockTakePollRef.current);
+        stockTakePollRef.current = null;
+      }
+      return;
+    }
+    stockTakePollRef.current = window.setInterval(() => {
+      void loadJobCardStockTakeSession(stockTakeSessionId, { silent: true });
+    }, 3000);
+    return () => {
+      if (stockTakePollRef.current) {
+        window.clearInterval(stockTakePollRef.current);
+        stockTakePollRef.current = null;
+      }
+    };
+  }, [wizardFlow, stockTakeSessionId]);
 
   useEffect(() => {
     if (wizardFlow !== 'stock_take') {
@@ -5732,6 +6019,7 @@ const JobCardFormPublic = () => {
               <select
                 id="stock-take-location"
                 value={stockTakeLocationId}
+                disabled={!!stockTakeSessionId}
                 onChange={(e) => {
                   setStockTakeLocationId(e.target.value);
                   setStockTakeCounts({});
@@ -5757,6 +6045,47 @@ const JobCardFormPublic = () => {
                 placeholder="Anything the reviewer should know about this count..."
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
               />
+              <div className="mt-3 rounded-lg border border-dashed border-blue-200 bg-blue-50/70 p-3 space-y-2">
+                <p className="text-xs font-semibold text-blue-900">Shared count (optional)</p>
+                <div className="flex flex-wrap gap-2 items-end">
+                  <input
+                    type="text"
+                    placeholder="Paste session ID to join"
+                    value={stockTakeJoinInput}
+                    onChange={(e) => setStockTakeJoinInput(e.target.value)}
+                    disabled={!!stockTakeSessionId}
+                    className="flex-1 min-w-[200px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void joinJobCardStockTakeSession()}
+                    disabled={stockTakeSubmitting || !!stockTakeSessionId}
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 touch-manipulation"
+                  >
+                    Join
+                  </button>
+                </div>
+                {stockTakeLocationId && !stockTakeSessionId ? (
+                  <button
+                    type="button"
+                    onClick={() => void startJobCardStockTakeSession()}
+                    disabled={stockTakeSubmitting}
+                    className="text-sm font-semibold text-blue-800 underline disabled:opacity-50 touch-manipulation"
+                  >
+                    Start shared session for this location
+                  </button>
+                ) : null}
+                {stockTakeSessionId ? (
+                  <p className="text-[11px] text-blue-900 break-all">
+                    Live session{' '}
+                    <span className="font-mono" title={stockTakeSessionId}>
+                      {stockTakeSessionId}
+                    </span>
+                    {' · rev '}
+                    {stockTakeSessionRevision}
+                  </p>
+                ) : null}
+              </div>
               <p className="text-[11px] text-amber-700 mt-2">
                 New items can be added below with full details and will require admin confirmation before final apply.
               </p>
@@ -5819,9 +6148,21 @@ const JobCardFormPublic = () => {
                                 step="0.01"
                                 inputMode="decimal"
                                 value={stockTakeCounts[sku] ?? ''}
+                                onFocus={() => {
+                                  stockTakeLocalEditSkusRef.current.add(sku);
+                                }}
+                                onBlur={() => {
+                                  window.setTimeout(() => {
+                                    stockTakeLocalEditSkusRef.current.delete(sku);
+                                  }, 400);
+                                }}
                                 onChange={(e) => {
                                   const nextValue = e.target.value;
                                   setStockTakeCounts((prev) => ({ ...prev, [sku]: nextValue }));
+                                  if (stockTakeSessionId) {
+                                    stockTakeDirtySkusRef.current.add(sku);
+                                    scheduleStockTakeSessionPatch();
+                                  }
                                 }}
                                 placeholder="Counted qty"
                                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"

@@ -167,6 +167,31 @@ function stockTakeSubmissionRef() {
   return `STK-${stamp}-${rand}`
 }
 
+function stockTakeAuthUserId(req) {
+  return String(req.user?.sub || req.user?.id || '').trim()
+}
+
+function stockTakeViewerAllowed(req, submission, participants = []) {
+  if (isAdminRole(req.user?.role)) return true
+  const uid = stockTakeAuthUserId(req)
+  if (!uid) return false
+  if (submission?.ownerId && submission.ownerId === uid) return true
+  return Array.isArray(participants) && participants.some((p) => p.userId === uid)
+}
+
+function stockTakeIsOwner(req, submission) {
+  const uid = stockTakeAuthUserId(req)
+  return Boolean(uid && submission?.ownerId && submission.ownerId === uid)
+}
+
+function parseStockTakeLineMeta(line) {
+  try {
+    return line?.meta ? JSON.parse(line.meta) : {}
+  } catch {
+    return {}
+  }
+}
+
 async function allocateStockCountSkuTx(tx) {
   for (let attempt = 0; attempt < 80; attempt++) {
     const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`.toUpperCase()
@@ -1424,19 +1449,91 @@ async function handler(req, res) {
 
   // STOCK COUNT (admin): Excel export / import
   if (resourceType === 'stock-take-submissions') {
+    const participantUserIdFromQuery = String(req.query?.userId || req.query?.participantId || '').trim()
+
     if (req.method === 'POST' && !id) {
       try {
         const body = await parseJsonBody(req)
         const locationId = String(body?.locationId || '').trim()
-        const linesInput = Array.isArray(body?.lines) ? body.lines : []
         if (!locationId) return badRequest(res, 'locationId is required')
-        if (!linesInput.length) return badRequest(res, 'At least one line is required')
 
         const location = await prisma.stockLocation.findUnique({
           where: { id: locationId },
           select: { id: true, code: true, name: true }
         })
         if (!location) return badRequest(res, 'Invalid locationId')
+
+        const sessionMode =
+          body?.mode === 'session' ||
+          body?.collaborative === true ||
+          body?.collaborativeSession === true
+
+        if (sessionMode) {
+          const uid = stockTakeAuthUserId(req)
+          if (!uid) return badRequest(res, 'You must be signed in to start a collaborative stock take.')
+          const displayName = String(req.user?.name || req.user?.email || 'User')
+          const invRows = await buildLocationInventoryResponse(locationId)
+          const lineCreates = invRows.map((row) => {
+            const systemQty = Number(row.quantity) || 0
+            const sku = String(row?.sku || '').trim()
+            return {
+              locationInventoryId: row.locationInventoryId ? String(row.locationInventoryId) : null,
+              inventoryItemId: row.inventoryItemId ? String(row.inventoryItemId) : null,
+              sku: sku || 'UNKNOWN',
+              itemName: String(row.name || row.itemName || sku || 'Item').trim() || 'Item',
+              unit: String(row.unit || 'pcs').trim() || 'pcs',
+              systemQty,
+              countedQty: systemQty,
+              deltaQty: 0,
+              meta: JSON.stringify({
+                sessionDraft: true,
+                untouched: true
+              })
+            }
+          })
+
+          const submission = await prisma.stockTakeSubmission.create({
+            data: {
+              submissionRef: stockTakeSubmissionRef(),
+              locationId: location.id,
+              locationCode: location.code || '',
+              locationName: location.name || '',
+              status: 'in_progress',
+              sessionRevision: 1,
+              submittedById: uid,
+              submittedBy: displayName,
+              notes: String(body?.notes || '').trim(),
+              startedAt: body?.startedAt ? new Date(body.startedAt) : new Date(),
+              finishedAt: null,
+              ownerId: uid,
+              meta: JSON.stringify({
+                collaborative: true,
+                userAgent: req.headers?.['user-agent'] || '',
+                lineCount: lineCreates.length
+              }),
+              participants: {
+                create: {
+                  userId: uid,
+                  userName: displayName,
+                  role: 'owner',
+                  invitedById: '',
+                  invitedByName: ''
+                }
+              },
+              ...(lineCreates.length ? { lines: { create: lineCreates } } : {})
+            },
+            include: { lines: true, participants: true }
+          })
+          auditManufacturing('create', 'stock-take-session', submission.id, {
+            submissionRef: submission.submissionRef,
+            locationId: submission.locationId,
+            lines: submission.lines.length
+          })
+          return created(res, { submission })
+        }
+
+        const linesInput = Array.isArray(body?.lines) ? body.lines : []
+        if (!linesInput.length) return badRequest(res, 'At least one line is required')
 
         const cleanLines = linesInput
           .map((line, idx) => {
@@ -1520,10 +1617,33 @@ async function handler(req, res) {
     }
 
     if (req.method === 'GET' && !id) {
-      if (!isAdminRole(req.user?.role)) {
-        return forbidden(res, 'Only administrators can review stock-take submissions.')
-      }
       try {
+        const mine = req.query?.mine === '1' || req.query?.scope === 'mine'
+        if (mine) {
+          const uid = stockTakeAuthUserId(req)
+          if (!uid) return forbidden(res, 'Authentication required.')
+          const rows = await prisma.stockTakeSubmission.findMany({
+            where: {
+              status: 'in_progress',
+              OR: [{ ownerId: uid }, { participants: { some: { userId: uid } } }]
+            },
+            include: {
+              _count: { select: { lines: true } },
+              participants: { select: { id: true, userId: true, userName: true, role: true } }
+            },
+            orderBy: [{ updatedAt: 'desc' }],
+            take: 50
+          })
+          return ok(res, {
+            submissions: rows.map((row) => ({
+              ...row,
+              lineCount: row._count?.lines || 0
+            }))
+          })
+        }
+        if (!isAdminRole(req.user?.role)) {
+          return forbidden(res, 'Only administrators can review stock-take submissions.')
+        }
         const status = String(req.query?.status || '').trim()
         const where = status ? { status } : {}
         const rows = await prisma.stockTakeSubmission.findMany({
@@ -1547,23 +1667,341 @@ async function handler(req, res) {
     }
 
     if (req.method === 'GET' && id) {
-      if (!isAdminRole(req.user?.role)) {
-        return forbidden(res, 'Only administrators can review stock-take submissions.')
-      }
       try {
         const submission = await prisma.stockTakeSubmission.findUnique({
           where: { id },
           include: {
             lines: {
               orderBy: [{ itemName: 'asc' }, { sku: 'asc' }]
-            }
+            },
+            participants: true
           }
         })
         if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (!stockTakeViewerAllowed(req, submission, submission.participants)) {
+          return forbidden(res, 'You do not have access to this stock take.')
+        }
         return ok(res, { submission })
       } catch (error) {
         console.error('❌ Stock-take submission detail failed:', error)
         return serverError(res, 'Failed to load stock-take submission', error.message)
+      }
+    }
+
+    if (req.method === 'PATCH' && id && !action) {
+      try {
+        const body = await parseJsonBody(req)
+        const submission = await prisma.stockTakeSubmission.findUnique({
+          where: { id },
+          include: { participants: true, lines: true }
+        })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (submission.status !== 'in_progress') {
+          return badRequest(res, 'This stock take is not editable (session closed).')
+        }
+        if (!stockTakeViewerAllowed(req, submission, submission.participants)) {
+          return forbidden(res, 'You do not have access to edit this stock take.')
+        }
+        const clientRev = body?.sessionRevision != null ? Number(body.sessionRevision) : null
+        if (
+          clientRev != null &&
+          Number.isFinite(clientRev) &&
+          clientRev !== submission.sessionRevision
+        ) {
+          if (!res.headersSent) {
+            res.statusCode = 409
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error: 'Conflict',
+                message: 'Stock take was updated by someone else. Refresh and try again.',
+                sessionRevision: submission.sessionRevision,
+                submissionId: submission.id
+              })
+            )
+          }
+          return
+        }
+
+        const uid = stockTakeAuthUserId(req)
+        const editorName = String(req.user?.name || req.user?.email || 'User')
+        const linePatches = Array.isArray(body?.linePatches) ? body.linePatches : []
+        const newItems = Array.isArray(body?.newItems) ? body.newItems : []
+
+        const updated = await prisma.$transaction(async (tx) => {
+          for (const patch of linePatches) {
+            const lineId = patch?.id ? String(patch.id).trim() : ''
+            const skuKey = patch?.sku != null ? String(patch.sku).trim() : ''
+            const countedQty = Number(patch?.countedQty)
+            if (!Number.isFinite(countedQty)) continue
+
+            let line = null
+            if (lineId) {
+              line = await tx.stockTakeSubmissionLine.findFirst({
+                where: { id: lineId, submissionId: submission.id }
+              })
+            } else if (skuKey) {
+              line = await tx.stockTakeSubmissionLine.findFirst({
+                where: { submissionId: submission.id, sku: skuKey }
+              })
+            }
+            if (!line) continue
+
+            const meta = parseStockTakeLineMeta(line)
+            const systemQty = Number(line.systemQty) || 0
+            const nextMeta = {
+              ...meta,
+              sessionDraft: true,
+              untouched: false,
+              lastEditedById: uid,
+              lastEditedByName: editorName,
+              lastEditedAt: new Date().toISOString()
+            }
+            await tx.stockTakeSubmissionLine.update({
+              where: { id: line.id },
+              data: {
+                countedQty,
+                deltaQty: countedQty - systemQty,
+                meta: JSON.stringify(nextMeta)
+              }
+            })
+          }
+
+          for (const item of newItems) {
+            const countedQty = Number(item?.countedQty)
+            if (!item?.itemName || !Number.isFinite(countedQty)) continue
+            const parsedUnitCost = Number(item?.unitCost)
+            const parsedReorderPoint = Number(item?.reorderPoint)
+            const proposedItemDetails =
+              item?.proposedItemDetails && typeof item.proposedItemDetails === 'object'
+                ? item.proposedItemDetails
+                : {
+                    category: String(item?.category || 'components').trim() || 'components',
+                    type: String(item?.type || 'raw_material').trim() || 'raw_material',
+                    unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : 0,
+                    reorderPoint: Number.isFinite(parsedReorderPoint) ? parsedReorderPoint : 0,
+                    supplier: String(item?.supplier || '').trim(),
+                    supplierPartNumber: String(item?.supplierPartNumber || '').trim(),
+                    manufacturingPartNumber: String(item?.manufacturingPartNumber || '').trim(),
+                    boxNumber: String(item?.boxNumber || '').trim(),
+                    notes: String(item?.notes || '').trim()
+                  }
+            const itemName = String(item.itemName).trim()
+            const unit = String(item?.unit || 'pcs').trim() || 'pcs'
+            const skuAlloc = await allocateStockCountSkuTx(tx)
+            await tx.stockTakeSubmissionLine.create({
+              data: {
+                submissionId: submission.id,
+                locationInventoryId: null,
+                inventoryItemId: null,
+                sku: skuAlloc,
+                itemName,
+                unit,
+                systemQty: 0,
+                countedQty,
+                deltaQty: countedQty,
+                meta: JSON.stringify({
+                  isNewItem: true,
+                  proposedItemDetails,
+                  proposedSku: String(item?.sku || '').trim(),
+                  sessionDraft: true,
+                  lastEditedById: uid,
+                  lastEditedByName: editorName
+                })
+              }
+            })
+          }
+
+          const notesUp = body?.notes !== undefined ? String(body.notes || '').trim() : null
+          const startedAtUp =
+            body?.startedAt !== undefined ? (body.startedAt ? new Date(body.startedAt) : null) : undefined
+
+          await tx.stockTakeSubmission.update({
+            where: { id: submission.id },
+            data: {
+              sessionRevision: { increment: 1 },
+              ...(notesUp !== null ? { notes: notesUp } : {}),
+              ...(startedAtUp !== undefined ? { startedAt: startedAtUp } : {})
+            }
+          })
+
+          return tx.stockTakeSubmission.findUnique({
+            where: { id: submission.id },
+            include: {
+              lines: { orderBy: [{ itemName: 'asc' }, { sku: 'asc' }] },
+              participants: true
+            }
+          })
+        })
+
+        auditManufacturing('update', 'stock-take-session-patch', id, {
+          linePatches: linePatches.length,
+          newItems: newItems.length
+        })
+        return ok(res, { submission: updated })
+      } catch (error) {
+        console.error('❌ Stock-take session patch failed:', error)
+        return serverError(res, 'Failed to update stock-take session', error.message)
+      }
+    }
+
+    if (req.method === 'POST' && id && action === 'participants') {
+      try {
+        const body = await parseJsonBody(req)
+        const targetUserId = String(body?.userId || '').trim()
+        if (!targetUserId) return badRequest(res, 'userId is required')
+
+        const submission = await prisma.stockTakeSubmission.findUnique({
+          where: { id },
+          include: { participants: true }
+        })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (submission.status !== 'in_progress') {
+          return badRequest(res, 'Session is not active.')
+        }
+        if (!stockTakeIsOwner(req, submission)) {
+          return forbidden(res, 'Only the session owner can add participants.')
+        }
+        if (targetUserId === submission.ownerId) {
+          return badRequest(res, 'Owner is already in the session.')
+        }
+        const exists = submission.participants.some((p) => p.userId === targetUserId)
+        if (exists) return badRequest(res, 'User is already a participant.')
+
+        const target = await prisma.user.findUnique({
+          where: { id: targetUserId },
+          select: { id: true, name: true, email: true, status: true }
+        })
+        if (!target || target.status === 'inactive') {
+          return badRequest(res, 'User not found or inactive.')
+        }
+        const invitingUid = stockTakeAuthUserId(req)
+        const inviterName = String(req.user?.name || req.user?.email || 'User')
+        const row = await prisma.stockTakeParticipant.create({
+          data: {
+            submissionId: submission.id,
+            userId: target.id,
+            userName: String(target.name || target.email || target.id),
+            role: 'member',
+            invitedById: invitingUid,
+            invitedByName: inviterName
+          }
+        })
+        await prisma.stockTakeSubmission.update({
+          where: { id: submission.id },
+          data: { sessionRevision: { increment: 1 } }
+        })
+        auditManufacturing('create', 'stock-take-session-participant', row.id, {
+          submissionId: submission.id,
+          userId: target.id
+        })
+        return created(res, { participant: row })
+      } catch (error) {
+        console.error('❌ Stock-take participant add failed:', error)
+        return serverError(res, 'Failed to add participant', error.message)
+      }
+    }
+
+    if (req.method === 'DELETE' && id && action === 'participants') {
+      try {
+        const targetUserId = participantUserIdFromQuery
+        if (!targetUserId) return badRequest(res, 'userId query parameter is required')
+
+        const submission = await prisma.stockTakeSubmission.findUnique({
+          where: { id },
+          include: { participants: true }
+        })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (submission.status !== 'in_progress') {
+          return badRequest(res, 'Session is not active.')
+        }
+        const uid = stockTakeAuthUserId(req)
+        const isOwner = stockTakeIsOwner(req, submission)
+        if (!isOwner && targetUserId !== uid) {
+          return forbidden(res, 'Only the owner can remove others, or leave the session yourself.')
+        }
+        if (targetUserId === submission.ownerId) {
+          return badRequest(res, 'Cannot remove the session owner.')
+        }
+        await prisma.stockTakeParticipant.deleteMany({
+          where: { submissionId: submission.id, userId: targetUserId }
+        })
+        await prisma.stockTakeSubmission.update({
+          where: { id: submission.id },
+          data: { sessionRevision: { increment: 1 } }
+        })
+        auditManufacturing('delete', 'stock-take-session-participant', `${id}:${targetUserId}`, {
+          submissionId: submission.id
+        })
+        return ok(res, { removed: true })
+      } catch (error) {
+        console.error('❌ Stock-take participant remove failed:', error)
+        return serverError(res, 'Failed to remove participant', error.message)
+      }
+    }
+
+    if (req.method === 'POST' && id && action === 'submit-for-review') {
+      try {
+        const submission = await prisma.stockTakeSubmission.findUnique({
+          where: { id },
+          include: { lines: true, participants: true }
+        })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (submission.status !== 'in_progress') {
+          return badRequest(res, 'This stock take is not an active session.')
+        }
+        if (!stockTakeViewerAllowed(req, submission, submission.participants)) {
+          return forbidden(res, 'You do not have access to submit this stock take.')
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+          const lines = await tx.stockTakeSubmissionLine.findMany({ where: { submissionId: submission.id } })
+          for (const line of lines) {
+            const meta = parseStockTakeLineMeta(line)
+            const isNewItem = meta?.isNewItem === true
+            const delta = Number(line.deltaQty) || 0
+            if (!isNewItem && Math.abs(delta) < 0.0001) {
+              await tx.stockTakeSubmissionLine.delete({ where: { id: line.id } })
+            }
+          }
+          const remaining = await tx.stockTakeSubmissionLine.count({ where: { submissionId: submission.id } })
+          if (remaining === 0) {
+            throw httpError(400, 'Enter at least one counted quantity or variance before submitting.')
+          }
+
+          let metaObj = {}
+          try {
+            metaObj = submission.meta ? JSON.parse(submission.meta) : {}
+          } catch {
+            metaObj = {}
+          }
+          metaObj.collaborative = true
+          metaObj.submittedFromSession = true
+
+          const finishedIso = new Date()
+          return tx.stockTakeSubmission.update({
+            where: { id: submission.id },
+            data: {
+              status: 'pending_review',
+              sessionRevision: { increment: 1 },
+              finishedAt: finishedIso,
+              submittedAt: finishedIso,
+              submittedById: stockTakeAuthUserId(req),
+              submittedBy: String(req.user?.name || req.user?.email || 'User'),
+              meta: JSON.stringify(metaObj)
+            },
+            include: { lines: true }
+          })
+        })
+
+        auditManufacturing('update', 'stock-take-session-submit', id, {
+          submissionRef: result.submissionRef
+        })
+        return ok(res, { submission: result })
+      } catch (error) {
+        if (error?.httpStatus === 400) return badRequest(res, error.message)
+        console.error('❌ Stock-take session submit failed:', error)
+        return serverError(res, 'Failed to submit stock-take session', error.message)
       }
     }
 
