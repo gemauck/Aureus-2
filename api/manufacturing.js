@@ -721,6 +721,76 @@ async function buildAllLocationsInventoryResponse() {
   return result
 }
 
+/**
+ * Per stock location: total value and units on hand (for dashboard).
+ * Valuation rules match LocationInventory rows + template unitCost fallback.
+ */
+async function buildInventoryLocationValueSummary() {
+  await syncInventoryAcrossAllLocations(false)
+
+  const allTemplates = await prisma.inventoryItem.findMany({
+    orderBy: [{ locationId: 'asc' }, { updatedAt: 'desc' }]
+  })
+  const templateBySku = new Map()
+  for (const meta of allTemplates) {
+    if (!templateBySku.has(meta.sku)) {
+      templateBySku.set(meta.sku, meta)
+    }
+  }
+
+  const stockLocations = await prisma.stockLocation.findMany({
+    orderBy: [{ code: 'asc' }]
+  })
+
+  const records = await prisma.locationInventory.findMany({
+    select: {
+      locationId: true,
+      sku: true,
+      quantity: true,
+      unitCost: true
+    }
+  })
+
+  const aggByLocation = new Map()
+  for (const r of records) {
+    const template = templateBySku.get(r.sku) || {}
+    const quantity = Number(r.quantity) || 0
+    const unitCost = r.unitCost ?? template.unitCost ?? 0
+    const lineValue = computedInventoryTotalValue(quantity, unitCost)
+    const prev = aggByLocation.get(r.locationId) || { totalValue: 0, totalUnits: 0 }
+    prev.totalValue += lineValue
+    prev.totalUnits += quantity
+    aggByLocation.set(r.locationId, prev)
+  }
+
+  let grandTotal = 0
+  let totalUnitsOnHand = 0
+  const locations = stockLocations.map((loc) => {
+    const agg = aggByLocation.get(loc.id) || { totalValue: 0, totalUnits: 0 }
+    grandTotal += agg.totalValue
+    totalUnitsOnHand += agg.totalUnits
+    return {
+      locationId: loc.id,
+      code: loc.code || '',
+      name: loc.name || '',
+      totalValue: agg.totalValue
+    }
+  })
+
+  return { locations, grandTotal, totalUnitsOnHand }
+}
+
+/** GET …/inventory/location-value-summary — must not fall through to GET-by-id (would 404 as fake UUID). */
+async function respondInventoryLocationValueSummary(res) {
+  try {
+    const summary = await buildInventoryLocationValueSummary()
+    return ok(res, summary)
+  } catch (error) {
+    console.error('❌ Failed to build location value summary:', error)
+    return serverError(res, 'Failed to load location value summary', error.message)
+  }
+}
+
 async function syncInventoryAcrossAllLocations(force = false) {
   const now = Date.now()
   if (!force && lastGlobalLocationSync && (now - lastGlobalLocationSync) < GLOBAL_LOCATION_SYNC_INTERVAL_MS) {
@@ -1998,6 +2068,11 @@ async function handler(req, res) {
       }
     }
 
+    // Location value summary (GET /api/manufacturing/inventory/location-value-summary)
+    if (req.method === 'GET' && id === 'location-value-summary' && !action) {
+      return respondInventoryLocationValueSummary(res)
+    }
+
     // LIST (GET /api/manufacturing/inventory)
     if (req.method === 'GET' && !id) {
       try {
@@ -2068,6 +2143,10 @@ async function handler(req, res) {
 
     // GET ONE (GET /api/manufacturing/inventory/:id)
     if (req.method === 'GET' && id) {
+      // Defensive: reserved slug must never hit Prisma as an item id (avoids 404 after routing/parser changes).
+      if (id === 'location-value-summary') {
+        return respondInventoryLocationValueSummary(res)
+      }
       try {
         const item = await prisma.inventoryItem.findUnique({
           where: { id }
