@@ -5574,6 +5574,7 @@ const JobCardFormPublic = () => {
               </div>
             ) : null}
 
+            {stockTakeLocationId ? (
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-gray-900">Add new item (admin confirmation)</p>
@@ -5682,6 +5683,10 @@ const JobCardFormPublic = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    if (wizardFlow !== 'stock_take' || !stockTakeLocationId) {
+                      setStockTakeError('Add new item is only available during an active stock take.');
+                      return;
+                    }
                     const itemName = String(stockTakeDraftNewItem.itemName || '').trim();
                     const countedQty = Number(stockTakeDraftNewItem.countedQty);
                     if (!itemName || !Number.isFinite(countedQty)) {
@@ -5735,6 +5740,7 @@ const JobCardFormPublic = () => {
                 </ul>
               ) : null}
             </div>
+            ) : null}
 
             {stockTakeError ? (
               <div className="rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm px-4 py-2">
