@@ -12024,15 +12024,20 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     // Best practice: sync location with URL so selected location is shareable and survives refresh
     const validLocationIds = useMemo(() => new Set(detailLocations.map(l => l.locationId)), [detailLocations]);
+    const inventoryListIsLocationScoped = selectedLocationId && selectedLocationId !== 'all';
     useEffect(() => {
       if (!window.RouteState?.getRoute) return;
+      // Only honor location from URL when the inventory list itself is location-scoped.
+      // This avoids stale URL location params forcing incorrect detail quantities
+      // when users click through from the "all locations" inventory list.
+      if (!inventoryListIsLocationScoped) return;
       const route = window.RouteState.getRoute();
       const search = route.search instanceof URLSearchParams ? route.search : new URLSearchParams(window.location.search || '');
       const urlLocation = search.get('location');
       if (urlLocation && validLocationIds.has(urlLocation)) {
         setSelectedDetailLocationId(urlLocation);
       }
-    }, [item?.id, validLocationIds]);
+    }, [item?.id, validLocationIds, inventoryListIsLocationScoped]);
     useEffect(() => {
       if (!window.RouteState?.navigate) return;
       const route = window.RouteState.getRoute();
