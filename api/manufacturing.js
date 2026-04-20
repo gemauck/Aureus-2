@@ -1368,11 +1368,13 @@ async function handler(req, res) {
 
         const cleanLines = linesInput
           .map((line, idx) => {
+            const isNewItem = line?.isNewItem === true
             const sku = String(line?.sku || '').trim()
             const itemName = String(line?.itemName || sku).trim()
             const systemQty = Number(line?.systemQty)
             const countedQty = Number(line?.countedQty)
-            if (!sku || !itemName || !Number.isFinite(systemQty) || !Number.isFinite(countedQty)) return null
+            if (!itemName || !Number.isFinite(systemQty) || !Number.isFinite(countedQty)) return null
+            if (!isNewItem && !sku) return null
             return {
               row: idx + 1,
               locationInventoryId: line?.locationInventoryId ? String(line.locationInventoryId) : null,
@@ -1382,7 +1384,12 @@ async function handler(req, res) {
               unit: String(line?.unit || 'pcs').trim() || 'pcs',
               systemQty,
               countedQty,
-              deltaQty: countedQty - systemQty
+              deltaQty: countedQty - systemQty,
+              isNewItem,
+              proposedItemDetails:
+                line?.proposedItemDetails && typeof line.proposedItemDetails === 'object'
+                  ? line.proposedItemDetails
+                  : {}
             }
           })
           .filter(Boolean)
@@ -1412,12 +1419,17 @@ async function handler(req, res) {
               create: cleanLines.map((line) => ({
                 locationInventoryId: line.locationInventoryId,
                 inventoryItemId: line.inventoryItemId,
-                sku: line.sku,
+                sku: line.sku || `NEWITEM-${Date.now()}-${line.row}`,
                 itemName: line.itemName,
                 unit: line.unit,
                 systemQty: line.systemQty,
                 countedQty: line.countedQty,
-                deltaQty: line.deltaQty
+                deltaQty: line.deltaQty,
+                meta: JSON.stringify({
+                  isNewItem: line.isNewItem === true,
+                  proposedItemDetails: line.proposedItemDetails || {},
+                  proposedSku: line.sku || ''
+                })
               }))
             }
           },
@@ -1509,19 +1521,34 @@ async function handler(req, res) {
               skipped++
               continue
             }
+            let meta = {}
+            try {
+              meta = line?.meta ? JSON.parse(line.meta) : {}
+            } catch {
+              meta = {}
+            }
+            const isNewItem = meta?.isNewItem === true
+            const proposed = meta?.proposedItemDetails && typeof meta.proposedItemDetails === 'object'
+              ? meta.proposedItemDetails
+              : {}
+            const applySku = isNewItem
+              ? await allocateStockCountSkuTx(tx)
+              : line.sku
             const { movement } = await applyStockCountAdjustmentTx(tx, {
               req,
               movementSeqRef,
-              sku: line.sku,
+              sku: applySku,
               itemName: line.itemName,
               quantityDelta: delta,
               locationId: submission.locationId,
               reference: `Stock take ${submission.submissionRef}`,
               notes: `Submitted stock-take apply (submission=${submission.id}, line=${line.id})`,
-              unit: line.unit || 'pcs',
-              unitCost: 0,
-              reorderPoint: 0,
-              needsCatalogReview: false,
+              unit: proposed?.unit || line.unit || 'pcs',
+              unitCost: Number(proposed?.unitCost) || 0,
+              reorderPoint: Number(proposed?.reorderPoint) || 0,
+              category: String(proposed?.category || 'components').trim() || 'components',
+              itemType: String(proposed?.type || 'raw_material').trim() || 'raw_material',
+              needsCatalogReview: isNewItem,
               importDate: new Date()
             })
             if (movement) movementsCreated++

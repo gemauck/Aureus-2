@@ -1164,6 +1164,22 @@ const JobCardFormPublic = () => {
   const [stockTakeLocationId, setStockTakeLocationId] = useState('');
   const [stockTakeRows, setStockTakeRows] = useState([]);
   const [stockTakeCounts, setStockTakeCounts] = useState({});
+  const [stockTakeNewItems, setStockTakeNewItems] = useState([]);
+  const [stockTakeDraftNewItem, setStockTakeDraftNewItem] = useState({
+    itemName: '',
+    sku: '',
+    unit: 'pcs',
+    category: 'components',
+    type: 'raw_material',
+    unitCost: '',
+    reorderPoint: '',
+    supplier: '',
+    supplierPartNumber: '',
+    manufacturingPartNumber: '',
+    boxNumber: '',
+    countedQty: '',
+    notes: ''
+  });
   const [stockTakeNotes, setStockTakeNotes] = useState('');
   const [stockTakeStartedAt, setStockTakeStartedAt] = useState('');
   const [stockTakeSubmitting, setStockTakeSubmitting] = useState(false);
@@ -3035,6 +3051,22 @@ const JobCardFormPublic = () => {
     setStockTakeLocationId('');
     setStockTakeRows([]);
     setStockTakeCounts({});
+    setStockTakeNewItems([]);
+    setStockTakeDraftNewItem({
+      itemName: '',
+      sku: '',
+      unit: 'pcs',
+      category: 'components',
+      type: 'raw_material',
+      unitCost: '',
+      reorderPoint: '',
+      supplier: '',
+      supplierPartNumber: '',
+      manufacturingPartNumber: '',
+      boxNumber: '',
+      countedQty: '',
+      notes: ''
+    });
     setStockTakeNotes('');
     setStockTakeStatus('');
     setStockTakeError('');
@@ -3047,7 +3079,7 @@ const JobCardFormPublic = () => {
       setStockTakeError('Select a stock location first.');
       return;
     }
-    const lines = (stockTakeRows || [])
+    const existingLines = (stockTakeRows || [])
       .map((row) => {
         const sku = String(row?.sku || '').trim();
         const raw = stockTakeCounts[sku];
@@ -3064,6 +3096,36 @@ const JobCardFormPublic = () => {
         };
       })
       .filter(Boolean);
+    const newItemLines = (stockTakeNewItems || [])
+      .map((item) => {
+        const countedQty = Number(item?.countedQty);
+        if (!item?.itemName || !Number.isFinite(countedQty)) return null;
+        const parsedUnitCost = Number(item?.unitCost);
+        const parsedReorderPoint = Number(item?.reorderPoint);
+        return {
+          locationInventoryId: null,
+          inventoryItemId: null,
+          sku: item?.sku ? String(item.sku).trim() : '',
+          itemName: String(item.itemName).trim(),
+          unit: String(item?.unit || 'pcs').trim() || 'pcs',
+          systemQty: 0,
+          countedQty,
+          isNewItem: true,
+          proposedItemDetails: {
+            category: String(item?.category || 'components').trim() || 'components',
+            type: String(item?.type || 'raw_material').trim() || 'raw_material',
+            unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : 0,
+            reorderPoint: Number.isFinite(parsedReorderPoint) ? parsedReorderPoint : 0,
+            supplier: String(item?.supplier || '').trim(),
+            supplierPartNumber: String(item?.supplierPartNumber || '').trim(),
+            manufacturingPartNumber: String(item?.manufacturingPartNumber || '').trim(),
+            boxNumber: String(item?.boxNumber || '').trim(),
+            notes: String(item?.notes || '').trim()
+          }
+        };
+      })
+      .filter(Boolean);
+    const lines = [...existingLines, ...newItemLines];
 
     if (lines.length === 0) {
       setStockTakeError('Enter at least one counted quantity before submitting.');
@@ -3343,8 +3405,11 @@ const JobCardFormPublic = () => {
 
   const handleSave = async (options = {}) => {
     const forceDraft = options?.forceDraft === true;
+    const forceSubmitted = options?.forceSubmitted === true;
     const normalizedStatus = forceDraft
       ? 'draft'
+      : forceSubmitted
+        ? (formData.status === 'completed' ? 'completed' : 'submitted')
       : ['draft', 'submitted', 'completed'].includes(formData.status)
         ? formData.status
         : 'draft';
@@ -3654,9 +3719,15 @@ const JobCardFormPublic = () => {
         upsertLocalPendingJobCard({ ...jobCardData, activityQueue: q });
         setLocalDraftsTick(t => t + 1);
         const hint = lastSyncError ? `\n\nDetails: ${lastSyncError}` : '';
-        alert(
-          `⚠️ Saved on this device only (not synced).${hint}\n\nCheck your connection or try again with smaller photos. Open “View or Edit Existing Job Card” to resubmit.`
-        );
+        if (normalizedStatus === 'draft') {
+          alert(
+            `⚠️ Draft saved on this device only (not synced).${hint}\n\nCheck your connection and open “View or Edit Existing Job Card” to sync later.`
+          );
+        } else {
+          alert(
+            `⚠️ Submission saved on this device and queued to sync.${hint}\n\nThis job card stays ${normalizedStatus.toUpperCase()} and can be re-opened from “View or Edit Existing Job Card”.`
+          );
+        }
       }
       setEditingMeta(null);
       resetForm();
@@ -3726,7 +3797,7 @@ const JobCardFormPublic = () => {
         completedAt: null,
         jobCardNumber: editingMeta?.jobCardNumber || '',
         serverJobCardId: editingMeta?.serverJobCardId || null,
-        totalMaterialsCost,
+        totalMaterialsCost: totalMaterialCost,
         travelKilometers: Math.max(
           0,
           (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
@@ -5032,15 +5103,13 @@ const JobCardFormPublic = () => {
           ) : (
             <button
               type="submit"
-              onClick={(event) => { event.preventDefault(); handleSave(); }}
+              onClick={(event) => { event.preventDefault(); handleSave({ forceSubmitted: true }); }}
               disabled={isSubmitting}
               className="min-h-[48px] px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-md shadow-blue-900/10 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting
                 ? 'Saving...'
-                : formData.status === 'draft'
-                  ? 'Save as draft'
-                  : formData.status === 'completed'
+                : formData.status === 'completed'
                     ? 'Save completed job card'
                     : 'Submit job card'}
             </button>
@@ -5403,10 +5472,11 @@ const JobCardFormPublic = () => {
   }
 
   if (wizardFlow === 'stock_take') {
-    const countedLines = (stockTakeRows || []).filter((row) => {
+    const countedExistingLines = (stockTakeRows || []).filter((row) => {
       const sku = String(row?.sku || '').trim();
       return sku && stockTakeCounts[sku] !== undefined && stockTakeCounts[sku] !== '';
     }).length;
+    const countedLines = countedExistingLines + stockTakeNewItems.length;
     return (
       <div className="job-card-stock-take min-h-[100dvh] flex flex-col bg-gradient-to-b from-slate-100 via-white to-blue-50/30 relative">
         <header className="flex-shrink-0 bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-md px-4 py-4 sm:px-6">
@@ -5456,6 +5526,9 @@ const JobCardFormPublic = () => {
                 placeholder="Anything the reviewer should know about this count..."
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
               />
+              <p className="text-[11px] text-amber-700 mt-2">
+                New items can be added below with full details and will require admin confirmation before final apply.
+              </p>
             </div>
 
             {stockTakeLocationId ? (
@@ -5500,6 +5573,168 @@ const JobCardFormPublic = () => {
                 )}
               </div>
             ) : null}
+
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-900">Add new item (admin confirmation)</p>
+                <span className="text-xs text-gray-500">{stockTakeNewItems.length} added</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="Item name *"
+                  value={stockTakeDraftNewItem.itemName}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, itemName: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="SKU (optional)"
+                  value={stockTakeDraftNewItem.sku}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, sku: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="Unit (e.g. pcs)"
+                  value={stockTakeDraftNewItem.unit}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, unit: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="Counted qty *"
+                  value={stockTakeDraftNewItem.countedQty}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, countedQty: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="Category"
+                  value={stockTakeDraftNewItem.category}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, category: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="Type"
+                  value={stockTakeDraftNewItem.type}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, type: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="Unit cost"
+                  value={stockTakeDraftNewItem.unitCost}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, unitCost: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="Reorder point"
+                  value={stockTakeDraftNewItem.reorderPoint}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, reorderPoint: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="Supplier"
+                  value={stockTakeDraftNewItem.supplier}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, supplier: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="Supplier part number"
+                  value={stockTakeDraftNewItem.supplierPartNumber}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, supplierPartNumber: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="Manufacturing part number"
+                  value={stockTakeDraftNewItem.manufacturingPartNumber}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, manufacturingPartNumber: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+                <input
+                  type="text"
+                  placeholder="Box number"
+                  value={stockTakeDraftNewItem.boxNumber}
+                  onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, boxNumber: e.target.value }))}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                />
+              </div>
+              <textarea
+                rows={2}
+                placeholder="Notes for admin confirmation"
+                value={stockTakeDraftNewItem.notes}
+                onChange={(e) => setStockTakeDraftNewItem((prev) => ({ ...prev, notes: e.target.value }))}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const itemName = String(stockTakeDraftNewItem.itemName || '').trim();
+                    const countedQty = Number(stockTakeDraftNewItem.countedQty);
+                    if (!itemName || !Number.isFinite(countedQty)) {
+                      setStockTakeError('New item needs item name and counted qty.');
+                      return;
+                    }
+                    setStockTakeError('');
+                    setStockTakeNewItems((prev) => [...prev, { ...stockTakeDraftNewItem, itemName, countedQty }]);
+                    setStockTakeDraftNewItem({
+                      itemName: '',
+                      sku: '',
+                      unit: 'pcs',
+                      category: 'components',
+                      type: 'raw_material',
+                      unitCost: '',
+                      reorderPoint: '',
+                      supplier: '',
+                      supplierPartNumber: '',
+                      manufacturingPartNumber: '',
+                      boxNumber: '',
+                      countedQty: '',
+                      notes: ''
+                    });
+                  }}
+                  className="inline-flex items-center justify-center rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 touch-manipulation"
+                >
+                  Add new item
+                </button>
+              </div>
+              {stockTakeNewItems.length > 0 ? (
+                <ul className="space-y-2">
+                  {stockTakeNewItems.map((item, idx) => (
+                    <li key={`stk-new-${idx}`} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-amber-900">{item.itemName}</p>
+                          <p className="text-xs text-amber-800">
+                            Qty {Number(item.countedQty)} · Unit {item.unit || 'pcs'} · SKU {item.sku || 'auto-generated'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setStockTakeNewItems((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-xs font-semibold text-amber-900 underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
 
             {stockTakeError ? (
               <div className="rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm px-4 py-2">

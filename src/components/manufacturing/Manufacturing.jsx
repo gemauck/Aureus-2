@@ -2140,6 +2140,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     return availableQty <= getItemReorderPoint(item);
   };
 
+  const getInventoryDetailMetrics = (item) => {
+    const quantity = toSafeNumber(item?.quantity);
+    const allocated = toSafeNumber(item?.allocatedQuantity);
+    const available = quantity - allocated;
+    const reorderPoint = getItemReorderPoint(item || {});
+    let status = 'in_stock';
+    if (available <= 0) status = 'out_of_stock';
+    else if (available <= reorderPoint) status = 'low_stock';
+    return { quantity, allocated, available, reorderPoint, status };
+  };
+
   const formatMovementDateLabel = (movement) => {
     const raw = movement?.date || movement?.createdAt;
     if (!raw) return '-';
@@ -7850,6 +7861,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
 
     if (modalType === 'view_item') {
+      const selectedItemMetrics = selectedItem ? getInventoryDetailMetrics(selectedItem) : null;
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -7872,8 +7884,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Status</p>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(selectedItem.status)}`}>
-                        {(selectedItem.status || '').replace('_', ' ')}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(selectedItemMetrics?.status || '')}`}>
+                        {(selectedItemMetrics?.status || '').replace('_', ' ')}
                       </span>
                     </div>
                     <div className="col-span-2">
@@ -7894,7 +7906,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Quantity</p>
-                      <p className="text-sm font-semibold text-gray-900">{selectedItem.quantity} {selectedItem.unit}</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItemMetrics?.quantity ?? 0} {selectedItem.unit}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Allocated</p>
+                      <p className="text-sm font-semibold text-yellow-700">{selectedItemMetrics?.allocated ?? 0} {selectedItem.unit}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Available</p>
+                      <p className="text-sm font-semibold text-green-700">{selectedItemMetrics?.available ?? 0} {selectedItem.unit}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Location</p>
@@ -12127,15 +12147,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const hasLocationBreakdown = detailLocations.length > 0;
     // Keep detail stock cards aligned with list rows: always use catalog/global quantities.
     // Location selector is still used for location table + ledger filtering only.
-    const displayQuantity = toSafeNumber(item.quantity);
-    const allocatedQtyForDisplay = toSafeNumber(item.allocatedQuantity);
-    const availableQty = getAvailableInventoryQuantity(item);
-    const computedDetailStatus = (() => {
-      const reorderPoint = getItemReorderPoint(item);
-      if (availableQty <= 0) return 'out_of_stock';
-      if (availableQty <= reorderPoint) return 'low_stock';
-      return 'in_stock';
-    })();
+    const detailMetrics = getInventoryDetailMetrics(item);
+    const displayQuantity = detailMetrics.quantity;
+    const allocatedQtyForDisplay = detailMetrics.allocated;
+    const availableQty = detailMetrics.available;
+    const computedDetailStatus = detailMetrics.status;
 
     const handleSaveEdit = async () => {
       try {

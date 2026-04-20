@@ -45,6 +45,13 @@
     };
 
     const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+    const parseLineMeta = (line) => {
+      try {
+        return line?.meta ? JSON.parse(line.meta) : {};
+      } catch {
+        return {};
+      }
+    };
 
     const loadSubmissions = React.useCallback(async () => {
       setSubmissionsLoading(true);
@@ -458,15 +465,42 @@
                     'tbody',
                     null,
                     (submissionDetail.lines || []).slice(0, 100).map((line) =>
-                      React.createElement(
-                        'tr',
-                        { key: line.id, className: isDark ? 'border-t border-gray-800' : 'border-t border-gray-200' },
-                        React.createElement('td', { className: 'px-2 py-1 ' + text }, line.sku),
-                        React.createElement('td', { className: 'px-2 py-1 ' + text }, (line.itemName || '').slice(0, 42)),
-                        React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.systemQty || 0).toFixed(2)),
-                        React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.countedQty || 0).toFixed(2)),
-                        React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.deltaQty || 0).toFixed(2))
-                      )
+                      (() => {
+                        const meta = parseLineMeta(line);
+                        const isNewItem = meta?.isNewItem === true;
+                        const proposed = meta?.proposedItemDetails && typeof meta.proposedItemDetails === 'object'
+                          ? meta.proposedItemDetails
+                          : {};
+                        return React.createElement(
+                          'tr',
+                          { key: line.id, className: isDark ? 'border-t border-gray-800' : 'border-t border-gray-200' },
+                          React.createElement('td', { className: 'px-2 py-1 ' + text }, isNewItem ? (meta?.proposedSku || line.sku || 'AUTO') : line.sku),
+                          React.createElement(
+                            'td',
+                            { className: 'px-2 py-1 ' + text },
+                            (line.itemName || '').slice(0, 42),
+                            isNewItem
+                              ? React.createElement(
+                                  'span',
+                                  { className: 'ml-1 inline-flex items-center rounded px-1 py-0.5 text-[10px] font-semibold ' + (isDark ? 'bg-amber-900/50 text-amber-200' : 'bg-amber-100 text-amber-800') },
+                                  'NEW ITEM'
+                                )
+                              : null,
+                            isNewItem && (proposed?.supplier || proposed?.supplierPartNumber || proposed?.manufacturingPartNumber)
+                              ? React.createElement(
+                                  'div',
+                                  { className: 'text-[10px] mt-0.5 ' + muted },
+                                  'Supplier: ' + (proposed?.supplier || '—') +
+                                  ' · Supplier Part: ' + (proposed?.supplierPartNumber || '—') +
+                                  ' · Mfg Part: ' + (proposed?.manufacturingPartNumber || '—')
+                                )
+                              : null
+                          ),
+                          React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.systemQty || 0).toFixed(2)),
+                          React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.countedQty || 0).toFixed(2)),
+                          React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.deltaQty || 0).toFixed(2))
+                        );
+                      })()
                     )
                   )
                 )
