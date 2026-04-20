@@ -1,6 +1,6 @@
 const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
   const ReactGlobal = window.React || {};
-  const { useState, useEffect } = ReactGlobal;
+  const { useState, useEffect, useMemo } = ReactGlobal;
   const [locations, setLocations] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -70,6 +70,57 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
     loadLocations();
   }, []);
 
+  const locationUsageById = useMemo(() => {
+    const usage = new Map();
+    const ensure = (locationId) => {
+      if (!locationId) return null;
+      if (!usage.has(locationId)) {
+        usage.set(locationId, {
+          quantity: 0,
+          allocatedQuantity: 0,
+          inProductionQuantity: 0,
+          completedQuantity: 0
+        });
+      }
+      return usage.get(locationId);
+    };
+    const toNumber = (value) => Number(value) || 0;
+    const addToUsage = (locationId, data = {}) => {
+      const row = ensure(locationId);
+      if (!row) return;
+      row.quantity += toNumber(data.quantity);
+      row.allocatedQuantity += toNumber(data.allocatedQuantity);
+      row.inProductionQuantity += toNumber(data.inProductionQuantity);
+      row.completedQuantity += toNumber(data.completedQuantity);
+    };
+
+    for (const item of Array.isArray(inventory) ? inventory : []) {
+      if (!item || typeof item !== 'object') continue;
+      // Only trust explicit per-location breakdown rows.
+      // Top-level item.locationId rows can be aggregated/derived and may
+      // falsely block valid deletes for empty locations.
+      if (!Array.isArray(item.locations)) continue;
+      for (const locationRow of item.locations) {
+        addToUsage(locationRow?.locationId, locationRow);
+      }
+    }
+
+    return usage;
+  }, [inventory]);
+
+  const getDeleteBlockReason = (loc) => {
+    const usage = locationUsageById.get(loc?.id);
+    if (!usage) return '';
+    const hasNonZeroUsage = [
+      usage.quantity,
+      usage.allocatedQuantity,
+      usage.inProductionQuantity,
+      usage.completedQuantity
+    ].some((value) => (Number(value) || 0) > 0);
+    if (!hasNonZeroUsage) return '';
+    return `Cannot delete "${loc.name}" while it has inventory or allocations. Move stock out and clear allocations first.`;
+  };
+
   const resetForm = () => {
     setEditingLocation(null);
     setFormData({
@@ -95,6 +146,12 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
       console.error('❌ StockLocations: DatabaseAPI.deleteStockLocation is not available');
       return;
     }
+    const deleteBlockReason = getDeleteBlockReason(loc);
+    if (deleteBlockReason) {
+      alert(deleteBlockReason);
+      return;
+    }
+
     if (!window.confirm(`Delete location "${loc.name}" (${loc.code})? This cannot be undone.`)) {
       return;
     }
@@ -105,8 +162,17 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
       // without waiting for any cached responses in DatabaseAPI.
       syncLocationsState((prev) => prev.filter((item) => item.id !== loc.id));
     } catch (error) {
-      console.error('❌ StockLocations: Failed to delete location', error);
-      const message = error?.message || 'Failed to delete location. Please try again.';
+      const isExpectedNonZeroDeleteError = String(error?.message || '')
+        .toLowerCase()
+        .includes('cannot delete location with non-zero inventory or allocations');
+      if (isExpectedNonZeroDeleteError) {
+        console.warn('⚠️ StockLocations: Delete blocked due to non-zero inventory/allocations');
+      } else {
+        console.error('❌ StockLocations: Failed to delete location', error);
+      }
+      const message = isExpectedNonZeroDeleteError
+        ? `Cannot delete "${loc.name}" while it has inventory or allocations. Move stock out and clear allocations first.`
+        : (error?.message || 'Failed to delete location. Please try again.');
       alert(message);
     } finally {
       setIsSaving(false);
@@ -187,7 +253,10 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
                     </td>
                   </tr>
                 )}
-                {locations.map(loc => (
+                {locations.map(loc => {
+                  const deleteBlockReason = getDeleteBlockReason(loc);
+                  const isDeleteBlocked = Boolean(deleteBlockReason);
+                  return (
                   <tr key={loc.id}>
                     <td className="px-4 py-2 font-mono text-xs text-gray-900">{loc.code}</td>
                     <td className="px-4 py-2 text-gray-900">{loc.name}</td>
@@ -204,14 +273,20 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
                       <button
                         type="button"
                         onClick={() => handleDelete(loc)}
-                        className="inline-flex items-center px-2 py-1 text-xs border border-red-300 text-red-700 rounded hover:bg-red-50"
-                        disabled={isSaving}
+                        className={`inline-flex items-center px-2 py-1 text-xs border rounded ${
+                          isDeleteBlocked
+                            ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'border-red-300 text-red-700 hover:bg-red-50'
+                        }`}
+                        disabled={isSaving || isDeleteBlocked}
+                        title={isDeleteBlocked ? deleteBlockReason : ''}
                       >
                         Delete
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
