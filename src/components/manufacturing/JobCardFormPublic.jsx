@@ -90,6 +90,31 @@ function jobCardStockPickListAllLocationsFromCachedInventory(items) {
   return out;
 }
 
+/**
+ * Stock-take list for one location: one row per SKU, quantity = on-hand at that location (sums duplicate catalog rows).
+ */
+function jobCardStockTakeRowsFromCachedInventory(items, locationId) {
+  if (!locationId || !Array.isArray(items)) return [];
+  const bySku = new Map();
+  for (const item of items) {
+    if (!item || item.status === 'inactive') continue;
+    const sku = String(item.sku || item.id || '').trim();
+    if (!sku) continue;
+    const q = jobCardQuantityAtLocation(item, locationId);
+    const existing = bySku.get(sku);
+    if (!existing) {
+      bySku.set(sku, { ...item, quantity: q, sku });
+    } else {
+      existing.quantity = (Number(existing.quantity) || 0) + q;
+    }
+  }
+  const out = Array.from(bySku.values());
+  out.sort((a, b) =>
+    String(a.name || a.sku || '').localeCompare(String(b.name || b.sku || ''), undefined, { sensitivity: 'base' })
+  );
+  return out;
+}
+
 function readPublicPriorJobCardIds() {
   try {
     const raw = localStorage.getItem(JOB_CARD_PUBLIC_PRIOR_IDS_KEY);
@@ -3396,22 +3421,17 @@ const JobCardFormPublic = () => {
       setStockTakeRows([]);
       return;
     }
-    // Stock-take should capture against the selected location while allowing
-    // counters to pick from global stock visibility across all locations.
-    const useAllLocationsInventory = true;
+    // One row per SKU for the selected location (system qty = on-hand at that warehouse, including zeros).
     let cancelled = false;
     const run = async () => {
       if (!isOnline) {
-        const rows = useAllLocationsInventory
-          ? jobCardStockPickListAllLocationsFromCachedInventory(inventory)
-          : jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId);
+        const rows = jobCardStockTakeRowsFromCachedInventory(inventory, stockTakeLocationId);
         if (!cancelled) setStockTakeRows(rows);
         return;
       }
       try {
-        const inventoryLocationId = useAllLocationsInventory ? 'all' : stockTakeLocationId;
         const response = await fetch(
-          `/api/public/inventory?locationId=${encodeURIComponent(inventoryLocationId)}`,
+          `/api/public/inventory?locationId=${encodeURIComponent(stockTakeLocationId)}&includeZero=1`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
         if (response.ok) {
@@ -3423,9 +3443,7 @@ const JobCardFormPublic = () => {
       } catch (e) {
         console.warn('⚠️ JobCardFormPublic: stock take location inventory fetch failed:', e?.message || e);
       }
-      const rows = useAllLocationsInventory
-        ? jobCardStockPickListAllLocationsFromCachedInventory(inventory)
-        : jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId);
+      const rows = jobCardStockTakeRowsFromCachedInventory(inventory, stockTakeLocationId);
       if (!cancelled) setStockTakeRows(rows);
     };
     void run();
