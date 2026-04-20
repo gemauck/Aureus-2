@@ -12752,27 +12752,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <h2 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Summary</h2>
               <div className="space-y-3">
                 <div>
-                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
-                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize mt-1 ${getStatusColor(computedDetailStatus)}`}>
-                    {computedDetailStatus.replace('_', ' ')}
-                  </span>
-                </div>
-                <div>
                   <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Value</p>
                   <p className={`text-lg font-bold mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatCurrency(catalogLineTotalValue || 0)}</p>
                   <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Quantity × unit cost</p>
                 </div>
-                {item.reorderPoint > 0 && (
-                  <div className={`p-3 rounded-lg border ${availableQty <= item.reorderPoint ? (isDark ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200') : (isDark ? 'bg-green-900/20 border-green-800' : 'bg-green-50 border-green-200')}`}>
-                    <p className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Stock Level</p>
-                    <p className={`text-sm font-bold mt-1 ${availableQty <= item.reorderPoint ? (isDark ? 'text-red-300' : 'text-red-600') : (isDark ? 'text-green-300' : 'text-green-600')}`}>
-                      {availableQty <= item.reorderPoint ? 'Low Stock' : 'In Stock'}
-                    </p>
-                    <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Available: {availableQty} / Reorder Point: {item.reorderPoint}
-                    </p>
-                  </div>
-                )}
+                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Stock status indicators are hidden on this detail view to avoid inconsistent interim states.
+                </p>
               </div>
             </div>
           </div>
