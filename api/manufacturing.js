@@ -9,7 +9,9 @@ import { isSuperAdminUser } from './_lib/adminRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { parseJsonBody } from './_lib/body.js'
 import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
+import { encodeInventoryQrPayload } from './_lib/inventoryQrPayload.js'
 import XLSX from 'xlsx'
+import QRCode from 'qrcode'
 
 const INVENTORY_TEMPLATE_FIELDS = {
   sku: true,
@@ -1975,6 +1977,27 @@ async function handler(req, res) {
 
   // INVENTORY ITEMS
   if (resourceType === 'inventory') {
+    // QR PNG (GET /api/manufacturing/inventory/:id/qr)
+    if (req.method === 'GET' && id && action === 'qr') {
+      try {
+        const item = await prisma.inventoryItem.findUnique({
+          where: { id },
+          select: { id: true }
+        })
+        if (!item) {
+          return notFound(res, 'Inventory item not found')
+        }
+        const payload = encodeInventoryQrPayload(item.id)
+        const png = await QRCode.toBuffer(payload, { type: 'png', width: 256, margin: 2, errorCorrectionLevel: 'M' })
+        res.setHeader('Content-Type', 'image/png')
+        res.setHeader('Cache-Control', 'private, max-age=300')
+        return res.status(200).send(Buffer.from(png))
+      } catch (error) {
+        console.error('❌ Inventory QR generation failed:', error)
+        return serverError(res, 'Failed to generate inventory QR', error.message)
+      }
+    }
+
     // LIST (GET /api/manufacturing/inventory)
     if (req.method === 'GET' && !id) {
       try {

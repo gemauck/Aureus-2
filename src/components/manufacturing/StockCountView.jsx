@@ -1,5 +1,6 @@
 /**
- * Admin stock count: download Excel template, upload completed count.
+ * Stock count: in-app stocktake (same flow as Job Cards), Excel import/export,
+ * and pending submission review/apply.
  * Loaded via lazy-load-components → window.StockCountView
  */
 (function () {
@@ -130,7 +131,7 @@
     const [stNotes, setStNotes] = React.useState('');
     const [stStartedLocal, setStStartedLocal] = React.useState('');
     const [stNewItems, setStNewItems] = React.useState([]);
-    const [stDraftNewItem, setStDraftNewItem] = React.useState(defaultDraftNewItem);
+    const [stDraftNewItem, setStDraftNewItem] = React.useState(() => defaultDraftNewItem());
     const [stSubmitting, setStSubmitting] = React.useState(false);
     const [stDraftNotice, setStDraftNotice] = React.useState('');
 
@@ -509,9 +510,340 @@
       }
     };
 
+    const stCountedExisting = (stRows || []).filter((row) => {
+      const sku = String(row?.sku || '').trim();
+      return sku && stCounts[sku] !== undefined && stCounts[sku] !== '';
+    }).length;
+    const stCountedTotal = stCountedExisting + stNewItems.length;
+    const inputCls =
+      'w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ' +
+      (isDark ? 'border-gray-600 bg-gray-950 ' + text : 'border-gray-300 bg-white text-gray-900');
+
     return React.createElement(
       'div',
       { className: 'space-y-4 erp-module-root' },
+      React.createElement(
+        'div',
+        { className: 'rounded-xl border p-5 shadow-sm ' + card },
+        React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'In-app stocktake'),
+        React.createElement(
+          'p',
+          { className: 'mt-1 text-sm ' + muted },
+          'Match the Job Cards app: pick a location, set when the count started, enter quantities, save progress on this device, then submit for review (same API as the mobile stock-take).'
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { htmlFor: 'erp-st-commenced', className: 'block text-xs font-semibold ' + muted + ' mb-1' },
+              'Commenced at'
+            ),
+            React.createElement('input', {
+              id: 'erp-st-commenced',
+              type: 'datetime-local',
+              className: inputCls,
+              value: stStartedLocal,
+              onChange: (e) => setStStartedLocal(e.target.value)
+            }),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                className: 'mt-2 text-xs font-semibold ' + (isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-700 hover:text-blue-800'),
+                onClick: () => setStStartedLocal(toDatetimeLocalValue(Date.now()))
+              },
+              'Set to now'
+            )
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { htmlFor: 'erp-st-location', className: 'block text-xs font-semibold ' + muted + ' mb-1' },
+              'Stock location'
+            ),
+            React.createElement(
+              'select',
+              {
+                id: 'erp-st-location',
+                className: inputCls,
+                value: stLocationId,
+                disabled: stLocationsLoading,
+                onChange: (e) => {
+                  const v = e.target.value;
+                  setStLocationId(v);
+                  setStCounts({});
+                  setStStartedLocal((prev) => prev || toDatetimeLocalValue(Date.now()));
+                }
+              },
+              React.createElement('option', { value: '' }, stLocationsLoading ? 'Loading locations…' : 'Select location'),
+              stLocationOptions.map((loc) =>
+                React.createElement(
+                  'option',
+                  { key: loc.id, value: loc.id },
+                  (loc.name || loc.code) + ' (' + (loc.code || '') + ')'
+                )
+              )
+            )
+          )
+        ),
+        React.createElement(
+          'label',
+          { htmlFor: 'erp-st-notes', className: 'block text-xs font-semibold ' + muted + ' mt-3 mb-1' },
+          'Notes (optional)'
+        ),
+        React.createElement('textarea', {
+          id: 'erp-st-notes',
+          rows: 2,
+          className: inputCls,
+          value: stNotes,
+          onChange: (e) => setStNotes(e.target.value),
+          placeholder: 'Anything reviewers should know about this count…'
+        }),
+        stLocationId
+          ? React.createElement(
+              'div',
+              { className: 'mt-4 rounded-lg border overflow-hidden ' + (isDark ? 'border-gray-700' : 'border-gray-200') },
+              React.createElement(
+                'div',
+                {
+                  className:
+                    'px-3 py-2 border-b flex items-center justify-between ' +
+                    (isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-100 bg-gray-50')
+                },
+                React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Stock lines'),
+                React.createElement(
+                  'p',
+                  { className: 'text-xs ' + muted },
+                  stRowsLoading ? 'Loading…' : stCountedTotal + ' counted · ' + stRows.length + ' lines'
+                )
+              ),
+              stRowsLoading
+                ? React.createElement('div', { className: 'px-3 py-6 text-sm ' + muted }, 'Loading inventory…')
+                : stRows.length === 0
+                  ? React.createElement(
+                      'div',
+                      { className: 'px-3 py-6 text-sm ' + muted },
+                      'No stock lines for this location.'
+                    )
+                  : React.createElement(
+                      'div',
+                      { className: 'divide-y ' + (isDark ? 'divide-gray-800' : 'divide-gray-100') },
+                      stRows.map((row) => {
+                        const sku = String(row?.sku || '').trim();
+                        const sys = Number(row?.quantity) || 0;
+                        return React.createElement(
+                          'div',
+                          {
+                            key: stLocationId + '-' + sku,
+                            className: 'px-3 py-2 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center'
+                          },
+                          React.createElement(
+                            'div',
+                            { className: 'sm:col-span-7 min-w-0' },
+                            React.createElement('p', { className: 'text-sm font-medium truncate ' + text }, row?.name || sku),
+                            React.createElement(
+                              'p',
+                              { className: 'text-xs ' + muted },
+                              sku + ' · System: ' + sys
+                            )
+                          ),
+                          React.createElement(
+                            'div',
+                            { className: 'sm:col-span-5' },
+                            React.createElement('input', {
+                              type: 'number',
+                              step: '0.01',
+                              inputMode: 'decimal',
+                              className: inputCls,
+                              placeholder: 'Counted qty',
+                              value: stCounts[sku] ?? '',
+                              onChange: (e) => {
+                                const next = e.target.value;
+                                setStCounts((prev) => ({ ...prev, [sku]: next }));
+                              }
+                            })
+                          )
+                        );
+                      })
+                    )
+            )
+          : null,
+        React.createElement(
+          'div',
+          { className: 'mt-4 rounded-lg border p-3 space-y-2 ' + (isDark ? 'border-amber-900/50 bg-amber-950/20' : 'border-amber-200 bg-amber-50/80') },
+          React.createElement(
+            'div',
+            { className: 'flex items-center justify-between' },
+            React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'New items (need admin confirmation on apply)'),
+            React.createElement('span', { className: 'text-xs ' + muted }, stNewItems.length + ' added')
+          ),
+          React.createElement(
+            'div',
+            { className: 'grid grid-cols-1 sm:grid-cols-2 gap-2' },
+            ['itemName', 'sku', 'unit', 'countedQty', 'category', 'type', 'unitCost', 'reorderPoint', 'supplier', 'supplierPartNumber', 'manufacturingPartNumber', 'boxNumber'].map(
+              (field) => {
+                const labels = {
+                  itemName: 'Item name *',
+                  sku: 'SKU (optional)',
+                  unit: 'Unit',
+                  countedQty: 'Counted qty *',
+                  category: 'Category',
+                  type: 'Type',
+                  unitCost: 'Unit cost',
+                  reorderPoint: 'Reorder point',
+                  supplier: 'Supplier',
+                  supplierPartNumber: 'Supplier part #',
+                  manufacturingPartNumber: 'Mfg part #',
+                  boxNumber: 'Box #'
+                };
+                const ph = labels[field] || field;
+                const isNum = field === 'countedQty' || field === 'unitCost' || field === 'reorderPoint';
+                return React.createElement('input', {
+                  key: field,
+                  type: isNum ? 'number' : 'text',
+                  step: isNum ? '0.01' : undefined,
+                  inputMode: isNum ? 'decimal' : undefined,
+                  className: inputCls,
+                  placeholder: ph,
+                  value: stDraftNewItem[field] ?? '',
+                  onChange: (e) =>
+                    setStDraftNewItem((prev) => ({
+                      ...prev,
+                      [field]: e.target.value
+                    }))
+                });
+              }
+            )
+          ),
+          React.createElement('textarea', {
+            rows: 2,
+            className: inputCls,
+            placeholder: 'Notes for admin confirmation',
+            value: stDraftNewItem.notes,
+            onChange: (e) => setStDraftNewItem((prev) => ({ ...prev, notes: e.target.value }))
+          }),
+          React.createElement(
+            'div',
+            { className: 'flex justify-end' },
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                className: btnPrimary,
+                onClick: () => {
+                  const itemName = String(stDraftNewItem.itemName || '').trim();
+                  const countedQty = Number(stDraftNewItem.countedQty);
+                  if (!itemName || !Number.isFinite(countedQty)) {
+                    setError('New item needs item name and counted qty.');
+                    return;
+                  }
+                  setError(null);
+                  setStNewItems((prev) => [...prev, { ...stDraftNewItem, itemName, countedQty }]);
+                  setStDraftNewItem(defaultDraftNewItem());
+                }
+              },
+              'Add new item'
+            )
+          ),
+          stNewItems.length > 0
+            ? React.createElement(
+                'ul',
+                { className: 'space-y-2' },
+                stNewItems.map((item, idx) =>
+                  React.createElement(
+                    'li',
+                    {
+                      key: 'stk-new-' + idx,
+                      className:
+                        'rounded border px-2 py-1.5 flex justify-between gap-2 text-sm ' +
+                        (isDark ? 'border-amber-800 bg-amber-950/40' : 'border-amber-300 bg-white')
+                    },
+                    React.createElement(
+                      'div',
+                      { className: 'min-w-0' },
+                      React.createElement('p', { className: 'font-semibold truncate ' + text }, item.itemName),
+                      React.createElement(
+                        'p',
+                        { className: 'text-xs ' + muted },
+                        'Qty ' +
+                          Number(item.countedQty) +
+                          ' · ' +
+                          (item.unit || 'pcs') +
+                          ' · SKU ' +
+                          (item.sku || 'auto')
+                      )
+                    ),
+                    React.createElement(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'text-xs font-semibold underline shrink-0 ' + muted,
+                        onClick: () => setStNewItems((prev) => prev.filter((_, i) => i !== idx))
+                      },
+                      'Remove'
+                    )
+                  )
+                )
+              )
+            : null
+        ),
+        stDraftNotice
+          ? React.createElement(
+              'div',
+              {
+                className:
+                  'mt-3 rounded-lg border text-sm px-3 py-2 ' +
+                  (isDark ? 'border-amber-800 bg-amber-950/30 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-900')
+              },
+              stDraftNotice
+            )
+          : null,
+        React.createElement(
+          'div',
+          { className: 'mt-4 flex flex-wrap gap-2' },
+          React.createElement(
+            'button',
+            { type: 'button', className: btn, onClick: persistStockTakeDraft },
+            React.createElement('i', { className: 'fas fa-save mr-2' }),
+            'Save draft'
+          ),
+          React.createElement(
+            'button',
+            { type: 'button', className: btn, onClick: restoreStockTakeDraft },
+            'Restore draft'
+          ),
+          React.createElement(
+            'button',
+            { type: 'button', className: btn, onClick: clearStockTakeDraft },
+            'Clear draft'
+          )
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-3 flex flex-wrap gap-2' },
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: btnPrimary,
+              disabled: stSubmitting || !stLocationId,
+              onClick: submitInlineStockTake
+            },
+            stSubmitting ? 'Submitting…' : 'Submit for review'
+          ),
+          React.createElement(
+            'button',
+            { type: 'button', className: btn, disabled: stSubmitting, onClick: resetInlineStockTake },
+            'Reset form'
+          )
+        )
+      ),
       React.createElement(
         'div',
         { className: 'rounded-xl border p-5 shadow-sm ' + card },
@@ -634,7 +966,7 @@
         React.createElement(
           'p',
           { className: 'mt-1 text-sm ' + muted },
-          'Counts submitted from the Job Cards app appear here for review before apply.'
+          'Counts submitted from the Job Cards app or from In-app stocktake above appear here for review before apply.'
         ),
         React.createElement(
           'div',

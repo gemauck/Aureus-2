@@ -309,6 +309,8 @@ try {
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [viewingInventoryItemDetail, setViewingInventoryItemDetail] = useState(null); // Full-page detail view
   const [isEditingInventoryItem, setIsEditingInventoryItem] = useState(false); // Edit mode in detail view
+  const [inventoryItemQrBlobUrl, setInventoryItemQrBlobUrl] = useState(null);
+  const [inventoryItemQrLoading, setInventoryItemQrLoading] = useState(false);
   const [bomComponents, setBomComponents] = useState([]);
   const [openBomComponentSelectIndex, setOpenBomComponentSelectIndex] = useState(null);
   const [bomComponentSearchTerm, setBomComponentSearchTerm] = useState('');
@@ -520,6 +522,53 @@ try {
   useEffect(() => {
     columnFiltersRef.current = columnFilters;
   }, [columnFilters]);
+
+  useEffect(() => {
+    if (!showModal || modalType !== 'view_item' || !selectedItem) {
+      setInventoryItemQrBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setInventoryItemQrLoading(false);
+      return;
+    }
+    const itemId = getInventoryItemId(selectedItem);
+    if (!itemId) return;
+    let cancelled = false;
+    setInventoryItemQrLoading(true);
+    const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+    const token = window.storage?.getToken?.();
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/api/manufacturing/inventory/${encodeURIComponent(itemId)}/qr`,
+          { headers }
+        );
+        if (!res.ok || cancelled) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        setInventoryItemQrBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+      } catch (e) {
+        console.warn('Manufacturing: inventory QR fetch failed', e);
+      } finally {
+        if (!cancelled) setInventoryItemQrLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      setInventoryItemQrBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
+  }, [showModal, modalType, selectedItem]);
+
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
@@ -8138,6 +8187,54 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <p className="text-xs text-gray-500">Last Restocked</p>
                       <p className="text-sm text-gray-900">{selectedItem.lastRestocked}</p>
                     </div>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Stock-take QR (scan in Job Cards app)</p>
+                    {inventoryItemQrLoading ? (
+                      <p className="text-sm text-gray-500">Loading QR…</p>
+                    ) : inventoryItemQrBlobUrl ? (
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <img
+                          src={inventoryItemQrBlobUrl}
+                          alt="Inventory QR code"
+                          className="w-40 h-40 border border-gray-200 bg-white p-2 rounded object-contain"
+                        />
+                        <div className="flex-1 space-y-2 min-w-0">
+                          <p className="text-xs text-gray-600 break-all font-mono">
+                            {typeof window.encodeInventoryQrPayload === 'function'
+                              ? window.encodeInventoryQrPayload(getInventoryItemId(selectedItem))
+                              : ''}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const p =
+                                  typeof window.encodeInventoryQrPayload === 'function'
+                                    ? window.encodeInventoryQrPayload(getInventoryItemId(selectedItem))
+                                    : '';
+                                if (p && navigator.clipboard?.writeText) {
+                                  void navigator.clipboard.writeText(p);
+                                }
+                              }}
+                              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                              Copy payload
+                            </button>
+                            <a
+                              href={inventoryItemQrBlobUrl}
+                              download={`qr-${selectedItem.sku || 'inventory'}.png`}
+                              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-block"
+                            >
+                              Download PNG
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">QR could not be loaded.</p>
+                    )}
                   </div>
                 </div>
               )}

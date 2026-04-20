@@ -7,6 +7,8 @@ import {
   sortJobCardActivitiesChronological,
   JOB_CARD_CALL_OUT_CATEGORY_OPTIONS
 } from './jobCardActivityDisplay.js';
+import jsQR from 'jsqr';
+import { parseInventoryQrPayload } from '../../utils/inventoryQrPayload.js';
 
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
 
@@ -1188,6 +1190,15 @@ const JobCardFormPublic = () => {
   const [stockTakeSubmitting, setStockTakeSubmitting] = useState(false);
   const [stockTakeStatus, setStockTakeStatus] = useState('');
   const [stockTakeError, setStockTakeError] = useState('');
+  const [stockTakeScanOpen, setStockTakeScanOpen] = useState(false);
+  const [stockTakeHighlightSku, setStockTakeHighlightSku] = useState('');
+  const stockTakeScanVideoRef = useRef(null);
+  const stockTakeScanCanvasRef = useRef(null);
+  const stockTakeScanStreamRef = useRef(null);
+  const stockTakeScanRafRef = useRef(null);
+  const stockTakeScanActiveRef = useRef(false);
+  const stockTakeScanLastRef = useRef({ text: '', t: 0 });
+  const stockTakeRowsRef = useRef([]);
   /** Prior list: server + public API; merged with readLocalPendingJobCards() for display */
   const [serverPriorList, setServerPriorList] = useState([]);
   const [serverPriorLoading, setServerPriorLoading] = useState(false);
@@ -3074,6 +3085,8 @@ const JobCardFormPublic = () => {
     setStockTakeNotes('');
     setStockTakeStatus('');
     setStockTakeError('');
+    setStockTakeScanOpen(false);
+    setStockTakeHighlightSku('');
     setStockTakeStartedAt(new Date().toISOString());
     setWizardFlow('stock_take');
   };
@@ -3407,6 +3420,152 @@ const JobCardFormPublic = () => {
       cancelled = true;
     };
   }, [wizardFlow, stockTakeLocationId, isOnline, inventory]);
+
+  useEffect(() => {
+    stockTakeRowsRef.current = stockTakeRows;
+  }, [stockTakeRows]);
+
+  useEffect(() => {
+    if (wizardFlow !== 'stock_take') {
+      setStockTakeScanOpen(false);
+      setStockTakeHighlightSku('');
+    }
+  }, [wizardFlow]);
+
+  useEffect(() => {
+    if (!stockTakeScanOpen || wizardFlow !== 'stock_take') {
+      stockTakeScanActiveRef.current = false;
+      return;
+    }
+    const video = stockTakeScanVideoRef.current;
+    const canvas = stockTakeScanCanvasRef.current;
+    if (!video || !canvas) return;
+
+    stockTakeScanActiveRef.current = true;
+    let stream = null;
+
+    const tryDecode = (text) => {
+      if (!stockTakeScanActiveRef.current) return;
+      const now = Date.now();
+      const s = String(text || '').trim();
+      if (!s) return;
+      const last = stockTakeScanLastRef.current;
+      if (s === last.text && now - last.t < 850) return;
+      last.text = s;
+      last.t = now;
+
+      const rows = stockTakeRowsRef.current || [];
+      const parsed = parseInventoryQrPayload(s);
+      let sku = '';
+      if (parsed?.inventoryItemId) {
+        const row = rows.find(
+          (r) => r.inventoryItemId && String(r.inventoryItemId) === String(parsed.inventoryItemId)
+        );
+        if (!row) {
+          setStockTakeError('This item is not in the stock list for the selected location.');
+          return;
+        }
+        sku = String(row.sku || '').trim();
+      } else {
+        const row = rows.find((r) => String(r.sku || '').trim() === s);
+        if (!row) {
+          setStockTakeError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');
+          return;
+        }
+        sku = String(row.sku || '').trim();
+      }
+      if (!sku) return;
+      setStockTakeCounts((prev) => {
+        const cur = prev[sku];
+        const n = cur === '' || cur === undefined ? 0 : Number(cur);
+        const next = (Number.isFinite(n) ? n : 0) + 1;
+        return { ...prev, [sku]: String(next) };
+      });
+      setStockTakeHighlightSku(sku);
+      window.setTimeout(() => setStockTakeHighlightSku(''), 2200);
+      setStockTakeError('');
+    };
+
+    const stopLoop = () => {
+      if (stockTakeScanRafRef.current != null) {
+        cancelAnimationFrame(stockTakeScanRafRef.current);
+        stockTakeScanRafRef.current = null;
+      }
+    };
+
+    const startJsQrLoop = () => {
+      const ctx = canvas.getContext('2d');
+      const loop = () => {
+        if (!stockTakeScanActiveRef.current) return;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (w && h) {
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(video, 0, 0, w, h);
+          const img = ctx.getImageData(0, 0, w, h);
+          const result = jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
+          if (result?.data) tryDecode(result.data);
+        }
+        stockTakeScanRafRef.current = requestAnimationFrame(loop);
+      };
+      stockTakeScanRafRef.current = requestAnimationFrame(loop);
+    };
+
+    const startBarcodeDetectorLoop = () => {
+      if (typeof window.BarcodeDetector !== 'function') return false;
+      let detector;
+      try {
+        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      } catch {
+        return false;
+      }
+      const loop = () => {
+        if (!stockTakeScanActiveRef.current) return;
+        if (video.readyState >= 2) {
+          void detector
+            .detect(video)
+            .then((codes) => {
+              if (codes?.length && codes[0].rawValue) {
+                tryDecode(codes[0].rawValue);
+              }
+            })
+            .catch(() => {});
+        }
+        stockTakeScanRafRef.current = requestAnimationFrame(loop);
+      };
+      stockTakeScanRafRef.current = requestAnimationFrame(loop);
+      return true;
+    };
+
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+        stockTakeScanStreamRef.current = stream;
+        video.srcObject = stream;
+        await video.play();
+        const usedBd = startBarcodeDetectorLoop();
+        if (!usedBd) startJsQrLoop();
+      } catch (err) {
+        console.warn('Stock-take camera:', err);
+        setStockTakeError('Camera access failed. Allow the camera or enter counts manually.');
+        setStockTakeScanOpen(false);
+      }
+    })();
+
+    return () => {
+      stockTakeScanActiveRef.current = false;
+      stopLoop();
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+      video.srcObject = null;
+      stockTakeScanStreamRef.current = null;
+    };
+  }, [stockTakeScanOpen, wizardFlow]);
 
   const handleSave = async (options = {}) => {
     const forceDraft = options?.forceDraft === true;
@@ -5565,9 +5724,23 @@ const JobCardFormPublic = () => {
 
             {stockTakeLocationId ? (
               <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-gray-900">Stock lines</p>
-                  <p className="text-xs text-gray-600">{countedLines} counted</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStockTakeError('');
+                        setStockTakeScanOpen(true);
+                      }}
+                      disabled={!stockTakeLocationId || stockTakeRows.length === 0}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                    >
+                      <i className="fa-solid fa-camera" aria-hidden />
+                      Scan QR
+                    </button>
+                    <p className="text-xs text-gray-600">{countedLines} counted</p>
+                  </div>
                 </div>
                 {stockTakeRows.length === 0 ? (
                   <div className="px-4 py-6 text-sm text-gray-500">No stock lines found for this location.</div>
@@ -5577,7 +5750,12 @@ const JobCardFormPublic = () => {
                       const sku = String(row?.sku || '').trim();
                       const currentQty = Number(row?.quantity) || 0;
                       return (
-                        <div key={`${stockTakeLocationId}-${sku}`} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center">
+                        <div
+                          key={`${stockTakeLocationId}-${sku}`}
+                          className={`px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center transition-shadow ${
+                            stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
+                          }`}
+                        >
                           <div className="sm:col-span-7 min-w-0">
                             <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
                             <p className="text-xs text-gray-500 mt-0.5">
@@ -5796,6 +5974,44 @@ const JobCardFormPublic = () => {
                 {stockTakeSubmitting ? 'Submitting...' : 'Submit stock take'}
               </button>
             </div>
+
+            {stockTakeScanOpen ? (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4">
+                <div className="bg-white rounded-xl max-w-md w-full p-4 shadow-xl space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Scan inventory QR</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Point the camera at the label. Each successful scan adds 1 to counted quantity for that line.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setStockTakeScanOpen(false)}
+                      className="text-gray-500 hover:text-gray-800 p-1"
+                      aria-label="Close scanner"
+                    >
+                      <i className="fa-solid fa-xmark text-lg" />
+                    </button>
+                  </div>
+                  <video
+                    ref={stockTakeScanVideoRef}
+                    className="w-full rounded-lg bg-black max-h-[48vh] object-cover"
+                    playsInline
+                    muted
+                    autoPlay
+                  />
+                  <canvas ref={stockTakeScanCanvasRef} className="hidden" aria-hidden />
+                  <button
+                    type="button"
+                    onClick={() => setStockTakeScanOpen(false)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 touch-manipulation"
+                  >
+                    Close camera
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
