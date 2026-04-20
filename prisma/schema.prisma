@@ -2016,7 +2016,7 @@ model JobCard {
   kmReadingAfter      Float                 @default(0)
   travelKilometers    Float                 @default(0)
   reasonForVisit      String                @default("")
-  /// Site visit classification (e.g. Maintenance, Calibration); see JOB_CARD_CALL_OUT_CATEGORY_OPTIONS in app.
+  /// Site visit classification; see JOB_CARD_CALL_OUT_CATEGORY_OPTIONS in app.
   callOutCategory     String                @default("")
   diagnosis           String                @default("")
   futureWorkRequired  String                @default("")

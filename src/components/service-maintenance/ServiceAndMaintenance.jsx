@@ -1,6 +1,6 @@
 // Use React from window (fallback to global React if needed)
 const ReactGlobal = (typeof window !== 'undefined' && window.React) || (typeof React !== 'undefined' && React) || {};
-const { useState, useEffect, useMemo, useCallback } = ReactGlobal;
+const { useState, useEffect, useMemo, useCallback, useRef } = ReactGlobal;
 
 /** Same convention as mobile job card wizard — project line embedded in `otherComments`. */
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
@@ -224,6 +224,8 @@ const ServiceAndMaintenance = () => {
   const [showJobCardDetail, setShowJobCardDetail] = useState(false);
   const [loadingJobCard, setLoadingJobCard] = useState(false);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
+  /** Set after `fetchJobCardPhotosAndMerge` is defined — used by the URL deep-link effect above it. */
+  const fetchJobCardPhotosMergeRef = useRef(null);
   const [jobCardActivities, setJobCardActivities] = useState([]);
   const [jobCardActivitiesLoading, setJobCardActivitiesLoading] = useState(false);
   const [showFormsManager, setShowFormsManager] = useState(false);
@@ -424,8 +426,9 @@ const ServiceAndMaintenance = () => {
           if (jobCard && jobCard.id) {
             setSelectedJobCard(jobCard);
             setShowJobCardDetail(true);
-            // Do not auto-fetch heavy photo payloads here.
-            // Attachments are loaded on demand from the detail panel.
+            if (jobCard.attachmentsPending === true) {
+              void fetchJobCardPhotosMergeRef.current?.(jobCard.id);
+            }
           }
         } else if (response.status === 404) {
           setShowJobCardDetail(false);
@@ -479,7 +482,7 @@ const ServiceAndMaintenance = () => {
         window.removeEventListener('hashchange', handleRouteChange);
       }
     };
-  }, []); // Empty deps - only run on mount and route changes
+  }, []); // See fetchJobCardPhotosMergeRef — photo fetcher is attached after it is defined below
 
   const handleCopyLink = async () => {
     const shareUrl = `${window.location.origin}/job-card`;
@@ -530,6 +533,51 @@ const ServiceAndMaintenance = () => {
     window.open(target, '_blank', 'noopener,noreferrer');
   };
 
+  /** Same behavior as manufacturing JobCards detail: after a lite GET (omitPhotos), pull attachments automatically. */
+  const photosFetchInFlightRef = useRef(false);
+
+  const fetchJobCardPhotosAndMerge = useCallback(async (jobCardId) => {
+    if (!jobCardId) return;
+    if (photosFetchInFlightRef.current) return;
+    const token = window.storage?.getToken?.();
+    if (!token) return;
+    photosFetchInFlightRef.current = true;
+    setLoadingAttachments(true);
+    try {
+      const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}/photos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!pr.ok) {
+        setSelectedJobCard((prev) =>
+          prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
+        );
+        return;
+      }
+      const pd = await pr.json();
+      const photos = pd?.data?.photos ?? pd?.photos;
+      setSelectedJobCard((prev) =>
+        prev?.id === jobCardId
+          ? { ...prev, photos: Array.isArray(photos) ? photos : [], attachmentsPending: false }
+          : prev
+      );
+    } catch {
+      setSelectedJobCard((prev) =>
+        prev?.id === jobCardId ? { ...prev, photos: [], attachmentsPending: false } : prev
+      );
+    } finally {
+      photosFetchInFlightRef.current = false;
+      setLoadingAttachments(false);
+    }
+  }, []);
+
+  fetchJobCardPhotosMergeRef.current = fetchJobCardPhotosAndMerge;
+
+  const handleLoadAttachments = useCallback(async () => {
+    const id = selectedJobCard?.id;
+    if (!id) return;
+    await fetchJobCardPhotosAndMerge(id);
+  }, [selectedJobCard?.id, fetchJobCardPhotosAndMerge]);
+
   const handleOpenJobCardDetail = async (jobCard) => {
     if (!jobCard?.id) {
       setSelectedJobCard(jobCard);
@@ -553,8 +601,9 @@ const ServiceAndMaintenance = () => {
         const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
         if (full && full.id) {
           setSelectedJobCard(full);
-          // Do not auto-fetch heavy photo payloads here.
-          // Attachments are loaded on demand from the detail panel.
+          if (full.attachmentsPending === true) {
+            void fetchJobCardPhotosAndMerge(full.id);
+          }
         }
       }
     } catch (e) {
@@ -571,38 +620,6 @@ const ServiceAndMaintenance = () => {
     setJobCardActivities([]);
     setJobCardActivitiesLoading(false);
   };
-
-  const handleLoadAttachments = useCallback(async () => {
-    const id = selectedJobCard?.id;
-    if (!id || loadingAttachments) return;
-    const token = window.storage?.getToken?.();
-    if (!token) return;
-    setLoadingAttachments(true);
-    try {
-      const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(id)}/photos`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!pr.ok) {
-        setSelectedJobCard((prev) =>
-          prev?.id === id ? { ...prev, photos: [], attachmentsPending: false } : prev
-        );
-        return;
-      }
-      const pd = await pr.json();
-      const photos = pd?.data?.photos ?? pd?.photos;
-      setSelectedJobCard((prev) =>
-        prev?.id === id
-          ? { ...prev, photos: Array.isArray(photos) ? photos : [], attachmentsPending: false }
-          : prev
-      );
-    } catch {
-      setSelectedJobCard((prev) =>
-        prev?.id === id ? { ...prev, photos: [], attachmentsPending: false } : prev
-      );
-    } finally {
-      setLoadingAttachments(false);
-    }
-  }, [selectedJobCard?.id, loadingAttachments]);
 
   useEffect(() => {
     if (!showJobCardDetail || !selectedJobCard?.id) {
@@ -650,8 +667,9 @@ const ServiceAndMaintenance = () => {
       const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
       if (full && full.id) {
         setSelectedJobCard(full);
-        // Do not auto-fetch heavy photo payloads here.
-        // Attachments are loaded on demand from the detail panel.
+        if (full.attachmentsPending === true) {
+          void fetchJobCardPhotosAndMerge(full.id);
+        }
       }
       const ar = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}/activity?order=asc`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -664,7 +682,7 @@ const ServiceAndMaintenance = () => {
     } catch (e) {
       console.warn('ServiceAndMaintenance: refetch after save failed', e);
     }
-  }, []);
+  }, [fetchJobCardPhotosAndMerge]);
 
   useEffect(() => {
     const onSaved = (ev) => {
@@ -1807,7 +1825,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Visit summary
                       </div>
-                      <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                      <div className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <span className="font-semibold">Call out category: </span>
+                        {selectedJobCard.callOutCategory || '—'}
+                      </div>
+                      <div className={`text-sm mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                         {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
                       </div>
                       {DetailVoice ? (

@@ -165,59 +165,6 @@ function stockTakeSubmissionRef() {
   return `STK-${stamp}-${rand}`
 }
 
-/** Normalize mobile / Excel stock-take line payloads into rows ready for Prisma create. */
-function normalizeStockTakeLinesFromInput(linesInput) {
-  const arr = Array.isArray(linesInput) ? linesInput : []
-  return arr
-    .map((line, idx) => {
-      const isNewItem = line?.isNewItem === true
-      const sku = String(line?.sku || '').trim()
-      const itemName = String(line?.itemName || sku).trim()
-      const systemQty = Number(line?.systemQty)
-      const countedQty = Number(line?.countedQty)
-      if (!itemName || !Number.isFinite(systemQty) || !Number.isFinite(countedQty)) return null
-      if (!isNewItem && !sku) return null
-      const draftRowKey = String(line?.draftRowKey || '').trim()
-      return {
-        row: idx + 1,
-        locationInventoryId: line?.locationInventoryId ? String(line.locationInventoryId) : null,
-        inventoryItemId: line?.inventoryItemId ? String(line.inventoryItemId) : null,
-        sku,
-        itemName,
-        unit: String(line?.unit || 'pcs').trim() || 'pcs',
-        systemQty,
-        countedQty,
-        deltaQty: countedQty - systemQty,
-        isNewItem,
-        proposedItemDetails:
-          line?.proposedItemDetails && typeof line.proposedItemDetails === 'object'
-            ? line.proposedItemDetails
-            : {},
-        draftRowKey: draftRowKey || null
-      }
-    })
-    .filter(Boolean)
-}
-
-function prismaLineCreateFromNormalized(line) {
-  return {
-    locationInventoryId: line.locationInventoryId,
-    inventoryItemId: line.inventoryItemId,
-    sku: line.sku || `NEWITEM-${Date.now()}-${line.row}`,
-    itemName: line.itemName,
-    unit: line.unit,
-    systemQty: line.systemQty,
-    countedQty: line.countedQty,
-    deltaQty: line.deltaQty,
-    meta: JSON.stringify({
-      isNewItem: line.isNewItem === true,
-      proposedItemDetails: line.proposedItemDetails || {},
-      proposedSku: line.sku || '',
-      draftRowKey: line.draftRowKey || ''
-    })
-  }
-}
-
 async function allocateStockCountSkuTx(tx) {
   for (let attempt = 0; attempt < 80; attempt++) {
     const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`.toUpperCase()
@@ -770,67 +717,6 @@ async function buildAllLocationsInventoryResponse() {
     else row.location = 'Multiple locations'
   }
   return result
-}
-
-/**
- * Dashboard / summary: extended value and units per stock location (from LocationInventory rows).
- */
-async function buildLocationInventoryValueSummary() {
-  await syncInventoryAcrossAllLocations(false)
-
-  const allLocs = await prisma.stockLocation.findMany({
-    orderBy: [{ code: 'asc' }, { name: 'asc' }]
-  })
-
-  const agg = new Map()
-  for (const loc of allLocs) {
-    agg.set(loc.id, {
-      locationId: loc.id,
-      code: loc.code || '',
-      name: loc.name || '',
-      totalValue: 0,
-      unitsOnHand: 0
-    })
-  }
-
-  const records = await prisma.locationInventory.findMany({
-    include: { location: true }
-  })
-
-  let grandTotal = 0
-  let totalUnitsOnHand = 0
-
-  for (const r of records) {
-    const q = Number(r.quantity) || 0
-    const uc = Number(r.unitCost) || 0
-    const val = computedInventoryTotalValue(q, uc)
-    grandTotal += val
-    totalUnitsOnHand += q
-
-    const lid = r.locationId
-    let row = agg.get(lid)
-    if (!row) {
-      const loc = r.location
-      row = {
-        locationId: lid,
-        code: loc?.code || '',
-        name: loc?.name || 'Unknown location',
-        totalValue: 0,
-        unitsOnHand: 0
-      }
-      agg.set(lid, row)
-    }
-    row.totalValue += val
-    row.unitsOnHand += q
-  }
-
-  const locations = Array.from(agg.values()).sort((a, b) => {
-    const c = (a.code || '').localeCompare(b.code || '')
-    if (c !== 0) return c
-    return (a.name || '').localeCompare(b.name || '')
-  })
-
-  return { locations, grandTotal, totalUnitsOnHand }
 }
 
 async function syncInventoryAcrossAllLocations(force = false) {
@@ -1471,11 +1357,8 @@ async function handler(req, res) {
         const body = await parseJsonBody(req)
         const locationId = String(body?.locationId || '').trim()
         const linesInput = Array.isArray(body?.lines) ? body.lines : []
-        const saveAsDraft = body?.saveAsDraft === true || body?.status === 'draft'
         if (!locationId) return badRequest(res, 'locationId is required')
-
-        const uid = String(req.user?.sub || req.user?.id || '').trim()
-        if (!uid) return badRequest(res, 'Authenticated user required')
+        if (!linesInput.length) return badRequest(res, 'At least one line is required')
 
         const location = await prisma.stockLocation.findUnique({
           where: { id: locationId },
@@ -1483,48 +1366,34 @@ async function handler(req, res) {
         })
         if (!location) return badRequest(res, 'Invalid locationId')
 
-        const cleanLines = normalizeStockTakeLinesFromInput(linesInput)
+        const cleanLines = linesInput
+          .map((line, idx) => {
+            const isNewItem = line?.isNewItem === true
+            const sku = String(line?.sku || '').trim()
+            const itemName = String(line?.itemName || sku).trim()
+            const systemQty = Number(line?.systemQty)
+            const countedQty = Number(line?.countedQty)
+            if (!itemName || !Number.isFinite(systemQty) || !Number.isFinite(countedQty)) return null
+            if (!isNewItem && !sku) return null
+            return {
+              row: idx + 1,
+              locationInventoryId: line?.locationInventoryId ? String(line.locationInventoryId) : null,
+              inventoryItemId: line?.inventoryItemId ? String(line.inventoryItemId) : null,
+              sku,
+              itemName,
+              unit: String(line?.unit || 'pcs').trim() || 'pcs',
+              systemQty,
+              countedQty,
+              deltaQty: countedQty - systemQty,
+              isNewItem,
+              proposedItemDetails:
+                line?.proposedItemDetails && typeof line.proposedItemDetails === 'object'
+                  ? line.proposedItemDetails
+                  : {}
+            }
+          })
+          .filter(Boolean)
 
-        if (saveAsDraft) {
-          if (linesInput.length > 0 && !cleanLines.length) {
-            return badRequest(res, 'No valid stock-take lines found')
-          }
-          await prisma.stockTakeSubmission.deleteMany({
-            where: { ownerId: uid, status: 'draft' }
-          })
-          const submission = await prisma.stockTakeSubmission.create({
-            data: {
-              submissionRef: stockTakeSubmissionRef(),
-              locationId: location.id,
-              locationCode: location.code || '',
-              locationName: location.name || '',
-              status: 'draft',
-              submittedById: uid,
-              submittedBy: String(req.user?.name || req.user?.email || 'User'),
-              notes: String(body?.notes || '').trim(),
-              startedAt: body?.startedAt ? new Date(body.startedAt) : new Date(),
-              finishedAt: null,
-              ownerId: uid,
-              meta: JSON.stringify({
-                userAgent: req.headers?.['user-agent'] || '',
-                lineCount: cleanLines.length,
-                draft: true
-              }),
-              lines: {
-                create: cleanLines.map((line) => prismaLineCreateFromNormalized(line))
-              }
-            },
-            include: { lines: true }
-          })
-          auditManufacturing('create', 'stock-take-submission-draft', submission.id, {
-            submissionRef: submission.submissionRef,
-            locationId: submission.locationId,
-            lines: submission.lines.length
-          })
-          return created(res, { submission })
-        }
-
-        if (!linesInput.length) return badRequest(res, 'At least one line is required')
         if (!cleanLines.length) {
           return badRequest(res, 'No valid stock-take lines found')
         }
@@ -1536,7 +1405,7 @@ async function handler(req, res) {
             locationCode: location.code || '',
             locationName: location.name || '',
             status: 'pending_review',
-            submittedById: uid,
+            submittedById: String(req.user?.sub || req.user?.id || ''),
             submittedBy: String(req.user?.name || req.user?.email || 'User'),
             notes: String(body?.notes || '').trim(),
             startedAt: body?.startedAt ? new Date(body.startedAt) : null,
@@ -1547,7 +1416,21 @@ async function handler(req, res) {
               lineCount: cleanLines.length
             }),
             lines: {
-              create: cleanLines.map((line) => prismaLineCreateFromNormalized(line))
+              create: cleanLines.map((line) => ({
+                locationInventoryId: line.locationInventoryId,
+                inventoryItemId: line.inventoryItemId,
+                sku: line.sku || `NEWITEM-${Date.now()}-${line.row}`,
+                itemName: line.itemName,
+                unit: line.unit,
+                systemQty: line.systemQty,
+                countedQty: line.countedQty,
+                deltaQty: line.deltaQty,
+                meta: JSON.stringify({
+                  isNewItem: line.isNewItem === true,
+                  proposedItemDetails: line.proposedItemDetails || {},
+                  proposedSku: line.sku || ''
+                })
+              }))
             }
           },
           include: { lines: true }
@@ -1565,37 +1448,12 @@ async function handler(req, res) {
     }
 
     if (req.method === 'GET' && !id) {
-      const mine = String(req.query?.mine || '').trim() === '1'
-      if (mine) {
-        try {
-          const uid = String(req.user?.sub || req.user?.id || '').trim()
-          if (!uid) return badRequest(res, 'Authenticated user required')
-          const statusFilter = String(req.query?.status || 'draft').trim() || 'draft'
-          const rows = await prisma.stockTakeSubmission.findMany({
-            where: { ownerId: uid, status: statusFilter },
-            include: {
-              _count: { select: { lines: true } }
-            },
-            orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-            take: 10
-          })
-          return ok(res, {
-            submissions: rows.map((row) => ({
-              ...row,
-              lineCount: row._count?.lines || 0
-            }))
-          })
-        } catch (error) {
-          console.error('❌ Stock-take submission mine list failed:', error)
-          return serverError(res, 'Failed to load your stock-take drafts', error.message)
-        }
-      }
       if (!isAdminRole(req.user?.role)) {
         return forbidden(res, 'Only administrators can review stock-take submissions.')
       }
       try {
         const status = String(req.query?.status || '').trim()
-        const where = status ? { status } : { status: { not: 'draft' } }
+        const where = status ? { status } : {}
         const rows = await prisma.stockTakeSubmission.findMany({
           where,
           include: {
@@ -1617,6 +1475,9 @@ async function handler(req, res) {
     }
 
     if (req.method === 'GET' && id) {
+      if (!isAdminRole(req.user?.role)) {
+        return forbidden(res, 'Only administrators can review stock-take submissions.')
+      }
       try {
         const submission = await prisma.stockTakeSubmission.findUnique({
           where: { id },
@@ -1627,221 +1488,10 @@ async function handler(req, res) {
           }
         })
         if (!submission) return notFound(res, 'Stock-take submission not found')
-        const uid = String(req.user?.sub || req.user?.id || '').trim()
-        const isOwnerDraft =
-          submission.status === 'draft' && submission.ownerId && submission.ownerId === uid
-        if (!isAdminRole(req.user?.role) && !isOwnerDraft) {
-          return forbidden(res, 'Only administrators can review stock-take submissions.')
-        }
         return ok(res, { submission })
       } catch (error) {
         console.error('❌ Stock-take submission detail failed:', error)
         return serverError(res, 'Failed to load stock-take submission', error.message)
-      }
-    }
-
-    if (req.method === 'PATCH' && id) {
-      try {
-        const body = await parseJsonBody(req)
-        const existing = await prisma.stockTakeSubmission.findUnique({
-          where: { id },
-          select: { id: true, status: true, ownerId: true, submissionRef: true, meta: true, locationId: true }
-        })
-        if (!existing) return notFound(res, 'Stock-take submission not found')
-        const uid = String(req.user?.sub || req.user?.id || '').trim()
-        const isAdmin = isAdminRole(req.user?.role)
-
-        if (isAdmin && existing.status === 'pending_review' && body?.status === 'rejected') {
-          let prevMeta = {}
-          try {
-            prevMeta = existing.meta ? JSON.parse(existing.meta) : {}
-          } catch {
-            prevMeta = {}
-          }
-          const rejectionNote = String(body?.applyNotes ?? body?.rejectionReason ?? '').trim()
-          const submission = await prisma.stockTakeSubmission.update({
-            where: { id },
-            data: {
-              status: 'rejected',
-              applyNotes: rejectionNote,
-              meta: JSON.stringify({
-                ...prevMeta,
-                userAgent: req.headers?.['user-agent'] || '',
-                rejectedAt: new Date().toISOString(),
-                rejectedById: uid,
-                rejectedBy: String(req.user?.name || req.user?.email || 'Admin')
-              })
-            },
-            include: { lines: true }
-          })
-          auditManufacturing('update', 'stock-take-submission-reject', id, {
-            submissionRef: submission.submissionRef,
-            locationId: submission.locationId,
-            applyNotes: rejectionNote
-          })
-          return ok(res, { submission })
-        }
-
-        if (isAdmin && existing.status === 'pending_review' && Array.isArray(body?.lines)) {
-          const linesInput = body.lines
-          const cleanLines = normalizeStockTakeLinesFromInput(linesInput)
-          if (!linesInput.length) {
-            return badRequest(res, 'At least one line is required')
-          }
-          if (!cleanLines.length) {
-            return badRequest(res, 'No valid stock-take lines found')
-          }
-          let prevMeta = {}
-          try {
-            prevMeta = existing.meta ? JSON.parse(existing.meta) : {}
-          } catch {
-            prevMeta = {}
-          }
-          const submission = await prisma.$transaction(async (tx) => {
-            await tx.stockTakeSubmissionLine.deleteMany({ where: { submissionId: id } })
-            return tx.stockTakeSubmission.update({
-              where: { id },
-              data: {
-                meta: JSON.stringify({
-                  ...prevMeta,
-                  userAgent: req.headers?.['user-agent'] || '',
-                  lineCount: cleanLines.length,
-                  adminLastEditedAt: new Date().toISOString(),
-                  adminLastEditedById: uid,
-                  adminLastEditedBy: String(req.user?.name || req.user?.email || 'Admin')
-                }),
-                lines: {
-                  create: cleanLines.map((line) => prismaLineCreateFromNormalized(line))
-                }
-              },
-              include: { lines: true }
-            })
-          })
-          auditManufacturing('update', 'stock-take-submission-admin-edit', id, {
-            submissionRef: submission.submissionRef,
-            locationId: submission.locationId,
-            lines: submission.lines.length
-          })
-          return ok(res, { submission })
-        }
-
-        if (existing.status !== 'draft' || String(existing.ownerId || '') !== uid) {
-          return forbidden(res, 'You cannot update this stock take.')
-        }
-        const linesInput = Array.isArray(body?.lines) ? body.lines : []
-        const cleanLines = normalizeStockTakeLinesFromInput(linesInput)
-        if (linesInput.length > 0 && !cleanLines.length) {
-          return badRequest(res, 'No valid stock-take lines found')
-        }
-        const submission = await prisma.$transaction(async (tx) => {
-          await tx.stockTakeSubmissionLine.deleteMany({ where: { submissionId: id } })
-          return tx.stockTakeSubmission.update({
-            where: { id },
-            data: {
-              notes: String(body?.notes ?? '').trim(),
-              startedAt: body?.startedAt ? new Date(body.startedAt) : undefined,
-              meta: JSON.stringify({
-                userAgent: req.headers?.['user-agent'] || '',
-                lineCount: cleanLines.length,
-                draft: true
-              }),
-              lines: {
-                create: cleanLines.map((line) => prismaLineCreateFromNormalized(line))
-              }
-            },
-            include: { lines: true }
-          })
-        })
-        auditManufacturing('update', 'stock-take-submission-draft', id, {
-          submissionRef: submission.submissionRef,
-          locationId: submission.locationId,
-          lines: submission.lines.length
-        })
-        return ok(res, { submission })
-      } catch (error) {
-        console.error('❌ Stock-take draft update failed:', error)
-        return serverError(res, 'Failed to update stock-take draft', error.message)
-      }
-    }
-
-    if (req.method === 'DELETE' && id) {
-      try {
-        const existing = await prisma.stockTakeSubmission.findUnique({
-          where: { id },
-          select: { id: true, status: true, ownerId: true, submissionRef: true }
-        })
-        if (!existing) return notFound(res, 'Stock-take submission not found')
-        const uid = String(req.user?.sub || req.user?.id || '').trim()
-        if (isAdminRole(req.user?.role) && (existing.status === 'pending_review' || existing.status === 'rejected')) {
-          await prisma.stockTakeSubmission.delete({ where: { id } })
-          auditManufacturing('delete', 'stock-take-submission-admin', id, {
-            submissionRef: existing.submissionRef,
-            priorStatus: existing.status
-          })
-          return ok(res, { deleted: true })
-        }
-        if (existing.status !== 'draft' || String(existing.ownerId || '') !== uid) {
-          return forbidden(res, 'You can only delete your own draft stock take.')
-        }
-        await prisma.stockTakeSubmission.delete({ where: { id } })
-        auditManufacturing('delete', 'stock-take-submission-draft', id, {
-          submissionRef: existing.submissionRef
-        })
-        return ok(res, { deleted: true })
-      } catch (error) {
-        console.error('❌ Stock-take draft delete failed:', error)
-        return serverError(res, 'Failed to delete stock-take draft', error.message)
-      }
-    }
-
-    if (req.method === 'POST' && id && action === 'submit') {
-      try {
-        const body = await parseJsonBody(req)
-        const existing = await prisma.stockTakeSubmission.findUnique({
-          where: { id },
-          include: { lines: true }
-        })
-        if (!existing) return notFound(res, 'Stock-take submission not found')
-        const uid = String(req.user?.sub || req.user?.id || '').trim()
-        const isOwner = String(existing.ownerId || '') === uid
-        if (existing.status !== 'draft' || !isOwner) {
-          return forbidden(res, 'Only the draft owner can submit this stock take.')
-        }
-        const linesInput = Array.isArray(body?.lines) ? body.lines : []
-        const cleanLines = normalizeStockTakeLinesFromInput(linesInput)
-        if (!cleanLines.length) {
-          return badRequest(res, 'At least one valid line is required to submit')
-        }
-        const notesVal = String(body?.notes ?? existing.notes ?? '').trim()
-        const submission = await prisma.$transaction(async (tx) => {
-          await tx.stockTakeSubmissionLine.deleteMany({ where: { submissionId: id } })
-          return tx.stockTakeSubmission.update({
-            where: { id },
-            data: {
-              status: 'pending_review',
-              notes: notesVal,
-              finishedAt: body?.finishedAt ? new Date(body.finishedAt) : new Date(),
-              meta: JSON.stringify({
-                userAgent: req.headers?.['user-agent'] || '',
-                lineCount: cleanLines.length,
-                submittedFromDraft: true
-              }),
-              lines: {
-                create: cleanLines.map((line) => prismaLineCreateFromNormalized(line))
-              }
-            },
-            include: { lines: true }
-          })
-        })
-        auditManufacturing('update', 'stock-take-submission-submit', id, {
-          submissionRef: submission.submissionRef,
-          locationId: submission.locationId,
-          lines: submission.lines.length
-        })
-        return ok(res, { submission })
-      } catch (error) {
-        console.error('❌ Stock-take draft submit failed:', error)
-        return serverError(res, 'Failed to submit stock take', error.message)
       }
     }
 
@@ -2367,14 +2017,10 @@ async function handler(req, res) {
         const rawPageSize = parseInt(req.query?.pageSize || req.query?.limit, 10)
         const pageSize = rawPageSize > 0 ? Math.min(200, Math.max(1, rawPageSize)) : null
 
-        // Format dates for response. Preserve pre-aggregated totalValue when provided
-        // (e.g. all-locations response can sum per-location costs).
+        // Format dates for response
         let formatted = items.map(item => ({
           ...item,
-          totalValue:
-            item.totalValue !== undefined && item.totalValue !== null
-              ? (parseFloat(item.totalValue) || 0)
-              : computedInventoryTotalValue(item.quantity, item.unitCost),
+          totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
           lastRestocked: formatDate(item.lastRestocked),
           createdAt: formatDate(item.createdAt),
           updatedAt: formatDate(item.updatedAt)
@@ -2394,17 +2040,6 @@ async function handler(req, res) {
       } catch (error) {
         console.error('❌ Failed to list inventory:', error)
         return serverError(res, 'Failed to list inventory', error.message)
-      }
-    }
-
-    // GET /api/manufacturing/inventory/location-value-summary — per-location value (dashboard)
-    if (req.method === 'GET' && id === 'location-value-summary') {
-      try {
-        const summary = await buildLocationInventoryValueSummary()
-        return ok(res, summary)
-      } catch (error) {
-        console.error('❌ Failed to load inventory value by location:', error)
-        return serverError(res, 'Failed to load inventory value by location', error.message)
       }
     }
 

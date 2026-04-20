@@ -546,11 +546,13 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           ? 'clientName'
           : sortField === 'technician'
             ? 'agentName'
-            : sortField === 'jobCardNumber' ||
-                sortField === 'status' ||
-                sortField === 'createdAt'
-              ? sortField
-              : 'createdAt';
+            : sortField === 'callOutCategory'
+              ? 'callOutCategory'
+              : sortField === 'jobCardNumber' ||
+                  sortField === 'status' ||
+                  sortField === 'createdAt'
+                ? sortField
+                : 'createdAt';
       params.set('sortField', apiSortField);
       params.set('sortDirection', sortDirection);
       return `/api/jobcards?${params.toString()}`;
@@ -1195,6 +1197,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <div className={`mt-1 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       {jc.reasonForVisit || jc.diagnosis || 'No summary'}
                     </div>
+                    {jc.callOutCategory ? (
+                      <div className={`mt-1 text-[11px] font-medium ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>
+                        Category: {jc.callOutCategory}
+                      </div>
+                    ) : null}
                     <JobCardListMetricChips jc={jc} isDark={isDark} />
                   </div>
                   <span
@@ -1275,6 +1282,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
+                    onClick={() => handleSort('callOutCategory')}
+                  >
+                    <span>Category</span>
+                    {renderSortIcon('callOutCategory')}
+                  </button>
+                </th>
+                <th className="px-4 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
                     onClick={() => handleSort('status')}
                   >
                     <span>Status</span>
@@ -1337,6 +1354,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {technicianName || '–'}
+                    </td>
+                    <td className={`px-4 py-2 max-w-[10rem] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      <span className="line-clamp-2" title={jc.callOutCategory || ''}>
+                        {jc.callOutCategory || '–'}
+                      </span>
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span
@@ -1695,12 +1717,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                         Visit summary
                       </div>
-                      {selectedJobCard.callOutCategory ? (
-                        <div className="text-xs font-medium text-primary-300 mt-0.5">
-                          {selectedJobCard.callOutCategory}
-                        </div>
-                      ) : null}
-                      <div className="text-sm text-slate-100">
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        <span className="font-semibold text-slate-300">Call out category: </span>
+                        {selectedJobCard.callOutCategory || '—'}
+                      </div>
+                      <div className="text-sm text-slate-100 mt-1">
                         {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
                       </div>
                       <JobCardVoiceClips

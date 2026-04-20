@@ -127,7 +127,8 @@ const LIST_SORT_WHITELIST = {
   clientName: true,
   status: true,
   agentName: true,
-  reasonForVisit: true
+  reasonForVisit: true,
+  callOutCategory: true
 }
 
 /** List responses only: keeps mobile list/search payloads small (full text comes from GET /api/jobcards/:id). */
@@ -403,6 +404,7 @@ async function handler(req, res) {
           location: true,
           status: true,
           reasonForVisit: true,
+          callOutCategory: true,
           diagnosis: true,
           ownerId: true,
           completedByUserId: true,
