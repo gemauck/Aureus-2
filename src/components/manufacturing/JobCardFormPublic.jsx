@@ -6031,6 +6031,38 @@ const JobCardFormPublic = () => {
       return sku && stockTakeCounts[sku] !== undefined && stockTakeCounts[sku] !== '';
     }).length;
     const countedLines = countedExistingLines + stockTakeNewItems.length;
+    const stockTakeScanFabDisabled =
+      !stockTakeLocationId || stockTakeRows.length === 0 || stockTakeScanOpen;
+    const stockTakeScanFabNode = (
+      <button
+        type="button"
+        onClick={() => {
+          setStockTakeError('');
+          setStockTakeScanOpen(true);
+        }}
+        disabled={stockTakeScanFabDisabled}
+        title={
+          stockTakeScanFabDisabled && !stockTakeScanOpen
+            ? !stockTakeLocationId
+              ? 'Select a stock location first'
+              : 'No stock lines for this location'
+            : undefined
+        }
+        aria-label="Scan inventory QR code"
+        className="job-card-stock-take-scan-fab pointer-events-auto fixed z-[80] inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation right-4 max-sm:right-3 bottom-[max(1rem,env(safe-area-inset-bottom,0px))] sm:bottom-6"
+      >
+        <i className="fa-solid fa-camera text-base" aria-hidden />
+        Scan QR
+      </button>
+    );
+    const canPortalStockTakeFab =
+      typeof document !== 'undefined' &&
+      window.ReactDOM &&
+      typeof window.ReactDOM.createPortal === 'function';
+    const stockTakeScanFabRendered = canPortalStockTakeFab
+      ? window.ReactDOM.createPortal(stockTakeScanFabNode, document.body)
+      : stockTakeScanFabNode;
+
     return (
       <div className="job-card-stock-take min-h-[100dvh] flex flex-col bg-gradient-to-b from-slate-100 via-white to-blue-50/30 relative">
         <header className="flex-shrink-0 bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-md px-4 py-4 sm:px-6">
@@ -6047,11 +6079,7 @@ const JobCardFormPublic = () => {
             Select a location, enter counted quantities, then submit for admin review and apply.
           </p>
         </header>
-        <div
-          className={`flex-1 overflow-y-auto px-4 py-4 sm:px-6 ${
-            stockTakeLocationId ? 'pb-24 sm:pb-28' : 'pb-8'
-          }`}
-        >
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 pb-24 sm:pb-28">
           <div className="max-w-3xl mx-auto space-y-4">
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <label htmlFor="stock-take-location" className="block text-xs font-semibold text-gray-600 mb-1">
@@ -6489,21 +6517,7 @@ const JobCardFormPublic = () => {
             ) : null}
           </div>
         </div>
-        {stockTakeLocationId ? (
-          <button
-            type="button"
-            onClick={() => {
-              setStockTakeError('');
-              setStockTakeScanOpen(true);
-            }}
-            disabled={stockTakeRows.length === 0}
-            aria-label="Scan inventory QR code"
-            className="fixed z-[70] inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation right-4 max-sm:right-3 bottom-[max(1rem,env(safe-area-inset-bottom,0px))] sm:bottom-6"
-          >
-            <i className="fa-solid fa-camera text-base" aria-hidden />
-            Scan QR
-          </button>
-        ) : null}
+        {stockTakeScanFabRendered}
       </div>
     );
   }
