@@ -1848,9 +1848,31 @@
         (function() {
             if (!('serviceWorker' in navigator)) return;
             window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').catch(function(error) {
-                    console.warn('Service worker registration failed:', error);
+                var refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    if (refreshing) return;
+                    refreshing = true;
+                    window.location.reload();
                 });
+                navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+                    .then(function(reg) {
+                        if (reg.waiting) {
+                            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                        reg.addEventListener('updatefound', function() {
+                            var installing = reg.installing;
+                            if (!installing) return;
+                            installing.addEventListener('statechange', function() {
+                                if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                                    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                                }
+                            });
+                        });
+                        reg.update().catch(function() {});
+                    })
+                    .catch(function(error) {
+                        console.warn('Service worker registration failed:', error);
+                    });
             });
         })();
     </script>

@@ -1,4 +1,4 @@
-const SW_VERSION = 'jobcard-offline-v5';
+const SW_VERSION = 'jobcard-offline-v6';
 const APP_CACHE = `${SW_VERSION}-app`;
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 
@@ -40,6 +40,12 @@ self.addEventListener('activate', event => {
       await self.clients.claim();
     })()
   );
+});
+
+self.addEventListener('message', event => {
+  if (event?.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 function isJobCardNavigation(url, mode) {
