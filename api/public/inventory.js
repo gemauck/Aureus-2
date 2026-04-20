@@ -20,7 +20,7 @@ const TEMPLATE_SELECT = {
  * Read-only: does not seed LocationInventory rows.
  */
 async function inventoryForLocation(locationId) {
-  if (!locationId || locationId === 'all') {
+  if (!locationId) {
     return []
   }
 
@@ -146,7 +146,7 @@ async function handler(req, res) {
     const rawLoc = req.query?.locationId
     const locationId = typeof rawLoc === 'string' ? rawLoc.trim() : ''
 
-    if (locationId) {
+    if (locationId && locationId !== 'all') {
       const rows = await inventoryForLocation(locationId)
       return ok(res, {
         inventory: rows,
