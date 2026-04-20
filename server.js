@@ -371,7 +371,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://cdn.sheetjs.com", "https://cdn.jsdelivr.net", "blob:"],
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers
-      imgSrc: ["'self'", "data:", "https:"],
+      // blob: for object-URL previews (e.g. QR/camera flows); data: already allowed
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
       // Voice notes on public job card use <audio src="data:..."> or blob: URLs; default-src alone blocks them
       mediaSrc: ["'self'", "data:", "blob:"],
       connectSrc: ["'self'", "https://unpkg.com", "https://cdn.jsdelivr.net", "https://pypi.org", "https://files.pythonhosted.org", "https://nominatim.openstreetmap.org"],

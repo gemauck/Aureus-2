@@ -87,6 +87,29 @@ function jobCardStockPickListFromCachedInventory(items, locationId, options = {}
   return out;
 }
 
+/**
+ * Offline stock take: one row per active catalog SKU (like /api/public/inventory allSkus=1), qty at location or 0.
+ */
+function jobCardStockTakePickListFromCachedInventory(items, locationId) {
+  if (!locationId || !Array.isArray(items)) return [];
+  const bySku = new Map();
+  for (const item of items) {
+    if (!item || item.status === 'inactive') continue;
+    const sku = String(item.sku || item.id || '').trim();
+    if (!sku) continue;
+    if (!bySku.has(sku)) bySku.set(sku, item);
+  }
+  const out = [];
+  for (const item of bySku.values()) {
+    const q = jobCardQuantityAtLocation(item, locationId);
+    if (q < 0) continue;
+    const sku = String(item.sku || item.id || '').trim();
+    out.push({ ...item, quantity: q, sku });
+  }
+  out.sort((a, b) => String(a.name || a.sku || '').localeCompare(String(b.name || b.sku || ''), undefined, { sensitivity: 'base' }));
+  return out;
+}
+
 function readPublicPriorJobCardIds() {
   try {
     const raw = localStorage.getItem(JOB_CARD_PUBLIC_PRIOR_IDS_KEY);
@@ -3717,9 +3740,7 @@ const JobCardFormPublic = () => {
     let cancelled = false;
     const run = async () => {
       if (!isOnline) {
-        const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId, {
-          includeZeroQty: true
-        });
+        const rows = jobCardStockTakePickListFromCachedInventory(inventory, stockTakeLocationId);
         if (!cancelled) setStockTakeRows(rows);
         return;
       }
@@ -3727,7 +3748,7 @@ const JobCardFormPublic = () => {
         const response = await fetch(
           `/api/public/inventory?locationId=${encodeURIComponent(
             stockTakeLocationId
-          )}&includeZero=1`,
+          )}&includeZero=1&allSkus=1`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
         if (response.ok) {
@@ -3739,9 +3760,7 @@ const JobCardFormPublic = () => {
       } catch (e) {
         console.warn('⚠️ JobCardFormPublic: stock take location inventory fetch failed:', e?.message || e);
       }
-      const rows = jobCardStockPickListFromCachedInventory(inventory, stockTakeLocationId, {
-        includeZeroQty: true
-      });
+      const rows = jobCardStockTakePickListFromCachedInventory(inventory, stockTakeLocationId);
       if (!cancelled) setStockTakeRows(rows);
     };
     void run();
@@ -6167,8 +6186,9 @@ const JobCardFormPublic = () => {
                 ) : (
                   <>
                     <div className="divide-y divide-gray-100">
-                      {stockTakePagedRows.map((row) => {
+                      {stockTakePagedRows.map((row, idx) => {
                         const sku = String(row?.sku || '').trim();
+                        const lineNo = (stockTakePage - 1) * STOCK_TAKE_PAGE_SIZE + idx + 1;
                         return (
                           <div
                             key={`${stockTakeLocationId}-${sku}`}
@@ -6176,7 +6196,12 @@ const JobCardFormPublic = () => {
                               stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
                             }`}
                           >
-                            <div className="sm:col-span-7 min-w-0">
+                            <div className="sm:col-span-1 flex items-center justify-start sm:justify-center shrink-0">
+                              <span className="text-xs font-semibold text-gray-500 tabular-nums w-8 text-center">
+                                {lineNo}
+                              </span>
+                            </div>
+                            <div className="sm:col-span-6 min-w-0">
                               <p className="text-sm font-semibold text-gray-900 truncate leading-tight">{row?.name || sku}</p>
                               {sku ? (
                                 <p className="text-[11px] text-gray-500 leading-tight truncate">{sku}</p>

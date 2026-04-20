@@ -1429,8 +1429,9 @@
                             React.createElement(
                               'div',
                               { className: 'divide-y ' + (isDark ? 'divide-gray-800' : 'divide-gray-100') },
-                              stPagedRows.map((row) => {
+                              stPagedRows.map((row, idx) => {
                                 const sku = String(row?.sku || '').trim();
+                                const lineNo = (stPage - 1) * STOCK_TAKE_PAGE_SIZE + idx + 1;
                                 return React.createElement(
                                   'div',
                                   {
@@ -1439,7 +1440,16 @@
                                   },
                                   React.createElement(
                                     'div',
-                                    { className: 'sm:col-span-7 min-w-0' },
+                                    { className: 'sm:col-span-1 flex items-center justify-start sm:justify-center shrink-0' },
+                                    React.createElement(
+                                      'span',
+                                      { className: 'text-xs font-semibold tabular-nums w-8 text-center ' + muted },
+                                      lineNo
+                                    )
+                                  ),
+                                  React.createElement(
+                                    'div',
+                                    { className: 'sm:col-span-6 min-w-0' },
                                     React.createElement(
                                       'p',
                                       { className: 'text-sm font-medium truncate leading-tight ' + text },

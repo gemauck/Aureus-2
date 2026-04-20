@@ -547,18 +547,13 @@ async function buildLocationInventoryResponse(locationId) {
     return []
   }
 
-  let locationInventoryRecords = await prisma.locationInventory.findMany({
+  // Ensure every active catalog SKU has a LocationInventory row at this site (stock take / counts need full list).
+  await ensureLocationHasAllInventory(location)
+
+  const locationInventoryRecords = await prisma.locationInventory.findMany({
     where: { locationId },
     orderBy: { itemName: 'asc' }
   })
-
-  if (!locationInventoryRecords.length) {
-    await ensureLocationHasAllInventory(location)
-    locationInventoryRecords = await prisma.locationInventory.findMany({
-      where: { locationId },
-      orderBy: { itemName: 'asc' }
-    })
-  }
 
   if (!locationInventoryRecords.length) {
     return []

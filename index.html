@@ -701,16 +701,46 @@
     <!-- React - Must load before dependent scripts, but preload helps -->
     <script src="/node_modules/react/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded (local)'); }" onerror="this.onerror=null; this.src='https://unpkg.com/react@18/umd/react.production.min.js';"></script>
     <script src="/node_modules/react-dom/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded (local)'); }" onerror="this.onerror=null; this.src='https://unpkg.com/react-dom@18/umd/react-dom.production.min.js';"></script>
+    <!--
+      SheetJS UMD + our exports/module polyfill: the library often lands on window.exports, while the
+      bundle's final window.XLSX = XLSX can point at an empty object. ExcelJS UMD uses module.exports.
+      Resolve both so window.XLSX / window.ExcelJS match what components expect.
+    -->
+    <script>
+        (function () {
+            function xlsxReady(x) {
+                return !!(x && (x.utils || typeof x.read === 'function'));
+            }
+            function excelJSReady(E) {
+                if (!E) return false;
+                var z = E.default || E;
+                return typeof z.Workbook === 'function';
+            }
+            window.__erpResolveXLSX = function () {
+                var g = typeof globalThis !== 'undefined' ? globalThis : window;
+                if (xlsxReady(g.XLSX)) return g.XLSX;
+                if (typeof exports !== 'undefined' && xlsxReady(exports)) return exports;
+                if (typeof module !== 'undefined' && module.exports && xlsxReady(module.exports)) return module.exports;
+                return null;
+            };
+            window.__erpResolveExcelJS = function () {
+                var g = typeof globalThis !== 'undefined' ? globalThis : window;
+                var onG = g.ExcelJS;
+                if (excelJSReady(onG)) return onG.default || onG;
+                if (typeof module !== 'undefined' && module.exports && excelJSReady(module.exports)) {
+                    return module.exports.default || module.exports;
+                }
+                if (typeof exports !== 'undefined' && excelJSReady(exports)) return exports.default || exports;
+                return null;
+            };
+        })();
+    </script>
     <!-- XLSX / ExcelJS: defer so they do not block parsing of the rest of the page (execute before core-bundle.js, same defer queue) -->
     <script defer crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" 
             onload="(function() {
-                     function xlsxReady(x) {
-                       return !!(x && (x.utils || typeof x.read === 'function'));
-                     }
                      function tryAssign() {
-                       var g = typeof globalThis !== 'undefined' ? globalThis : window;
-                       var x = g && g.XLSX;
-                       if (xlsxReady(x)) {
+                       var x = typeof window.__erpResolveXLSX === 'function' ? window.__erpResolveXLSX() : null;
+                       if (x) {
                          window.XLSX = x;
                          console.log('✅ XLSX library loaded from SheetJS CDN');
                          return true;
@@ -735,10 +765,9 @@
     <script defer crossorigin src="https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js" 
             onload="(function() {
                      function tryAssign() {
-                       var g = typeof globalThis !== 'undefined' ? globalThis : window;
-                       var E = g && g.ExcelJS;
-                       if (E && (typeof E.Workbook === 'function' || (E.default && typeof E.default.Workbook === 'function'))) {
-                         window.ExcelJS = E.default || E;
+                       var E = typeof window.__erpResolveExcelJS === 'function' ? window.__erpResolveExcelJS() : null;
+                       if (E) {
+                         window.ExcelJS = E;
                          console.log('✅ ExcelJS library loaded for data validation support');
                          return true;
                        }
@@ -776,13 +805,19 @@
             function xlsxReady(x) {
                 return !!(x && (x.utils || typeof x.read === 'function'));
             }
-            var xl = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
+            var xl = typeof window.__erpResolveXLSX === 'function' ? window.__erpResolveXLSX() : null;
+            if (!xl) {
+                xl = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
+            }
             if (xlsxReady(xl)) {
                 window.XLSX = xl;
                 console.log('✅ XLSX verified');
             } else {
                 setTimeout(function() {
-                    var xl2 = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
+                    var xl2 = typeof window.__erpResolveXLSX === 'function' ? window.__erpResolveXLSX() : null;
+                    if (!xl2) {
+                        xl2 = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
+                    }
                     if (xlsxReady(xl2)) {
                         window.XLSX = xl2;
                         console.log('✅ XLSX loaded (delayed)');
