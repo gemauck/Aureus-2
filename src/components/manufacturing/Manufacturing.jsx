@@ -4311,6 +4311,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
             <span className="text-xs">
               Page {invSafePage} of {invTotalPages} ({INVENTORY_LIST_PAGE_SIZE} per page)
+              <span className="ml-1">· {invFilteredTotal.toLocaleString()} items</span>
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <button

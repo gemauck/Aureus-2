@@ -1284,6 +1284,12 @@ const JobCardFormPublic = () => {
   const [stockTakeSubmitting, setStockTakeSubmitting] = useState(false);
   const [stockTakeStatus, setStockTakeStatus] = useState('');
   const [stockTakeError, setStockTakeError] = useState('');
+  /** Server-backed draft (one per signed-in user); persisted in StockTakeSubmission status=draft */
+  const [stockTakeDraftId, setStockTakeDraftId] = useState(null);
+  const [stockTakeDraftSaving, setStockTakeDraftSaving] = useState(false);
+  const [stockTakeResumeLoading, setStockTakeResumeLoading] = useState(false);
+  const [serverStockTakeDraft, setServerStockTakeDraft] = useState(null);
+  const [serverStockTakeDraftLoading, setServerStockTakeDraftLoading] = useState(false);
   /** Prior list: server + public API; merged with readLocalPendingJobCards() for display */
   const [serverPriorList, setServerPriorList] = useState([]);
   const [serverPriorLoading, setServerPriorLoading] = useState(false);
@@ -2482,6 +2488,42 @@ const JobCardFormPublic = () => {
     };
     loadStockData();
   }, [isOnline]);
+
+  /** Load current user's server stock-take draft (signed-in only) for landing + resume */
+  useEffect(() => {
+    if (wizardFlow !== 'landing') return;
+    const token = getJobCardAuthToken();
+    if (!token) {
+      setServerStockTakeDraft(null);
+      return;
+    }
+    let cancelled = false;
+    setServerStockTakeDraftLoading(true);
+    void (async () => {
+      try {
+        const response = await fetch('/api/manufacturing/stock-take-submissions?mine=1&status=draft', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok) {
+          setServerStockTakeDraft(null);
+          return;
+        }
+        const subs = payload?.data?.submissions ?? payload?.submissions;
+        const first = Array.isArray(subs) && subs[0] ? subs[0] : null;
+        setServerStockTakeDraft(first);
+      } catch {
+        if (!cancelled) setServerStockTakeDraft(null);
+      } finally {
+        if (!cancelled) setServerStockTakeDraftLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardFlow, priorListRefreshTick]);
 
   useEffect(() => {
     const loadSitesForClient = async () => {
@@ -5666,32 +5708,43 @@ const JobCardFormPublic = () => {
                   <div className="px-4 py-6 text-sm text-gray-500">No parts match your search.</div>
                 ) : (
                   <div className="divide-y divide-gray-100">
-                    {filteredStockTakeRows.map((row) => {
+                    {filteredStockTakeRows.map((row, rowIndex) => {
                       const sku = String(row?.sku || '').trim();
                       const rowKey = stockTakeRowStateKey(row, stockTakeLocationId);
                       const countVal =
                         stockTakeCounts[rowKey] ?? (sku ? stockTakeCounts[sku] : undefined) ?? '';
                       const currentQty = Number(row?.quantity) || 0;
                       return (
-                        <div key={rowKey} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center">
-                          <div className="sm:col-span-7 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {sku} · System: {currentQty}
-                            </p>
+                        <div
+                          key={rowKey}
+                          className="px-4 py-3 flex gap-3 sm:gap-4 items-start"
+                        >
+                          <div
+                            className="flex-shrink-0 w-8 sm:w-9 text-right text-sm font-medium text-gray-500 tabular-nums pt-0.5"
+                            aria-hidden
+                          >
+                            {rowIndex + 1}
                           </div>
-                          <div className="sm:col-span-5">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={countVal}
-                              onChange={(e) => {
-                                const nextValue = e.target.value;
-                                setStockTakeCounts((prev) => ({ ...prev, [rowKey]: nextValue }));
-                              }}
-                              placeholder="Counted qty"
-                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
-                            />
+                          <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center">
+                            <div className="sm:col-span-7 min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {sku} · System: {currentQty}
+                              </p>
+                            </div>
+                            <div className="sm:col-span-5">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={countVal}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value;
+                                  setStockTakeCounts((prev) => ({ ...prev, [rowKey]: nextValue }));
+                                }}
+                                placeholder="Counted qty"
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                              />
+                            </div>
                           </div>
                         </div>
                       );
