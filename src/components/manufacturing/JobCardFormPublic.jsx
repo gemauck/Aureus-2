@@ -11,9 +11,15 @@ const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = R
 
 const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
 
-/** Base64 payloads: keep video cap lower than express.json (100mb) to leave room for the rest of the payload */
-const JOB_CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+/** Base64 payloads: keep image/video caps below gateway and server limits with room for the rest of the payload. */
+const JOB_CARD_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+const JOB_CARD_IMAGE_TARGET_BYTES = 1600 * 1024;
+const JOB_CARD_IMAGE_MAX_DIMENSION = 1920;
+const JOB_CARD_SYNC_WARN_PAYLOAD_BYTES = 18 * 1024 * 1024;
+const JOB_CARD_SYNC_HARD_PAYLOAD_BYTES = 28 * 1024 * 1024;
+const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 45000;
+const JOB_CARD_SYNC_RETRY_ATTEMPTS = 3;
 
 /** Work-step fields that can each carry photos/videos (stored on JobCard.photos as { kind: 'sectionMedia', section, url, name }). */
 const SECTION_WORK_MEDIA_KEYS = ['diagnosis', 'actionsTaken', 'futureWorkRequired'];
@@ -139,6 +145,161 @@ function jobCardFileLooksImageOrVideo(file) {
 function jobCardFileIsVideo(file) {
   if (file.type.startsWith('video/')) return true;
   return /\.(mp4|webm|mov|mkv)$/i.test(file.name || '');
+}
+
+function dataUrlApproxBytes(dataUrl) {
+  if (typeof dataUrl !== 'string') return 0;
+  const idx = dataUrl.indexOf(',');
+  if (idx < 0) return 0;
+  const b64 = dataUrl.slice(idx + 1).replace(/\s/g, '');
+  if (!b64) return 0;
+  const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((b64.length * 3) / 4) - pad);
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Unable to read file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function sleepMs(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function estimateJsonBytes(value) {
+  try {
+    const raw = JSON.stringify(value);
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(raw).length;
+    }
+    return raw.length;
+  } catch {
+    return 0;
+  }
+}
+
+function shouldRetryHttpStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function isRetryableFetchError(error) {
+  const msg = String(error?.message || '').toLowerCase();
+  return (
+    error?.name === 'AbortError' ||
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network error') ||
+    msg.includes('load failed') ||
+    msg.includes('timeout')
+  );
+}
+
+async function fetchWithRetry(url, options = {}, config = {}) {
+  const attempts = Number(config.attempts || JOB_CARD_SYNC_RETRY_ATTEMPTS);
+  const timeoutMs = Number(config.timeoutMs || JOB_CARD_SYNC_REQUEST_TIMEOUT_MS);
+  const baseDelayMs = Number(config.baseDelayMs || 700);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (response.ok || !shouldRetryHttpStatus(response.status) || attempt >= attempts) {
+        return response;
+      }
+    } catch (error) {
+      clearTimeout(timeout);
+      lastError = error;
+      if (!isRetryableFetchError(error) || attempt >= attempts) {
+        throw error;
+      }
+    }
+    const delay = Math.min(baseDelayMs * (2 ** (attempt - 1)), 3000);
+    await sleepMs(delay);
+  }
+  throw lastError || new Error('Network request failed');
+}
+
+function canvasToBlobPromise(canvas, type, quality) {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob || null), type, quality);
+  });
+}
+
+function loadImageForCompression(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Unable to decode image.'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function prepareJobCardImageDataUrl(file) {
+  const fallbackDataUrl = await readFileAsDataUrl(file);
+  if ((file.type || '').includes('gif') || /\.gif$/i.test(file.name || '')) {
+    return fallbackDataUrl;
+  }
+  try {
+    const image = await loadImageForCompression(file);
+    const sourceW = image.naturalWidth || image.width || 0;
+    const sourceH = image.naturalHeight || image.height || 0;
+    if (!sourceW || !sourceH) return fallbackDataUrl;
+
+    const maxSide = Math.max(sourceW, sourceH);
+    const baseScale = maxSide > JOB_CARD_IMAGE_MAX_DIMENSION ? JOB_CARD_IMAGE_MAX_DIMENSION / maxSide : 1;
+    const outputType = 'image/jpeg';
+    const attempts = [
+      { scale: baseScale, quality: 0.82 },
+      { scale: Math.min(baseScale, 0.9), quality: 0.74 },
+      { scale: Math.min(baseScale, 0.8), quality: 0.66 },
+      { scale: Math.min(baseScale, 0.7), quality: 0.58 }
+    ];
+
+    let selectedDataUrl = fallbackDataUrl;
+    let selectedBytes = dataUrlApproxBytes(fallbackDataUrl);
+
+    for (const attempt of attempts) {
+      const w = Math.max(1, Math.round(sourceW * attempt.scale));
+      const h = Math.max(1, Math.round(sourceH * attempt.scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      ctx.drawImage(image, 0, 0, w, h);
+      const blob = await canvasToBlobPromise(canvas, outputType, attempt.quality);
+      if (!blob) continue;
+      const dataUrl = await readFileAsDataUrl(blob);
+      const bytes = dataUrlApproxBytes(dataUrl);
+      if (bytes > 0 && (selectedBytes <= 0 || bytes < selectedBytes)) {
+        selectedDataUrl = dataUrl;
+        selectedBytes = bytes;
+      }
+      if (bytes > 0 && bytes <= JOB_CARD_IMAGE_TARGET_BYTES) {
+        return dataUrl;
+      }
+    }
+    return selectedDataUrl;
+  } catch {
+    return fallbackDataUrl;
+  }
 }
 
 function parseProjectAssociationFromComments(rawComments) {
@@ -2247,15 +2408,15 @@ const JobCardFormPublic = () => {
     }));
   };
 
-  const handlePhotoUpload = (event) => {
+  const handlePhotoUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     const input = event.target;
     if (files.length === 0) return;
 
-    files.forEach(file => {
+    for (const file of files) {
       if (!jobCardFileLooksImageOrVideo(file)) {
         alert('Please choose an image or video file.');
-        return;
+        continue;
       }
       const isVid = jobCardFileIsVideo(file);
       const maxBytes = isVid ? JOB_CARD_VIDEO_MAX_BYTES : JOB_CARD_IMAGE_MAX_BYTES;
@@ -2265,17 +2426,25 @@ const JobCardFormPublic = () => {
             ? `Each video must be ${JOB_CARD_VIDEO_MAX_BYTES / 1024 / 1024}MB or smaller.`
             : `Each image must be ${JOB_CARD_IMAGE_MAX_BYTES / 1024 / 1024}MB or smaller.`
         );
-        return;
+        continue;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result;
+      try {
+        const dataUrl = isVid
+          ? await readFileAsDataUrl(file)
+          : await prepareJobCardImageDataUrl(file);
+        const finalBytes = dataUrlApproxBytes(dataUrl);
+        if (!isVid && finalBytes > JOB_CARD_IMAGE_MAX_BYTES) {
+          alert(`This image is still too large after compression. Please choose a smaller photo.`);
+          continue;
+        }
         pushWizardActivity('wizard_media_added', { kind: 'photo' });
-        setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: file.size }]);
+        setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: finalBytes || file.size }]);
         setFormData(prev => ({ ...prev, photos: [...prev.photos, dataUrl] }));
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (error) {
+        console.warn('JobCardFormPublic: media read failed', error);
+        alert('Failed to read that file. Please try again.');
+      }
+    }
     input.value = '';
   };
 
@@ -2285,15 +2454,15 @@ const JobCardFormPublic = () => {
     setFormData(prev => ({ ...prev, photos: newPhotos.map(photo => typeof photo === 'string' ? photo : photo.url) }));
   };
 
-  const handleSectionWorkMediaUpload = (section, event) => {
+  const handleSectionWorkMediaUpload = async (section, event) => {
     const files = Array.from(event.target.files || []);
     const input = event.target;
     if (files.length === 0) return;
 
-    files.forEach(file => {
+    for (const file of files) {
       if (!jobCardFileLooksImageOrVideo(file)) {
         alert('Please choose an image or video file.');
-        return;
+        continue;
       }
       const isVid = jobCardFileIsVideo(file);
       const maxBytes = isVid ? JOB_CARD_VIDEO_MAX_BYTES : JOB_CARD_IMAGE_MAX_BYTES;
@@ -2303,19 +2472,27 @@ const JobCardFormPublic = () => {
             ? `Each video must be ${JOB_CARD_VIDEO_MAX_BYTES / 1024 / 1024}MB or smaller.`
             : `Each image must be ${JOB_CARD_IMAGE_MAX_BYTES / 1024 / 1024}MB or smaller.`
         );
-        return;
+        continue;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result;
+      try {
+        const dataUrl = isVid
+          ? await readFileAsDataUrl(file)
+          : await prepareJobCardImageDataUrl(file);
+        const finalBytes = dataUrlApproxBytes(dataUrl);
+        if (!isVid && finalBytes > JOB_CARD_IMAGE_MAX_BYTES) {
+          alert('This image is still too large after compression. Please choose a smaller photo.');
+          continue;
+        }
         pushWizardActivity('wizard_media_added', { kind: 'sectionMedia', section });
         setSectionWorkMedia(prev => ({
           ...prev,
-          [section]: [...(prev[section] || []), { name: file.name, url: dataUrl, size: file.size }]
+          [section]: [...(prev[section] || []), { name: file.name, url: dataUrl, size: finalBytes || file.size }]
         }));
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (error) {
+        console.warn('JobCardFormPublic: section media read failed', error);
+        alert('Failed to read that file. Please try again.');
+      }
+    }
     input.value = '';
   };
 
@@ -3062,10 +3239,17 @@ const JobCardFormPublic = () => {
       let serverReachOk = false;
       let lastSyncError = '';
       let resolvedServerId = null;
+      let skipRemoteSync = false;
 
       const parseSyncFailureMessage = (status, text) => {
         if (status === 413) {
           return 'Payload too large for the server (try fewer or smaller photos/videos).';
+        }
+        if (status === 429) {
+          return 'Too many requests right now. Please retry in a few moments.';
+        }
+        if (status === 502 || status === 503 || status === 504) {
+          return 'Server temporarily unreachable. Please retry in a few moments.';
         }
         if (!text) return `HTTP ${status}`;
         try {
@@ -3086,13 +3270,24 @@ const JobCardFormPublic = () => {
         delete createPayload.id;
         delete createPayload.serverJobCardId;
         delete createPayload.activityQueue;
+        const estimatedCreatePayloadBytes = estimateJsonBytes(createPayload);
+        if (estimatedCreatePayloadBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
+          lastSyncError = 'Upload payload is too large for reliable sync on mobile. Remove some media and retry.';
+          skipRemoteSync = true;
+          return { ok: false, serverId: null };
+        }
+        if (estimatedCreatePayloadBytes > JOB_CARD_SYNC_WARN_PAYLOAD_BYTES) {
+          console.warn('⚠️ JobCardFormPublic: large create payload', {
+            estimatedCreatePayloadBytes
+          });
+        }
         const token = getJobCardAuthToken();
         if (!token) {
           lastSyncError = 'Sign in is required to save the job card to the server.';
           return { ok: false, serverId: null };
         }
         try {
-          const response = await fetch('/api/jobcards', {
+          const response = await fetchWithRetry('/api/jobcards', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -3119,22 +3314,35 @@ const JobCardFormPublic = () => {
           }
           return { ok: true, serverId: sid };
         } catch (error) {
-          lastSyncError = error.message || 'Network error';
+          lastSyncError =
+            error?.name === 'AbortError'
+              ? 'Request timed out while syncing. Please try again on a stable connection.'
+              : (error.message || 'Network error');
           console.warn('⚠️ JobCardFormPublic: POST /api/jobcards failed:', error.message);
           return { ok: false, serverId: null };
         }
       };
 
-      if (serverJobCardId) {
+      if (!skipRemoteSync && serverJobCardId) {
         resolvedServerId = serverJobCardId;
         const payloadObj = { ...jobCardData };
         delete payloadObj.activityQueue;
+        const estimatedPatchPayloadBytes = estimateJsonBytes(payloadObj);
+        if (estimatedPatchPayloadBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
+          lastSyncError = 'Upload payload is too large for reliable sync on mobile. Remove some media and retry.';
+          skipRemoteSync = true;
+        }
+        if (estimatedPatchPayloadBytes > JOB_CARD_SYNC_WARN_PAYLOAD_BYTES) {
+          console.warn('⚠️ JobCardFormPublic: large patch payload', {
+            estimatedPatchPayloadBytes
+          });
+        }
         const payloadJson = JSON.stringify(payloadObj);
         const token = getJobCardAuthToken();
         let patchStatus = 0;
-        if (token) {
+        if (!skipRemoteSync && token) {
           try {
-            const authRes = await fetch(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
+            const authRes = await fetchWithRetry(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
               method: 'PATCH',
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -3157,9 +3365,12 @@ const JobCardFormPublic = () => {
             }
           } catch (e) {
             console.warn('JobCardFormPublic: authenticated PATCH failed', e);
-            lastSyncError = e.message || 'Network error';
+            lastSyncError =
+              e?.name === 'AbortError'
+                ? 'Request timed out while syncing. Please try again on a stable connection.'
+                : (e.message || 'Network error');
           }
-        } else {
+        } else if (!skipRemoteSync) {
           lastSyncError = 'Sign in is required to update this job card on the server.';
         }
         if (!serverReachOk && patchStatus === 404) {
@@ -3169,7 +3380,7 @@ const JobCardFormPublic = () => {
             resolvedServerId = postResult.serverId;
           }
         }
-      } else {
+      } else if (!skipRemoteSync) {
         const postResult = await attemptPostCreate();
         serverReachOk = postResult.ok;
         resolvedServerId = postResult.serverId;
