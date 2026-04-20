@@ -196,6 +196,21 @@ const PermissionGate =
   (typeof window !== 'undefined' && window.PermissionGate) ||
   (({ children }) => children);
 
+const DETAIL_FETCH_TIMEOUT_MS = 12000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = DETAIL_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const ServiceAndMaintenance = () => {
   const { user } = window.useAuth();
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
@@ -556,7 +571,7 @@ const ServiceAndMaintenance = () => {
       const headers = token
         ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
         : { 'Content-Type': 'application/json' };
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `/api/jobcards/${encodeURIComponent(jobCard.id)}?omitPhotos=1`,
         { headers }
       );
@@ -568,7 +583,7 @@ const ServiceAndMaintenance = () => {
           if (full.attachmentsPending === true && jobCard.id) {
             void (async () => {
               try {
-                const pr = await fetch(`/api/jobcards/${encodeURIComponent(jobCard.id)}/photos`, {
+                const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCard.id)}/photos`, {
                   headers
                 });
                 if (!pr.ok) {
@@ -624,7 +639,7 @@ const ServiceAndMaintenance = () => {
       try {
         const token = window.storage?.getToken?.();
         if (!token || cancelled) return;
-        const res = await fetch(`/api/jobcards/${encodeURIComponent(id)}/activity?order=asc`, {
+        const res = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(id)}/activity?order=asc`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!res.ok || cancelled) {
@@ -649,7 +664,7 @@ const ServiceAndMaintenance = () => {
     const token = window.storage?.getToken?.();
     if (!token || !jobCardId) return;
     try {
-      const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`, {
+      const response = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
       if (!response.ok) return;
@@ -660,7 +675,7 @@ const ServiceAndMaintenance = () => {
         if (full.attachmentsPending === true) {
           void (async () => {
             try {
-              const pr = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}/photos`, {
+              const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}/photos`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
               if (!pr.ok) {
@@ -684,7 +699,7 @@ const ServiceAndMaintenance = () => {
           })();
         }
       }
-      const ar = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}/activity?order=asc`, {
+      const ar = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}/activity?order=asc`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (ar.ok) {

@@ -377,6 +377,8 @@ const JobCardWizardAttachmentPreview = ({ url, index, onRemove }) => {
         <img
           src={url}
           alt={`Attachment ${index + 1}`}
+          loading="lazy"
+          decoding="async"
           className="w-full h-24 sm:h-32 object-cover"
         />
       )}
@@ -1114,6 +1116,7 @@ const JobCardFormPublic = () => {
   const [priorLoadedActivities, setPriorLoadedActivities] = useState([]);
   const [priorActivityLoading, setPriorActivityLoading] = useState(false);
   const [priorActivityOpen, setPriorActivityOpen] = useState(true);
+  const [showAllSelectedPhotos, setShowAllSelectedPhotos] = useState(false);
   /** For offline warning when there is no cached auth */
   const [networkOnline, setNetworkOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -1123,6 +1126,7 @@ const JobCardFormPublic = () => {
   const lastSignatureRestoreRef = useRef(null);
   /** New wizard events since this session opened (merged into activityQueue on save). */
   const sessionActivityQueueRef = useRef([]);
+  const activeEditCardIdRef = useRef(null);
 
   const pushWizardActivity = useCallback((action, metadata) => {
     const ev = {
@@ -1131,6 +1135,54 @@ const JobCardFormPublic = () => {
       source: 'mobile'
     };
     sessionActivityQueueRef.current.push(ev);
+  }, []);
+
+  const applyPhotosToEditState = useCallback((targetLocalId, photosValue) => {
+    if (!targetLocalId || String(activeEditCardIdRef.current || '') !== String(targetLocalId)) {
+      return;
+    }
+    const photosRaw = parseStoredJsonArray(photosValue, []);
+    const voiceEntries = photosRaw.filter(
+      p => p && typeof p === 'object' && p.kind === 'voice'
+    );
+    const sectionMediaEntries = photosRaw.filter(
+      p => p && typeof p === 'object' && p.kind === 'sectionMedia'
+    );
+    const imageUrls = photosRaw
+      .filter(p => {
+        if (typeof p === 'string') return true;
+        if (!p || typeof p !== 'object') return false;
+        if (p.kind === 'voice' || p.kind === 'sectionMedia') return false;
+        return true;
+      })
+      .map(p => (typeof p === 'string' ? p : p && p.url))
+      .filter(Boolean);
+
+    const restoredSectionMedia = emptySectionWorkMedia();
+    sectionMediaEntries.forEach(item => {
+      const sec = item.section;
+      if (restoredSectionMedia[sec] != null) {
+        restoredSectionMedia[sec].push({
+          name: item.name || `Attachment ${restoredSectionMedia[sec].length + 1}`,
+          url: item.url
+        });
+      }
+    });
+    setSectionWorkMedia(restoredSectionMedia);
+    setVoiceAttachments(
+      voiceEntries.map((v, i) => ({
+        id: `vn_restore_${i}_${Date.now()}`,
+        section: v.section || 'otherComments',
+        dataUrl: v.url || v.dataUrl || '',
+        mimeType: v.mimeType || 'audio/webm',
+        noteNumber: i + 1
+      }))
+    );
+    setSelectedPhotos(imageUrls.map((url, i) => ({ name: `Photo ${i + 1}`, url })));
+    setFormData(prev => {
+      if (String(activeEditCardIdRef.current || '') !== String(targetLocalId)) return prev;
+      return { ...prev, photos: imageUrls };
+    });
   }, []);
 
   const signatureCanvasRef = useRef(null);
@@ -1440,6 +1492,11 @@ const JobCardFormPublic = () => {
     );
     return selectedPhotos.length + sectionCount;
   }, [selectedPhotos, sectionWorkMedia]);
+  const visibleSelectedPhotos = useMemo(
+    () => (showAllSelectedPhotos ? selectedPhotos : selectedPhotos.slice(0, 8)),
+    [showAllSelectedPhotos, selectedPhotos]
+  );
+  const hiddenSelectedPhotosCount = Math.max(0, selectedPhotos.length - visibleSelectedPhotos.length);
 
   const shareUrl = useMemo(() => {
     if (typeof window === 'undefined') {
@@ -2845,13 +2902,16 @@ const JobCardFormPublic = () => {
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setVoiceAttachments([]);
     setCurrentStep(0);
+    setShowAllSelectedPhotos(false);
     lastSignatureRestoreRef.current = null;
     sessionActivityQueueRef.current = [];
+    activeEditCardIdRef.current = null;
     clearSignature();
   };
 
   const exitToMenu = () => {
     setEditingMeta(null);
+    activeEditCardIdRef.current = null;
     sessionActivityQueueRef.current = [];
     setPriorLoadedActivities([]);
     setPriorActivityLoading(false);
@@ -2861,6 +2921,7 @@ const JobCardFormPublic = () => {
 
   const startNewJobCard = () => {
     setEditingMeta(null);
+    activeEditCardIdRef.current = null;
     sessionActivityQueueRef.current = [];
     setPriorLoadedActivities([]);
     setPriorActivityLoading(false);
@@ -2886,10 +2947,12 @@ const JobCardFormPublic = () => {
     lastSignatureRestoreRef.current = null;
     clearSignature();
     sessionActivityQueueRef.current = [];
+    activeEditCardIdRef.current = null;
     setOpeningJobCard(true);
 
     try {
     let full = card;
+    let deferredPhotosPromise = null;
     const token = getJobCardAuthToken();
     if (token) {
       setPriorLoadedActivities([]);
@@ -2925,24 +2988,20 @@ const JobCardFormPublic = () => {
           if (apiCard && apiCard.id) {
             full = apiCard;
             if (apiCard.attachmentsPending === true) {
-              try {
-                const pr = await fetch(`/api/jobcards/${encodeURIComponent(openId)}/photos`, {
-                  headers
-                });
-                if (pr.ok) {
+              deferredPhotosPromise = (async () => {
+                try {
+                  const pr = await fetch(`/api/jobcards/${encodeURIComponent(openId)}/photos`, {
+                    headers
+                  });
+                  if (!pr.ok) return [];
                   const pd = await pr.json();
                   const photos = pd?.data?.photos ?? pd?.photos;
-                  full = {
-                    ...apiCard,
-                    photos: Array.isArray(photos) ? photos : [],
-                    attachmentsPending: false
-                  };
-                } else {
-                  full = { ...apiCard, photos: [], attachmentsPending: false };
+                  return Array.isArray(photos) ? photos : [];
+                } catch {
+                  return [];
                 }
-              } catch {
-                full = { ...apiCard, photos: [], attachmentsPending: false };
-              }
+              })();
+              full = { ...apiCard, photos: [], attachmentsPending: true };
             }
           }
         }
@@ -2992,46 +3051,14 @@ const JobCardFormPublic = () => {
       synced,
       jobCardNumber
     });
+    activeEditCardIdRef.current = localId;
 
-    const photosRaw = parseStoredJsonArray(full.photos, []);
-    const voiceEntries = photosRaw.filter(
-      p => p && typeof p === 'object' && p.kind === 'voice'
-    );
-    const sectionMediaEntries = photosRaw.filter(
-      p => p && typeof p === 'object' && p.kind === 'sectionMedia'
-    );
-    const imageUrls = photosRaw
-      .filter(p => {
-        if (typeof p === 'string') return true;
-        if (!p || typeof p !== 'object') return false;
-        if (p.kind === 'voice' || p.kind === 'sectionMedia') return false;
-        return true;
-      })
-      .map(p => (typeof p === 'string' ? p : p && p.url))
-      .filter(Boolean);
-
-    const restoredSectionMedia = emptySectionWorkMedia();
-    sectionMediaEntries.forEach(item => {
-      const sec = item.section;
-      if (restoredSectionMedia[sec] != null) {
-        restoredSectionMedia[sec].push({
-          name: item.name || `Attachment ${restoredSectionMedia[sec].length + 1}`,
-          url: item.url
-        });
-      }
-    });
-    setSectionWorkMedia(restoredSectionMedia);
-
-    setVoiceAttachments(
-      voiceEntries.map((v, i) => ({
-        id: `vn_restore_${i}_${Date.now()}`,
-        section: v.section || 'otherComments',
-        dataUrl: v.url || v.dataUrl || '',
-        mimeType: v.mimeType || 'audio/webm',
-        noteNumber: i + 1
-      }))
-    );
-    setSelectedPhotos(imageUrls.map((url, i) => ({ name: `Photo ${i + 1}`, url })));
+    applyPhotosToEditState(localId, full.photos);
+    if (deferredPhotosPromise) {
+      void deferredPhotosPromise.then((photos) => {
+        applyPhotosToEditState(localId, photos);
+      });
+    }
 
     const parsedProject = parseProjectAssociationFromComments(full.otherComments || '');
 
@@ -3071,7 +3098,14 @@ const JobCardFormPublic = () => {
       otherComments: full.otherComments || '',
       stockUsed: parseStoredJsonArray(full.stockUsed, []),
       materialsBought: parseStoredJsonArray(full.materialsBought, []),
-      photos: imageUrls,
+      photos: parseStoredJsonArray(full.photos, [])
+        .filter(p => {
+          if (typeof p === 'string') return true;
+          if (!p || typeof p !== 'object') return false;
+          return p.kind !== 'voice' && p.kind !== 'sectionMedia';
+        })
+        .map(p => (typeof p === 'string' ? p : p && p.url))
+        .filter(Boolean),
       serviceForms: parseStoredJsonArray(full.serviceForms, []),
       status: full.status || 'draft',
       customerName: full.customerName || '',
@@ -3992,21 +4026,32 @@ const JobCardFormPublic = () => {
               Tap to add photos or videos
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              Mobile camera or gallery • Images up to 10MB • Videos up to 50MB each
+              Mobile camera or gallery • Images up to {JOB_CARD_IMAGE_MAX_BYTES / 1024 / 1024}MB • Videos up to {JOB_CARD_VIDEO_MAX_BYTES / 1024 / 1024}MB each
             </p>
           </label>
         </div>
         {selectedPhotos.length > 0 && (
+          <>
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {selectedPhotos.map((photo, idx) => (
+            {visibleSelectedPhotos.map((photo, idx) => (
               <JobCardWizardAttachmentPreview
-                key={idx}
+                key={showAllSelectedPhotos ? idx : `${idx}-${hiddenSelectedPhotosCount}`}
                 url={typeof photo === 'string' ? photo : photo.url}
                 index={idx}
                 onRemove={handleRemovePhoto}
               />
             ))}
           </div>
+          {hiddenSelectedPhotosCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAllSelectedPhotos(true)}
+              className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              Load remaining {hiddenSelectedPhotosCount} attachment{hiddenSelectedPhotosCount === 1 ? '' : 's'}
+            </button>
+          )}
+          </>
         )}
       </section>
 
@@ -4456,15 +4501,15 @@ const JobCardFormPublic = () => {
                   Tap to add photos or videos
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Mobile camera or gallery • Images up to 10MB • Videos up to 50MB each
+                  Mobile camera or gallery • Images up to {JOB_CARD_IMAGE_MAX_BYTES / 1024 / 1024}MB • Videos up to {JOB_CARD_VIDEO_MAX_BYTES / 1024 / 1024}MB each
                 </p>
               </label>
             </div>
             {selectedPhotos.length > 0 && (
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {selectedPhotos.map((photo, idx) => (
+                {visibleSelectedPhotos.map((photo, idx) => (
                   <JobCardWizardAttachmentPreview
-                    key={idx}
+                    key={showAllSelectedPhotos ? idx : `${idx}-${hiddenSelectedPhotosCount}`}
                     url={typeof photo === 'string' ? photo : photo.url}
                     index={idx}
                     onRemove={handleRemovePhoto}
