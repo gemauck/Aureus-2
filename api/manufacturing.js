@@ -1691,6 +1691,68 @@ async function handler(req, res) {
           include: { participants: true, lines: true }
         })
         if (!submission) return notFound(res, 'Stock-take submission not found')
+
+        if (submission.status === 'pending_review') {
+          if (!isAdminRole(req.user?.role)) {
+            return forbidden(res, 'Only administrators can edit pending stock-take submissions.')
+          }
+          const linePatches = Array.isArray(body?.linePatches) ? body.linePatches : []
+          const hasNotes = body?.notes !== undefined
+          const notesVal = hasNotes ? String(body.notes || '').trim() : undefined
+          if (!linePatches.length && !hasNotes) {
+            return badRequest(res, 'Provide linePatches and/or notes to update this submission.')
+          }
+          const adminId = stockTakeAuthUserId(req)
+          const adminName = String(req.user?.name || req.user?.email || 'User')
+          const updatedPending = await prisma.$transaction(async (tx) => {
+            for (const patch of linePatches) {
+              const lineId = patch?.id ? String(patch.id).trim() : ''
+              const countedQty = Number(patch?.countedQty)
+              if (!lineId || !Number.isFinite(countedQty)) continue
+              const line = await tx.stockTakeSubmissionLine.findFirst({
+                where: { id: lineId, submissionId: submission.id }
+              })
+              if (!line) continue
+              const meta = parseStockTakeLineMeta(line)
+              const systemQty = Number(line.systemQty) || 0
+              const nextMeta = {
+                ...meta,
+                reviewEditedById: adminId,
+                reviewEditedByName: adminName,
+                reviewEditedAt: new Date().toISOString()
+              }
+              await tx.stockTakeSubmissionLine.update({
+                where: { id: line.id },
+                data: {
+                  countedQty,
+                  deltaQty: countedQty - systemQty,
+                  meta: JSON.stringify(nextMeta)
+                }
+              })
+            }
+            await tx.stockTakeSubmission.update({
+              where: { id: submission.id },
+              data: {
+                sessionRevision: { increment: 1 },
+                ...(hasNotes ? { notes: notesVal } : {})
+              }
+            })
+            return tx.stockTakeSubmission.findUnique({
+              where: { id: submission.id },
+              include: {
+                lines: { orderBy: [{ itemName: 'asc' }, { sku: 'asc' }] },
+                participants: true
+              }
+            })
+          })
+          auditManufacturing('update', 'stock-take-submission-review-patch', id, {
+            submissionRef: submission.submissionRef,
+            linePatches: linePatches.length,
+            notes: hasNotes
+          })
+          return ok(res, { submission: updatedPending })
+        }
+
         if (submission.status !== 'in_progress') {
           return badRequest(res, 'This stock take is not editable (session closed).')
         }
@@ -2083,6 +2145,47 @@ async function handler(req, res) {
         if (error?.httpStatus === 400) return badRequest(res, error.message)
         console.error('❌ Stock-take submission apply failed:', error)
         return serverError(res, 'Failed to apply stock-take submission', error.message)
+      }
+    }
+
+    if (req.method === 'POST' && id && action === 'reject') {
+      if (!isAdminRole(req.user?.role)) {
+        return forbidden(res, 'Only administrators can reject stock-take submissions.')
+      }
+      try {
+        const body = await parseJsonBody(req)
+        const submission = await prisma.stockTakeSubmission.findUnique({ where: { id } })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (submission.status !== 'pending_review') {
+          return badRequest(res, `Only pending submissions can be rejected (status is ${submission.status}).`)
+        }
+        let metaObj = {}
+        try {
+          metaObj = submission.meta ? JSON.parse(submission.meta) : {}
+        } catch {
+          metaObj = {}
+        }
+        const rejecterId = String(req.user?.sub || req.user?.id || '').trim()
+        const rejecterName = String(req.user?.name || req.user?.email || 'User')
+        metaObj.rejectedAt = new Date().toISOString()
+        metaObj.rejectedById = rejecterId
+        metaObj.rejectedByName = rejecterName
+        metaObj.rejectReason = String(body?.reason || '').trim()
+        await prisma.stockTakeSubmission.update({
+          where: { id },
+          data: {
+            status: 'rejected',
+            meta: JSON.stringify(metaObj)
+          }
+        })
+        auditManufacturing('update', 'stock-take-submission-reject', id, {
+          submissionRef: submission.submissionRef,
+          reason: metaObj.rejectReason
+        })
+        return ok(res, { rejected: true })
+      } catch (error) {
+        console.error('❌ Stock-take submission reject failed:', error)
+        return serverError(res, 'Failed to reject stock-take submission', error.message)
       }
     }
 

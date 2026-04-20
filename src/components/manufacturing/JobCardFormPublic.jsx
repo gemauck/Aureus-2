@@ -3856,6 +3856,7 @@ const JobCardFormPublic = () => {
       }
     };
 
+    /** BarcodeDetector on live video is unreliable on many devices; jsQR on ImageData works consistently. */
     const startJsQrLoop = () => {
       const ctx = canvas.getContext('2d');
       const loop = () => {
@@ -3875,32 +3876,6 @@ const JobCardFormPublic = () => {
       stockTakeScanRafRef.current = requestAnimationFrame(loop);
     };
 
-    const startBarcodeDetectorLoop = () => {
-      if (typeof window.BarcodeDetector !== 'function') return false;
-      let detector;
-      try {
-        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-      } catch {
-        return false;
-      }
-      const loop = () => {
-        if (!stockTakeScanActiveRef.current) return;
-        if (video.readyState >= 2) {
-          void detector
-            .detect(video)
-            .then((codes) => {
-              if (codes?.length && codes[0].rawValue) {
-                tryDecode(codes[0].rawValue);
-              }
-            })
-            .catch(() => {});
-        }
-        stockTakeScanRafRef.current = requestAnimationFrame(loop);
-      };
-      stockTakeScanRafRef.current = requestAnimationFrame(loop);
-      return true;
-    };
-
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -3910,8 +3885,7 @@ const JobCardFormPublic = () => {
         stockTakeScanStreamRef.current = stream;
         video.srcObject = stream;
         await video.play();
-        const usedBd = startBarcodeDetectorLoop();
-        if (!usedBd) startJsQrLoop();
+        startJsQrLoop();
       } catch (err) {
         console.warn('Stock-take camera:', err);
         setStockTakeError('Camera access failed. Allow the camera or enter counts manually.');

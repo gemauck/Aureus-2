@@ -1,5 +1,6 @@
 /**
- * Stock count: in-app stocktake (same flow as Job Cards), Excel import/export,
+ * Stock count: in-app stocktake (session-based flow aligned with Job Cards: start/join,
+ * live PATCH sync, QR scan, drafts with session resume), Excel import/export,
  * and pending submission review/apply.
  * Loaded via lazy-load-components → window.StockCountView
  */
@@ -37,6 +38,35 @@
   };
 
   const QR_SHEET_MAX = 400;
+
+  /** Lazy-load jsQR for camera scanning (frame decode; avoids flaky BarcodeDetector on live video). */
+  let stockTakeJsQrLoadPromise = null;
+  function ensureStockTakeJsQr() {
+    if (typeof window !== 'undefined' && typeof window.jsQR === 'function') {
+      return Promise.resolve(window.jsQR);
+    }
+    if (!stockTakeJsQrLoadPromise) {
+      stockTakeJsQrLoadPromise = new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-erp-stocktake-jsqr]');
+        if (existing) {
+          existing.addEventListener('load', () =>
+            resolve(typeof window.jsQR === 'function' ? window.jsQR : null)
+          );
+          existing.addEventListener('error', () => reject(new Error('jsQR load failed')));
+          return;
+        }
+        const s = document.createElement('script');
+        s.setAttribute('data-erp-stocktake-jsqr', '1');
+        s.async = true;
+        s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+        s.onload = () =>
+          resolve(typeof window.jsQR === 'function' ? window.jsQR : null);
+        s.onerror = () => reject(new Error('jsQR load failed'));
+        document.head.appendChild(s);
+      });
+    }
+    return stockTakeJsQrLoadPromise;
+  }
 
   function inventoryPayloadForQr(inventoryItemId) {
     if (typeof window.encodeInventoryQrPayload === 'function') {
@@ -87,56 +117,6 @@
     return d.toISOString();
   }
 
-  function buildStockTakeLines(rows, counts, newItems) {
-    const existingLines = (rows || [])
-      .map((row) => {
-        const sku = String(row?.sku || '').trim();
-        const raw = counts[sku];
-        if (raw === undefined || raw === null || raw === '') return null;
-        const countedQty = Number(raw);
-        if (!Number.isFinite(countedQty)) return null;
-        return {
-          locationInventoryId: row?.locationInventoryId || null,
-          inventoryItemId: row?.inventoryItemId || null,
-          sku,
-          itemName: row?.name || row?.itemName || sku,
-          systemQty: Number(row?.quantity) || 0,
-          countedQty
-        };
-      })
-      .filter(Boolean);
-    const newItemLines = (newItems || [])
-      .map((item) => {
-        const countedQty = Number(item?.countedQty);
-        if (!item?.itemName || !Number.isFinite(countedQty)) return null;
-        const parsedUnitCost = Number(item?.unitCost);
-        const parsedReorderPoint = Number(item?.reorderPoint);
-        return {
-          locationInventoryId: null,
-          inventoryItemId: null,
-          sku: item?.sku ? String(item.sku).trim() : '',
-          itemName: String(item.itemName).trim(),
-          unit: String(item?.unit || 'pcs').trim() || 'pcs',
-          systemQty: 0,
-          countedQty,
-          isNewItem: true,
-          proposedItemDetails: {
-            category: String(item?.category || 'components').trim() || 'components',
-            type: String(item?.type || 'raw_material').trim() || 'raw_material',
-            unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : 0,
-            reorderPoint: Number.isFinite(parsedReorderPoint) ? parsedReorderPoint : 0,
-            supplier: String(item?.supplier || '').trim(),
-            supplierPartNumber: String(item?.supplierPartNumber || '').trim(),
-            manufacturingPartNumber: String(item?.manufacturingPartNumber || '').trim(),
-            boxNumber: String(item?.boxNumber || '').trim(),
-            notes: String(item?.notes || '').trim()
-          }
-        };
-      })
-      .filter(Boolean);
-    return existingLines.concat(newItemLines);
-  }
-
   function StockCountView({ isDark = false, onApplied }) {
     const [busy, setBusy] = React.useState(false);
     const [message, setMessage] = React.useState(null);
@@ -149,6 +129,10 @@
     const [submissionDetail, setSubmissionDetail] = React.useState(null);
     const [detailLoading, setDetailLoading] = React.useState(false);
     const [applyingSubmissionId, setApplyingSubmissionId] = React.useState('');
+    const [rejectingSubmissionId, setRejectingSubmissionId] = React.useState('');
+    const [reviewSaving, setReviewSaving] = React.useState(false);
+    /** lineId -> counted qty string while reviewing a pending submission */
+    const [reviewCounts, setReviewCounts] = React.useState({});
     const fileInputRef = React.useRef(null);
 
     const defaultDraftNewItem = () => ({
@@ -196,6 +180,15 @@
     const stNotesRef = React.useRef('');
     const stRowsRef = React.useRef([]);
     const stSessionRevisionRef = React.useRef(0);
+    const [stJoinInput, setStJoinInput] = React.useState('');
+    const [stScanOpen, setStScanOpen] = React.useState(false);
+    const [stHighlightSku, setStHighlightSku] = React.useState('');
+    const stScanVideoRef = React.useRef(null);
+    const stScanCanvasRef = React.useRef(null);
+    const stScanStreamRef = React.useRef(null);
+    const stScanRafRef = React.useRef(null);
+    const stScanActiveRef = React.useRef(false);
+    const stScanLastRef = React.useRef({ text: '', t: 0 });
 
     const [qrLocationId, setQrLocationId] = React.useState('');
     const [qrOnlyInStock, setQrOnlyInStock] = React.useState(true);
@@ -249,7 +242,6 @@
     React.useEffect(() => {
       stSessionRevisionRef.current = stSessionRevision;
     }, [stSessionRevision]);
-
     const submissionToStockTakeState = (submission) => {
       const lines = submission?.lines || [];
       const rows = [];
@@ -347,7 +339,10 @@
           }
           return submission;
         } catch (e) {
-          if (!silent) setError(e.message || 'Failed to load stock take session');
+          if (!silent) {
+            setError(e.message || 'Failed to load stock take session');
+            setStSessionId('');
+          }
           return null;
         }
       },
@@ -455,6 +450,143 @@
       };
     }, [stSessionId, loadStockTakeSession]);
 
+    React.useEffect(() => {
+      if (!stSessionId) {
+        setStScanOpen(false);
+        setStHighlightSku('');
+      }
+    }, [stSessionId]);
+
+    React.useEffect(() => {
+      if (!stScanOpen || !stSessionId) {
+        stScanActiveRef.current = false;
+        return;
+      }
+      const video = stScanVideoRef.current;
+      const canvas = stScanCanvasRef.current;
+      if (!video || !canvas) return;
+
+      stScanActiveRef.current = true;
+      let stream = null;
+
+      const parseQr =
+        typeof window.parseInventoryQrPayload === 'function' ? window.parseInventoryQrPayload : null;
+
+      const tryDecode = (text) => {
+        if (!stScanActiveRef.current) return;
+        if (!parseQr) {
+          setError('QR helpers not loaded. Refresh the page.');
+          return;
+        }
+        const now = Date.now();
+        const s = String(text || '').trim();
+        if (!s) return;
+        const last = stScanLastRef.current;
+        if (s === last.text && now - last.t < 850) return;
+        last.text = s;
+        last.t = now;
+
+        const rows = stRowsRef.current || [];
+        const parsed = parseQr(s);
+        let sku = '';
+        if (parsed?.inventoryItemId) {
+          const row = rows.find(
+            (r) => r.inventoryItemId && String(r.inventoryItemId) === String(parsed.inventoryItemId)
+          );
+          if (!row) {
+            setError('This item is not in the stock list for this session’s location.');
+            return;
+          }
+          sku = String(row.sku || '').trim();
+        } else {
+          const row = rows.find((r) => String(r.sku || '').trim() === s);
+          if (!row) {
+            setError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');
+            return;
+          }
+          sku = String(row.sku || '').trim();
+        }
+        if (!sku) return;
+        setStCounts((prev) => {
+          const cur = prev[sku];
+          const n = cur === '' || cur === undefined ? 0 : Number(cur);
+          const next = (Number.isFinite(n) ? n : 0) + 1;
+          return { ...prev, [sku]: String(next) };
+        });
+        stDirtySkusRef.current.add(sku);
+        scheduleCollaborativePatch();
+        setStHighlightSku(sku);
+        window.setTimeout(() => setStHighlightSku(''), 2200);
+        setError(null);
+      };
+
+      const stopLoop = () => {
+        if (stScanRafRef.current != null) {
+          cancelAnimationFrame(stScanRafRef.current);
+          stScanRafRef.current = null;
+        }
+      };
+
+      /** BarcodeDetector on live video is unreliable on many devices; jsQR on ImageData works consistently. */
+      const startJsQrLoop = async () => {
+        let jsQR = null;
+        try {
+          jsQR = await ensureStockTakeJsQr();
+        } catch {
+          return false;
+        }
+        if (!jsQR || typeof jsQR !== 'function') return false;
+        const ctx = canvas.getContext('2d');
+        const loop = () => {
+          if (!stScanActiveRef.current) return;
+          const w = video.videoWidth;
+          const h = video.videoHeight;
+          if (w && h) {
+            canvas.width = w;
+            canvas.height = h;
+            ctx.drawImage(video, 0, 0, w, h);
+            const img = ctx.getImageData(0, 0, w, h);
+            const result = jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
+            if (result?.data) tryDecode(result.data);
+          }
+          stScanRafRef.current = requestAnimationFrame(loop);
+        };
+        stScanRafRef.current = requestAnimationFrame(loop);
+        return true;
+      };
+
+      (async () => {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false
+          });
+          stScanStreamRef.current = stream;
+          video.srcObject = stream;
+          await video.play();
+          const ok = await startJsQrLoop();
+          if (!ok) {
+            setError('QR scanning is not supported in this browser. Enter counts manually.');
+            setStScanOpen(false);
+          }
+        } catch (err) {
+          console.warn('Stock-take camera:', err);
+          setError('Camera access failed. Allow the camera or enter counts manually.');
+          setStScanOpen(false);
+        }
+      })();
+
+      return () => {
+        stScanActiveRef.current = false;
+        stopLoop();
+        if (stream) {
+          stream.getTracks().forEach((t) => t.stop());
+        }
+        video.srcObject = null;
+        stScanStreamRef.current = null;
+      };
+    }, [stScanOpen, stSessionId, scheduleCollaborativePatch]);
+
     const loadSubmissions = React.useCallback(async () => {
       setSubmissionsLoading(true);
       try {
@@ -505,39 +637,12 @@
       void loadStockLocations();
     }, [loadStockLocations]);
 
+    /** Stock lines load only from an active server session (same as Job Cards shared stock take). */
     React.useEffect(() => {
       if (stSessionId) return;
-      if (!stLocationId) {
-        setStRows([]);
-        return;
-      }
-      let cancelled = false;
-      setStRowsLoading(true);
-      fetch(
-        apiBase + '/api/manufacturing/inventory?locationId=' + encodeURIComponent(stLocationId),
-        { method: 'GET', headers: authHeaders() }
-      )
-        .then(async (res) => {
-          if (!res.ok) {
-            const txt = await res.text();
-            throw new Error(txt || res.statusText);
-          }
-          return res.json();
-        })
-        .then((data) => {
-          const inv = data?.data?.inventory || data?.inventory || [];
-          if (!cancelled) setStRows(Array.isArray(inv) ? inv : []);
-        })
-        .catch((e) => {
-          if (!cancelled) setError(e.message || 'Failed to load inventory for this location');
-        })
-        .finally(() => {
-          if (!cancelled) setStRowsLoading(false);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }, [stLocationId, apiBase, stSessionId]);
+      setStRows([]);
+      setStRowsLoading(false);
+    }, [stLocationId, stSessionId]);
 
     const buildQrLabelSheet = async () => {
       if (!qrLocationId) {
@@ -616,6 +721,7 @@
     const persistStockTakeDraft = () => {
       try {
         const payload = {
+          sessionId: stSessionId || '',
           locationId: stLocationId,
           notes: stNotes,
           startedLocal: stStartedLocal,
@@ -625,7 +731,11 @@
           savedAt: new Date().toISOString()
         };
         localStorage.setItem(STOCK_TAKE_DRAFT_KEY, JSON.stringify(payload));
-        setStDraftNotice('Draft saved on this device (' + new Date().toLocaleString() + ').');
+        setStDraftNotice(
+          stSessionId
+            ? 'Saved session reference on this device (' + new Date().toLocaleString() + '). Use Restore to resume.'
+            : 'Draft saved on this device (' + new Date().toLocaleString() + ').'
+        );
         setMessage(null);
       } catch (e) {
         setError(e.message || 'Could not save draft');
@@ -640,6 +750,30 @@
           return;
         }
         const d = JSON.parse(raw);
+        const sid = d.sessionId ? String(d.sessionId).trim() : '';
+        if (sid) {
+          setError(null);
+          setStDraftNotice('Loading saved session…');
+          setStSessionId(sid);
+          void loadStockTakeSession(sid, { silent: false }).then((sub) => {
+            if (sub && sub.status === 'in_progress') {
+              setStDraftNotice(
+                d.savedAt ? 'Resumed session from save (' + new Date(d.savedAt).toLocaleString() + ').' : 'Session restored.'
+              );
+            } else {
+              setStSessionId('');
+              setStDraftNotice('Saved session is no longer in progress.');
+            }
+          });
+          try {
+            const u = new URL(window.location.href);
+            u.searchParams.set('session', sid);
+            window.history.replaceState({}, '', u.toString());
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
         if (d.locationId) setStLocationId(String(d.locationId));
         if (typeof d.notes === 'string') setStNotes(d.notes);
         if (typeof d.startedLocal === 'string') setStStartedLocal(d.startedLocal);
@@ -719,7 +853,7 @@
         const sub = payload?.data?.submission || payload?.submission;
         if (!sub?.id) throw new Error('Invalid session response');
         setStSessionId(sub.id);
-        setMessage('Shared session started. Add people below; counts sync every few seconds.');
+        setMessage('Stock take started. Counts sync with the team and Job Cards; add people below if needed.');
         await loadStockTakeSession(sub.id, { silent: false });
         try {
           const u = new URL(window.location.href);
@@ -733,6 +867,39 @@
       } finally {
         setStSubmitting(false);
       }
+    };
+
+    const joinStockTakeSession = async () => {
+      const sid = String(stJoinInput || '').trim();
+      if (!sid) {
+        setError('Paste a session ID to join.');
+        return;
+      }
+      setStSubmitting(true);
+      setError(null);
+      setMessage(null);
+      setStJoinInput('');
+      setStSessionId(sid);
+      const sub = await loadStockTakeSession(sid, { silent: false });
+      if (!sub) {
+        setStSessionId('');
+        setStSubmitting(false);
+        return;
+      }
+      if (sub.status !== 'in_progress') {
+        setStSessionId('');
+        setStSubmitting(false);
+        return;
+      }
+      setMessage('Joined in-progress stock take.');
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.set('session', sid);
+        window.history.replaceState({}, '', u.toString());
+      } catch {
+        /* ignore */
+      }
+      setStSubmitting(false);
     };
 
     const submitCollaborativeForReview = async () => {
@@ -845,56 +1012,11 @@
     };
 
     const submitInlineStockTake = async () => {
-      if (stSessionId) {
-        await submitCollaborativeForReview();
+      if (!stSessionId) {
+        setError('Start a stock take or join an existing session before submitting.');
         return;
       }
-      if (!stLocationId) {
-        setError('Select a stock location first.');
-        return;
-      }
-      const lines = buildStockTakeLines(stRows, stCounts, stNewItems);
-      if (!lines.length) {
-        setError('Enter at least one counted quantity or add a new item before submitting.');
-        return;
-      }
-      const startedIso = fromDatetimeLocalToIso(stStartedLocal) || new Date().toISOString();
-      setStSubmitting(true);
-      setError(null);
-      setMessage(null);
-      try {
-        const res = await fetch(apiBase + '/api/manufacturing/stock-take-submissions', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({
-            locationId: stLocationId,
-            notes: stNotes,
-            startedAt: startedIso,
-            finishedAt: new Date().toISOString(),
-            lines
-          })
-        });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const msg =
-            payload?.error?.message || payload?.message || payload?.error || 'Failed to submit stock take.';
-          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-        }
-        const sub = payload?.data?.submission || payload?.submission;
-        const ref = sub?.submissionRef || sub?.id || '';
-        setMessage(
-          ref
-            ? 'Stock take submitted for review (ref: ' + ref + ').'
-            : 'Stock take submitted for review.'
-        );
-        clearStockTakeDraft();
-        resetInlineStockTake();
-        await loadSubmissions();
-      } catch (e) {
-        setError(e.message || 'Failed to submit stock take.');
-      } finally {
-        setStSubmitting(false);
-      }
+      await submitCollaborativeForReview();
     };
 
     const handleStCountChange = (sku, next) => {
@@ -1148,8 +1270,58 @@
         React.createElement(
           'p',
           { className: 'mt-1 text-sm ' + muted },
-          'Pick a location, set when the count started, enter quantities, then submit for review. Use a shared session so multiple people can count together with live sync (web and Job Cards app). You can still save a draft on this device only when not in a shared session.'
+          'Choose location and when the count started, then start a stock take (or join with a session ID). Counts and notes sync in real time with the Job Cards app. Save a draft on this device to remember setup, or save while in progress to store the session ID and resume later.'
         ),
+        !stSessionId
+          ? React.createElement(
+              'div',
+              {
+                className:
+                  'mt-4 rounded-lg border border-dashed px-3 py-3 space-y-2 ' +
+                  (isDark ? 'border-blue-900/50 bg-blue-950/25' : 'border-blue-200 bg-blue-50/70')
+              },
+              React.createElement('p', { className: 'text-xs font-semibold ' + (isDark ? 'text-blue-200' : 'text-blue-900') }, 'Stock take session'),
+              React.createElement(
+                'div',
+                { className: 'flex flex-wrap gap-2 items-end' },
+                React.createElement('input', {
+                  type: 'text',
+                  className: inputCls,
+                  placeholder: 'Paste session ID to join / resume',
+                  value: stJoinInput,
+                  disabled: stSubmitting,
+                  onChange: (e) => setStJoinInput(e.target.value)
+                }),
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    className: btnPrimary,
+                    disabled: stSubmitting,
+                    onClick: () => void joinStockTakeSession()
+                  },
+                  'Join'
+                )
+              ),
+              stLocationId
+                ? React.createElement(
+                    'button',
+                    {
+                      type: 'button',
+                      className:
+                        'text-sm font-semibold ' + (isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-800 hover:text-blue-900') + ' underline disabled:opacity-50',
+                      disabled: stSubmitting,
+                      onClick: () => void startStockTakeSession()
+                    },
+                    'Start stock take for this location'
+                  )
+                : React.createElement(
+                    'p',
+                    { className: 'text-[11px] ' + muted },
+                    'Select a stock location below, then start a stock take to load lines and enter counts.'
+                  )
+            )
+          : null,
         stSessionId
           ? React.createElement(
               'div',
@@ -1275,17 +1447,6 @@
                 : null
             )
           : null,
-        !stSessionId && stLocationId
-          ? React.createElement(
-              'div',
-              { className: 'mt-3' },
-              React.createElement(
-                'button',
-                { type: 'button', className: btnPrimary, disabled: stSubmitting, onClick: startStockTakeSession },
-                'Start shared session for this location'
-              )
-            )
-          : null,
         React.createElement(
           'div',
           { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
@@ -1302,13 +1463,17 @@
               type: 'datetime-local',
               className: inputCls,
               value: stStartedLocal,
+              disabled: !!stSessionId,
               onChange: (e) => setStStartedLocal(e.target.value)
             }),
             React.createElement(
               'button',
               {
                 type: 'button',
-                className: 'mt-2 text-xs font-semibold ' + (isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-700 hover:text-blue-800'),
+                className:
+                  'mt-2 text-xs font-semibold ' +
+                  (isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-700 hover:text-blue-800') +
+                  (stSessionId ? ' opacity-50 pointer-events-none' : ''),
                 onClick: () => setStStartedLocal(toDatetimeLocalValue(Date.now()))
               },
               'Set to now'
@@ -1365,7 +1530,7 @@
           },
           placeholder: 'Anything reviewers should know about this count…'
         }),
-        stLocationId
+        stSessionId
           ? React.createElement(
               'div',
               { className: 'mt-4 rounded-lg border overflow-hidden ' + (isDark ? 'border-gray-700' : 'border-gray-200') },
@@ -1373,21 +1538,48 @@
                 'div',
                 {
                   className:
-                    'px-3 py-2 border-b flex items-center justify-between ' +
+                    'px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 ' +
                     (isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-100 bg-gray-50')
                 },
-                React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Stock lines'),
                 React.createElement(
-                  'p',
-                  { className: 'text-xs ' + muted },
-                  stRowsLoading
-                    ? 'Loading…'
-                    : stCountedTotal +
-                        ' counted · ' +
-                        (String(stLineSearch || '').trim()
-                          ? stLineCount + ' matching of ' + stAllLineCount + ' lines'
-                          : stAllLineCount + ' lines') +
-                        (stTotalPages > 1 ? ' · page ' + stPage + ' of ' + stTotalPages : '')
+                  'div',
+                  null,
+                  React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Stock lines'),
+                  React.createElement(
+                    'p',
+                    { className: 'text-xs ' + muted },
+                    stRowsLoading
+                      ? 'Loading…'
+                      : stCountedTotal +
+                          ' counted · ' +
+                          (String(stLineSearch || '').trim()
+                            ? stLineCount + ' matching of ' + stAllLineCount + ' lines'
+                            : stAllLineCount + ' lines') +
+                          (stTotalPages > 1 ? ' · page ' + stPage + ' of ' + stTotalPages : '')
+                  )
+                ),
+                React.createElement(
+                  'div',
+                  { className: 'flex items-center gap-2' },
+                  React.createElement(
+                    'button',
+                    {
+                      type: 'button',
+                      className:
+                        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ' +
+                        (isDark
+                          ? 'border-blue-800 bg-blue-950/50 text-blue-200 hover:bg-blue-900/40'
+                          : 'border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100') +
+                        ' disabled:opacity-50 disabled:cursor-not-allowed',
+                      disabled: stRows.length === 0,
+                      onClick: () => {
+                        setError(null);
+                        setStScanOpen(true);
+                      }
+                    },
+                    React.createElement('i', { className: 'fas fa-camera mr-1' }),
+                    'Scan QR'
+                  )
                 )
               ),
               stRowsLoading
@@ -1436,7 +1628,13 @@
                                   'div',
                                   {
                                     key: stLocationId + '-' + sku,
-                                    className: 'px-3 py-1.5 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center'
+                                    className:
+                                      'px-3 py-1.5 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center transition-shadow ' +
+                                      (stHighlightSku === sku
+                                        ? isDark
+                                          ? 'ring-2 ring-inset ring-blue-500 bg-blue-950/30'
+                                          : 'ring-2 ring-inset ring-blue-400 bg-blue-50/70'
+                                        : '')
                                   },
                                   React.createElement(
                                     'div',
@@ -1543,179 +1741,203 @@
                   )
                 )
           : null,
-        React.createElement(
-          'div',
-          { className: 'mt-4 rounded-lg border p-3 space-y-2 ' + (isDark ? 'border-amber-900/50 bg-amber-950/20' : 'border-amber-200 bg-amber-50/80') },
-          React.createElement(
-            'div',
-            { className: 'flex items-center justify-between' },
-            React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'New items (need admin confirmation on apply)'),
-            React.createElement('span', { className: 'text-xs ' + muted }, stNewItems.length + ' added')
-          ),
-          React.createElement(
-            'div',
-            { className: 'grid grid-cols-1 sm:grid-cols-2 gap-2' },
-            ['itemName', 'sku', 'unit', 'countedQty', 'category', 'type', 'unitCost', 'reorderPoint', 'supplier', 'supplierPartNumber', 'manufacturingPartNumber', 'boxNumber'].map(
-              (field) => {
-                const labels = {
-                  itemName: 'Item name *',
-                  sku: 'SKU (optional)',
-                  unit: 'Unit',
-                  countedQty: 'Counted qty *',
-                  category: 'Category',
-                  type: 'Type',
-                  unitCost: 'Unit cost',
-                  reorderPoint: 'Reorder point',
-                  supplier: 'Supplier',
-                  supplierPartNumber: 'Supplier part #',
-                  manufacturingPartNumber: 'Mfg part #',
-                  boxNumber: 'Box #'
-                };
-                const ph = labels[field] || field;
-                const isNum = field === 'countedQty' || field === 'unitCost' || field === 'reorderPoint';
-                return React.createElement('input', {
-                  key: field,
-                  type: isNum ? 'number' : 'text',
-                  step: isNum ? '0.01' : undefined,
-                  inputMode: isNum ? 'decimal' : undefined,
-                  className: inputCls,
-                  placeholder: ph,
-                  value: stDraftNewItem[field] ?? '',
-                  onChange: (e) =>
-                    setStDraftNewItem((prev) => ({
-                      ...prev,
-                      [field]: e.target.value
-                    }))
-                });
-              }
-            )
-          ),
-          React.createElement('textarea', {
-            rows: 2,
-            className: inputCls,
-            placeholder: 'Notes for admin confirmation',
-            value: stDraftNewItem.notes,
-            onChange: (e) => setStDraftNewItem((prev) => ({ ...prev, notes: e.target.value }))
-          }),
-          React.createElement(
-            'div',
-            { className: 'flex justify-end' },
-            React.createElement(
-              'button',
+        stSessionId
+          ? React.createElement(
+              'div',
               {
-                type: 'button',
-                className: btnPrimary,
-                onClick: () => {
-                  const itemName = String(stDraftNewItem.itemName || '').trim();
-                  const countedQty = Number(stDraftNewItem.countedQty);
-                  if (!itemName || !Number.isFinite(countedQty)) {
-                    setError('New item needs item name and counted qty.');
-                    return;
-                  }
-                  setError(null);
-                  if (stSessionId) {
-                    setStSubmitting(true);
-                    void (async () => {
-                      try {
-                        const parsedUnitCost = Number(stDraftNewItem.unitCost);
-                        const parsedReorderPoint = Number(stDraftNewItem.reorderPoint);
-                        const newItems = [
-                          {
-                            itemName,
-                            sku: String(stDraftNewItem.sku || '').trim(),
-                            unit: String(stDraftNewItem.unit || 'pcs').trim() || 'pcs',
-                            countedQty,
-                            category: String(stDraftNewItem.category || 'components'),
-                            type: String(stDraftNewItem.type || 'raw_material'),
-                            unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : 0,
-                            reorderPoint: Number.isFinite(parsedReorderPoint) ? parsedReorderPoint : 0,
-                            supplier: String(stDraftNewItem.supplier || '').trim(),
-                            supplierPartNumber: String(stDraftNewItem.supplierPartNumber || '').trim(),
-                            manufacturingPartNumber: String(stDraftNewItem.manufacturingPartNumber || '').trim(),
-                            boxNumber: String(stDraftNewItem.boxNumber || '').trim(),
-                            notes: String(stDraftNewItem.notes || '').trim()
-                          }
-                        ];
-                        const res = await fetch(
-                          apiBase +
-                            '/api/manufacturing/stock-take-submissions/' +
-                            encodeURIComponent(stSessionId),
-                          {
-                            method: 'PATCH',
-                            headers: authHeaders(),
-                            body: JSON.stringify({
-                              sessionRevision: stSessionRevisionRef.current,
-                              linePatches: [],
-                              newItems
-                            })
-                          }
-                        );
-                        const payload = await res.json().catch(() => ({}));
-                        if (!res.ok) {
-                          const msg =
-                            payload?.error?.message || payload?.message || payload?.error || 'Failed to add item';
-                          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-                        }
-                        setStDraftNewItem(defaultDraftNewItem());
-                        await loadStockTakeSession(stSessionId, { silent: false });
-                        setMessage('New item added to the shared session.');
-                      } catch (e) {
-                        setError(e.message || 'Failed to add item');
-                      } finally {
-                        setStSubmitting(false);
-                      }
-                    })();
-                    return;
-                  }
-                  setStNewItems((prev) => [...prev, { ...stDraftNewItem, itemName, countedQty }]);
-                  setStDraftNewItem(defaultDraftNewItem());
-                }
+                className:
+                  'mt-4 rounded-lg border p-3 space-y-2 ' +
+                  (isDark ? 'border-amber-900/50 bg-amber-950/20' : 'border-amber-200 bg-amber-50/80')
               },
-              'Add new item'
-            )
-          ),
-          stNewItems.length > 0
-            ? React.createElement(
-                'ul',
-                { className: 'space-y-2' },
-                stNewItems.map((item, idx) =>
-                  React.createElement(
-                    'li',
-                    {
-                      key: 'stk-new-' + idx,
-                      className:
-                        'rounded border px-2 py-1.5 flex justify-between gap-2 text-sm ' +
-                        (isDark ? 'border-amber-800 bg-amber-950/40' : 'border-amber-300 bg-white')
-                    },
-                    React.createElement(
-                      'div',
-                      { className: 'min-w-0' },
-                      React.createElement('p', { className: 'font-semibold truncate ' + text }, item.itemName),
+              React.createElement(
+                'div',
+                { className: 'flex items-center justify-between' },
+                React.createElement(
+                  'p',
+                  { className: 'text-sm font-semibold ' + text },
+                  'New items (need admin confirmation on apply)'
+                ),
+                React.createElement('span', { className: 'text-xs ' + muted }, stNewItems.length + ' added')
+              ),
+              React.createElement(
+                'div',
+                { className: 'grid grid-cols-1 sm:grid-cols-2 gap-2' },
+                [
+                  'itemName',
+                  'sku',
+                  'unit',
+                  'countedQty',
+                  'category',
+                  'type',
+                  'unitCost',
+                  'reorderPoint',
+                  'supplier',
+                  'supplierPartNumber',
+                  'manufacturingPartNumber',
+                  'boxNumber'
+                ].map((field) => {
+                  const labels = {
+                    itemName: 'Item name *',
+                    sku: 'SKU (optional)',
+                    unit: 'Unit',
+                    countedQty: 'Counted qty *',
+                    category: 'Category',
+                    type: 'Type',
+                    unitCost: 'Unit cost',
+                    reorderPoint: 'Reorder point',
+                    supplier: 'Supplier',
+                    supplierPartNumber: 'Supplier part #',
+                    manufacturingPartNumber: 'Mfg part #',
+                    boxNumber: 'Box #'
+                  };
+                  const ph = labels[field] || field;
+                  const isNum = field === 'countedQty' || field === 'unitCost' || field === 'reorderPoint';
+                  return React.createElement('input', {
+                    key: field,
+                    type: isNum ? 'number' : 'text',
+                    step: isNum ? '0.01' : undefined,
+                    inputMode: isNum ? 'decimal' : undefined,
+                    className: inputCls,
+                    placeholder: ph,
+                    value: stDraftNewItem[field] ?? '',
+                    onChange: (e) =>
+                      setStDraftNewItem((prev) => ({
+                        ...prev,
+                        [field]: e.target.value
+                      }))
+                  });
+                })
+              ),
+              React.createElement('textarea', {
+                rows: 2,
+                className: inputCls,
+                placeholder: 'Notes for admin confirmation',
+                value: stDraftNewItem.notes,
+                onChange: (e) => setStDraftNewItem((prev) => ({ ...prev, notes: e.target.value }))
+              }),
+              React.createElement(
+                'div',
+                { className: 'flex justify-end' },
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    className: btnPrimary,
+                    onClick: () => {
+                      const itemName = String(stDraftNewItem.itemName || '').trim();
+                      const countedQty = Number(stDraftNewItem.countedQty);
+                      if (!itemName || !Number.isFinite(countedQty)) {
+                        setError('New item needs item name and counted qty.');
+                        return;
+                      }
+                      setError(null);
+                      setStSubmitting(true);
+                      void (async () => {
+                        try {
+                          const parsedUnitCost = Number(stDraftNewItem.unitCost);
+                          const parsedReorderPoint = Number(stDraftNewItem.reorderPoint);
+                          const newItems = [
+                            {
+                              itemName,
+                              sku: String(stDraftNewItem.sku || '').trim(),
+                              unit: String(stDraftNewItem.unit || 'pcs').trim() || 'pcs',
+                              countedQty,
+                              category: String(stDraftNewItem.category || 'components'),
+                              type: String(stDraftNewItem.type || 'raw_material'),
+                              unitCost: Number.isFinite(parsedUnitCost) ? parsedUnitCost : 0,
+                              reorderPoint: Number.isFinite(parsedReorderPoint) ? parsedReorderPoint : 0,
+                              supplier: String(stDraftNewItem.supplier || '').trim(),
+                              supplierPartNumber: String(stDraftNewItem.supplierPartNumber || '').trim(),
+                              manufacturingPartNumber: String(stDraftNewItem.manufacturingPartNumber || '').trim(),
+                              boxNumber: String(stDraftNewItem.boxNumber || '').trim(),
+                              notes: String(stDraftNewItem.notes || '').trim()
+                            }
+                          ];
+                          const res = await fetch(
+                            apiBase +
+                              '/api/manufacturing/stock-take-submissions/' +
+                              encodeURIComponent(stSessionId),
+                            {
+                              method: 'PATCH',
+                              headers: authHeaders(),
+                              body: JSON.stringify({
+                                sessionRevision: stSessionRevisionRef.current,
+                                linePatches: [],
+                                newItems
+                              })
+                            }
+                          );
+                          const payload = await res.json().catch(() => ({}));
+                          if (!res.ok) {
+                            const msg =
+                              payload?.error?.message || payload?.message || payload?.error || 'Failed to add item';
+                            throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+                          }
+                          setStDraftNewItem(defaultDraftNewItem());
+                          await loadStockTakeSession(stSessionId, { silent: false });
+                          setMessage('New item added to the stock take.');
+                        } catch (e) {
+                          setError(e.message || 'Failed to add item');
+                        } finally {
+                          setStSubmitting(false);
+                        }
+                      })();
+                    }
+                  },
+                  'Add new item'
+                )
+              ),
+              stNewItems.length > 0
+                ? React.createElement(
+                    'ul',
+                    { className: 'space-y-2' },
+                    stNewItems.map((item, idx) =>
                       React.createElement(
-                        'p',
-                        { className: 'text-xs ' + muted },
-                        'Qty ' +
-                          Number(item.countedQty) +
-                          ' · ' +
-                          (item.unit || 'pcs') +
-                          ' · SKU ' +
-                          (item.sku || 'auto')
+                        'li',
+                        {
+                          key: 'stk-new-' + idx,
+                          className:
+                            'rounded border px-2 py-1.5 flex justify-between gap-2 text-sm ' +
+                            (isDark ? 'border-amber-800 bg-amber-950/40' : 'border-amber-300 bg-white')
+                        },
+                        React.createElement(
+                          'div',
+                          { className: 'min-w-0' },
+                          React.createElement('p', { className: 'font-semibold truncate ' + text }, item.itemName),
+                          React.createElement(
+                            'p',
+                            { className: 'text-xs ' + muted },
+                            'Qty ' +
+                              Number(item.countedQty) +
+                              ' · ' +
+                              (item.unit || 'pcs') +
+                              ' · SKU ' +
+                              (item.sku || 'auto')
+                          )
+                        ),
+                        React.createElement(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'text-xs font-semibold underline shrink-0 ' + muted,
+                            onClick: () => setStNewItems((prev) => prev.filter((_, i) => i !== idx))
+                          },
+                          'Remove'
+                        )
                       )
-                    ),
-                    React.createElement(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'text-xs font-semibold underline shrink-0 ' + muted,
-                        onClick: () => setStNewItems((prev) => prev.filter((_, i) => i !== idx))
-                      },
-                      'Remove'
                     )
                   )
-                )
-              )
-            : null
-        ),
+                : null
+            )
+          : React.createElement(
+              'div',
+              {
+                className:
+                  'mt-4 rounded-lg border px-3 py-2 text-sm ' +
+                  (isDark ? 'border-gray-700 text-gray-400' : 'border-gray-200 text-gray-600')
+              },
+              'Start or join a stock take session to load lines, use Scan QR, and add new items.'
+            ),
         stDraftNotice
           ? React.createElement(
               'div',
@@ -1755,7 +1977,7 @@
             {
               type: 'button',
               className: btnPrimary,
-              disabled: stSubmitting || !stLocationId,
+              disabled: stSubmitting || !stSessionId,
               onClick: submitInlineStockTake
             },
             stSubmitting ? 'Submitting…' : 'Submit for review'
@@ -1765,7 +1987,65 @@
             { type: 'button', className: btn, disabled: stSubmitting, onClick: resetInlineStockTake },
             'Reset form'
           )
-        )
+        ),
+        stScanOpen
+          ? React.createElement(
+              'div',
+              {
+                className:
+                  'fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4 erp-stocktake-scan-overlay'
+              },
+              React.createElement(
+                'div',
+                {
+                  className:
+                    'bg-white dark:bg-gray-900 rounded-xl max-w-md w-full p-4 shadow-xl space-y-3 ' +
+                    (isDark ? 'border border-gray-700' : '')
+                },
+                React.createElement(
+                  'div',
+                  { className: 'flex items-start justify-between gap-2' },
+                  React.createElement(
+                    'div',
+                    null,
+                    React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Scan inventory QR'),
+                    React.createElement(
+                      'p',
+                      { className: 'text-xs ' + muted + ' mt-1' },
+                      'Point the camera at the label. Each successful scan adds 1 to counted quantity for that line.'
+                    )
+                  ),
+                  React.createElement(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'text-gray-500 hover:text-gray-800 p-1',
+                      onClick: () => setStScanOpen(false),
+                      'aria-label': 'Close scanner'
+                    },
+                    React.createElement('i', { className: 'fas fa-times text-lg' })
+                  )
+                ),
+                React.createElement('video', {
+                  ref: stScanVideoRef,
+                  className: 'w-full rounded-lg bg-black max-h-[48vh] object-cover',
+                  playsInline: true,
+                  muted: true,
+                  autoPlay: true
+                }),
+                React.createElement('canvas', { ref: stScanCanvasRef, className: 'hidden', 'aria-hidden': true }),
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    className: btn,
+                    onClick: () => setStScanOpen(false)
+                  },
+                  'Close camera'
+                )
+              )
+            )
+          : null
       ),
       React.createElement(
         'div',
