@@ -291,6 +291,9 @@ try {
   const [activeTab, setActiveTab] = useState(getInitialTabFromURL);
   const [inventory, setInventory] = useState([]);
   const [inventoryLoadedFromAPI, setInventoryLoadedFromAPI] = useState(false);
+  /** Per stock location: value & units (GET …/inventory/location-value-summary). Independent of inventory tab filter. */
+  const [inventoryValueByLocationSummary, setInventoryValueByLocationSummary] = useState(null);
+  const [inventoryValueByLocationSummaryLoaded, setInventoryValueByLocationSummaryLoaded] = useState(false);
   const [boms, setBoms] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
   const [expandedProductionOrderId, setExpandedProductionOrderId] = useState(null);
@@ -370,6 +373,23 @@ try {
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
   const [inventoryListPage, setInventoryListPage] = useState(1);
   const inventoryTableScrollRef = useRef(null);
+  const loadInventoryValueByLocationSummary = useCallback(async (options = {}) => {
+    if (!window.DatabaseAPI?.getManufacturingInventoryLocationValueSummary) {
+      return;
+    }
+    try {
+      const res = await window.DatabaseAPI.getManufacturingInventoryLocationValueSummary(options);
+      const payload = res?.data ?? res;
+      if (payload && typeof payload === 'object') {
+        setInventoryValueByLocationSummary(payload);
+      }
+    } catch (error) {
+      console.error('Manufacturing: failed to load inventory value by location', error);
+    } finally {
+      setInventoryValueByLocationSummaryLoaded(true);
+    }
+  }, []);
+
   const reloadInventoryForLocation = useCallback(async (options = {}) => {
     if (options.skipIfTyping && isUserTypingRef.current) {
       return;
@@ -399,6 +419,7 @@ try {
       setInventory(processed);
       setInventoryLoadedFromAPI(true);
       safeSetItem('manufacturing_inventory', JSON.stringify(processed));
+      void loadInventoryValueByLocationSummary({ forceRefresh: true });
 
       // Restore focus after state update if user was typing
       if (wasInputFocused) {
@@ -431,7 +452,7 @@ try {
     } catch (error) {
       console.error('Error loading inventory for location:', error);
     }
-  }, [selectedLocationId]);
+  }, [selectedLocationId, loadInventoryValueByLocationSummary]);
   const syncTabToRoute = useCallback((tab, options = {}) => {
     const normalizedTab = normalizeManufacturingTab(tab);
     const segments = normalizedTab === 'dashboard' ? [] : [normalizedTab];
@@ -744,6 +765,26 @@ try {
           );
         }
 
+        if (typeof window.DatabaseAPI.getManufacturingInventoryLocationValueSummary === 'function') {
+          apiCalls.push(
+            window.DatabaseAPI
+              .getManufacturingInventoryLocationValueSummary()
+              .then((res) => {
+                const payload = res?.data ?? res;
+                if (payload && typeof payload === 'object') {
+                  setInventoryValueByLocationSummary(payload);
+                }
+                setInventoryValueByLocationSummaryLoaded(true);
+                return { type: 'inventoryLocationValue', data: payload };
+              })
+              .catch((error) => {
+                console.error('Error loading inventory value by location:', error);
+                setInventoryValueByLocationSummaryLoaded(true);
+                return { type: 'inventoryLocationValue', error };
+              })
+          );
+        }
+
         // BOMs
         if (typeof window.DatabaseAPI.getBOMs === 'function') {
           apiCalls.push(
@@ -1024,6 +1065,25 @@ try {
               return { type: 'inventory', data: processed };
             })
             .catch(error => ({ type: 'inventory', error }))
+        );
+      }
+
+      if (window.DatabaseAPI?.getManufacturingInventoryLocationValueSummary) {
+        apiCalls.push(
+          window.DatabaseAPI
+            .getManufacturingInventoryLocationValueSummary({ forceRefresh: true })
+            .then((res) => {
+              const payload = res?.data ?? res;
+              if (payload && typeof payload === 'object') {
+                setInventoryValueByLocationSummary(payload);
+              }
+              setInventoryValueByLocationSummaryLoaded(true);
+              return { type: 'inventoryLocationValue', data: payload };
+            })
+            .catch((error) => {
+              setInventoryValueByLocationSummaryLoaded(true);
+              return { type: 'inventoryLocationValue', error };
+            })
         );
       }
 
@@ -2164,7 +2224,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   const getInventoryStats = () => {
     const totalValue = inventory.reduce(
-      (sum, item) => sum + inventoryLineTotalValue(item.quantity, item.unitCost),
+      (sum, item) => sum + (normalizeInventoryItemRow(item).totalValue || 0),
       0
     );
     const lowStockItems = inventory.filter(isLowStockInventoryItem).length;
@@ -2508,23 +2568,58 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   const DashboardView = () => {
     const invStats = getInventoryStats();
     const prodStats = getProductionStats();
+    const showInventoryByLocation =
+      inventoryValueByLocationSummaryLoaded && inventoryValueByLocationSummary != null;
 
     return (
       <div className="erp-module-root space-y-4 min-w-0">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Inventory Value</p>
-                <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                  {inventoryLoadedFromAPI ? formatCurrency(invStats.totalValue) : '—'}
-                </p>
-                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {inventoryLoadedFromAPI ? invStats.totalItems.toLocaleString() : '—'} units on hand
-                </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Inventory value by location</p>
+                {showInventoryByLocation ? (
+                  <>
+                    <ul
+                      className={`mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1 text-xs ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
+                    >
+                      {inventoryValueByLocationSummary.locations.map((row) => {
+                        const label = [row.code, row.name].filter(Boolean).join(' · ') || row.locationId;
+                        return (
+                          <li key={row.locationId} className="flex justify-between gap-2">
+                            <span className="truncate" title={label}>
+                              {label}
+                            </span>
+                            <span className="font-medium shrink-0 tabular-nums">{formatCurrency(row.totalValue)}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <div
+                      className={`mt-2 pt-2 border-t flex justify-between text-xs ${isDark ? 'border-gray-800 text-gray-300' : 'border-gray-100 text-gray-700'}`}
+                    >
+                      <span className="font-medium">Total</span>
+                      <span className="font-semibold tabular-nums">
+                        {formatCurrency(inventoryValueByLocationSummary.grandTotal)}
+                      </span>
+                    </div>
+                    <p className={`text-xs mt-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {Number(inventoryValueByLocationSummary.totalUnitsOnHand || 0).toLocaleString()} units on hand (all locations)
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-lg font-semibold mt-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {inventoryLoadedFromAPI ? formatCurrency(invStats.totalValue) : '—'}
+                    </p>
+                    <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {inventoryLoadedFromAPI ? invStats.totalItems.toLocaleString() : '—'} units on hand
+                    </p>
+                  </>
+                )}
               </div>
-              <div className={`p-2 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
+              <div className={`p-2 rounded-lg shrink-0 ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
                 <i className={`fas fa-boxes ${isDark ? 'text-gray-300' : 'text-blue-600'}`}></i>
               </div>
             </div>

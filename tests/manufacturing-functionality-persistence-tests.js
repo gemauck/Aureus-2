@@ -375,7 +375,7 @@ async function runUiChecks({
     await page.waitForTimeout(1000)
 
     // Dashboard appearance
-    recordResult('UI: Dashboard card - Total Inventory Value', await waitVisible('text=Total Inventory Value'))
+    recordResult('UI: Dashboard card - Inventory value by location', await waitVisible('text=Inventory value by location'))
     recordResult('UI: Dashboard card - Low Stock Alerts', await waitVisible('text=Low Stock Alerts'))
     recordResult('UI: Dashboard card - Active Production Orders', await waitVisible('text=Active Production Orders'))
     recordResult('UI: Dashboard card - Total Production (Month)', await waitVisible('text=Total Production (Month)'))

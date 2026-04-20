@@ -1698,6 +1698,18 @@ const DatabaseAPI = {
     },
 
     // MANUFACTURING OPERATIONS - INVENTORY
+    async getManufacturingInventoryLocationValueSummary(options = {}) {
+        const raw = await this.makeRequest('/manufacturing/inventory/location-value-summary', options);
+        const inner = raw?.data ?? raw;
+        return {
+            data: {
+                locations: Array.isArray(inner?.locations) ? inner.locations : [],
+                grandTotal: Number(inner?.grandTotal) || 0,
+                totalUnitsOnHand: Number(inner?.totalUnitsOnHand) || 0
+            }
+        };
+    },
+
     async getInventory(locationId = null, options = {}) {
         const endpoint = locationId && locationId !== 'all' ? `/manufacturing/inventory?locationId=${locationId}` : '/manufacturing/inventory';
         const raw = await this.makeRequest(endpoint, options);
@@ -1733,6 +1745,7 @@ const DatabaseAPI = {
         try {
             // Clear generic inventory cache (all locations)
             this.clearEndpointCache('/manufacturing/inventory', 'GET');
+            this.clearEndpointCache('/manufacturing/inventory/location-value-summary', 'GET');
 
             // Clear any per-location inventory caches
             if (this._responseCache && typeof this._responseCache.keys === 'function') {
@@ -1754,6 +1767,7 @@ const DatabaseAPI = {
                     if (
                         typeof key === 'string' &&
                         (key === 'GET:/manufacturing/inventory' ||
+                         key === 'GET:/manufacturing/inventory/location-value-summary' ||
                          key.startsWith('GET:/manufacturing/inventory?locationId='))
                     ) {
                         pendingKeysToDelete.push(key);

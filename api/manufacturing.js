@@ -719,6 +719,67 @@ async function buildAllLocationsInventoryResponse() {
   return result
 }
 
+/**
+ * Dashboard / summary: extended value and units per stock location (from LocationInventory rows).
+ */
+async function buildLocationInventoryValueSummary() {
+  await syncInventoryAcrossAllLocations(false)
+
+  const allLocs = await prisma.stockLocation.findMany({
+    orderBy: [{ code: 'asc' }, { name: 'asc' }]
+  })
+
+  const agg = new Map()
+  for (const loc of allLocs) {
+    agg.set(loc.id, {
+      locationId: loc.id,
+      code: loc.code || '',
+      name: loc.name || '',
+      totalValue: 0,
+      unitsOnHand: 0
+    })
+  }
+
+  const records = await prisma.locationInventory.findMany({
+    include: { location: true }
+  })
+
+  let grandTotal = 0
+  let totalUnitsOnHand = 0
+
+  for (const r of records) {
+    const q = Number(r.quantity) || 0
+    const uc = Number(r.unitCost) || 0
+    const val = computedInventoryTotalValue(q, uc)
+    grandTotal += val
+    totalUnitsOnHand += q
+
+    const lid = r.locationId
+    let row = agg.get(lid)
+    if (!row) {
+      const loc = r.location
+      row = {
+        locationId: lid,
+        code: loc?.code || '',
+        name: loc?.name || 'Unknown location',
+        totalValue: 0,
+        unitsOnHand: 0
+      }
+      agg.set(lid, row)
+    }
+    row.totalValue += val
+    row.unitsOnHand += q
+  }
+
+  const locations = Array.from(agg.values()).sort((a, b) => {
+    const c = (a.code || '').localeCompare(b.code || '')
+    if (c !== 0) return c
+    return (a.name || '').localeCompare(b.name || '')
+  })
+
+  return { locations, grandTotal, totalUnitsOnHand }
+}
+
 async function syncInventoryAcrossAllLocations(force = false) {
   const now = Date.now()
   if (!force && lastGlobalLocationSync && (now - lastGlobalLocationSync) < GLOBAL_LOCATION_SYNC_INTERVAL_MS) {
@@ -2044,6 +2105,17 @@ async function handler(req, res) {
       } catch (error) {
         console.error('❌ Failed to list inventory:', error)
         return serverError(res, 'Failed to list inventory', error.message)
+      }
+    }
+
+    // GET /api/manufacturing/inventory/location-value-summary — per-location value (dashboard)
+    if (req.method === 'GET' && id === 'location-value-summary') {
+      try {
+        const summary = await buildLocationInventoryValueSummary()
+        return ok(res, summary)
+      } catch (error) {
+        console.error('❌ Failed to load inventory value by location:', error)
+        return serverError(res, 'Failed to load inventory value by location', error.message)
       }
     }
 
