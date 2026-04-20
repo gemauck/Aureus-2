@@ -3394,17 +3394,9 @@ const JobCardFormPublic = () => {
       setStockTakeRows([]);
       return;
     }
-    const selectedStockTakeLocation = (stockLocations || []).find(
-      (loc) => String(loc?.id || '') === String(stockTakeLocationId)
-    );
-    const selectedCode = String(selectedStockTakeLocation?.code || '').trim().toLowerCase();
-    const selectedName = String(selectedStockTakeLocation?.name || '').trim().toLowerCase();
-    const useAllLocationsInventory =
-      stockTakeLocationId === 'all' ||
-      selectedCode === 'all' ||
-      selectedCode === 'other' ||
-      selectedName === 'other stock locations' ||
-      selectedName.includes('other stock');
+    // Stock-take should capture against the selected location while allowing
+    // counters to pick from global stock visibility across all locations.
+    const useAllLocationsInventory = true;
     let cancelled = false;
     const run = async () => {
       if (!isOnline) {
@@ -3438,7 +3430,7 @@ const JobCardFormPublic = () => {
     return () => {
       cancelled = true;
     };
-  }, [wizardFlow, stockTakeLocationId, isOnline, inventory, stockLocations]);
+  }, [wizardFlow, stockTakeLocationId, isOnline, inventory]);
 
   const handleSave = async (options = {}) => {
     const forceDraft = options?.forceDraft === true;
