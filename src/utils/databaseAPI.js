@@ -9,7 +9,10 @@ function _normalizeManufacturingInventoryItem(item) {
     if (!item || typeof item !== 'object') return item;
     return {
         ...item,
-        totalValue: _computedManufacturingInventoryTotalValue(item.quantity, item.unitCost)
+        totalValue:
+            item.totalValue !== undefined && item.totalValue !== null
+                ? (Number(item.totalValue) || 0)
+                : _computedManufacturingInventoryTotalValue(item.quantity, item.unitCost)
     };
 }
 

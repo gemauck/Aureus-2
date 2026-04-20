@@ -2017,10 +2017,14 @@ async function handler(req, res) {
         const rawPageSize = parseInt(req.query?.pageSize || req.query?.limit, 10)
         const pageSize = rawPageSize > 0 ? Math.min(200, Math.max(1, rawPageSize)) : null
 
-        // Format dates for response
+        // Format dates for response. Preserve pre-aggregated totalValue when provided
+        // (e.g. all-locations response can sum per-location costs).
         let formatted = items.map(item => ({
           ...item,
-          totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
+          totalValue:
+            item.totalValue !== undefined && item.totalValue !== null
+              ? (parseFloat(item.totalValue) || 0)
+              : computedInventoryTotalValue(item.quantity, item.unitCost),
           lastRestocked: formatDate(item.lastRestocked),
           createdAt: formatDate(item.createdAt),
           updatedAt: formatDate(item.updatedAt)

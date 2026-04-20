@@ -55,12 +55,15 @@ function inventoryLineTotalValue(quantity, unitCost) {
   return (Number(quantity) || 0) * (Number(unitCost) || 0);
 }
 
-/** Keep `totalValue` on every inventory row aligned with qty × unit cost (API/cache may drift). */
+/** Prefer API-provided totalValue (supports aggregated per-location costing); fallback to qty × unit cost. */
 function normalizeInventoryItemRow(item) {
   if (!item || typeof item !== 'object') return item;
   return {
     ...item,
-    totalValue: inventoryLineTotalValue(item.quantity, item.unitCost)
+    totalValue:
+      item.totalValue !== undefined && item.totalValue !== null
+        ? (Number(item.totalValue) || 0)
+        : inventoryLineTotalValue(item.quantity, item.unitCost)
   };
 }
 
