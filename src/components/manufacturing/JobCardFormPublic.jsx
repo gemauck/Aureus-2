@@ -1207,6 +1207,7 @@ const JobCardFormPublic = () => {
   const [stockTakeError, setStockTakeError] = useState('');
   const [stockTakeScanOpen, setStockTakeScanOpen] = useState(false);
   const [stockTakeHighlightSku, setStockTakeHighlightSku] = useState('');
+  const [stockTakeLineSearch, setStockTakeLineSearch] = useState('');
   const [stockTakePage, setStockTakePage] = useState(1);
   /** Collaborative stock-take session (same API as Manufacturing web) */
   const [stockTakeSessionId, setStockTakeSessionId] = useState('');
@@ -1255,21 +1256,37 @@ const JobCardFormPublic = () => {
   const sessionActivityQueueRef = useRef([]);
   const activeEditCardIdRef = useRef(null);
 
-  const stockTakeLineCount = stockTakeRows?.length ?? 0;
+  const stockTakeFilteredRows = useMemo(() => {
+    const q = stockTakeLineSearch.trim().toLowerCase();
+    const rows = stockTakeRows || [];
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const sku = String(row?.sku || '').trim().toLowerCase();
+      const name = String(row?.name || '').trim().toLowerCase();
+      return sku.includes(q) || name.includes(q);
+    });
+  }, [stockTakeRows, stockTakeLineSearch]);
+
+  const stockTakeLineCount = stockTakeFilteredRows.length;
+  const stockTakeAllLineCount = stockTakeRows?.length ?? 0;
   const stockTakeTotalPages = Math.max(1, Math.ceil(stockTakeLineCount / STOCK_TAKE_PAGE_SIZE));
   const stockTakePagedRows = useMemo(() => {
     const start = (stockTakePage - 1) * STOCK_TAKE_PAGE_SIZE;
-    return (stockTakeRows || []).slice(start, start + STOCK_TAKE_PAGE_SIZE);
-  }, [stockTakeRows, stockTakePage]);
+    return (stockTakeFilteredRows || []).slice(start, start + STOCK_TAKE_PAGE_SIZE);
+  }, [stockTakeFilteredRows, stockTakePage]);
 
   useEffect(() => {
     setStockTakePage((p) => {
-      const total = Math.max(1, Math.ceil((stockTakeRows?.length || 0) / STOCK_TAKE_PAGE_SIZE));
+      const total = Math.max(1, Math.ceil((stockTakeFilteredRows?.length || 0) / STOCK_TAKE_PAGE_SIZE));
       if (p > total) return total;
       if (p < 1) return 1;
       return p;
     });
-  }, [stockTakeRows?.length]);
+  }, [stockTakeFilteredRows?.length]);
+
+  useEffect(() => {
+    setStockTakePage(1);
+  }, [stockTakeLineSearch]);
 
   useEffect(() => {
     stockTakeCountsRef.current = stockTakeCounts;
@@ -3354,6 +3371,7 @@ const JobCardFormPublic = () => {
     setStockTakeError('');
     setStockTakeScanOpen(false);
     setStockTakeHighlightSku('');
+    setStockTakeLineSearch('');
     setStockTakePage(1);
     setStockTakeStartedAt(new Date().toISOString());
     setWizardFlow('stock_take');
@@ -6023,6 +6041,7 @@ const JobCardFormPublic = () => {
                 onChange={(e) => {
                   setStockTakeLocationId(e.target.value);
                   setStockTakeCounts({});
+                  setStockTakeLineSearch('');
                   setStockTakePage(1);
                 }}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
@@ -6098,11 +6117,15 @@ const JobCardFormPublic = () => {
                     <p className="text-sm font-semibold text-gray-900">Stock lines</p>
                     {stockTakeLineCount > 0 ? (
                       <p className="text-[11px] text-gray-500 mt-0.5">
-                        {stockTakeLineCount} line{stockTakeLineCount === 1 ? '' : 's'}
+                        {stockTakeLineSearch.trim()
+                          ? `${stockTakeLineCount} matching of ${stockTakeAllLineCount} lines`
+                          : `${stockTakeLineCount} line${stockTakeLineCount === 1 ? '' : 's'}`}
                         {stockTakeTotalPages > 1
                           ? ` · Page ${stockTakePage} of ${stockTakeTotalPages} (${STOCK_TAKE_PAGE_SIZE} per page)`
                           : ''}
                       </p>
+                    ) : stockTakeAllLineCount > 0 && stockTakeLineSearch.trim() ? (
+                      <p className="text-[11px] text-gray-500 mt-0.5">No lines match your search.</p>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
@@ -6121,28 +6144,45 @@ const JobCardFormPublic = () => {
                     <p className="text-xs text-gray-600">{countedLines} counted</p>
                   </div>
                 </div>
+                {stockTakeRows.length > 0 ? (
+                  <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/50">
+                    <label htmlFor="stock-take-line-search" className="sr-only">
+                      Search stock lines
+                    </label>
+                    <input
+                      id="stock-take-line-search"
+                      type="search"
+                      autoComplete="off"
+                      value={stockTakeLineSearch}
+                      onChange={(e) => setStockTakeLineSearch(e.target.value)}
+                      placeholder="Search by name or SKU…"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                    />
+                  </div>
+                ) : null}
                 {stockTakeRows.length === 0 ? (
                   <div className="px-4 py-6 text-sm text-gray-500">No stock lines found for this location.</div>
+                ) : stockTakeFilteredRows.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-gray-500">No lines match your search.</div>
                 ) : (
                   <>
                     <div className="divide-y divide-gray-100">
                       {stockTakePagedRows.map((row) => {
                         const sku = String(row?.sku || '').trim();
-                        const currentQty = Number(row?.quantity) || 0;
                         return (
                           <div
                             key={`${stockTakeLocationId}-${sku}`}
-                            className={`px-4 py-3 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 items-center transition-shadow ${
+                            className={`px-3 py-1.5 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center transition-shadow ${
                               stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
                             }`}
                           >
                             <div className="sm:col-span-7 min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">{row?.name || sku}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                {sku} · System: {currentQty}
-                              </p>
+                              <p className="text-sm font-semibold text-gray-900 truncate leading-tight">{row?.name || sku}</p>
+                              {sku ? (
+                                <p className="text-[11px] text-gray-500 leading-tight truncate">{sku}</p>
+                              ) : null}
                             </div>
-                            <div className="sm:col-span-5">
+                            <div className="sm:col-span-5 flex sm:justify-end">
                               <input
                                 type="number"
                                 step="0.01"
@@ -6164,8 +6204,8 @@ const JobCardFormPublic = () => {
                                     scheduleStockTakeSessionPatch();
                                   }
                                 }}
-                                placeholder="Counted qty"
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                                placeholder="Qty"
+                                className="w-full max-w-[5.5rem] rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
                               />
                             </div>
                           </div>
