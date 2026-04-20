@@ -2728,6 +2728,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     setViewingInventoryItemDetail(prev => {
       if (!prev || getInventoryItemId(prev) !== viewedId) return prev;
+      const preserveLiveStockFields = Array.isArray(prev.locations) && prev.locations.length > 0;
       const merged = {
         ...prev,
         ...fromList,
@@ -2735,6 +2736,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         inventoryItemId: prev.inventoryItemId || fromList.inventoryItemId,
         locations: fromList.locations && fromList.locations.length ? fromList.locations : prev.locations
       };
+
+      // Inventory list refreshes can carry a different scope/status snapshot than the currently
+      // opened detail view. Preserve live stock fields to prevent post-load reverts.
+      if (preserveLiveStockFields) {
+        merged.quantity = prev.quantity;
+        merged.status = prev.status;
+        merged.location = prev.location;
+        merged.locationId = prev.locationId;
+        merged.allocatedQuantity = prev.allocatedQuantity;
+        merged.inProductionQuantity = prev.inProductionQuantity;
+        merged.completedQuantity = prev.completedQuantity;
+      }
       return normalizeInventoryItemRow(merged);
     });
   }, [inventory, detailInventoryCanonicalId]);
