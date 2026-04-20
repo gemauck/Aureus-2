@@ -12015,12 +12015,22 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
     }, [item, itemMovementsForDetail, openAddMovementModal, isAdmin]);
 
-    // Sync editFormData and selectedDetailLocationId when item changes
+    // Keep edit form in sync with latest item payload.
     useEffect(() => {
       setEditFormData({ ...item });
+    }, [item]);
+
+    // Only reset selected detail location when switching to a different item.
+    // Inventory auto-refresh and detail hydration update `item` frequently; if we reset
+    // on every update, the location dropdown can "revert" after briefly showing correct values.
+    const detailItemIdentity = getInventoryItemId(item) || item?.id || item?.sku || '';
+    const lastDetailItemIdentityRef = useRef(detailItemIdentity);
+    useEffect(() => {
+      if (lastDetailItemIdentityRef.current === detailItemIdentity) return;
+      lastDetailItemIdentityRef.current = detailItemIdentity;
       const defaultLocationId = getDefaultDetailLocationId(item);
       setSelectedDetailLocationId(defaultLocationId);
-    }, [item]);
+    }, [detailItemIdentity, item]);
 
     // Best practice: sync location with URL so selected location is shareable and survives refresh
     const validLocationIds = useMemo(() => new Set(detailLocations.map(l => l.locationId)), [detailLocations]);
