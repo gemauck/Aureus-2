@@ -2899,12 +2899,14 @@ const JobCardFormPublic = () => {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         };
-        const [r, actR] = await Promise.all([
-          fetch(`/api/jobcards/${encodeURIComponent(openId)}?omitPhotos=1`, { headers }),
-          fetch(`/api/jobcards/${encodeURIComponent(openId)}/activity?order=asc`, { headers })
-        ]);
-        if (actR.ok) {
+        const activityReq = fetch(`/api/jobcards/${encodeURIComponent(openId)}/activity?order=asc`, { headers });
+        void (async () => {
           try {
+            const actR = await activityReq;
+            if (!actR.ok) {
+              setPriorLoadedActivities([]);
+              return;
+            }
             const aj = await actR.json();
             const acts = aj?.data?.activities ?? aj?.activities;
             setPriorLoadedActivities(
@@ -2912,10 +2914,11 @@ const JobCardFormPublic = () => {
             );
           } catch {
             setPriorLoadedActivities([]);
+          } finally {
+            setPriorActivityLoading(false);
           }
-        } else {
-          setPriorLoadedActivities([]);
-        }
+        })();
+        const r = await fetch(`/api/jobcards/${encodeURIComponent(openId)}?omitPhotos=1`, { headers });
         if (r.ok) {
           const data = await r.json();
           const apiCard = data?.data?.jobCard ?? data?.jobCard;

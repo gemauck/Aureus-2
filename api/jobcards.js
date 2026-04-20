@@ -423,7 +423,7 @@ async function handler(req, res) {
           safetyCultureAuditId: true
         }
 
-        const totalItems = await prisma.jobCard.count({ where: whereClause })
+        const totalItemsPromise = prisma.jobCard.count({ where: whereClause })
 
         let jobCards
         try {
@@ -454,21 +454,24 @@ async function handler(req, res) {
           }))
         }
 
-        console.log('📋 List job cards', {
-          owner,
-          count: jobCards.length,
-          page,
-          pageSize,
-          totalItems,
-          clientId: clientId || clientName || 'all',
-          q: searchQ || null,
-          whereClause,
-          sampleJobCard: jobCards[0] ? {
-            jobCardNumber: jobCards[0].jobCardNumber,
-            clientId: jobCards[0].clientId,
-            clientName: jobCards[0].clientName
-          } : null
-        })
+        const totalItems = await totalItemsPromise
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('📋 List job cards', {
+            owner,
+            count: jobCards.length,
+            page,
+            pageSize,
+            totalItems,
+            clientId: clientId || clientName || 'all',
+            q: searchQ || null,
+            whereClause,
+            sampleJobCard: jobCards[0] ? {
+              jobCardNumber: jobCards[0].jobCardNumber,
+              clientId: jobCards[0].clientId,
+              clientName: jobCards[0].clientName
+            } : null
+          })
+        }
         
         // Format dates for response; flatten checklist count for clients
         const formatted = jobCards.map((jobCard) => {

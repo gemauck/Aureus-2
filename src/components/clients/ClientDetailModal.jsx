@@ -1246,47 +1246,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             }
                         }
                         
-                        // Fallback: Fetch all job cards and filter by clientId ONLY (strict match)
-                        response = await fetch(`/api/jobcards?pageSize=1000`, {
-                            headers: { 
-                                'Authorization': `Bearer ${token}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            data = await response.json();
-                            const allJobCards = data.jobCards || data.data?.jobCards || [];
-                            console.log(`🔍 Checking ${allJobCards.length} job cards for clientId: ${clientId}`);
-                            let matchingJobCards = allJobCards.filter(jc => {
-                                // Check multiple possible field names for client ID
-                                const jcClientId = jc.clientId || jc.client?.id;
-                                const matches = jcClientId && String(jcClientId).trim() === clientId.trim();
-                                if (jcClientId && !matches) {
-                                    console.log(`⚠️ Job card ${jc.id} has clientId "${jcClientId}" (type: ${typeof jcClientId}), expected "${clientId}"`);
-                                }
-                                return matches;
-                            });
-                            console.log(`✅ Found ${matchingJobCards.length} matching job cards for clientId: ${clientId}`);
-                            
-                            if (matchingJobCards.length > 0) {
-                                setJobCards(matchingJobCards);
-                                jobCardsRef.current = matchingJobCards; // Update ref
-                            } else {
-                                setJobCards([]);
-                                jobCardsRef.current = []; // Update ref
-                            }
-                            
-                            lastLoadedClientIdRef.current = clientId;
-                            lastLoadedClientNameRef.current = clientName;
-                            return { jobCards: matchingJobCards };
-                        } else {
-                            const errorText = await response.text().catch(() => 'Unknown error');
-                            console.error('❌ Failed to load job cards:', response.status, errorText);
-                            setJobCards([]);
-                            jobCardsRef.current = []; // Update ref
-                            throw new Error(`Failed to load job cards: ${response.status} ${errorText}`);
-                        }
+                        // No broad fallback query here: fetching all job cards is expensive
+                        // and makes client detail open slowly on desktop.
+                        setJobCards([]);
+                        jobCardsRef.current = [];
+                        lastLoadedClientIdRef.current = clientId;
+                        lastLoadedClientNameRef.current = clientName;
+                        return { jobCards: [] };
                     } catch (error) {
                         console.error('Error loading job cards:', error);
                         setJobCards([]);
