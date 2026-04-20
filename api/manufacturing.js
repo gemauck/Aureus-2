@@ -2057,8 +2057,27 @@ async function handler(req, res) {
         if (!item) {
           return notFound(res, 'Inventory item not found')
         }
+        let width = 256
+        try {
+          const qs = new URL(req.url || '', 'http://localhost').searchParams
+          const w = parseInt(qs.get('w') || '', 10)
+          const size = String(qs.get('size') || '').trim().toLowerCase()
+          if (Number.isFinite(w) && w >= 64 && w <= 1024) {
+            width = w
+          } else if (size === 'xs' || size === 'small' || size === 'sm') {
+            width = 160
+          } else if (size === 'md' || size === 'medium') {
+            width = 256
+          } else if (size === 'lg' || size === 'large') {
+            width = 384
+          } else if (size === 'xl' || size === 'xlarge') {
+            width = 512
+          }
+        } catch {
+          /* default width */
+        }
         const payload = encodeInventoryQrPayload(item.id)
-        const png = await QRCode.toBuffer(payload, { type: 'png', width: 256, margin: 2, errorCorrectionLevel: 'M' })
+        const png = await QRCode.toBuffer(payload, { type: 'png', width, margin: 2, errorCorrectionLevel: 'M' })
         res.setHeader('Content-Type', 'image/png')
         res.setHeader('Cache-Control', 'private, max-age=300')
         return res.status(200).send(Buffer.from(png))

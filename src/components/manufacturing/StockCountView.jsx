@@ -19,6 +19,40 @@
   const STOCK_TAKE_DRAFT_KEY = 'erpStockCountView_stockTakeDraft_v1';
   const STOCK_TAKE_PAGE_SIZE = 50;
 
+  /** Maps to api/manufacturing/inventory/:id/qr?size= */
+  const QR_LABEL_PRESETS = {
+    small: { apiSize: 'sm', label: 'Small — 4 per row', cols: 4, qrDisplayPx: 72 },
+    medium: { apiSize: 'md', label: 'Medium — 3 per row', cols: 3, qrDisplayPx: 96 },
+    large: { apiSize: 'lg', label: 'Large — 2 per row', cols: 2, qrDisplayPx: 128 },
+    xlarge: { apiSize: 'xl', label: 'Extra large — full width', cols: 1, qrDisplayPx: 200 }
+  };
+
+  const QR_SHEET_MAX = 400;
+
+  function inventoryPayloadForQr(inventoryItemId) {
+    if (typeof window.encodeInventoryQrPayload === 'function') {
+      return window.encodeInventoryQrPayload(inventoryItemId);
+    }
+    const id = String(inventoryItemId || '').trim();
+    return id ? 'ABCO:INV:' + id : '';
+  }
+
+  async function fetchQrBlobUrl(apiBase, authHeaders, inventoryItemId, apiSize) {
+    const url =
+      apiBase +
+      '/api/manufacturing/inventory/' +
+      encodeURIComponent(inventoryItemId) +
+      '/qr?size=' +
+      encodeURIComponent(apiSize);
+    const res = await fetch(url, { method: 'GET', headers: authHeaders });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || res.statusText || 'QR request failed');
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  }
+
   function toDatetimeLocalValue(ts) {
     const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
     if (Number.isNaN(d.getTime())) return '';
@@ -137,6 +171,14 @@
     const [stSubmitting, setStSubmitting] = React.useState(false);
     const [stDraftNotice, setStDraftNotice] = React.useState('');
 
+    const [qrLocationId, setQrLocationId] = React.useState('');
+    const [qrOnlyInStock, setQrOnlyInStock] = React.useState(true);
+    const [qrSizePreset, setQrSizePreset] = React.useState('medium');
+    const [qrSheetItems, setQrSheetItems] = React.useState([]);
+    const [qrSheetLoading, setQrSheetLoading] = React.useState(false);
+    const [qrSheetNote, setQrSheetNote] = React.useState('');
+    const qrBlobUrlsRef = React.useRef(new Set());
+
     const card = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100';
     const text = isDark ? 'text-gray-100' : 'text-gray-900';
     const muted = isDark ? 'text-gray-400' : 'text-gray-500';
@@ -243,6 +285,100 @@
         cancelled = true;
       };
     }, [stLocationId, apiBase]);
+
+    const revokeAllQrBlobs = () => {
+      qrBlobUrlsRef.current.forEach((u) => {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {
+          /* ignore */
+        }
+      });
+      qrBlobUrlsRef.current.clear();
+    };
+
+    React.useEffect(() => {
+      return () => {
+        revokeAllQrBlobs();
+      };
+    }, []);
+
+    const buildQrLabelSheet = async () => {
+      if (!qrLocationId) {
+        setError('Select a stock location for QR labels.');
+        return;
+      }
+      const preset = QR_LABEL_PRESETS[qrSizePreset] || QR_LABEL_PRESETS.medium;
+      setQrSheetLoading(true);
+      setError(null);
+      setQrSheetNote('');
+      revokeAllQrBlobs();
+      setQrSheetItems([]);
+      try {
+        const res = await fetch(
+          apiBase + '/api/manufacturing/inventory?locationId=' + encodeURIComponent(qrLocationId),
+          { method: 'GET', headers: authHeaders() }
+        );
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || res.statusText);
+        }
+        const data = await res.json();
+        const inv = data?.data?.inventory || data?.inventory || [];
+        const rows = Array.isArray(inv) ? inv : [];
+        const seen = new Set();
+        const candidates = [];
+        for (const row of rows) {
+          const iid = row?.inventoryItemId ? String(row.inventoryItemId).trim() : '';
+          if (!iid || seen.has(iid)) continue;
+          const qty = Number(row?.quantity) || 0;
+          if (qrOnlyInStock && qty <= 0) continue;
+          seen.add(iid);
+          candidates.push({
+            inventoryItemId: iid,
+            sku: String(row?.sku || '').trim() || '—',
+            name: String(row?.name || row?.itemName || row?.sku || '').trim() || '—',
+            quantity: qty
+          });
+        }
+        if (!candidates.length) {
+          setQrSheetNote(
+            qrOnlyInStock
+              ? 'No in-stock lines with a catalog link at this location. Try “Include zero qty” or add stock first.'
+              : 'No printable lines found for this location.'
+          );
+          return;
+        }
+        const slice = candidates.slice(0, QR_SHEET_MAX);
+        if (candidates.length > QR_SHEET_MAX) {
+          setQrSheetNote('Showing first ' + QR_SHEET_MAX + ' of ' + candidates.length + ' labels.');
+        }
+        const concurrency = 8;
+        const out = new Array(slice.length);
+        let idx = 0;
+        async function worker() {
+          while (idx < slice.length) {
+            const my = idx++;
+            const c = slice[my];
+            const blobUrl = await fetchQrBlobUrl(apiBase, authHeaders(), c.inventoryItemId, preset.apiSize);
+            qrBlobUrlsRef.current.add(blobUrl);
+            out[my] = {
+              ...c,
+              blobUrl,
+              payload: inventoryPayloadForQr(c.inventoryItemId)
+            };
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(concurrency, slice.length) }, () => worker()));
+        setQrSheetItems(out);
+      } catch (e) {
+        revokeAllQrBlobs();
+        setQrSheetItems([]);
+        setError(e.message || 'Failed to build QR label sheet');
+      } finally {
+        setQrSheetLoading(false);
+      }
+    };
 
     const persistStockTakeDraft = () => {
       try {
@@ -363,6 +499,12 @@
         stLocations.filter((loc) => loc.status !== 'inactive' && loc.status !== 'suspended'),
       [stLocations]
     );
+
+    const qrPreset = QR_LABEL_PRESETS[qrSizePreset] || QR_LABEL_PRESETS.medium;
+    const qrLocationLabel = React.useMemo(() => {
+      const loc = stLocationOptions.find((l) => l.id === qrLocationId);
+      return loc ? String(loc.name || loc.code || '') + (loc.code ? ' (' + loc.code + ')' : '') : '';
+    }, [stLocationOptions, qrLocationId]);
 
     const stLineCount = stRows?.length ?? 0;
     const stTotalPages = Math.max(1, Math.ceil(stLineCount / STOCK_TAKE_PAGE_SIZE));
@@ -925,6 +1067,217 @@
             'Reset form'
           )
         )
+      ),
+      React.createElement(
+        'div',
+        { className: 'rounded-xl border p-5 shadow-sm ' + card },
+        React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'Inventory QR labels'),
+        React.createElement(
+          'p',
+          { className: 'mt-1 text-sm ' + muted },
+          'Each stock line is tied to a catalog item. The QR encodes that item id (ABCO:INV:…) for Job Cards stock-take scanning. Build a sheet for this location, choose a label size, then print — only the label grid is sent to the printer.'
+        ),
+        React.createElement('style', {
+          dangerouslySetInnerHTML: {
+            __html:
+              '@media print { @page { size: A4; margin: 10mm; } body * { visibility: hidden !important; } #erp-stock-qr-print-root, #erp-stock-qr-print-root * { visibility: visible !important; } #erp-stock-qr-print-root { position: absolute; left: 0; top: 0; width: 100%; box-sizing: border-box; padding: 0; background: #fff !important; } }'
+          }
+        }),
+        React.createElement(
+          'div',
+          { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { htmlFor: 'erp-qr-loc', className: 'block text-xs font-semibold ' + muted + ' mb-1' },
+              'Location for labels'
+            ),
+            React.createElement(
+              'select',
+              {
+                id: 'erp-qr-loc',
+                className: inputCls,
+                value: qrLocationId,
+                disabled: stLocationsLoading,
+                onChange: (e) => setQrLocationId(e.target.value)
+              },
+              React.createElement('option', { value: '' }, stLocationsLoading ? 'Loading locations…' : 'Select location'),
+              stLocationOptions.map((loc) =>
+                React.createElement(
+                  'option',
+                  { key: 'qr-' + loc.id, value: loc.id },
+                  (loc.name || loc.code) + ' (' + (loc.code || '') + ')'
+                )
+              )
+            )
+          ),
+          React.createElement(
+            'div',
+            null,
+            React.createElement(
+              'label',
+              { htmlFor: 'erp-qr-size', className: 'block text-xs font-semibold ' + muted + ' mb-1' },
+              'Label size on paper'
+            ),
+            React.createElement(
+              'select',
+              {
+                id: 'erp-qr-size',
+                className: inputCls,
+                value: qrSizePreset,
+                onChange: (e) => setQrSizePreset(e.target.value)
+              },
+              Object.keys(QR_LABEL_PRESETS).map((k) =>
+                React.createElement(
+                  'option',
+                  { key: k, value: k },
+                  QR_LABEL_PRESETS[k].label
+                )
+              )
+            )
+          )
+        ),
+        React.createElement(
+          'label',
+          { className: 'mt-3 flex items-center gap-2 cursor-pointer text-sm ' + muted },
+          React.createElement('input', {
+            type: 'checkbox',
+            checked: qrOnlyInStock,
+            onChange: (e) => setQrOnlyInStock(e.target.checked)
+          }),
+          'Only lines with quantity on hand (uncheck to include zero qty)'
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-4 flex flex-wrap gap-2' },
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: btnPrimary,
+              disabled: qrSheetLoading || !qrLocationId,
+              onClick: () => void buildQrLabelSheet()
+            },
+            qrSheetLoading
+              ? 'Preparing labels…'
+              : React.createElement(React.Fragment, null, React.createElement('i', { className: 'fas fa-qrcode mr-2' }), 'Build label sheet')
+          ),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: btn,
+              disabled: !qrSheetItems.length,
+              onClick: () => {
+                if (qrSheetItems.length) window.print();
+              }
+            },
+            React.createElement('i', { className: 'fas fa-print mr-2' }),
+            'Print labels'
+          ),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: btn,
+              disabled: qrSheetLoading,
+              onClick: () => {
+                revokeAllQrBlobs();
+                setQrSheetItems([]);
+                setQrSheetNote('');
+              }
+            },
+            'Clear sheet'
+          )
+        ),
+        qrSheetNote
+          ? React.createElement(
+              'p',
+              { className: 'mt-3 text-xs ' + (isDark ? 'text-amber-200' : 'text-amber-800') },
+              qrSheetNote
+            )
+          : null,
+        !qrSheetLoading && qrLocationId && !qrSheetItems.length && !qrSheetNote
+          ? React.createElement(
+              'p',
+              { className: 'mt-3 text-xs ' + muted },
+              'Choose options and click “Build label sheet” to load QR images for every catalog line at this location.'
+            )
+          : null,
+        qrSheetItems.length
+          ? React.createElement(
+              'div',
+              {
+                id: 'erp-stock-qr-print-root',
+                className:
+                  'mt-5 rounded-xl border p-4 ' +
+                  (isDark ? 'border-slate-700 bg-slate-950/40' : 'border-slate-200 bg-slate-50/80')
+              },
+              React.createElement(
+                'div',
+                { className: 'mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b pb-3 ' + (isDark ? 'border-slate-700' : 'border-slate-200') },
+                React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Print preview'),
+                React.createElement(
+                  'p',
+                  { className: 'text-xs ' + muted },
+                  (qrLocationLabel || 'Location') +
+                    ' · ' +
+                    qrPreset.label +
+                    ' · ' +
+                    qrSheetItems.length +
+                    ' label' +
+                    (qrSheetItems.length === 1 ? '' : 's') +
+                    ' · ' +
+                    new Date().toLocaleString()
+                )
+              ),
+              React.createElement(
+                'div',
+                {
+                  className: 'grid gap-3',
+                  style: {
+                    gridTemplateColumns: 'repeat(' + qrPreset.cols + ', minmax(0, 1fr))'
+                  }
+                },
+                qrSheetItems.map((item) =>
+                  React.createElement(
+                    'div',
+                    {
+                      key: item.inventoryItemId,
+                      className:
+                        'flex flex-col items-center justify-start text-center rounded-lg border p-3 break-inside-avoid shadow-sm ' +
+                        (isDark ? 'border-slate-600 bg-gray-900' : 'border-slate-200 bg-white'),
+                      style: { pageBreakInside: 'avoid' }
+                    },
+                    React.createElement('img', {
+                      src: item.blobUrl,
+                      alt: 'QR ' + item.sku,
+                      width: qrPreset.qrDisplayPx,
+                      height: qrPreset.qrDisplayPx,
+                      className: 'shrink-0 object-contain bg-white p-1 rounded border border-slate-200'
+                    }),
+                    React.createElement(
+                      'p',
+                      { className: 'mt-2 text-xs font-semibold leading-tight line-clamp-2 ' + text },
+                      item.name
+                    ),
+                    React.createElement(
+                      'p',
+                      { className: 'mt-0.5 text-[11px] font-mono ' + muted },
+                      item.sku
+                    ),
+                    React.createElement(
+                      'p',
+                      { className: 'mt-1 text-[10px] ' + muted },
+                      'Qty ' + item.quantity
+                    )
+                  )
+                )
+              )
+            )
+          : null
       ),
       React.createElement(
         'div',
