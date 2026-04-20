@@ -1231,6 +1231,7 @@ const JobCardFormPublic = () => {
   const [stockTakeScanOpen, setStockTakeScanOpen] = useState(false);
   const [stockTakeHighlightSku, setStockTakeHighlightSku] = useState('');
   const [stockTakeLineSearch, setStockTakeLineSearch] = useState('');
+  const stockTakeLineSearchRef = useRef('');
   const [stockTakePage, setStockTakePage] = useState(1);
   /** Collaborative stock-take session (same API as Manufacturing web) */
   const [stockTakeSessionId, setStockTakeSessionId] = useState('');
@@ -1309,6 +1310,10 @@ const JobCardFormPublic = () => {
 
   useEffect(() => {
     setStockTakePage(1);
+  }, [stockTakeLineSearch]);
+
+  useEffect(() => {
+    stockTakeLineSearchRef.current = stockTakeLineSearch;
   }, [stockTakeLineSearch]);
 
   useEffect(() => {
@@ -3838,15 +3843,36 @@ const JobCardFormPublic = () => {
         sku = String(row.sku || '').trim();
       }
       if (!sku) return;
-      setStockTakeCounts((prev) => {
-        const cur = prev[sku];
-        const n = cur === '' || cur === undefined ? 0 : Number(cur);
-        const next = (Number.isFinite(n) ? n : 0) + 1;
-        return { ...prev, [sku]: String(next) };
-      });
+      const q = String(stockTakeLineSearchRef.current || '').trim().toLowerCase();
+      const rowMatchesSearch = (r) => {
+        const skuStr = String(r?.sku || '').trim().toLowerCase();
+        const name = String(r?.name || '').trim().toLowerCase();
+        return !q || skuStr.includes(q) || name.includes(q);
+      };
+      let filtered = rows.filter(rowMatchesSearch);
+      let idx = filtered.findIndex((r) => String(r?.sku || '').trim() === sku);
+      if (idx < 0) {
+        setStockTakeLineSearch('');
+        filtered = rows;
+        idx = filtered.findIndex((r) => String(r?.sku || '').trim() === sku);
+      }
+      if (idx < 0) {
+        setStockTakeError('This item is not in the stock list for the selected location.');
+        return;
+      }
+      const page = Math.floor(idx / STOCK_TAKE_PAGE_SIZE) + 1;
+      setStockTakePage(page);
       setStockTakeHighlightSku(sku);
-      window.setTimeout(() => setStockTakeHighlightSku(''), 2200);
+      setStockTakeScanOpen(false);
       setStockTakeError('');
+      window.setTimeout(() => {
+        const el = document.getElementById('jc-st-qty-' + encodeURIComponent(sku));
+        if (el) {
+          el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          el.focus();
+          if (typeof el.select === 'function') el.select();
+        }
+      }, 150);
     };
 
     const stopLoop = () => {
@@ -6183,6 +6209,7 @@ const JobCardFormPublic = () => {
                             </div>
                             <div className="sm:col-span-5 flex sm:justify-end">
                               <input
+                                id={'jc-st-qty-' + encodeURIComponent(sku)}
                                 type="number"
                                 step="0.01"
                                 inputMode="decimal"
@@ -6440,7 +6467,7 @@ const JobCardFormPublic = () => {
                     <div>
                       <p className="text-sm font-semibold text-gray-900">Scan inventory QR</p>
                       <p className="text-xs text-gray-600 mt-1">
-                        Point the camera at the label. Each successful scan adds 1 to counted quantity for that line.
+                        Point the camera at the label. The matching line opens and the quantity field is focused so you can enter the count.
                       </p>
                     </div>
                     <button

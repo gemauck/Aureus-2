@@ -158,6 +158,7 @@
     const [stRowsLoading, setStRowsLoading] = React.useState(false);
     const [stPage, setStPage] = React.useState(1);
     const [stLineSearch, setStLineSearch] = React.useState('');
+    const stLineSearchRef = React.useRef('');
     const [stCounts, setStCounts] = React.useState({});
     const [stNotes, setStNotes] = React.useState('');
     const [stStartedLocal, setStStartedLocal] = React.useState('');
@@ -204,6 +205,10 @@
       ? 'px-4 py-2 text-sm rounded-lg border border-gray-600 text-gray-200 hover:bg-gray-800'
       : 'px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-800 hover:bg-gray-50';
     const btnPrimary = 'px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50';
+    const btnDanger =
+      'px-4 py-2 text-sm rounded-lg border border-red-600/80 text-red-700 hover:bg-red-50 dark:text-red-300 dark:border-red-500 dark:hover:bg-red-950/40 disabled:opacity-50';
+    const btnSuccess =
+      'px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50';
 
     const authHeaders = () => {
       const token = window.storage?.getToken?.();
@@ -239,6 +244,9 @@
     React.useEffect(() => {
       stRowsRef.current = stRows;
     }, [stRows]);
+    React.useEffect(() => {
+      stLineSearchRef.current = stLineSearch;
+    }, [stLineSearch]);
     React.useEffect(() => {
       stSessionRevisionRef.current = stSessionRevision;
     }, [stSessionRevision]);
@@ -507,17 +515,37 @@
           sku = String(row.sku || '').trim();
         }
         if (!sku) return;
-        setStCounts((prev) => {
-          const cur = prev[sku];
-          const n = cur === '' || cur === undefined ? 0 : Number(cur);
-          const next = (Number.isFinite(n) ? n : 0) + 1;
-          return { ...prev, [sku]: String(next) };
-        });
-        stDirtySkusRef.current.add(sku);
-        scheduleCollaborativePatch();
+        const q = String(stLineSearchRef.current || '').trim().toLowerCase();
+        const rowMatchesSearch = (r) => {
+          const skuStr = String(r?.sku || '').trim().toLowerCase();
+          const name = String(r?.name || r?.itemName || '').trim().toLowerCase();
+          return !q || skuStr.includes(q) || name.includes(q);
+        };
+        let filtered = rows.filter(rowMatchesSearch);
+        let idx = filtered.findIndex((r) => String(r?.sku || '').trim() === sku);
+        if (idx < 0) {
+          setStLineSearch('');
+          filtered = rows;
+          idx = filtered.findIndex((r) => String(r?.sku || '').trim() === sku);
+        }
+        if (idx < 0) {
+          setError('This item is not in the stock list for this session’s location.');
+          return;
+        }
+        const page = Math.floor(idx / STOCK_TAKE_PAGE_SIZE) + 1;
+        setStPage(page);
         setStHighlightSku(sku);
-        window.setTimeout(() => setStHighlightSku(''), 2200);
+        setStScanOpen(false);
         setError(null);
+        window.setTimeout(() => {
+          const id = 'erp-st-qty-' + encodeURIComponent(sku);
+          const el = document.getElementById(id);
+          if (el) {
+            el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            el.focus();
+            if (typeof el.select === 'function') el.select();
+          }
+        }, 150);
       };
 
       const stopLoop = () => {
@@ -585,7 +613,7 @@
         video.srcObject = null;
         stScanStreamRef.current = null;
       };
-    }, [stScanOpen, stSessionId, scheduleCollaborativePatch]);
+    }, [stScanOpen, stSessionId]);
 
     const loadSubmissions = React.useCallback(async () => {
       setSubmissionsLoading(true);
@@ -643,6 +671,18 @@
       setStRows([]);
       setStRowsLoading(false);
     }, [stLocationId, stSessionId]);
+
+    React.useEffect(() => {
+      if (!submissionDetail?.lines || submissionDetail.status !== 'pending_review') {
+        setReviewCounts({});
+        return;
+      }
+      const m = {};
+      for (const line of submissionDetail.lines) {
+        m[line.id] = String(Number(line.countedQty ?? 0));
+      }
+      setReviewCounts(m);
+    }, [submissionDetail?.id, submissionDetail?.status, submissionDetail?.sessionRevision]);
 
     const buildQrLabelSheet = async () => {
       if (!qrLocationId) {
@@ -1213,13 +1253,128 @@
       }
     };
 
+    const buildPendingReviewLinePatches = (detail) => {
+      const linePatches = [];
+      for (const line of detail?.lines || []) {
+        const raw = reviewCounts[line.id];
+        const next = raw !== undefined && raw !== '' ? Number(raw) : Number(line.countedQty);
+        if (!Number.isFinite(next)) continue;
+        if (next !== Number(line.countedQty)) {
+          linePatches.push({ id: line.id, countedQty: next });
+        }
+      }
+      return linePatches;
+    };
+
+    const savePendingReviewEdits = async () => {
+      if (!submissionDetail || submissionDetail.status !== 'pending_review') return;
+      const linePatches = buildPendingReviewLinePatches(submissionDetail);
+      if (!linePatches.length) {
+        setMessage('No counted-quantity changes to save.');
+        return;
+      }
+      setReviewSaving(true);
+      setError(null);
+      setMessage(null);
+      try {
+        const res = await fetch(
+          apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(submissionDetail.id),
+          {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({ linePatches })
+          }
+        );
+        const txt = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(txt);
+        } catch {}
+        if (!res.ok) {
+          const msg = data?.error?.message || data?.message || data?.error || txt || res.statusText;
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const sub = data?.data?.submission || data?.submission;
+        if (sub) setSubmissionDetail(sub);
+        setMessage('Counts saved. You can accept & apply when ready.');
+        await loadSubmissions();
+      } catch (e) {
+        setError(e.message || 'Failed to save submission edits');
+      } finally {
+        setReviewSaving(false);
+      }
+    };
+
+    const rejectSubmission = async (submissionId) => {
+      if (!submissionId) return;
+      if (!window.confirm('Reject this submission? It will not be applied to inventory.')) return;
+      const reason = window.prompt('Optional reason (for audit log):', '');
+      if (reason === null) return;
+      setRejectingSubmissionId(submissionId);
+      setError(null);
+      setMessage(null);
+      try {
+        const res = await fetch(
+          apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(submissionId) + '/reject',
+          {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ reason: reason || '' })
+          }
+        );
+        const txt = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(txt);
+        } catch {}
+        if (!res.ok) {
+          const msg = data?.error?.message || data?.message || data?.error || txt || res.statusText;
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        setMessage('Submission rejected.');
+        if (submissionDetail?.id === submissionId) {
+          setSubmissionDetail(null);
+        }
+        await loadSubmissions();
+      } catch (e) {
+        setError(e.message || 'Failed to reject submission');
+      } finally {
+        setRejectingSubmissionId('');
+      }
+    };
+
     const applySubmission = async (submissionId) => {
       if (!submissionId) return;
-      if (!window.confirm('Apply this stock-take submission to inventory now?')) return;
+      if (!window.confirm('Accept and apply this stock-take submission to inventory now?')) return;
       setApplyingSubmissionId(submissionId);
       setError(null);
       setMessage(null);
       try {
+        if (submissionDetail?.id === submissionId && submissionDetail?.status === 'pending_review') {
+          const linePatches = buildPendingReviewLinePatches(submissionDetail);
+          if (linePatches.length) {
+            const patchRes = await fetch(
+              apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(submissionId),
+              {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ linePatches })
+              }
+            );
+            const ptxt = await patchRes.text();
+            let pdata = {};
+            try {
+              pdata = JSON.parse(ptxt);
+            } catch {}
+            if (!patchRes.ok) {
+              const msg = pdata?.error?.message || pdata?.message || pdata?.error || ptxt || patchRes.statusText;
+              throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            const sub = pdata?.data?.submission || pdata?.submission;
+            if (sub) setSubmissionDetail(sub);
+          }
+        }
+
         const res = await fetch(apiBase + '/api/manufacturing/stock-take-submissions/' + encodeURIComponent(submissionId) + '/apply', {
           method: 'POST',
           headers: authHeaders(),
@@ -1237,7 +1392,7 @@
           'Submission applied. Movements created: ' + (payload.movementsCreated ?? 0) + ', skipped: ' + (payload.skipped ?? 0) + '.'
         );
         if (submissionDetail?.id === submissionId) {
-          setSubmissionDetail((prev) => prev ? { ...prev, status: 'applied' } : prev);
+          setSubmissionDetail((prev) => (prev ? { ...prev, status: 'applied' } : prev));
         }
         await loadSubmissions();
         if (typeof onApplied === 'function') onApplied();
@@ -1665,6 +1820,7 @@
                                     'div',
                                     { className: 'sm:col-span-5 flex sm:justify-end' },
                                     React.createElement('input', {
+                                      id: 'erp-st-qty-' + encodeURIComponent(sku),
                                       type: 'number',
                                       step: '0.01',
                                       inputMode: 'decimal',
@@ -2012,7 +2168,7 @@
                     React.createElement(
                       'p',
                       { className: 'text-xs ' + muted + ' mt-1' },
-                      'Point the camera at the label. Each successful scan adds 1 to counted quantity for that line.'
+                      'Point the camera at the label. The matching line opens and the quantity field is focused so you can enter the count.'
                     )
                   ),
                   React.createElement(
@@ -2379,7 +2535,7 @@
         React.createElement(
           'p',
           { className: 'mt-1 text-sm ' + muted },
-          'Counts submitted from the Job Cards app or from In-app stocktake above appear here for review before apply.'
+          'Counts submitted from the Job Cards app or from In-app stocktake above appear here for review. Open Review to edit counted quantities, save changes, then accept & apply to post to inventory or reject to discard.'
         ),
         React.createElement(
           'div',
@@ -2427,7 +2583,7 @@
                     ),
                     React.createElement(
                       'div',
-                      { className: 'flex gap-2' },
+                      { className: 'flex flex-wrap gap-2' },
                       React.createElement(
                         'button',
                         { type: 'button', className: btn, onClick: () => void openSubmissionDetail(row.id) },
@@ -2437,11 +2593,21 @@
                         'button',
                         {
                           type: 'button',
-                          className: btnPrimary,
-                          disabled: applyingSubmissionId === row.id,
+                          className: btnDanger,
+                          disabled: rejectingSubmissionId === row.id || applyingSubmissionId === row.id,
+                          onClick: () => void rejectSubmission(row.id)
+                        },
+                        rejectingSubmissionId === row.id ? 'Rejecting…' : 'Reject'
+                      ),
+                      React.createElement(
+                        'button',
+                        {
+                          type: 'button',
+                          className: btnSuccess,
+                          disabled: applyingSubmissionId === row.id || rejectingSubmissionId === row.id,
                           onClick: () => void applySubmission(row.id)
                         },
-                        applyingSubmissionId === row.id ? 'Applying…' : 'Apply'
+                        applyingSubmissionId === row.id ? 'Applying…' : 'Accept & apply'
                       )
                     )
                   )
@@ -2471,6 +2637,44 @@
                   ' · submitted ' +
                   new Date(submissionDetail.submittedAt || Date.now()).toLocaleString()
               ),
+              submissionDetail.status === 'pending_review'
+                ? React.createElement(
+                    'div',
+                    { className: 'mt-3 flex flex-wrap gap-2' },
+                    React.createElement(
+                      'button',
+                      {
+                        type: 'button',
+                        className: btn,
+                        disabled: reviewSaving || applyingSubmissionId === submissionDetail.id,
+                        onClick: () => void savePendingReviewEdits()
+                      },
+                      reviewSaving ? 'Saving…' : 'Save edits'
+                    ),
+                    React.createElement(
+                      'button',
+                      {
+                        type: 'button',
+                        className: btnDanger,
+                        disabled:
+                          rejectingSubmissionId === submissionDetail.id || applyingSubmissionId === submissionDetail.id,
+                        onClick: () => void rejectSubmission(submissionDetail.id)
+                      },
+                      rejectingSubmissionId === submissionDetail.id ? 'Rejecting…' : 'Reject'
+                    ),
+                    React.createElement(
+                      'button',
+                      {
+                        type: 'button',
+                        className: btnSuccess,
+                        disabled:
+                          applyingSubmissionId === submissionDetail.id || rejectingSubmissionId === submissionDetail.id,
+                        onClick: () => void applySubmission(submissionDetail.id)
+                      },
+                      applyingSubmissionId === submissionDetail.id ? 'Applying…' : 'Accept & apply'
+                    )
+                  )
+                : null,
               React.createElement(
                 'div',
                 { className: 'mt-2 overflow-x-auto max-h-64' },
@@ -2498,6 +2702,16 @@
                         const proposed = meta?.proposedItemDetails && typeof meta.proposedItemDetails === 'object'
                           ? meta.proposedItemDetails
                           : {};
+                        const pendingReview = submissionDetail.status === 'pending_review';
+                        const rawCounted = reviewCounts[line.id];
+                        const sysQ = Number(line.systemQty || 0);
+                        const countedNum =
+                          pendingReview && rawCounted !== undefined && rawCounted !== ''
+                            ? Number(rawCounted)
+                            : Number(line.countedQty || 0);
+                        const deltaShow = pendingReview
+                          ? (Number.isFinite(countedNum) ? countedNum - sysQ : Number(line.deltaQty || 0))
+                          : Number(line.deltaQty || 0);
                         return React.createElement(
                           'tr',
                           { key: line.id, className: isDark ? 'border-t border-gray-800' : 'border-t border-gray-200' },
@@ -2523,9 +2737,29 @@
                                 )
                               : null
                           ),
-                          React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.systemQty || 0).toFixed(2)),
-                          React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.countedQty || 0).toFixed(2)),
-                          React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(line.deltaQty || 0).toFixed(2))
+                          React.createElement('td', { className: 'px-2 py-1 ' + text }, sysQ.toFixed(2)),
+                          pendingReview
+                            ? React.createElement(
+                                'td',
+                                { className: 'px-2 py-1' },
+                                React.createElement('input', {
+                                  type: 'number',
+                                  step: 'any',
+                                  className: qtyInputCls + ' max-w-[6.5rem]',
+                                  value: rawCounted !== undefined ? rawCounted : String(Number(line.countedQty ?? 0)),
+                                  onChange: (e) =>
+                                    setReviewCounts((prev) => ({
+                                      ...prev,
+                                      [line.id]: e.target.value
+                                    }))
+                                })
+                              )
+                            : React.createElement(
+                                'td',
+                                { className: 'px-2 py-1 ' + text },
+                                Number(line.countedQty || 0).toFixed(2)
+                              ),
+                          React.createElement('td', { className: 'px-2 py-1 ' + text }, Number(deltaShow || 0).toFixed(2))
                         );
                       })()
                     )
