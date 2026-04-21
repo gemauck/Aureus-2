@@ -2101,10 +2101,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     textTransform: 'uppercase',
                     letterSpacing: '0.04em',
                     color: config.color,
-                    marginBottom: '2px'
+                    marginBottom: '2px',
+                    // Icon-only headers: Font Awesome glyphs vary in height (e.g. shield vs clipboard);
+                    // fixed row height keeps Open Review / Open checklist buttons aligned across columns.
+                    ...(field !== 'comments' ? { minHeight: '22px', flexShrink: 0 } : {})
                 }
             },
-                React.createElement('i', { className: `fas ${config.icon}`, style: { fontSize: '10px', color: config.accent } }),
+                React.createElement('i', {
+                    className: `fas ${config.icon}`,
+                    style: { fontSize: '10px', color: config.accent, lineHeight: 1 }
+                }),
                 field === 'comments' ? React.createElement('span', null, config.label) : null
             ),
             // Content area: comments are always a real textarea — tab/focus and type (no extra "open" step)
