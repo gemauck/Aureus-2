@@ -675,6 +675,93 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             return '';
         }
     };
+
+    const parseSectionsPayload = (rawValue) => {
+        if (!rawValue) return {};
+        if (typeof rawValue === 'object') return rawValue;
+        if (typeof rawValue !== 'string') return {};
+        try {
+            return JSON.parse(rawValue);
+        } catch {
+            return {};
+        }
+    };
+
+    const getSectionsForYear = (rawSections, year) => {
+        const parsed = parseSectionsPayload(rawSections);
+        if (!parsed) return [];
+        if (Array.isArray(parsed)) return parsed;
+        if (typeof parsed !== 'object') return [];
+        const yearKey = String(year);
+        const byYear = parsed[yearKey];
+        if (Array.isArray(byYear)) return byYear;
+        return [];
+    };
+
+    const resolveMonthlyDataReviewStatusKey = (status) => {
+        if (!status) return '';
+        const normalized = String(status).toLowerCase();
+        if (normalized === 'in-progress') return 'started-minor-info';
+        return normalized;
+    };
+
+    const isCompletedReviewStatus = (reviewType, rawStatus) => {
+        if (!rawStatus) return false;
+        const normalized = String(rawStatus).toLowerCase();
+        if (reviewType === 'monthlyDataReview') {
+            const statusKey = resolveMonthlyDataReviewStatusKey(normalized);
+            return statusKey === 'done' || statusKey === 'complete-issues-outstanding' || statusKey === 'complete';
+        }
+        if (reviewType === 'complianceReview') {
+            return normalized === 'reviewed-in-order' || normalized === 'reviewed-issue';
+        }
+        return false;
+    };
+
+    const getReviewProgressForMonth = (project, monthName, reviewType) => {
+        const safeYear = Number(selectedYear) || currentYear;
+        const monthKey = `${String(monthName || '')}-${String(safeYear)}`;
+        const sectionsField = reviewType === 'complianceReview' ? project?.complianceReviewSections : project?.monthlyDataReviewSections;
+        const yearSections = getSectionsForYear(sectionsField, safeYear);
+
+        if (!Array.isArray(yearSections) || yearSections.length === 0) {
+            return { completed: 0, total: 0, percent: null };
+        }
+
+        let total = 0;
+        let completed = 0;
+        yearSections.forEach((section) => {
+            const docs = Array.isArray(section?.documents) ? section.documents : [];
+            docs.forEach((doc) => {
+                total += 1;
+                const rawStatus = doc?.collectionStatus?.[monthKey];
+                if (isCompletedReviewStatus(reviewType, rawStatus)) {
+                    completed += 1;
+                }
+            });
+        });
+
+        return {
+            completed,
+            total,
+            percent: total > 0 ? Math.round((completed / total) * 100) : null
+        };
+    };
+
+    const buildProjectReviewLink = (projectId, tab, monthName, monthIndex, year) => {
+        try {
+            const basePath = `${window.location.origin}${window.location.pathname}`;
+            const query = new URLSearchParams();
+            if (tab) query.set('tab', tab);
+            if (monthName) query.set('month', String(monthName));
+            if (typeof monthIndex === 'number' && monthIndex >= 0) query.set('monthIndex', String(monthIndex));
+            if (year) query.set('year', String(year));
+            return `${basePath}#/projects/${encodeURIComponent(String(projectId))}?${query.toString()}`;
+        } catch (error) {
+            console.error('❌ ProjectProgressTracker: Failed to build review link:', error);
+            return '#/projects';
+        }
+    };
     
     // Validate progress data before saving
     const validateProgressData = (progress) => {
@@ -1410,9 +1497,26 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const currentValue = getProgressData(project, safeMonth, field);
         const displayValue = currentValue || '';
         const hasValue = displayValue && displayValue.trim().length > 0;
+        const reviewTypeByField = {
+            compliance: 'complianceReview',
+            data: 'monthlyDataReview'
+        };
+        const reviewType = reviewTypeByField[field] || null;
+        const reviewProgress = reviewType ? getReviewProgressForMonth(project, safeMonth, reviewType) : null;
+        const reviewPercent = reviewProgress?.percent;
+        const monthReviewLink = reviewType
+            ? buildProjectReviewLink(
+                project.id,
+                reviewType,
+                safeMonth,
+                monthIdx,
+                Number(selectedYear) || currentYear
+            )
+            : null;
         
         // Handle cell click - open modal for comments, inline edit for compliance/data
         const handleCellClick = async () => {
+            if (field !== 'comments') return;
             // If another cell is being edited, save it first
             if (editingCell && (editingCell.projectId !== project.id || 
                 editingCell.month !== safeMonth || editingCell.field !== field)) {
@@ -1422,16 +1526,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 }
             }
             
-            if (field === 'comments') {
-                // Close any inline editing before opening modal
-                setEditingCell(null);
-                setEditingValue('');
-                openEditModal(project, safeMonth, field);
-            } else {
-                // Start inline editing for compliance and data
-                setEditingCell({ projectId: project.id, month: safeMonth, field: field });
-                setEditingValue(displayValue);
-            }
+            // Close any inline editing before opening modal
+            setEditingCell(null);
+            setEditingValue('');
+            openEditModal(project, safeMonth, field);
         };
         
         // Handle inline input change
@@ -1467,16 +1565,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 color: '#10b981', // green
                 bgColor: hasValue ? '#ecfdf5' : '#f0fdf4',
                 borderColor: hasValue ? '#10b981' : '#d1fae5',
-                label: 'Compliance',
-                placeholder: 'Add compliance link'
+                label: 'Compliance Review',
+                placeholder: 'Open review'
             },
             data: {
                 icon: 'fa-database',
                 color: '#3b82f6', // blue
                 bgColor: hasValue ? '#eff6ff' : '#f0f9ff',
                 borderColor: hasValue ? '#3b82f6' : '#bfdbfe',
-                label: 'Data',
-                placeholder: 'Add data link'
+                label: 'Monthly Data Review',
+                placeholder: 'Open review'
             },
             comments: {
                 icon: 'fa-comment-dots',
@@ -1519,7 +1617,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             transition: 'all 0.2s ease',
             position: 'relative',
             boxShadow: isFocusedCell ? `0 0 0 2px ${config.color}40` : 'none',
-            cursor: isEditing ? 'text' : (field === 'comments' ? 'pointer' : 'pointer')
+            cursor: isEditing ? 'text' : (field === 'comments' ? 'pointer' : 'default')
         };
         
         // Render cell with inline editing for compliance/data, modal for comments
@@ -1590,6 +1688,75 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         boxShadow: `0 0 0 2px ${config.color}40`
                     }
                 })
+            ) : (field === 'compliance' || field === 'data') ? (
+                React.createElement('div', {
+                    style: {
+                        width: '100%',
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                        justifyContent: 'space-between'
+                    }
+                },
+                    React.createElement('button', {
+                        type: 'button',
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            if (monthReviewLink && monthReviewLink !== '#/projects') {
+                                window.open(monthReviewLink, '_blank', 'noopener,noreferrer');
+                            }
+                        },
+                        style: {
+                            width: '100%',
+                            padding: '5px 8px',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            borderRadius: '4px',
+                            border: `1px solid ${config.borderColor}`,
+                            backgroundColor: '#ffffff',
+                            color: config.color,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px'
+                        },
+                        title: `Open ${config.label}`
+                    },
+                        React.createElement('i', { className: 'fas fa-external-link-alt', style: { fontSize: '9px' } }),
+                        React.createElement('span', null, 'Open Review')
+                    ),
+                    React.createElement('div', {
+                        style: {
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            fontSize: '10px',
+                            color: '#6b7280'
+                        }
+                    },
+                        React.createElement('span', { style: { fontWeight: '600', color: '#374151' } }, reviewPercent == null ? '--%' : `${reviewPercent}%`),
+                        React.createElement('span', null, reviewProgress?.total > 0 ? `${reviewProgress.completed}/${reviewProgress.total}` : 'No items')
+                    ),
+                    React.createElement('div', {
+                        style: {
+                            width: '100%',
+                            height: '6px',
+                            borderRadius: '999px',
+                            backgroundColor: '#e5e7eb',
+                            overflow: 'hidden'
+                        }
+                    },
+                        React.createElement('div', {
+                            style: {
+                                width: `${reviewPercent == null ? 0 : reviewPercent}%`,
+                                height: '100%',
+                                backgroundColor: config.color,
+                                transition: 'width 0.25s ease'
+                            }
+                        })
+                    )
+                )
             ) : (
                 React.createElement('div', {
                     style: {
@@ -1636,31 +1803,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     )
                 )
             ),
-            // Link icon for compliance/data fields
-            hasValue && displayValue.trim() && field !== 'comments' ? React.createElement('a', {
-                href: displayValue.startsWith('http') ? displayValue : `https://${displayValue}`,
-                target: '_blank',
-                rel: 'noopener noreferrer',
-                style: {
-                    position: 'absolute',
-                    right: '8px',
-                    top: '8px',
-                    color: config.color,
-                    fontSize: '11px',
-                    textDecoration: 'none',
-                    padding: '4px 6px',
-                    borderRadius: '4px',
-                    transition: 'all 0.2s ease',
-                    zIndex: 10,
-                    backgroundColor: '#ffffff',
-                    border: `1px solid ${config.borderColor}`,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
-                },
-                className: 'hover:bg-blue-50 hover:border-blue-400',
-                onClick: (e) => {
-                    e.stopPropagation();
-                }
-            }, React.createElement('i', { className: 'fas fa-external-link-alt' })) : null,
+            // Link icon is only needed for comments now that compliance/data use open-review button.
             // Status indicator dot (only show if no link icon)
             hasValue && (field === 'comments' || !displayValue.trim()) ? React.createElement('div', {
                 style: {
@@ -1965,7 +2108,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
                                         React.createElement('i', { className: 'fas fa-shield-check text-xs', style: { color: '#10b981' } }),
-                                        React.createElement('span', null, 'Compliance')
+                                        React.createElement('span', null, 'Compliance Review')
                                     )
                                 ),
                                 React.createElement('th', { 
@@ -1988,7 +2131,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
                                         React.createElement('i', { className: 'fas fa-database text-xs', style: { color: '#3b82f6' } }),
-                                        React.createElement('span', null, 'Data')
+                                        React.createElement('span', null, 'Monthly Data Review')
                                     )
                                 ),
                                 React.createElement('th', {
