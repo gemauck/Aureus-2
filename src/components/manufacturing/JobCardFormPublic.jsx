@@ -1208,6 +1208,7 @@ const JobCardFormPublic = () => {
   const [stockTakeRows, setStockTakeRows] = useState([]);
   const [stockTakeCounts, setStockTakeCounts] = useState({});
   const [stockTakeNewItems, setStockTakeNewItems] = useState([]);
+  const [stockTakeShowNewItemForm, setStockTakeShowNewItemForm] = useState(false);
   const [stockTakeDraftNewItem, setStockTakeDraftNewItem] = useState({
     itemName: '',
     sku: '',
@@ -6100,6 +6101,7 @@ const JobCardFormPublic = () => {
                   setStockTakeCounts({});
                   setStockTakeLineSearch('');
                   setStockTakePage(1);
+                  setStockTakeShowNewItemForm(false);
                 }}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
               >
@@ -6162,9 +6164,11 @@ const JobCardFormPublic = () => {
                   </p>
                 ) : null}
               </div>
-              <p className="text-[11px] text-amber-700 mt-2">
-                New items can be added below with full details and will require admin confirmation before final apply.
-              </p>
+              {stockTakeLocationId ? (
+                <p className="text-[11px] text-amber-700 mt-2">
+                  New items can be added below with full details and will require admin confirmation before final apply.
+                </p>
+              ) : null}
             </div>
 
             {stockTakeLocationId ? (
@@ -6185,7 +6189,17 @@ const JobCardFormPublic = () => {
                       <p className="text-[11px] text-gray-500 mt-0.5">No lines match your search.</p>
                     ) : null}
                   </div>
-                  <p className="text-xs text-gray-600">{countedLines} counted</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-600">{countedLines} counted</p>
+                    <button
+                      type="button"
+                      onClick={() => setStockTakeShowNewItemForm((prev) => !prev)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 touch-manipulation"
+                    >
+                      <i className="fas fa-plus" aria-hidden />
+                      {stockTakeShowNewItemForm ? 'Hide new item' : 'Add new item'}
+                    </button>
+                  </div>
                 </div>
                 {stockTakeRows.length > 0 ? (
                   <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/50">
@@ -6293,7 +6307,8 @@ const JobCardFormPublic = () => {
               </div>
             ) : null}
 
-            <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 space-y-3">
+            {stockTakeLocationId && stockTakeShowNewItemForm ? (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-gray-900">Add new item (admin confirmation)</p>
                 <span className="text-xs text-gray-500">{stockTakeNewItems.length} added</span>
@@ -6453,7 +6468,8 @@ const JobCardFormPublic = () => {
                   ))}
                 </ul>
               ) : null}
-            </div>
+              </div>
+            ) : null}
 
             {stockTakeError ? (
               <div className="rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm px-4 py-2">
