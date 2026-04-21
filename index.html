@@ -91,14 +91,24 @@
         (function() {
             var embedVersion = window.BUILD_VERSION;
             if (!embedVersion) return;
+            var STALE_CHECK_RELOAD_KEY = 'abcotronics_stale_reload_at';
+            var STALE_CHECK_RELOAD_COOLDOWN_MS = 5 * 60 * 1000;
             function runStaleCheck() {
                 fetch('/dist/build-version.json?t=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })
                     .then(function(r) { return r.ok ? r.json() : null; })
                     .then(function(data) {
                         if (data && data.version && String(data.version) !== String(embedVersion)) {
                             var params = new URLSearchParams(location.search || '');
+                            var now = Date.now();
+                            var lastReloadAt = Number(localStorage.getItem(STALE_CHECK_RELOAD_KEY) || '0');
+                            var recentlyForced = lastReloadAt > 0 && (now - lastReloadAt) < STALE_CHECK_RELOAD_COOLDOWN_MS;
+                            // Avoid infinite reload loops if edge cache serves mismatched HTML/version metadata.
+                            if (params.has('_purge') || recentlyForced) {
+                                return;
+                            }
+                            localStorage.setItem(STALE_CHECK_RELOAD_KEY, String(now));
                             params.delete('_purge');
-                            params.set('_purge', String(Date.now()));
+                            params.set('_purge', String(now));
                             var q = params.toString();
                             location.replace(location.pathname + (q ? '?' + q : '') + (location.hash || ''));
                         }
