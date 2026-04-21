@@ -36,6 +36,7 @@ function emptySectionWorkMedia() {
 const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
 const MAX_PUBLIC_PRIOR_IDS = 200;
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
+const HEADING_PREFIX = 'Heading:';
 /** Stock-take lists can be large; show a page of lines at a time (full list still loads for submit/scan). */
 const STOCK_TAKE_PAGE_SIZE = 50;
 
@@ -422,6 +423,14 @@ function parseProjectAssociationFromComments(rawComments) {
     return { projectId, projectName };
   }
   return { projectId: '', projectName: raw };
+}
+
+function parseHeadingFromComments(rawComments) {
+  if (!rawComments || typeof rawComments !== 'string') return '';
+  const line = rawComments
+    .split('\n')
+    .find(l => typeof l === 'string' && l.startsWith(HEADING_PREFIX));
+  return line ? line.slice(HEADING_PREFIX.length).trim() : '';
 }
 
 /** Inline photo/video strip for Diagnosis / Actions / Future work sections on the work step. */
@@ -1137,6 +1146,7 @@ function buildMergedWizardJobCardRows(serverList) {
 
 const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
+    heading: '',
     agentName: '',
     otherTechnicians: [],
     projectId: '',
@@ -3091,6 +3101,7 @@ const JobCardFormPublic = () => {
 
   const resetForm = () => {
       setFormData({
+        heading: '',
         agentName: '',
         otherTechnicians: [],
         projectId: '',
@@ -3668,9 +3679,11 @@ const JobCardFormPublic = () => {
     }
 
     const parsedProject = parseProjectAssociationFromComments(full.otherComments || '');
+    const parsedHeading = parseHeadingFromComments(full.otherComments || '');
 
     setFormData(prev => ({
       ...prev,
+      heading: full.heading || parsedHeading || '',
       agentName: full.agentName || '',
       otherTechnicians: parseStoredJsonArray(full.otherTechnicians, []),
       projectId: full.projectId || parsedProject.projectId || '',
@@ -3985,19 +3998,26 @@ const JobCardFormPublic = () => {
       }
 
       {
+        const headingLine = String(jobCardData.heading || '').trim();
         const existingLines = String(jobCardData.otherComments || '')
           .split('\n')
-          .filter(line => line && !line.startsWith(PROJECT_ASSOCIATION_PREFIX));
+          .filter(
+            line =>
+              line &&
+              !line.startsWith(PROJECT_ASSOCIATION_PREFIX) &&
+              !line.startsWith(HEADING_PREFIX)
+          );
+        const linesToStore = [...existingLines];
         if (jobCardData.projectName) {
           const projectAssociationLine = `${PROJECT_ASSOCIATION_PREFIX} ${jobCardData.projectName}${
             jobCardData.projectId ? ` (${jobCardData.projectId})` : ''
           }`;
-          jobCardData.otherComments = [projectAssociationLine, ...existingLines]
-            .filter(Boolean)
-            .join('\n');
-        } else {
-          jobCardData.otherComments = existingLines.join('\n');
+          linesToStore.unshift(projectAssociationLine);
         }
+        if (headingLine) {
+          linesToStore.unshift(`${HEADING_PREFIX} ${headingLine}`);
+        }
+        jobCardData.otherComments = linesToStore.filter(Boolean).join('\n');
       }
 
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
@@ -4358,6 +4378,28 @@ const JobCardFormPublic = () => {
 
   const renderAssignmentStep = () => (
     <div className="space-y-4 sm:space-y-6">
+      <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
+        <header className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Heading</h2>
+          <p className="text-sm text-gray-500 mt-1">Add a short free-text heading for this job card.</p>
+        </header>
+        <div>
+          <label htmlFor="jobcard-heading" className="block text-sm font-medium text-gray-700 mb-2">
+            Heading
+          </label>
+          <input
+            id="jobcard-heading"
+            type="text"
+            name="heading"
+            value={formData.heading || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+            placeholder="Enter heading"
+            style={{ fontSize: '16px' }}
+          />
+        </div>
+      </section>
+
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Lead Technician</h2>
@@ -5539,6 +5581,7 @@ const JobCardFormPublic = () => {
           <p className="text-sm text-gray-500 mt-1">Quick review before submitting this job card.</p>
         </header>
         <div className="space-y-3">
+          <SummaryRow label="Heading" value={formData.heading} />
           <SummaryRow label="Technician" value={formData.agentName} />
           <SummaryRow
             label="Recorded as (ERP account)"
