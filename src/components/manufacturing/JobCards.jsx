@@ -504,6 +504,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [mineOnly, setMineOnly] = useState(false);
   const [technicianOwnerId, setTechnicianOwnerId] = useState('');
+  const [technicianFilter, setTechnicianFilter] = useState('');
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
 
@@ -556,6 +557,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     categoryFilter,
     mineOnly,
     technicianOwnerId,
+    technicianFilter,
     createdFrom,
     createdTo
   ]);
@@ -577,6 +579,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     });
     return list;
   }, [users]);
+
+  const technicianNameOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        jobCards
+          .map((jc) => String(jc.agentName || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [jobCards]);
 
   /** Match Prisma cuid or UUID so we query by clientId; otherwise filter by clientName (contains). */
   const clientFilterLooksLikeId = (value) => {
@@ -757,8 +769,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     ).sort((a, b) => a.localeCompare(b));
   }, [jobCards]);
 
-  /** Server applies filters + sort; list is ready to render. */
-  const displayJobCards = jobCards;
+  /** Server applies main filters + sort; technician filter narrows current list client-side. */
+  const displayJobCards = useMemo(() => {
+    if (!technicianFilter) return jobCards;
+    const selected = technicianFilter.trim().toLowerCase();
+    return jobCards.filter((jc) =>
+      String(jc.agentName || '').trim().toLowerCase() === selected
+    );
+  }, [jobCards, technicianFilter]);
 
   const handleSort = (field) => {
     setPage(1);
@@ -1123,7 +1141,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-8">
           <select
             aria-label="Filter by status"
             className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
@@ -1151,7 +1169,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             ))}
           </select>
           <select
-            aria-label="Filter by technician owner"
+            aria-label="Filter by creator"
             disabled={mineOnly}
             className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
             value={technicianOwnerId}
@@ -1161,10 +1179,23 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               if (v) setMineOnly(false);
             }}
           >
-            <option value="">All technicians</option>
+            <option value="">All created by</option>
             {technicianOptions.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name || u.email || u.id}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by technician"
+            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            value={technicianFilter}
+            onChange={(e) => setTechnicianFilter(e.target.value)}
+          >
+            <option value="">All technicians</option>
+            {technicianNameOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
               </option>
             ))}
           </select>
@@ -1207,6 +1238,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 setDebouncedSearch('');
                 setMineOnly(false);
                 setTechnicianOwnerId('');
+                setTechnicianFilter('');
                 setCreatedFrom('');
                 setCreatedTo('');
                 setStatusFilter('all');
@@ -1379,6 +1411,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   </button>
                 </th>
                 <th className="px-4 py-2 text-left">
+                  <span className="font-semibold">Created by</span>
+                </th>
+                <th className="px-4 py-2 text-left">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
@@ -1417,9 +1452,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <span>Created</span>
                     {renderSortIcon('createdAt')}
                   </button>
-                </th>
-                <th className="px-4 py-2 text-left">
-                  <span className="font-semibold">Created by</span>
                 </th>
                 {canDeleteJobCards ? (
                   <th className="px-4 py-2 text-right">
@@ -1470,6 +1502,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {jc.clientName || '–'}
                     </td>
+                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      <div className="text-[11px]">
+                        {createdByName || '–'}
+                      </div>
+                    </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {technicianName || '–'}
                     </td>
@@ -1489,11 +1526,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       <div className="text-[11px]">
                         {formatDate(jc.createdAt)}
-                      </div>
-                    </td>
-                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                      <div className="text-[11px]">
-                        {createdByName || '–'}
                       </div>
                     </td>
                     {canDeleteJobCards ? (
