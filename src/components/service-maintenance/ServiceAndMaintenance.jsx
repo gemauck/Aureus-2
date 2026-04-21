@@ -164,11 +164,11 @@ function JobCardSafetyCultureThumbnailService({
     };
   }, [canRender, proxyUrl, retryTick]);
 
-  const border = isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-200 bg-gray-50';
+  const border = isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-200 bg-white shadow-sm';
   const fnColor = isDark ? 'text-gray-400' : 'text-gray-500';
   const errColor = isDark ? 'text-red-400' : 'text-red-600';
   const loadColor = isDark ? 'text-gray-500' : 'text-gray-500';
-  const figBg = isDark ? 'bg-gray-800' : 'bg-gray-100';
+  const figBg = isDark ? 'bg-gray-900' : 'bg-white';
 
   return (
     <div className={`overflow-hidden rounded-xl border ${border}`}>
@@ -199,7 +199,7 @@ function JobCardSafetyCultureThumbnailService({
         />
       ) : null}
       {canRender && !isVideo && resolvedSrc ? (
-        <figure className={`group relative h-28 overflow-hidden sm:h-32 ${figBg}`}>
+        <figure className={`group relative h-36 overflow-hidden sm:h-40 ${figBg}`}>
           <button
             type="button"
             onClick={() => {
@@ -211,7 +211,7 @@ function JobCardSafetyCultureThumbnailService({
             <img
               src={resolvedSrc}
               alt={`SafetyCulture attachment ${idx + 1}`}
-              className="h-full w-full object-contain p-1 transition-transform duration-200 group-hover:scale-[1.02]"
+              className="h-full w-full object-contain p-0.5 transition-transform duration-200 group-hover:scale-[1.02]"
               loading="lazy"
               decoding="async"
               onError={() => {
@@ -282,8 +282,8 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId, onPrevi
           return (
             <figure
               key={key}
-              className={`h-28 overflow-hidden rounded-xl border sm:h-32 ${
-                isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-100'
+              className={`h-36 overflow-hidden rounded-xl border sm:h-40 ${
+                isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
               }`}
             >
               <button
@@ -297,7 +297,7 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId, onPrevi
                 <img
                   src={url}
                   alt=""
-                  className="h-full w-full object-contain p-1"
+                  className="h-full w-full object-contain p-0.5"
                   loading="lazy"
                   decoding="async"
                 />
@@ -2699,10 +2699,10 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         return (
                           <figure
                             key={idx}
-                            className={`group relative h-28 overflow-hidden rounded-xl border sm:h-32 ${
+                            className={`group relative h-36 overflow-hidden rounded-xl border sm:h-40 ${
                               isDark
                                 ? 'border-gray-700 bg-gray-950'
-                                : 'border-gray-200 bg-gray-100'
+                                : 'border-gray-200 bg-white'
                             }`}
                           >
                             <button
@@ -2718,7 +2718,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                                     : url
                                 }
                                 alt={`Job card photo ${idx + 1}`}
-                                className="h-full w-full object-contain p-1 transition-transform duration-200 group-hover:scale-[1.02]"
+                                className="h-full w-full object-contain p-0.5 transition-transform duration-200 group-hover:scale-[1.02]"
                                 loading="lazy"
                                 decoding="async"
                               />
