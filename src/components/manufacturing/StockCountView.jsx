@@ -170,6 +170,7 @@
     const [stStartedLocal, setStStartedLocal] = React.useState('');
     const [stNewItems, setStNewItems] = React.useState([]);
     const [stDraftNewItem, setStDraftNewItem] = React.useState(() => defaultDraftNewItem());
+    const [stShowNewItemForm, setStShowNewItemForm] = React.useState(false);
     const [stSubmitting, setStSubmitting] = React.useState(false);
     const [stDraftNotice, setStDraftNotice] = React.useState('');
 
@@ -532,6 +533,7 @@
       if (!stSessionId) {
         setStScanOpen(false);
         setStHighlightSku('');
+        setStShowNewItemForm(false);
       }
     }, [stSessionId]);
 
@@ -1834,6 +1836,20 @@
                       className:
                         'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ' +
                         (isDark
+                          ? 'border-amber-800 bg-amber-950/50 text-amber-200 hover:bg-amber-900/40'
+                          : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'),
+                      onClick: () => setStShowNewItemForm((prev) => !prev)
+                    },
+                    React.createElement('i', { className: 'fas fa-plus mr-1' }),
+                    stShowNewItemForm ? 'Hide new item' : 'Add new item'
+                  ),
+                  React.createElement(
+                    'button',
+                    {
+                      type: 'button',
+                      className:
+                        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ' +
+                        (isDark
                           ? 'border-blue-800 bg-blue-950/50 text-blue-200 hover:bg-blue-900/40'
                           : 'border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100') +
                         ' disabled:opacity-50 disabled:cursor-not-allowed',
@@ -2008,7 +2024,7 @@
                   )
                 )
           : null,
-        stSessionId
+        stSessionId && stShowNewItemForm
           ? React.createElement(
               'div',
               {
@@ -2018,13 +2034,26 @@
               },
               React.createElement(
                 'div',
-                { className: 'flex items-center justify-between' },
+                { className: 'flex items-center justify-between gap-2' },
                 React.createElement(
                   'p',
                   { className: 'text-sm font-semibold ' + text },
                   'New items (need admin confirmation on apply)'
                 ),
-                React.createElement('span', { className: 'text-xs ' + muted }, stNewItems.length + ' added')
+                React.createElement(
+                  'div',
+                  { className: 'flex items-center gap-2' },
+                  React.createElement('span', { className: 'text-xs ' + muted }, stNewItems.length + ' added'),
+                  React.createElement(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'text-xs font-semibold underline ' + muted,
+                      onClick: () => setStShowNewItemForm(false)
+                    },
+                    'Close'
+                  )
+                )
               ),
               React.createElement(
                 'div',
@@ -2549,8 +2578,7 @@
             '.'
           ),
           React.createElement('li', null, 'Run dry run first. Apply blocks duplicate names unless you check “Allow duplicate names”.')
-        )
-      ),
+        ),
       React.createElement(
         'div',
         { className: 'flex flex-wrap gap-3 items-center' },
@@ -2642,7 +2670,9 @@
               )
             )
           )
-        ),
+        )
+      )
+          : null,
       React.createElement(
         'div',
         { className: 'rounded-xl border p-5 shadow-sm ' + card },
@@ -2884,7 +2914,6 @@
             )
           : null
       )
-        : null
     );
   }
 
