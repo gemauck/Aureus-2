@@ -172,6 +172,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const saveProgressDataRef = useRef(null);
     const flushPendingCommentSaveRef = useRef(async () => {});
     const selectedYearRef = useRef(selectedYear);
+    /** Only auto-scroll to the first working month once per mount (not on every projects refresh). */
+    const workingMonthInitialScrollDoneRef = useRef(false);
 
     useEffect(() => {
         projectsRef.current = projects;
@@ -186,8 +188,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         selectedYearRef.current = selectedYear;
     }, [selectedYear]);
 
-    // Scroll horizontally so the first working month column (chronologically) is in view after load / year change
+    // Scroll horizontally so the first working month column is in view once after the grid is ready — not on every data refresh
     useEffect(() => {
+        if (workingMonthInitialScrollDoneRef.current) return;
         try {
             if (!tableRef?.current) return;
             const targetMonth = getFirstWorkingMonthNameForYear(selectedYear);
@@ -204,6 +207,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             left: desiredScroll,
                             behavior: 'smooth'
                         });
+                        workingMonthInitialScrollDoneRef.current = true;
                     }
                 } catch (scrollErr) {
                     console.warn('⚠️ ProjectProgressTracker: Failed to auto-scroll to first working month:', scrollErr);
