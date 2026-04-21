@@ -1849,6 +1849,12 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       </div>
                       <div className="mt-1">{formatDate(selectedJobCard.createdAt)}</div>
                     </div>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Jobcard category
+                      </div>
+                      <div className="mt-1">{selectedJobCard.callOutCategory || '—'}</div>
+                    </div>
                     {otherCommentsReport.project.projectName ? (
                       <div>
                         <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>

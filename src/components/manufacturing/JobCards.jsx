@@ -1805,6 +1805,12 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Jobcard category
+                      </div>
+                      <div className="mt-1">{selectedJobCard.callOutCategory || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
                         Departure
                       </div>
                       <div className="mt-1">
