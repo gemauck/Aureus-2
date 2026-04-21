@@ -2390,14 +2390,19 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 )
             )
         ),
-        // Modern Table Container with Enhanced Styling
+        // Table scrollport: must be THIS element (overflow auto + max-height), not only #main-page-scroll.
+        // A parent with overflow-x:auto is a scroll container; sticky top then does not track vertical page scroll,
+        // so the header never sticks. Bounded height + overflow:auto makes sticky th track this box (grid UX).
         React.createElement('div', { 
             ref: tableRef, 
-            className: 'overflow-x-auto bg-white rounded-xl border border-slate-200/90',
+            className: 'overflow-auto min-h-0 bg-white rounded-xl border border-slate-200/90',
+            role: 'region',
+            'aria-label': 'Monthly progress grid — scroll inside this area to view all projects; column headers stay visible',
             style: { 
                 boxShadow: '0 10px 40px -12px rgba(30, 41, 59, 0.12), 0 4px 14px -6px rgba(15, 23, 42, 0.06)',
-                // overflow-x:auto often forces overflow-y:auto in Chromium, which breaks viewport sticky thead; clip keeps vertical scroll on the page
-                overflowY: 'clip'
+                maxHeight: 'min(72vh, 900px)',
+                overscrollBehavior: 'contain',
+                WebkitOverflowScrolling: 'touch'
             }
         },
             React.createElement('table', { 
@@ -2407,9 +2412,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             },
                 React.createElement('thead', { 
                     className: 'bg-slate-50',
-                    // Do not use position:sticky on <thead> — it is undefined/poorly supported; stick each <th> instead.
+                    // Do not use position:sticky on <thead> — stick each <th>. Keep thead above tbody paint order.
                     style: { 
-                        borderBottom: '2px solid #e2e8f0'
+                        borderBottom: '2px solid #e2e8f0',
+                        position: 'relative',
+                        zIndex: 25,
+                        isolation: 'isolate'
                     }
                 },
                     // First row: Month headers - Modern Design
@@ -2684,7 +2692,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         })
                     )
                 ),
-                React.createElement('tbody', null,
+                React.createElement('tbody', { style: { position: 'relative', zIndex: 0 } },
                     safeProjects.length === 0 ? React.createElement('tr', null,
                         React.createElement('td', { 
                             colSpan: months.length * 4 + 4, 
