@@ -9,6 +9,7 @@ const ReactGlobal =
   {};
 
 const { useState, useEffect, useMemo, useCallback, useRef } = ReactGlobal;
+const HEADING_PREFIX = 'Heading:';
 
 function normalizeRole(role) {
   if (!role) return '';
@@ -69,6 +70,19 @@ function labelForTemplateField(templateFields, fieldId) {
   const arr = Array.isArray(templateFields) ? templateFields : [];
   const f = arr.find((x) => x && (x.id === fieldId || x.fieldId === fieldId));
   return f && f.label ? f.label : fieldId;
+}
+
+function getHeadingFromJobCard(jobCard) {
+  if (!jobCard || typeof jobCard !== 'object') return '';
+  if (jobCard.heading != null && String(jobCard.heading).trim() !== '') {
+    return String(jobCard.heading).trim();
+  }
+  const rawComments = jobCard.otherComments;
+  if (typeof rawComments !== 'string' || !rawComments.trim()) return '';
+  const headingLine = rawComments
+    .split('\n')
+    .find((line) => typeof line === 'string' && line.startsWith(HEADING_PREFIX));
+  return headingLine ? headingLine.slice(HEADING_PREFIX.length).trim() : '';
 }
 
 /** Resolve a human label for `form_<id>_<fieldId>` voice keys (wizard id may not match server instance id). */
@@ -498,6 +512,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   /** Checklist / service form instances for the open detail view (GET /api/jobcards/:id/forms). */
   const [detailServiceForms, setDetailServiceForms] = useState([]);
+  const selectedHeading = useMemo(
+    () => getHeadingFromJobCard(selectedJobCard),
+    [selectedJobCard]
+  );
   /** Activity trail (GET /api/jobcards/:id/activity). */
   const [detailActivities, setDetailActivities] = useState([]);
   const [searchInput, setSearchInput] = useState('');
@@ -1639,6 +1657,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   <h2 className="text-lg font-semibold text-white">
                     {selectedJobCard.jobCardNumber || 'New job card'}
                   </h2>
+                  {selectedHeading ? (
+                    <span className="text-sm text-slate-200">
+                      - {selectedHeading}
+                    </span>
+                  ) : null}
                   <span
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                       (selectedJobCard.status || 'draft').toString().toLowerCase() === 'completed'
