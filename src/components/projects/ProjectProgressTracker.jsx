@@ -118,6 +118,21 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         'November',
         'December'
     ];
+    /** Earliest calendar month (leftmost on the grid) among working months for a given year */
+    const getFirstWorkingMonthNameForYear = (year) => {
+        const y = Number(year);
+        if (Number.isNaN(y)) return null;
+        const entries = workingMonths.filter((e) => Number(e?.year) === y);
+        if (!entries.length) return null;
+        const sorted = [...entries].sort((a, b) => a.monthIndex - b.monthIndex);
+        const idx = sorted[0].monthIndex;
+        if (typeof idx !== 'number' || idx < 0 || idx >= months.length) return null;
+        return months[idx] || null;
+    };
+    // Wide cells + sticky column width (used for horizontal scroll alignment)
+    const TRACK_CELL_WIDTH = 200;
+    const TRACK_MONTH_GROUP_WIDTH = TRACK_CELL_WIDTH * 3;
+    const TRACK_STICKY_PROJECT_WIDTH = 340;
     
     // State - always initialize with empty array to prevent undefined/null issues
     const [projects, setProjects] = useState(() => []);
@@ -142,40 +157,34 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const focusRequestRef = useRef(null);
     const pendingFocusRef = useRef(false);
     
-    // Auto focus on highlighted month columns when data loads
+    // Scroll horizontally so the first working month column (chronologically) is in view after load / year change
     useEffect(() => {
         try {
             if (!tableRef?.current) return;
-            
-            const focusEntries = Array.isArray(workingMonths) ? workingMonths : [];
-            const sameYearTargets = focusEntries.filter((entry) => Number(entry?.year) === Number(selectedYear));
-            const targetIndex = sameYearTargets.length > 0
-                ? Number(sameYearTargets[0].monthIndex)
-                : null;
-            
-            if (targetIndex == null || isNaN(targetIndex) || targetIndex < 0 || targetIndex >= months.length) return;
-            
-            const targetMonth = months[targetIndex];
+            const targetMonth = getFirstWorkingMonthNameForYear(selectedYear);
             if (!targetMonth) return;
-            
-            window.requestAnimationFrame(() => {
+
+            const runScroll = () => {
                 try {
                     const container = tableRef.current;
+                    if (!container) return;
                     const headerCell = container.querySelector(`[data-month-header="${targetMonth}"]`);
                     if (headerCell && typeof headerCell.offsetLeft === 'number') {
-                        const stickyColumnWidth = 320;
-                        const desiredScroll = Math.max(headerCell.offsetLeft - stickyColumnWidth, 0);
+                        const desiredScroll = Math.max(headerCell.offsetLeft - TRACK_STICKY_PROJECT_WIDTH, 0);
                         container.scrollTo({
                             left: desiredScroll,
                             behavior: 'smooth'
                         });
                     }
                 } catch (scrollErr) {
-                    console.warn('⚠️ ProjectProgressTracker: Failed to auto-scroll to focused month:', scrollErr);
+                    console.warn('⚠️ ProjectProgressTracker: Failed to auto-scroll to first working month:', scrollErr);
                 }
+            };
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(runScroll);
             });
         } catch (err) {
-            console.warn('⚠️ ProjectProgressTracker: Auto focus effect error:', err);
+            console.warn('⚠️ ProjectProgressTracker: Auto-scroll effect error:', err);
         }
     }, [projects, selectedYear]);
 
@@ -1779,29 +1788,38 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             }
         };
         
-        // Field-specific styling for better visual hierarchy
+        // Field-specific styling — distinct but restrained accents for scanability
         const fieldConfig = {
             compliance: {
                 icon: 'fa-shield-check',
-                color: '#334155',
-                bgColor: hasValue ? '#f8fafc' : '#f9fafb',
-                borderColor: hasValue ? '#cbd5e1' : '#e2e8f0',
+                accent: '#4f46e5',
+                color: '#3730a3',
+                bgColor: hasValue ? '#eef2ff' : '#f5f3ff',
+                hoverBg: '#e0e7ff',
+                borderColor: hasValue ? '#a5b4fc' : '#c7d2fe',
+                barColor: '#6366f1',
                 label: 'Compliance Review',
                 placeholder: 'Open review'
             },
             data: {
                 icon: 'fa-database',
-                color: '#334155',
-                bgColor: hasValue ? '#f8fafc' : '#f9fafb',
-                borderColor: hasValue ? '#cbd5e1' : '#e2e8f0',
+                accent: '#0f766e',
+                color: '#115e59',
+                bgColor: hasValue ? '#ecfdf5' : '#f0fdfa',
+                hoverBg: '#ccfbf1',
+                borderColor: hasValue ? '#5eead4' : '#99f6e4',
+                barColor: '#14b8a6',
                 label: 'Monthly Data Review',
                 placeholder: 'Open review'
             },
             comments: {
                 icon: 'fa-comment-dots',
-                color: '#475569',
-                bgColor: hasValue ? '#f8fafc' : '#f9fafb',
-                borderColor: hasValue ? '#cbd5e1' : '#e2e8f0',
+                accent: '#b45309',
+                color: '#9a3412',
+                bgColor: hasValue ? '#fffbeb' : '#fefce8',
+                hoverBg: '#fef3c7',
+                borderColor: hasValue ? '#fcd34d' : '#fde68a',
+                barColor: '#d97706',
                 label: 'Comments',
                 placeholder: 'Add comments'
             }
@@ -1809,35 +1827,37 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         
         const config = fieldConfig[field] || fieldConfig.data;
         
-        // Modern cell styling with field-specific colors
         const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f8fafc';
-        const calculatedBackground = isFocusedCell
-            ? config.bgColor
-            : isWorking
-                ? '#f1f5f9'
-                : defaultBgColor;
+        let calculatedBackground = defaultBgColor;
+        if (isFocusedCell) {
+            calculatedBackground = config.bgColor;
+        } else if (isWorking) {
+            const light = rowBgColor === '#ffffff';
+            if (field === 'compliance') calculatedBackground = light ? '#eef2ff' : '#e8eaf6';
+            else if (field === 'data') calculatedBackground = light ? '#ecfdf5' : '#dff7f2';
+            else calculatedBackground = light ? '#fffbeb' : '#fef6e0';
+        }
         
-        // Slimmer cells with reduced padding
         const isEditing = editingCell && 
             editingCell.projectId === project.id && 
             editingCell.month === safeMonth && 
             editingCell.field === field;
         
         const cellStyle = {
-            padding: '6px',
+            padding: '8px 10px',
             border: 'none',
             borderBottom: '1px solid #e5e7eb',
             borderRight: '1px solid #e5e7eb',
             backgroundColor: calculatedBackground,
-            minHeight: '84px',
-            height: '84px',
+            minHeight: '100px',
+            height: '100px',
             verticalAlign: 'top',
-            width: '140px',
-            minWidth: '140px',
-            maxWidth: '140px',
-            transition: 'all 0.2s ease',
+            width: `${TRACK_CELL_WIDTH}px`,
+            minWidth: `${TRACK_CELL_WIDTH}px`,
+            maxWidth: `${TRACK_CELL_WIDTH}px`,
+            transition: 'background-color 0.2s ease, box-shadow 0.2s ease',
             position: 'relative',
-            boxShadow: isFocusedCell ? '0 0 0 1px #94a3b8' : 'none',
+            boxShadow: isFocusedCell ? `0 0 0 2px ${config.accent}55` : 'none',
             cursor: isEditing ? 'text' : (field === 'comments' ? 'pointer' : 'default')
         };
         
@@ -1853,7 +1873,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             'data-field': field,
             onClick: !isEditing ? handleCellClick : undefined,
             onMouseEnter: !isEditing ? (e) => {
-                e.currentTarget.style.backgroundColor = config.bgColor;
+                e.currentTarget.style.backgroundColor = config.hoverBg;
             } : undefined,
             onMouseLeave: !isEditing ? (e) => {
                 e.currentTarget.style.backgroundColor = calculatedBackground;
@@ -1873,16 +1893,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 style: {
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '3px',
-                    fontSize: '8px',
-                    fontWeight: '600',
+                    gap: '4px',
+                    fontSize: '10px',
+                    fontWeight: '700',
                     textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
+                    letterSpacing: '0.04em',
                     color: config.color,
-                    marginBottom: '1px'
+                    marginBottom: '2px'
                 }
             },
-                React.createElement('i', { className: `fas ${config.icon}`, style: { fontSize: '8px' } }),
+                React.createElement('i', { className: `fas ${config.icon}`, style: { fontSize: '10px', color: config.accent } }),
                 React.createElement('span', null, config.label)
             ),
             // Content area - inline input for compliance/data when editing, display otherwise
@@ -1906,7 +1926,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         backgroundColor: '#ffffff',
                         color: '#111827',
                         outline: 'none',
-                        boxShadow: `0 0 0 2px ${config.color}40`
+                        boxShadow: `0 0 0 2px ${config.accent}40`
                     }
                 })
             ) : (field === 'compliance' || field === 'data') ? (
@@ -1930,21 +1950,22 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         },
                         style: {
                             width: '100%',
-                            padding: '5px 8px',
-                            fontSize: '10px',
+                            padding: '6px 10px',
+                            fontSize: '11px',
                             fontWeight: '600',
-                            borderRadius: '4px',
-                            border: `1px solid ${config.borderColor}`,
+                            borderRadius: '6px',
+                            border: `1px solid ${config.accent}`,
                             backgroundColor: '#ffffff',
-                            color: '#334155',
+                            color: '#1e293b',
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '5px'
+                            gap: '6px',
+                            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)'
                         },
                         title: `Open ${config.label}`
                     },
-                        React.createElement('i', { className: 'fas fa-external-link-alt', style: { fontSize: '9px' } }),
+                        React.createElement('i', { className: 'fas fa-external-link-alt', style: { fontSize: '10px', color: config.accent } }),
                         React.createElement('span', null, 'Open Review')
                     ),
                     React.createElement('div', {
@@ -1952,25 +1973,25 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            fontSize: '10px',
-                            color: '#6b7280',
-                            padding: '2px 0',
-                            borderTop: '1px solid #e5e7eb',
-                            borderBottom: '1px solid #e5e7eb'
+                            fontSize: '11px',
+                            color: '#64748b',
+                            padding: '4px 0',
+                            borderTop: `1px solid ${config.borderColor}`,
+                            borderBottom: `1px solid ${config.borderColor}`
                         }
                     },
                         React.createElement('span', {
                             style: {
                                 fontWeight: '800',
-                                fontSize: '18px',
-                                color: '#111827',
-                                letterSpacing: '-0.01em',
+                                fontSize: '20px',
+                                color: config.accent,
+                                letterSpacing: '-0.02em',
                                 lineHeight: '1'
                             }
                         }, reviewPercent == null ? '--%' : `${reviewPercent}%`),
                         React.createElement(
                             'span',
-                            { style: { fontSize: '10px', color: '#475569' } },
+                            { style: { fontSize: '11px', color: '#475569', fontWeight: '500' } },
                             reviewProgress?.total > 0
                                 ? `${reviewProgress.completed}/${reviewProgress.total}`
                                 : (reviewProgress?.source === 'monthlyProgress' ? 'From monthly progress' : 'No items')
@@ -1979,7 +2000,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     React.createElement('div', {
                         style: {
                             width: '100%',
-                            height: '6px',
+                            height: '7px',
                             borderRadius: '999px',
                             backgroundColor: '#e2e8f0',
                             overflow: 'hidden'
@@ -1989,7 +2010,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             style: {
                                 width: `${reviewPercent == null ? 0 : reviewPercent}%`,
                                 height: '100%',
-                                backgroundColor: '#64748b',
+                                backgroundColor: config.barColor,
                                 transition: 'width 0.25s ease'
                             }
                         })
@@ -2051,8 +2072,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     width: '8px',
                     height: '8px',
                     borderRadius: '50%',
-                    backgroundColor: config.color,
-                    boxShadow: `0 0 0 2px ${config.bgColor}`,
+                    backgroundColor: config.accent,
+                    boxShadow: `0 0 0 2px ${calculatedBackground}`,
                     zIndex: 5
                 }
             }) : null
@@ -2074,8 +2095,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     return React.createElement('div', { className: 'space-y-4 p-4 md:p-6' },
         // Modern Header with Card Design
         React.createElement('div', { 
-            className: 'bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6',
-            style: { backgroundImage: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }
+            className: 'bg-white rounded-xl shadow-sm border border-slate-200/80 p-4 md:p-6',
+            style: { backgroundImage: 'linear-gradient(135deg, #ffffff 0%, #f1f5f9 55%, #eef2ff 100%)' }
         },
             React.createElement('div', { className: 'flex flex-col md:flex-row md:items-center md:justify-between gap-4' },
                 React.createElement('div', { className: 'flex items-center gap-3' },
@@ -2141,45 +2162,47 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         ) : null,
         // Working Months Info - Modern Badge Design
         React.createElement('div', { 
-            className: 'flex flex-col md:flex-row md:items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200',
+            className: 'flex flex-col md:flex-row md:items-center gap-3 p-4 rounded-xl border border-indigo-100',
+            style: { background: 'linear-gradient(90deg, #f8fafc 0%, #eef2ff 40%, #f0fdfa 100%)' }
         },
             React.createElement('div', {
-                className: 'px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm',
-                style: { 
-                    flexShrink: 0
+                className: 'px-4 py-2 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm',
+                style: {
+                    flexShrink: 0,
+                    background: 'linear-gradient(135deg, #4338ca 0%, #6366f1 100%)'
                 }
             },
                 React.createElement('i', { className: 'fas fa-calendar-check' }),
                 React.createElement('span', null, 'Working Months')
             ),
             React.createElement('div', { className: 'flex-1 flex items-center gap-2' },
-                React.createElement('i', { className: 'fas fa-lightbulb text-slate-500' }),
+                React.createElement('i', { className: 'fas fa-lightbulb', style: { color: '#6366f1' } }),
                 React.createElement('span', { 
-                    className: 'text-sm text-gray-700'
-                }, 'Highlighted columns mark the previous two months')
+                    className: 'text-sm text-slate-700 font-medium'
+                }, 'Highlighted columns mark the previous two calendar months (scroll snaps to the first)')
             ),
             // Field type legend
             React.createElement('div', { className: 'flex items-center gap-4 flex-wrap' },
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
-                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#64748b' } }),
-                    React.createElement('span', { className: 'text-xs text-gray-600' }, 'Compliance')
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '4px', backgroundColor: '#6366f1' } }),
+                    React.createElement('span', { className: 'text-xs text-slate-600' }, 'Compliance')
                 ),
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
-                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#64748b' } }),
-                    React.createElement('span', { className: 'text-xs text-gray-600' }, 'Data')
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '4px', backgroundColor: '#14b8a6' } }),
+                    React.createElement('span', { className: 'text-xs text-slate-600' }, 'Data')
                 ),
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
-                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#64748b' } }),
-                    React.createElement('span', { className: 'text-xs text-gray-600' }, 'Comments')
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '4px', backgroundColor: '#d97706' } }),
+                    React.createElement('span', { className: 'text-xs text-slate-600' }, 'Comments')
                 )
             )
         ),
         // Modern Table Container with Enhanced Styling
         React.createElement('div', { 
             ref: tableRef, 
-            className: 'overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-200',
+            className: 'overflow-x-auto bg-white rounded-xl border border-slate-200/90',
             style: { 
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                boxShadow: '0 10px 40px -12px rgba(30, 41, 59, 0.12), 0 4px 14px -6px rgba(15, 23, 42, 0.06)'
             }
         },
             React.createElement('table', { 
@@ -2187,9 +2210,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 style: { borderSpacing: 0, tableLayout: 'auto' }
             },
                 React.createElement('thead', { 
-                    className: 'bg-gray-50',
+                    className: 'bg-slate-50',
                     style: { 
-                        borderBottom: '2px solid #e5e7eb',
+                        borderBottom: '2px solid #e2e8f0',
                         position: 'sticky',
                         top: 0,
                         zIndex: 20
@@ -2200,25 +2223,25 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '12px 16px',
+                                padding: '14px 18px',
                                 fontSize: '12px',
                                 fontWeight: '700',
-                                backgroundColor: '#1f2937',
-                                color: '#ffffff',
+                                background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+                                color: '#f8fafc',
                                 border: 'none',
-                                borderRight: '2px solid #374151',
+                                borderRight: '2px solid #334155',
                                 position: 'sticky',
                                 left: 0,
                                 zIndex: 15,
-                                minWidth: '320px',
-                                width: '320px',
+                                minWidth: `${TRACK_STICKY_PROJECT_WIDTH}px`,
+                                width: `${TRACK_STICKY_PROJECT_WIDTH}px`,
                                 textTransform: 'uppercase',
-                                letterSpacing: '0.05em'
+                                letterSpacing: '0.06em'
                             },
                             className: 'text-left sticky left-0'
                         }, 
                             React.createElement('div', { className: 'flex items-center gap-2' },
-                                React.createElement('i', { className: 'fas fa-project-diagram text-sm' }),
+                                React.createElement('i', { className: 'fas fa-project-diagram text-sm text-indigo-300' }),
                                 React.createElement('span', null, 'Project')
                             )
                         ),
@@ -2233,26 +2256,27 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     fontSize: '12px',
                                     fontWeight: '700',
                                     textAlign: 'center',
-                                    backgroundColor: isWorking ? '#e2e8f0' : '#f9fafb',
+                                    backgroundColor: isWorking ? '#dbeafe' : '#f8fafc',
                                     backgroundImage: 'none',
-                                    color: '#374151',
+                                    color: isWorking ? '#1e3a8a' : '#334155',
                                     border: 'none',
-                                    borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
-                                    borderBottom: '2px solid ' + (isWorking ? '#94a3b8' : '#e5e7eb'),
-                                    minWidth: '420px',
-                                    width: '420px',
-                                    maxWidth: '420px',
+                                    borderLeft: idx === 0 ? '2px solid #475569' : '1px solid #e2e8f0',
+                                    borderBottom: isWorking ? '3px solid #2563eb' : '2px solid #e5e7eb',
+                                    minWidth: `${TRACK_MONTH_GROUP_WIDTH}px`,
+                                    width: `${TRACK_MONTH_GROUP_WIDTH}px`,
+                                    maxWidth: `${TRACK_MONTH_GROUP_WIDTH}px`,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
                                     position: 'relative'
                                 },
                                 'data-month-header': safeMonth
                             }, 
-                                isWorking ? React.createElement('div', { className: 'flex items-center justify-center gap-2' },
-                                    React.createElement('i', { className: 'fas fa-star text-xs text-slate-600' }),
+                                isWorking ? React.createElement('div', { className: 'flex items-center justify-center gap-2 flex-wrap' },
+                                    React.createElement('i', { className: 'fas fa-star text-xs', style: { color: '#2563eb' } }),
                                     React.createElement('span', null, safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2)),
                                     React.createElement('span', { 
-                                        className: 'ml-1 px-1.5 py-0.5 bg-white rounded text-[10px] font-bold text-slate-700'
+                                        className: 'ml-1 px-2 py-0.5 rounded-md text-[10px] font-bold',
+                                        style: { backgroundColor: '#ffffff', color: '#1d4ed8', border: '1px solid #93c5fd' }
                                     }, 'WORKING')
                                 ) : safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2)
                             );
@@ -2260,61 +2284,61 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '12px 16px',
+                                padding: '14px 16px',
                                 fontSize: '12px',
                                 fontWeight: '700',
-                                backgroundColor: '#1f2937',
-                                color: '#ffffff',
+                                background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+                                color: '#f8fafc',
                                 border: 'none',
-                                borderLeft: '2px solid #374151',
-                                minWidth: '120px',
-                                width: '120px',
+                                borderLeft: '2px solid #334155',
+                                minWidth: '132px',
+                                width: '132px',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.05em'
                             }
                         }, 
                             React.createElement('div', { className: 'flex items-center gap-2' },
-                                React.createElement('i', { className: 'fas fa-user-tie text-sm' }),
+                                React.createElement('i', { className: 'fas fa-user-tie text-sm text-sky-300' }),
                                 React.createElement('span', null, 'PM')
                             )
                         ),
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '12px 16px',
+                                padding: '14px 16px',
                                 fontSize: '12px',
                                 fontWeight: '700',
-                                backgroundColor: '#1f2937',
-                                color: '#ffffff',
+                                background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+                                color: '#f8fafc',
                                 border: 'none',
-                                minWidth: '140px',
-                                width: '140px',
+                                minWidth: '152px',
+                                width: '152px',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.05em'
                             }
                         }, 
                             React.createElement('div', { className: 'flex items-center gap-2' },
-                                React.createElement('i', { className: 'fas fa-tag text-sm' }),
+                                React.createElement('i', { className: 'fas fa-tag text-sm text-violet-300' }),
                                 React.createElement('span', null, 'Type')
                             )
                         ),
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '12px 16px',
+                                padding: '14px 16px',
                                 fontSize: '12px',
                                 fontWeight: '700',
-                                backgroundColor: '#1f2937',
-                                color: '#ffffff',
+                                background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+                                color: '#f8fafc',
                                 border: 'none',
-                                minWidth: '120px',
-                                width: '120px',
+                                minWidth: '132px',
+                                width: '132px',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.05em'
                             }
                         }, 
                             React.createElement('div', { className: 'flex items-center gap-2' },
-                                React.createElement('i', { className: 'fas fa-circle-check text-sm' }),
+                                React.createElement('i', { className: 'fas fa-circle-check text-sm text-emerald-300' }),
                                 React.createElement('span', null, 'Status')
                             )
                         )
@@ -2327,71 +2351,71 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             return React.createElement(React.Fragment, { key: safeMonth + '-subheaders' },
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '8px 10px',
-                            fontSize: '11px',
+                                        padding: '10px 12px',
+                                        fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? '#f1f5f9' : '#ffffff',
-                                        color: '#475569',
+                                        backgroundColor: isWorking ? '#e0e7ff' : '#fafafa',
+                                        color: '#312e81',
                                         border: 'none',
-                                        borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
+                                        borderLeft: idx === 0 ? '2px solid #475569' : '1px solid #e5e7eb',
                                         borderBottom: '1px solid #e5e7eb',
                                         borderRight: '1px solid #e5e7eb',
-                                        minWidth: '140px',
-                                        width: '140px',
-                                        maxWidth: '140px',
+                                        minWidth: `${TRACK_CELL_WIDTH}px`,
+                                        width: `${TRACK_CELL_WIDTH}px`,
+                                        maxWidth: `${TRACK_CELL_WIDTH}px`,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
-                                        React.createElement('i', { className: 'fas fa-shield-check text-xs', style: { color: '#64748b' } }),
+                                        React.createElement('i', { className: 'fas fa-shield-check text-xs', style: { color: '#4f46e5' } }),
                                         React.createElement('span', null, 'Compliance Review')
                                     )
                                 ),
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '8px 10px',
-                                        fontSize: '10px',
+                                        padding: '10px 12px',
+                                        fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? '#f1f5f9' : '#ffffff',
-                                        color: '#475569',
+                                        backgroundColor: isWorking ? '#ccfbf1' : '#fafafa',
+                                        color: '#134e4a',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
                                         borderRight: '1px solid #e5e7eb',
-                                        minWidth: '140px',
-                                        width: '140px',
-                                        maxWidth: '140px',
+                                        minWidth: `${TRACK_CELL_WIDTH}px`,
+                                        width: `${TRACK_CELL_WIDTH}px`,
+                                        maxWidth: `${TRACK_CELL_WIDTH}px`,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
-                                        React.createElement('i', { className: 'fas fa-database text-xs', style: { color: '#64748b' } }),
+                                        React.createElement('i', { className: 'fas fa-database text-xs', style: { color: '#0d9488' } }),
                                         React.createElement('span', null, 'Monthly Data Review')
                                     )
                                 ),
                                 React.createElement('th', {
                                     style: {
-                                        padding: '8px 10px',
-                                        fontSize: '10px',
+                                        padding: '10px 12px',
+                                        fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? '#f1f5f9' : '#ffffff',
-                                        color: '#475569',
+                                        backgroundColor: isWorking ? '#fef3c7' : '#fafafa',
+                                        color: '#78350f',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
                                         borderRight: '1px solid #e5e7eb',
-                                        minWidth: '140px',
-                                        width: '140px',
-                                        maxWidth: '140px',
+                                        minWidth: `${TRACK_CELL_WIDTH}px`,
+                                        width: `${TRACK_CELL_WIDTH}px`,
+                                        maxWidth: `${TRACK_CELL_WIDTH}px`,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
-                                        React.createElement('i', { className: 'fas fa-comment-dots text-xs', style: { color: '#64748b' } }),
+                                        React.createElement('i', { className: 'fas fa-comment-dots text-xs', style: { color: '#d97706' } }),
                                         React.createElement('span', null, 'Comments')
                                     )
                                 )
@@ -2489,17 +2513,18 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         const rowChildren = [
                             React.createElement('td', { 
                                 style: {
-                                    padding: '10px 12px',
+                                    padding: '12px 16px',
                                     fontSize: '13px',
                                     backgroundColor: rowBaseBgColor,
                                     border: 'none',
-                                    borderRight: '2px solid #374151',
+                                    borderRight: '2px solid #475569',
                                     position: 'sticky',
                                     left: 0,
                                     zIndex: 9,
-                                    minWidth: '320px',
-                                    width: '320px',
-                                    transition: 'background-color 0.2s ease'
+                                    minWidth: `${TRACK_STICKY_PROJECT_WIDTH}px`,
+                                    width: `${TRACK_STICKY_PROJECT_WIDTH}px`,
+                                    transition: 'background-color 0.2s ease',
+                                    boxShadow: '4px 0 12px -6px rgba(15, 23, 42, 0.12)'
                                 },
                                 className: 'sticky left-0',
                                 'data-project-id': project.id
@@ -2548,14 +2573,14 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             ...monthCells,
                             React.createElement('td', { 
                                 style: {
-                                    padding: '12px 16px',
+                                    padding: '12px 14px',
                                     fontSize: '12px',
                                     border: 'none',
-                                    borderLeft: '2px solid #374151',
+                                    borderLeft: '2px solid #cbd5e1',
                                     backgroundColor: rowBaseBgColor,
-                                    color: '#374151',
-                                    minWidth: '120px',
-                                    width: '120px',
+                                    color: '#334155',
+                                    minWidth: '132px',
+                                    width: '132px',
                                     fontWeight: '500'
                                 }
                             }, 
@@ -2571,13 +2596,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             ),
                             React.createElement('td', { 
                                 style: {
-                                    padding: '12px 16px',
+                                    padding: '12px 14px',
                                     fontSize: '12px',
                                     border: 'none',
                                     backgroundColor: rowBaseBgColor,
-                                    color: '#374151',
-                                    minWidth: '140px',
-                                    width: '140px',
+                                    color: '#334155',
+                                    minWidth: '152px',
+                                    width: '152px',
                                     fontWeight: '500'
                                 }
                             }, 
@@ -2588,11 +2613,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             ),
                             React.createElement('td', { 
                                 style: {
-                                    padding: '12px 16px',
+                                    padding: '12px 14px',
                                     border: 'none',
                                     backgroundColor: rowBaseBgColor,
-                                    minWidth: '120px',
-                                    width: '120px'
+                                    minWidth: '132px',
+                                    width: '132px'
                                 }
                             },
                                 React.createElement('span', {
