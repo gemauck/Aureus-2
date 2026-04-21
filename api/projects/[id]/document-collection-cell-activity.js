@@ -232,9 +232,35 @@ async function handler(req, res) {
   const filteredActivity = activityLogs
 
   const timeline = []
+  const syntheticSentKeys = new Set()
 
   for (const c of comments) {
-    if (syntheticCommentMatchesLog(c, sentLogs)) continue
+    const author = (c.author || '').trim()
+    if (SYNTHETIC_SENT_AUTHORS.has(author)) {
+      // Keep platform "sent" fallback comments out of the comment stream.
+      // If no matching sent log exists, surface them as email rows instead.
+      if (syntheticCommentMatchesLog(c, sentLogs)) continue
+      const { subject, bodyText } = parseSyntheticSubjectBody(c.text)
+      const createdAtMs = new Date(c.createdAt).getTime()
+      const dedupeKey = `${subject}::${createdAtMs}`
+      if (syntheticSentKeys.has(dedupeKey)) continue
+      syntheticSentKeys.add(dedupeKey)
+      timeline.push({
+        id: `email_sent-fallback-${c.id}`,
+        kind: 'email_sent',
+        logId: c.id,
+        subject,
+        bodyText,
+        messageId: null,
+        deliveryStatus: null,
+        deliveredAt: null,
+        bouncedAt: null,
+        bounceReason: null,
+        lastEventAt: null,
+        createdAt: c.createdAt
+      })
+      continue
+    }
     timeline.push({
       id: `comment-${c.id}`,
       kind: 'comment',

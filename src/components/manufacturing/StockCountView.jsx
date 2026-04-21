@@ -1829,20 +1829,22 @@
                 React.createElement(
                   'div',
                   { className: 'flex items-center gap-2' },
-                  React.createElement(
-                    'button',
-                    {
-                      type: 'button',
-                      className:
-                        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ' +
-                        (isDark
-                          ? 'border-amber-800 bg-amber-950/50 text-amber-200 hover:bg-amber-900/40'
-                          : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'),
-                      onClick: () => setStShowNewItemForm((prev) => !prev)
-                    },
-                    React.createElement('i', { className: 'fas fa-plus mr-1' }),
-                    stShowNewItemForm ? 'Hide new item' : 'Add new item'
-                  ),
+                  stLocationId
+                    ? React.createElement(
+                        'button',
+                        {
+                          type: 'button',
+                          className:
+                            'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ' +
+                            (isDark
+                              ? 'border-amber-800 bg-amber-950/50 text-amber-200 hover:bg-amber-900/40'
+                              : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'),
+                          onClick: () => setStShowNewItemForm((prev) => !prev)
+                        },
+                        React.createElement('i', { className: 'fas fa-plus mr-1' }),
+                        stShowNewItemForm ? 'Hide new item' : 'Add new item'
+                      )
+                    : null,
                   React.createElement(
                     'button',
                     {
@@ -2024,7 +2026,7 @@
                   )
                 )
           : null,
-        stSessionId && stShowNewItemForm
+        stSessionId && stLocationId && stShowNewItemForm
           ? React.createElement(
               'div',
               {
