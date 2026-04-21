@@ -629,7 +629,7 @@ const ProjectsDatabaseFirst = () => {
                 progress: projectData.progress || 0,
                 assignedTo: projectData.assignedTo || '',
                 description: projectData.description || '',
-                includeInProgressTracker: projectData.includeInProgressTracker !== false,
+                includeInProgressTracker: projectData.includeInProgressTracker === true,
                 budget: projectData.budget || 0,
                 actualCost: projectData.actualCost || 0,
                 tasks: projectData.tasks || [],

@@ -16,8 +16,7 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                 description: project.description || '',
                 status: project.status || 'Active',
                 manager: project.manager || '',
-                includeInProgressTracker:
-                    project.includeInProgressTracker === false ? false : true
+                includeInProgressTracker: project.includeInProgressTracker === true
             };
         }
         return {
@@ -30,7 +29,7 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
             description: '',
             status: 'Active',
             manager: '',
-            includeInProgressTracker: true
+            includeInProgressTracker: false
         };
     });
 

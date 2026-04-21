@@ -1840,7 +1840,7 @@ async function handler(req, res) {
               ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
               ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
               ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false,
-              ADD COLUMN IF NOT EXISTS "includeInProgressTracker" BOOLEAN DEFAULT true;
+              ADD COLUMN IF NOT EXISTS "includeInProgressTracker" BOOLEAN DEFAULT false;
             `;
             projectListColumnsMigrated = true;
             globalThis.projectListColumnsMigrated = true;
@@ -2248,7 +2248,7 @@ async function handler(req, res) {
           ? (typeof body.includeInProgressTracker === 'boolean'
             ? body.includeInProgressTracker
             : Boolean(body.includeInProgressTracker === true || body.includeInProgressTracker === 'true' || body.includeInProgressTracker === 1))
-          : true
+          : false
       }
 
       

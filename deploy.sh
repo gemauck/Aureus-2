@@ -120,6 +120,16 @@ if [ -f migrate-remove-on-hold-qualified-engagement.sql ]; then
   fi
 fi
 
+if [ -f set-progress-tracker-allowlist.sql ]; then
+  echo
+  echo "-> Applying migration (Progress Tracker defaults + allowlist)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f set-progress-tracker-allowlist.sql 2>/dev/null && echo "  Done." || echo "  (skipped or failed; check DB)"
+  else
+    echo "  (psql or DATABASE_URL not available; run set-progress-tracker-allowlist.sql manually)"
+  fi
+fi
+
 echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then

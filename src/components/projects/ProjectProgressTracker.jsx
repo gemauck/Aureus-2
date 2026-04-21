@@ -52,13 +52,12 @@ if (!ReactElement && typeof window !== 'undefined' && window.React && window.Rea
 
 const storage = window.storage;
 
-/** Show in Progress Tracker unless explicitly opted out. null/undefined = include (DB default & legacy/cache without field). */
-function isExplicitlyExcludedFromProgressTracker(value) {
-    if (value === false || value === 0) return true;
-    if (value == null) return false;
+/** Show in Progress Tracker only when explicitly opted in (DB default is false). */
+function isIncludedInProgressTracker(value) {
+    if (value === true || value === 1) return true;
     if (typeof value === 'string') {
         const s = value.trim().toLowerCase();
-        return s === 'false' || s === '0';
+        return s === 'true' || s === '1';
     }
     return false;
 }
@@ -258,10 +257,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         };
                     });
                     
-                    // Only projects not explicitly opted out in Edit Project (unchecked = false)
+                    // Only projects with Include in Progress Tracker checked (explicit true)
                     const monthlyProjects = normalizedProjects.filter((p) => {
                         if (!p || typeof p !== 'object') return false;
-                        return !isExplicitlyExcludedFromProgressTracker(p.includeInProgressTracker);
+                        return isIncludedInProgressTracker(p.includeInProgressTracker);
                     });
                     
                     
@@ -272,7 +271,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     
                     if (monthlyProjects.length > 0) {
                     } else if (normalizedProjects.length > 0) {
-                        console.warn('⚠️ ProjectProgressTracker: No projects to show (all opted out of Progress Tracker?)');
+                        console.warn('⚠️ ProjectProgressTracker: No projects with Include in Progress Tracker enabled');
                     } else {
                     }
                     
