@@ -6436,14 +6436,22 @@ const JobCardFormPublic = () => {
                   isLocalPending && String(jc.status || 'draft').trim().toLowerCase() === 'draft';
                 return (
                   <li key={`${jc.source || 'local'}-${getPriorCardOpenId(jc) || String(jc.id ?? 'row')}`}>
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={e => {
                         e.preventDefault();
                         e.stopPropagation();
                         void handleSelectPriorCard(jc);
                       }}
-                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation cursor-pointer relative z-[1]"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleSelectPriorCard(jc);
+                        }
+                      }}
+                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation cursor-pointer relative z-[1] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                       style={{ touchAction: 'manipulation' }}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -6494,7 +6502,7 @@ const JobCardFormPublic = () => {
                           <i className="fa-solid fa-chevron-right text-gray-400 mt-1" aria-hidden />
                         </div>
                       </div>
-                    </button>
+                    </div>
                   </li>
                 );
               })}
