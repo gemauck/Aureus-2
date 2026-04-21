@@ -2305,6 +2305,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return next;
     };
 
+    const monthCompletionByIndex = useMemo(() => {
+        if (!isMonthlyDataReview || !Array.isArray(months) || months.length === 0) return {};
+
+        const completionMap = {};
+        months.forEach((_, monthIdx) => {
+            const monthLabel = months[monthIdx];
+            let total = 0;
+            let completed = 0;
+
+            (sections || []).forEach((section) => {
+                (section?.documents || []).forEach((doc) => {
+                    total += 1;
+                    const rawStatus = getStatusForYear(doc?.collectionStatus || {}, monthLabel, selectedYear);
+                    const statusKey = resolveMonthlyDataReviewStatusKey(rawStatus);
+                    if (statusKey === 'done' || statusKey === 'complete-issues-outstanding' || statusKey === 'complete') {
+                        completed += 1;
+                    }
+                });
+            });
+
+            const percent = total > 0 ? Math.round((completed / total) * 100) : null;
+            completionMap[monthIdx] = { completed, total, percent };
+        });
+
+        return completionMap;
+    }, [isMonthlyDataReview, months, sections, selectedYear]);
+
     // Email request per document/month: saved recipients, subject, body, recipientName, schedule (for "Request documents via email")
     const getEmailRequestForYear = (doc, month, year = selectedYear) => {
         if (!doc) return {};
@@ -8639,6 +8666,11 @@ Abcotronics`;
                                                                 >
                                                                     <span>{month.slice(0, 3)}</span>
                                                                     <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                                    {isMonthlyDataReview ? (
+                                                                        <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
+                                                                            {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
+                                                                        </span>
+                                                                    ) : null}
                                                                 </div>
                                                             </div>
                                                         </th>
