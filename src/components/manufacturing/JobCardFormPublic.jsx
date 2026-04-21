@@ -442,7 +442,7 @@ function abbreviateHeading(value, maxChars = PRIOR_CARD_HEADING_MAX_CHARS) {
 }
 
 /** Inline photo/video strip for Diagnosis / Actions / Future work sections on the work step. */
-const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove }) => {
+const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove, onPreview }) => {
   const inputId = `section-work-media-${sectionKey}`;
   return (
     <div className="mt-3 pt-3 border-t border-gray-100">
@@ -473,6 +473,7 @@ const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove }) 
               previewUrl={photo.thumbUrl || ''}
               index={idx}
               onRemove={(i) => onRemove(sectionKey, i)}
+              onPreview={onPreview}
             />
           ))}
         </div>
@@ -481,30 +482,43 @@ const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove }) 
   );
 };
 
-const JobCardWizardAttachmentPreview = ({ url, previewUrl, index, onRemove }) => {
+const JobCardWizardAttachmentPreview = ({ url, previewUrl, index, onRemove, onPreview }) => {
   const isVideo = jobCardMediaIsVideoDataUrl(url);
   return (
-    <div className="relative group rounded-lg overflow-hidden border border-gray-200">
+    <div className="relative group h-24 sm:h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
       {isVideo ? (
         <video
           src={url}
-          className="w-full max-h-48 sm:max-h-64 object-contain bg-black"
+          className="h-full w-full object-contain bg-black"
           controls
           playsInline
           preload="metadata"
         />
       ) : (
-        <img
-          src={previewUrl || url}
-          alt={`Attachment ${index + 1}`}
-          loading="lazy"
-          decoding="async"
-          className="w-full h-24 sm:h-32 object-cover"
-        />
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof onPreview === 'function') onPreview(url);
+          }}
+          className="h-full w-full cursor-zoom-in"
+          title="Open full photo"
+        >
+          <img
+            src={previewUrl || url}
+            alt={`Attachment ${index + 1}`}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-contain p-1"
+          />
+        </button>
       )}
       <button
         type="button"
-        onClick={() => onRemove(index)}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRemove(index);
+        }}
         className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation z-10"
         title="Remove"
       >
@@ -1194,6 +1208,7 @@ const JobCardFormPublic = () => {
 
   const [technicianInput, setTechnicianInput] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]);
+  const [photoLightboxUrl, setPhotoLightboxUrl] = useState('');
   /** Per-section photos/videos on work step (Diagnosis, Actions, Future work). */
   const [sectionWorkMedia, setSectionWorkMedia] = useState(() => emptySectionWorkMedia());
   const [availableSites, setAvailableSites] = useState([]);
@@ -3865,6 +3880,19 @@ const JobCardFormPublic = () => {
     [setLocalDraftsTick]
   );
 
+  const closePhotoLightbox = useCallback(() => {
+    setPhotoLightboxUrl('');
+  }, []);
+
+  useEffect(() => {
+    if (!photoLightboxUrl) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') closePhotoLightbox();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [photoLightboxUrl, closePhotoLightbox]);
+
   useEffect(() => {
     if (wizardFlow !== 'stock_take') return;
     if (stockTakeSessionId) return;
@@ -4910,6 +4938,7 @@ const JobCardFormPublic = () => {
               items={sectionWorkMedia.diagnosis}
               onUpload={handleSectionWorkMediaUpload}
               onRemove={handleRemoveSectionWorkMedia}
+              onPreview={setPhotoLightboxUrl}
             />
       </section>
 
@@ -4952,6 +4981,7 @@ const JobCardFormPublic = () => {
               items={sectionWorkMedia.actionsTaken}
               onUpload={handleSectionWorkMediaUpload}
               onRemove={handleRemoveSectionWorkMedia}
+              onPreview={setPhotoLightboxUrl}
             />
       </section>
 
@@ -4983,6 +5013,7 @@ const JobCardFormPublic = () => {
               items={sectionWorkMedia.futureWorkRequired}
               onUpload={handleSectionWorkMediaUpload}
               onRemove={handleRemoveSectionWorkMedia}
+              onPreview={setPhotoLightboxUrl}
             />
           </div>
           <div>
@@ -5067,6 +5098,7 @@ const JobCardFormPublic = () => {
                 previewUrl={typeof photo === 'string' ? '' : (photo.previewUrl || photo.thumbUrl || '')}
                 index={idx}
                 onRemove={handleRemovePhoto}
+                onPreview={setPhotoLightboxUrl}
               />
             ))}
           </div>
@@ -5542,6 +5574,7 @@ const JobCardFormPublic = () => {
                     previewUrl={typeof photo === 'string' ? '' : (photo.previewUrl || photo.thumbUrl || '')}
                     index={idx}
                     onRemove={handleRemovePhoto}
+                    onPreview={setPhotoLightboxUrl}
                   />
                 ))}
               </div>
@@ -7028,6 +7061,31 @@ const JobCardFormPublic = () => {
 
         {/* Footer removed - navigation buttons are now inline at end of each step */}
       </div>
+
+      {photoLightboxUrl ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-4 sm:p-6"
+          onClick={closePhotoLightbox}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo preview"
+        >
+          <button
+            type="button"
+            className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+            onClick={closePhotoLightbox}
+            aria-label="Close photo preview"
+          >
+            <i className="fa-solid fa-xmark" />
+          </button>
+          <img
+            src={photoLightboxUrl}
+            alt="Full-size attachment"
+            className="max-h-[92vh] max-w-[96vw] rounded-lg object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
 
       {/* Map Selection Modal */}
       {showMapModal && (
