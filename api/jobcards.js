@@ -314,6 +314,7 @@ async function handler(req, res) {
         const url = new URL(req.url, 'http://localhost')
         const clientId = url.searchParams.get('clientId')
         const clientName = url.searchParams.get('clientName')
+        const callOutCategory = (url.searchParams.get('callOutCategory') || '').trim()
         const statusParam = url.searchParams.get('status')
         const searchQ = (url.searchParams.get('q') || url.searchParams.get('search') || '').trim()
         const sortFieldRaw = url.searchParams.get('sortField') || 'createdAt'
@@ -338,6 +339,7 @@ async function handler(req, res) {
         const allowLargePageSize = !!(
           clientId ||
           clientName ||
+          callOutCategory ||
           searchQ ||
           mineParam ||
           ownerIdParamRaw ||
@@ -362,6 +364,12 @@ async function handler(req, res) {
         }
         if (statusParam && statusParam !== 'all') {
           baseFilters.status = statusParam
+        }
+        if (callOutCategory) {
+          baseFilters.callOutCategory = {
+            equals: callOutCategory,
+            mode: 'insensitive'
+          }
         }
 
         if (mineParam && owner) {

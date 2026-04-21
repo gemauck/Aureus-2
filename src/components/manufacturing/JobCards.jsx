@@ -484,6 +484,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
   const [sortField, setSortField] = useState('createdAt'); // jobCardNumber | client | technician | status | createdAt
@@ -552,6 +553,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     debouncedSearch,
     statusFilter,
     clientFilter,
+    categoryFilter,
     mineOnly,
     technicianOwnerId,
     createdFrom,
@@ -599,6 +601,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           params.set('clientName', clientFilter.trim());
         }
       }
+      if (categoryFilter) {
+        params.set('callOutCategory', categoryFilter.trim());
+      }
       if (debouncedSearch) {
         params.set('q', debouncedSearch);
       }
@@ -633,6 +638,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       pageSize,
       statusFilter,
       clientFilter,
+      categoryFilter,
       sortField,
       sortDirection,
       debouncedSearch,
@@ -740,6 +746,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       ...extraNames.map((name) => ({ id: name, name })),
     ];
   }, [clients, jobCards]);
+
+  const categoryOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        jobCards
+          .map((jc) => String(jc.callOutCategory || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [jobCards]);
 
   /** Server applies filters + sort; list is ready to render. */
   const displayJobCards = jobCards;
@@ -1107,7 +1123,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
           <select
             aria-label="Filter by status"
             className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
@@ -1152,6 +1168,19 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               </option>
             ))}
           </select>
+          <select
+            aria-label="Filter by category"
+            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="">All categories</option>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
           <div className="flex flex-col gap-0.5">
             <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Created from</span>
             <input
@@ -1182,6 +1211,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 setCreatedTo('');
                 setStatusFilter('all');
                 setClientFilter('');
+                setCategoryFilter('');
               }}
               className={`w-full rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${isDark ? 'border-slate-600 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
             >
