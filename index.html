@@ -1389,7 +1389,7 @@
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
                 // Fixed version for cacheability - bump when deploying new Vite projects bundle (e.g. projects-module-v5)
-                const VITE_PROJECTS_VERSION = 'projects-module-v4';
+                const VITE_PROJECTS_VERSION = 'projects-module-v5';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
