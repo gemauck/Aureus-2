@@ -6623,6 +6623,7 @@ const JobCardFormPublic = () => {
           {editingMeta && (
             <p className="text-xs text-amber-100 mt-1.5 font-medium">
               Editing {editingMeta.jobCardNumber || 'saved draft'}
+              {formData.heading ? ` - ${formData.heading}` : ''}
               {editingMeta.synced ? ' (already submitted)' : ''}
             </p>
           )}
@@ -6704,7 +6705,11 @@ const JobCardFormPublic = () => {
                 <h1 className="jobcard-app-title text-sm font-bold leading-none text-white truncate">
                   Job cards
                   {editingMeta?.jobCardNumber ? (
-                    <span className="font-normal text-amber-100/95"> · {editingMeta.jobCardNumber}</span>
+                    <span className="font-normal text-amber-100/95">
+                      {' '}
+                      · {editingMeta.jobCardNumber}
+                      {formData.heading ? ` - ${formData.heading}` : ''}
+                    </span>
                   ) : null}
                 </h1>
               </div>
