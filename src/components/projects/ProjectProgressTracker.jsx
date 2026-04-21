@@ -52,6 +52,17 @@ if (!ReactElement && typeof window !== 'undefined' && window.React && window.Rea
 
 const storage = window.storage;
 
+/** Show in Progress Tracker unless explicitly opted out. null/undefined = include (DB default & legacy/cache without field). */
+function isExplicitlyExcludedFromProgressTracker(value) {
+    if (value === false || value === 0) return true;
+    if (value == null) return false;
+    if (typeof value === 'string') {
+        const s = value.trim().toLowerCase();
+        return s === 'false' || s === '0';
+    }
+    return false;
+}
+
 // Main component - completely rebuilt for reliability
 const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const {
@@ -205,7 +216,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 }
                 
                 if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
-                    const response = await window.DatabaseAPI.getProjects();
+                    const response = await window.DatabaseAPI.getProjects({ forceRefresh: true });
                     
                     let projs = [];
                     
@@ -247,11 +258,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         };
                     });
                     
-                    // Only projects with "Include in Project Progress Tracker" enabled in Edit Project
+                    // Only projects not explicitly opted out in Edit Project (unchecked = false)
                     const monthlyProjects = normalizedProjects.filter((p) => {
                         if (!p || typeof p !== 'object') return false;
-                        const v = p.includeInProgressTracker;
-                        return v === true || v === 1 || v === 'true';
+                        return !isExplicitlyExcludedFromProgressTracker(p.includeInProgressTracker);
                     });
                     
                     
@@ -262,7 +272,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     
                     if (monthlyProjects.length > 0) {
                     } else if (normalizedProjects.length > 0) {
-                        console.warn('⚠️ ProjectProgressTracker: No projects opted in (Include in Project Progress Tracker)');
+                        console.warn('⚠️ ProjectProgressTracker: No projects to show (all opted out of Progress Tracker?)');
                     } else {
                     }
                     
@@ -1477,7 +1487,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     }
                     
                     if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
-                        const reloadResponse = await window.DatabaseAPI.getProjects();
+                        const reloadResponse = await window.DatabaseAPI.getProjects({ forceRefresh: true });
                         let reloadedProjs = [];
                         
                         if (reloadResponse?.data?.projects && Array.isArray(reloadResponse.data.projects)) {
@@ -1607,8 +1617,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         }
     };
     
-    // Close modal without saving
-    // Render progress cell — comments edit inline in the cell
+    // Render progress cell — comments use an always-visible textarea (focus and type; no separate step)
     const renderProgressCell = (project, month, field, rowBgColor = '#ffffff', providedKey = null) => {
         // Validate inputs
         if (!project || !project.id || !month || !field) {
@@ -1650,24 +1659,71 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             )
             : null;
         
-        // Handle cell click — start inline edit for comments (type directly in cell)
-        const handleCellClick = async () => {
+        /** Claim this comments cell for editing (save another cell first if needed). */
+        const beginCommentEditIfNeeded = async () => {
             if (field !== 'comments') return;
-            // If another cell is being edited, save it first
-            if (editingCell && (editingCell.projectId !== project.id ||
-                editingCell.month !== safeMonth || editingCell.field !== field)) {
+            const alreadyThis =
+                editingCell &&
+                String(editingCell.projectId) === String(project.id) &&
+                editingCell.month === safeMonth &&
+                editingCell.field === 'comments';
+            if (alreadyThis) return;
+            if (editingCell && !alreadyThis) {
                 const editingProject = safeProjects.find(p => String(p.id) === String(editingCell.projectId));
                 if (editingProject) {
                     await saveProgressData(editingProject, editingCell.month, editingCell.field, editingValue);
                 }
             }
-
             setEditingCell({
                 projectId: project.id,
                 month: safeMonth,
                 field: 'comments'
             });
             setEditingValue(displayValue);
+        };
+
+        const handleCommentFocus = () => {
+            void beginCommentEditIfNeeded();
+        };
+
+        const handleCommentChange = async (e) => {
+            if (field !== 'comments') return;
+            const v = e.target.value;
+            const isThis =
+                editingCell &&
+                String(editingCell.projectId) === String(project.id) &&
+                editingCell.month === safeMonth &&
+                editingCell.field === 'comments';
+            if (isThis) {
+                setEditingValue(v);
+                return;
+            }
+            if (editingCell) {
+                const editingProject = safeProjects.find(p => String(p.id) === String(editingCell.projectId));
+                if (editingProject) {
+                    await saveProgressData(editingProject, editingCell.month, editingCell.field, editingValue);
+                }
+            }
+            setEditingCell({
+                projectId: project.id,
+                month: safeMonth,
+                field: 'comments'
+            });
+            setEditingValue(v);
+        };
+
+        const handleCommentCellClick = (e) => {
+            if (field !== 'comments') return;
+            if (e.target.closest && e.target.closest('textarea')) return;
+            void beginCommentEditIfNeeded();
+            requestAnimationFrame(() => {
+                try {
+                    const ta = e.currentTarget.querySelector('textarea');
+                    if (ta) ta.focus();
+                } catch (err) {
+                    /* ignore */
+                }
+            });
         };
         
         // Handle inline input change
@@ -1677,8 +1733,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         
         // Handle inline input blur - save and stop editing
         const handleInlineInputBlur = async () => {
-            if (editingCell && editingCell.projectId === project.id && 
-                editingCell.month === safeMonth && editingCell.field === field) {
+            if (
+                editingCell &&
+                String(editingCell.projectId) === String(project.id) &&
+                editingCell.month === safeMonth &&
+                editingCell.field === field
+            ) {
                 await saveProgressData(project, safeMonth, field, editingValue);
                 setEditingCell(null);
                 setEditingValue('');
@@ -1756,9 +1816,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             else calculatedBackground = light ? '#fffbeb' : '#fef6e0';
         }
         
-        const isEditing = editingCell && 
-            editingCell.projectId === project.id && 
-            editingCell.month === safeMonth && 
+        const isEditing =
+            editingCell &&
+            String(editingCell.projectId) === String(project.id) &&
+            editingCell.month === safeMonth &&
             editingCell.field === field;
         
         const monthCount = Array.isArray(months) ? months.length : 0;
@@ -1786,7 +1847,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             cursor: isEditing ? 'text' : (field === 'comments' ? 'text' : 'default')
         };
         
-        // Render cell with inline editing for compliance/data, modal for comments
+        // Render cell — comments: always a textarea (focus / tab to type); compliance/data unchanged
         return React.createElement('td', {
             key: cellIdentifier,
             style: cellStyle,
@@ -1796,7 +1857,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             'data-month-name': safeMonth,
             'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
             'data-field': field,
-            onClick: !isEditing ? handleCellClick : undefined,
+            onClick: field === 'comments' ? handleCommentCellClick : undefined,
             onMouseEnter: !isEditing ? (e) => {
                 e.currentTarget.style.backgroundColor = config.hoverBg;
             } : undefined,
@@ -1830,15 +1891,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 React.createElement('i', { className: `fas ${config.icon}`, style: { fontSize: '10px', color: config.accent } }),
                 React.createElement('span', null, config.label)
             ),
-            // Content area - inline input/textarea when editing, display otherwise
-            isEditing && field === 'comments' ? (
+            // Content area: comments are always a real textarea — tab/focus and type (no extra "open" step)
+            field === 'comments' ? (
                 React.createElement('textarea', {
-                    value: editingValue,
-                    onChange: handleInlineInputChange,
+                    value: isEditing ? editingValue : displayValue,
+                    onFocus: handleCommentFocus,
+                    onChange: handleCommentChange,
                     onBlur: handleInlineInputBlur,
                     onKeyDown: handleInlineInputKeyDown,
                     placeholder: config.placeholder,
-                    autoFocus: true,
+                    autoFocus: focusedCellKey === cellIdentifier,
                     rows: 4,
                     style: {
                         width: '100%',
@@ -1848,12 +1910,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         fontSize: '11px',
                         fontFamily: 'inherit',
                         lineHeight: '1.35',
-                        border: `1.5px solid ${config.borderColor}`,
+                        border: `1.5px solid ${hasValue ? config.borderColor : '#e5e7eb'}`,
                         borderRadius: '4px',
                         backgroundColor: '#ffffff',
                         color: '#111827',
                         outline: 'none',
-                        boxShadow: `0 0 0 2px ${config.accent}40`,
+                        boxShadow: isEditing ? `0 0 0 2px ${config.accent}40` : 'none',
                         resize: 'vertical'
                     }
                 })
@@ -1967,54 +2029,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         })
                     )
                 )
-            ) : (
-                React.createElement('div', {
-                    style: {
-                        width: '100%',
-                        flex: 1,
-                        padding: '4px 6px',
-                        fontSize: '11px',
-                        fontFamily: 'inherit',
-                        border: `1.5px solid ${hasValue ? config.borderColor : '#e5e7eb'}`,
-                        borderRadius: '4px',
-                        backgroundColor: field === 'comments' ? '#ffffff' : (hasValue ? '#ffffff' : config.bgColor),
-                        color: hasValue ? '#111827' : '#9ca3af',
-                        lineHeight: '1.3',
-                        transition: 'all 0.2s ease',
-                        whiteSpace: field === 'comments' ? 'pre-wrap' : 'nowrap',
-                        wordWrap: field === 'comments' ? 'break-word' : 'normal',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: field === 'comments' ? '-webkit-box' : 'flex',
-                        WebkitLineClamp: field === 'comments' ? 3 : undefined,
-                        WebkitBoxOrient: field === 'comments' ? 'vertical' : undefined,
-                        alignItems: field === 'comments' ? 'flex-start' : 'center',
-                        minHeight: '30px',
-                        position: 'relative'
-                    },
-                    className: field === 'comments' ? (hasValue ? 'hover:border-slate-400 hover:shadow-sm cursor-pointer' : 'hover:border-gray-400 cursor-pointer') : '',
-                    title: hasValue
-                        ? displayValue
-                        : 'Click to type. Blur or ⌘/Ctrl+Enter saves.'
-                }, 
-                    hasValue ? (
-                        React.createElement('span', { style: { 
-                            display: 'block',
-                            width: '100%',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                        } }, displayValue)
-                    ) : (
-                        React.createElement('span', { 
-                            style: { 
-                                fontStyle: 'italic',
-                                fontSize: '10px',
-                                color: '#9ca3af'
-                            } 
-                        }, config.placeholder)
-                    )
-                )
-            ),
+            ) : null,
             // Status indicator dot for saved comments (hidden while editing inline)
             hasValue && !isEditing && (field === 'comments' || !displayValue.trim()) ? React.createElement('div', {
                 style: {
