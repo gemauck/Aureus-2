@@ -241,6 +241,7 @@ const Projects = () => {
     const navigatingBackRef = useRef(false); // Track when user explicitly navigates back
     const lastHandleViewProjectCallRef = useRef({ projectId: null, timestamp: 0 });
     const reloadProjectsListRef = useRef(null);
+    const listScrollRestoreFrameRef = useRef(null);
     // Track when projects were last loaded to avoid unnecessary refreshes
     const projectLoadTimestampsRef = useRef(new Map()); // Map<projectId, timestamp>
     const [selectedClient, setSelectedClient] = useState('all');
@@ -286,6 +287,27 @@ const Projects = () => {
     const projectPrefsUserKey = useMemo(() => getProjectPrefsUserKey(user), [user]);
     const starredProjectsStorageKey = useMemo(() => `projects.starredProjectIds.${projectPrefsUserKey}`, [projectPrefsUserKey]);
     const starredOnlyStorageKey = useMemo(() => `projects.showStarredOnly.${projectPrefsUserKey}`, [projectPrefsUserKey]);
+    const projectListScrollStorageKey = useMemo(() => `projects.listScroll.${projectPrefsUserKey}`, [projectPrefsUserKey]);
+    const projectListRestorePendingKey = useMemo(() => `projects.listScrollRestorePending.${projectPrefsUserKey}`, [projectPrefsUserKey]);
+
+    const getProjectsScrollContainer = useCallback(() => {
+        const mainContainer = document.getElementById('main-page-scroll');
+        if (mainContainer && typeof mainContainer.scrollTop === 'number') {
+            return mainContainer;
+        }
+        return document.scrollingElement || document.documentElement || document.body;
+    }, []);
+
+    const saveProjectsListScrollPosition = useCallback(() => {
+        try {
+            const scrollContainer = getProjectsScrollContainer();
+            const scrollTop = Number(scrollContainer?.scrollTop || 0);
+            sessionStorage.setItem(projectListScrollStorageKey, JSON.stringify({ scrollTop, savedAt: Date.now() }));
+            sessionStorage.setItem(projectListRestorePendingKey, '1');
+        } catch (error) {
+            console.warn('⚠️ Projects: Failed to save list scroll position:', error);
+        }
+    }, [getProjectsScrollContainer, projectListScrollStorageKey, projectListRestorePendingKey]);
     
     // Strip query/fragment from project ID (e.g. "id&clearCache=1" or "id?tab=documents" -> "id")
     const normalizeProjectId = (id) => {
@@ -1143,6 +1165,7 @@ const Projects = () => {
             sessionStorage.removeItem('openProjectId');
             sessionStorage.removeItem('openTaskId');
             sessionStorage.removeItem('openTaskFocusInput');
+            sessionStorage.setItem(projectListRestorePendingKey, '1');
             // Clear the project detail view when explicitly navigating to projects list
             if (viewingProject) {
                 setViewingProject(null);
@@ -1154,7 +1177,56 @@ const Projects = () => {
         
         window.addEventListener('navigateToProjectsList', handleNavigateToProjectsList);
         return () => window.removeEventListener('navigateToProjectsList', handleNavigateToProjectsList);
-    }, [viewingProject, selectedProject]);
+    }, [viewingProject, selectedProject, projectListRestorePendingKey]);
+
+    useEffect(() => {
+        if (viewingProject || showAllTasksView || showProgressTracker) return;
+        let shouldRestore = false;
+        let savedScrollTop = 0;
+        try {
+            shouldRestore = sessionStorage.getItem(projectListRestorePendingKey) === '1';
+            if (!shouldRestore) return;
+            const rawSaved = sessionStorage.getItem(projectListScrollStorageKey);
+            if (!rawSaved) {
+                sessionStorage.removeItem(projectListRestorePendingKey);
+                return;
+            }
+            const parsed = JSON.parse(rawSaved);
+            savedScrollTop = Number(parsed?.scrollTop || 0);
+        } catch (error) {
+            console.warn('⚠️ Projects: Failed to parse saved list scroll position:', error);
+            sessionStorage.removeItem(projectListRestorePendingKey);
+            return;
+        }
+
+        if (listScrollRestoreFrameRef.current) {
+            cancelAnimationFrame(listScrollRestoreFrameRef.current);
+            listScrollRestoreFrameRef.current = null;
+        }
+
+        listScrollRestoreFrameRef.current = requestAnimationFrame(() => {
+            const scrollContainer = getProjectsScrollContainer();
+            if (scrollContainer && typeof scrollContainer.scrollTop === 'number') {
+                scrollContainer.scrollTop = savedScrollTop;
+            }
+            sessionStorage.removeItem(projectListRestorePendingKey);
+            listScrollRestoreFrameRef.current = null;
+        });
+
+        return () => {
+            if (listScrollRestoreFrameRef.current) {
+                cancelAnimationFrame(listScrollRestoreFrameRef.current);
+                listScrollRestoreFrameRef.current = null;
+            }
+        };
+    }, [
+        viewingProject,
+        showAllTasksView,
+        showProgressTracker,
+        getProjectsScrollContainer,
+        projectListScrollStorageKey,
+        projectListRestorePendingKey
+    ]);
     
     // Ensure storage is available
     useEffect(() => {
@@ -2693,6 +2765,7 @@ const Projects = () => {
     };
 
     const handleViewProject = async (project) => {
+        saveProjectsListScrollPosition();
         // Skip redundant work if already viewing this project and detail is ready
         if (project?.id && viewingProject?.id === project.id && projectDetailAvailable) {
             return;
@@ -3348,6 +3421,7 @@ const Projects = () => {
     // Memoize the onBack handler to prevent unnecessary re-renders
     // Must be at top level (not inside conditional blocks) to follow Rules of Hooks
     const handleBackToProjects = useCallback(() => {
+        sessionStorage.setItem(projectListRestorePendingKey, '1');
         // CRITICAL: Set navigating back flag FIRST to prevent route handler from re-opening project
         navigatingBackRef.current = true;
         routeCheckInProgressRef.current = true;
@@ -3392,7 +3466,7 @@ const Projects = () => {
                 navigatingBackRef.current = false;
             }, 300);
         }, 500);
-    }, []);
+    }, [projectListRestorePendingKey]);
     
     const confirmDeleteProject = useCallback(async () => {
         const projectId = deleteConfirmation.projectId;
