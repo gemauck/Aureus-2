@@ -38,6 +38,12 @@
   };
 
   const QR_SHEET_MAX = 400;
+  const STOCK_COUNT_PAGES = ['in-app', 'labels', 'excel'];
+
+  function normalizeStockCountPage(value) {
+    const slug = String(value || '').trim().toLowerCase();
+    return STOCK_COUNT_PAGES.includes(slug) ? slug : 'in-app';
+  }
 
   /** Lazy-load jsQR for camera scanning (frame decode; avoids flaky BarcodeDetector on live video). */
   let stockTakeJsQrLoadPromise = null;
@@ -197,6 +203,30 @@
     const [qrSheetItems, setQrSheetItems] = React.useState([]);
     const [qrSheetLoading, setQrSheetLoading] = React.useState(false);
     const [qrSheetNote, setQrSheetNote] = React.useState('');
+    const getInitialStockCountPage = () => {
+      try {
+        if (window.RouteState) {
+          const route = window.RouteState.getRoute();
+          if (route?.page === 'manufacturing' && String(route?.segments?.[0] || '').toLowerCase() === 'stock-count') {
+            return normalizeStockCountPage(route?.segments?.[1]);
+          }
+        }
+        const pathSegments = String(window.location.pathname || '')
+          .replace(/^\//, '')
+          .split('/')
+          .filter(Boolean);
+        if (
+          String(pathSegments[0] || '').toLowerCase() === 'manufacturing' &&
+          String(pathSegments[1] || '').toLowerCase() === 'stock-count'
+        ) {
+          return normalizeStockCountPage(pathSegments[2]);
+        }
+      } catch {
+        // keep default page
+      }
+      return 'in-app';
+    };
+    const [stockCountPage, setStockCountPage] = React.useState(getInitialStockCountPage);
 
     const card = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100';
     const text = isDark ? 'text-gray-100' : 'text-gray-900';
@@ -209,6 +239,7 @@
       'px-4 py-2 text-sm rounded-lg border border-red-600/80 text-red-700 hover:bg-red-50 dark:text-red-300 dark:border-red-500 dark:hover:bg-red-950/40 disabled:opacity-50';
     const btnSuccess =
       'px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50';
+    const pageBtnBase = 'px-3 py-2 text-sm font-medium rounded-lg border transition-colors';
 
     const authHeaders = () => {
       const token = window.storage?.getToken?.();
@@ -235,9 +266,48 @@
       }
     };
 
+    const syncStockCountPageToRoute = React.useCallback((nextPage, options = {}) => {
+      const normalized = normalizeStockCountPage(nextPage);
+      const segments = normalized === 'in-app' ? ['stock-count'] : ['stock-count', normalized];
+      if (window.RouteState) {
+        window.RouteState.setPageSubpath('manufacturing', segments, {
+          replace: options.replace ?? false,
+          preserveSearch: true,
+          preserveHash: false
+        });
+      } else {
+        const path = '/manufacturing/' + segments.join('/');
+        const method = options.replace ? 'replaceState' : 'pushState';
+        window.history[method]({ page: 'manufacturing', tab: 'stock-count' }, '', path);
+      }
+    }, []);
+
+    const goToStockCountPage = React.useCallback((nextPage, options = {}) => {
+      const normalized = normalizeStockCountPage(nextPage);
+      setStockCountPage(normalized);
+      if (!options.skipUrlSync) {
+        syncStockCountPageToRoute(normalized, { replace: options.replace });
+      }
+    }, [syncStockCountPageToRoute]);
+
     React.useEffect(() => {
       stCountsRef.current = stCounts;
     }, [stCounts]);
+    React.useEffect(() => {
+      if (!window.RouteState) {
+        return;
+      }
+      const unsubscribe = window.RouteState.subscribe((route) => {
+        if (route?.page !== 'manufacturing') {
+          return;
+        }
+        if (String(route?.segments?.[0] || '').toLowerCase() !== 'stock-count') {
+          return;
+        }
+        goToStockCountPage(route?.segments?.[1], { skipUrlSync: true });
+      });
+      return unsubscribe;
+    }, [goToStockCountPage]);
     React.useEffect(() => {
       stNotesRef.current = stNotes;
     }, [stNotes]);
@@ -1420,6 +1490,47 @@
       { className: 'space-y-4 erp-module-root' },
       React.createElement(
         'div',
+        { className: 'rounded-xl border p-4 shadow-sm ' + card },
+        React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Stock count tools'),
+        React.createElement(
+          'p',
+          { className: 'mt-1 text-xs ' + muted },
+          'Open a dedicated page for in-app stocktake, inventory labels, or stock count Excel.'
+        ),
+        React.createElement(
+          'div',
+          { className: 'mt-3 flex flex-wrap gap-2' },
+          [
+            { id: 'in-app', label: 'In-app stocktake', icon: 'fa-play-circle' },
+            { id: 'labels', label: 'Inventory labels', icon: 'fa-tags' },
+            { id: 'excel', label: 'Stock count Excel', icon: 'fa-file-excel' }
+          ].map((page) =>
+            React.createElement(
+              'button',
+              {
+                key: page.id,
+                type: 'button',
+                className:
+                  pageBtnBase +
+                  ' ' +
+                  (stockCountPage === page.id
+                    ? isDark
+                      ? 'border-blue-400 bg-blue-900/40 text-blue-100'
+                      : 'border-blue-600 bg-blue-50 text-blue-800'
+                    : isDark
+                      ? 'border-gray-600 text-gray-200 hover:bg-gray-800'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'),
+                onClick: () => goToStockCountPage(page.id)
+              },
+              React.createElement('i', { className: 'fas ' + page.icon + ' mr-2' }),
+              page.label
+            )
+          )
+        )
+      ),
+      stockCountPage === 'in-app'
+        ? React.createElement(
+        'div',
         { className: 'rounded-xl border p-5 shadow-sm ' + card },
         React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'In-app stocktake'),
         React.createElement(
@@ -2202,8 +2313,10 @@
               )
             )
           : null
-      ),
-      React.createElement(
+      )
+        : null,
+      stockCountPage === 'labels'
+        ? React.createElement(
         'div',
         { className: 'rounded-xl border p-5 shadow-sm ' + card },
         React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'Inventory QR labels'),
@@ -2412,8 +2525,10 @@
               )
             )
           : null
-      ),
-      React.createElement(
+      )
+        : null,
+      stockCountPage === 'excel'
+        ? React.createElement(
         'div',
         { className: 'rounded-xl border p-5 shadow-sm ' + card },
         React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'Stock count (Excel)'),
@@ -2531,11 +2646,11 @@
       React.createElement(
         'div',
         { className: 'rounded-xl border p-5 shadow-sm ' + card },
-        React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'Pending mobile stock-take submissions'),
+        React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'Pending stock-take submissions'),
         React.createElement(
           'p',
           { className: 'mt-1 text-sm ' + muted },
-          'Counts submitted from the Job Cards app or from In-app stocktake above appear here for review. Open Review to edit counted quantities, save changes, then accept & apply to post to inventory or reject to discard.'
+          'Submitted counts appear here for review. Open Review to edit counted quantities, save changes, then accept & apply to post to inventory or reject to discard.'
         ),
         React.createElement(
           'div',
@@ -2769,6 +2884,7 @@
             )
           : null
       )
+        : null
     );
   }
 

@@ -501,7 +501,6 @@ try {
   
   // Track user input state to prevent data sync from interrupting typing
   const isUserTypingRef = useRef(false);
-  const defaultInventoryLocationAppliedRef = useRef(false);
   const activeInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   
@@ -702,16 +701,14 @@ try {
     const loadData = async () => {
       try {
         // STEP 1: Load from localStorage immediately for instant UI
-        const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
         const cachedBOMs = JSON.parse(localStorage.getItem('manufacturing_boms') || '[]');
         const cachedProductionOrders = JSON.parse(localStorage.getItem('manufacturing_production_orders') || '[]');
         const cachedSalesOrders = JSON.parse(localStorage.getItem('manufacturing_sales_orders') || '[]');
         const cachedPurchaseOrders = JSON.parse(localStorage.getItem('manufacturing_purchase_orders') || '[]');
         const cachedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
 
-        if (cachedInventory.length > 0) {
-          setInventory(normalizeInventoryRows(cachedInventory));
-        }
+        // Keep inventory sourced from API only to avoid count flicker from stale cache.
+        // We still read/write cache for fallback/diagnostics, but we do not hydrate UI from it.
         if (cachedBOMs.length > 0) {
           setBoms(cachedBOMs);
         }
@@ -3144,21 +3141,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     };
   }, []);
 
-  // Default inventory tab filter to PMB once locations are known (user can still choose "All locations").
-  // Do not auto-switch while an inventory detail page is open; that can reload list data with a
-  // different location scope and make detail values appear to "revert" after initial load.
-  useEffect(() => {
-    if (defaultInventoryLocationAppliedRef.current) return;
-    if (!stockLocations.length) return;
-    if (viewingInventoryItemDetail) return;
-    const pmb = window.manufacturingStockLocations?.isPmbStockLocation
-      ? stockLocations.find((l) => window.manufacturingStockLocations.isPmbStockLocation(l))
-      : null;
-    if (selectedLocationId === 'all' && pmb?.id) {
-      defaultInventoryLocationAppliedRef.current = true;
-      setSelectedLocationId(pmb.id);
-    }
-  }, [stockLocations, selectedLocationId, viewingInventoryItemDetail]);
+  // Keep location scope stable on initial load ("all") until user explicitly changes it.
+  // This prevents implicit re-scoping that can make dashboard counts jump on first paint.
 
   // Handle column sorting - memoized to prevent recreation
   const handleSort = useCallback((key, e) => {
