@@ -240,7 +240,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const trackerContextTitlePrefix = isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document Collection';
     // Month grid column widths (Data Review, Compliance Review, Document Collection)
     const jsonTrackerStatusColPx = isComplianceReview ? 280 : 360;
-    const jsonTrackerNotesColPx = isComplianceReview ? 260 : 340;
+    const jsonTrackerNotesColPx = isComplianceReview ? 336 : 416;
     /** Two-row sticky header: offset for Status/Notes row (approx. JAN + year row with py-2). */
     const jsonTrackerHeaderRow2TopClass = 'top-[3.5rem]';
     const documentCollectionMonthColMinPx = 240;
@@ -480,7 +480,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 const keys = [
                     ...Object.keys(doc.collectionStatus || {}),
                     ...Object.keys(doc.comments || {}),
-                    ...Object.keys(doc.notesByMonth || {})
+                    ...Object.keys(doc.notesByMonth || {}),
+                    ...Object.keys(doc.notesReviewByMonth || {})
                 ];
                 keys.forEach(key => {
                     if (!key) return;
@@ -2019,6 +2020,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     collectionStatus: {},
                     comments: {},
                     notesByMonth: {},
+                    notesReviewByMonth: {},
                     emailRequestByMonth: {}
                 };
                 if (hasParent) out.parentId = idMap.get(String(rawParent));
@@ -2086,6 +2088,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     collectionStatus: doc.collectionStatus || {},
                     comments: doc.comments || {},
                     notesByMonth: doc.notesByMonth || {},
+                    notesReviewByMonth: doc.notesReviewByMonth || {},
                     emailRequestByMonth: doc.emailRequestByMonth || {}
                 })) : []
             }));
@@ -2188,6 +2191,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 collectionStatus: remapYearKeys(doc.collectionStatus, sourceYear, targetYear),
                 comments: remapYearKeys(doc.comments, sourceYear, targetYear),
                 notesByMonth: remapYearKeys(doc.notesByMonth, sourceYear, targetYear),
+                notesReviewByMonth: remapYearKeys(doc.notesReviewByMonth, sourceYear, targetYear),
                 emailRequestByMonth: remapYearKeys(doc.emailRequestByMonth, sourceYear, targetYear)
             }))
         }));
@@ -2301,6 +2305,31 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             delete next[monthKey];
         } else {
             next[monthKey] = String(text).trim();
+        }
+        return next;
+    };
+
+    const getNotesReviewForYear = (notesReviewByMonth, month, year = selectedYear) => {
+        if (!notesReviewByMonth || typeof notesReviewByMonth !== 'object') return null;
+        const monthKey = getMonthKey(month, year);
+        if (!monthKey) return null;
+        const v = notesReviewByMonth[monthKey];
+        if (!v || typeof v !== 'object' || !v.reviewedAt) return null;
+        return v;
+    };
+
+    const setNotesReviewForYear = (notesReviewByMonth, month, record, year = selectedYear) => {
+        const monthKey = getMonthKey(month, year);
+        if (!monthKey) return notesReviewByMonth || {};
+        const next = { ...(notesReviewByMonth && typeof notesReviewByMonth === 'object' ? notesReviewByMonth : {}) };
+        if (!record) {
+            delete next[monthKey];
+        } else {
+            next[monthKey] = {
+                reviewedAt: record.reviewedAt,
+                reviewedByName: record.reviewedByName,
+                reviewedByUserId: record.reviewedByUserId != null ? String(record.reviewedByUserId) : ''
+            };
         }
         return next;
     };
@@ -2894,6 +2923,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             collectionStatus: {},
             comments: {},
             notesByMonth: {},
+            notesReviewByMonth: {},
             assignedTo: [],
             parentId: parentDoc.id
         };
@@ -2920,7 +2950,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         ...section,
                         documents: section.documents.map(doc => 
                             doc.id === editingDocument.id 
-                                ? { ...doc, ...documentData, parentId: doc.parentId }
+                                ? {
+                                    ...doc,
+                                    ...documentData,
+                                    parentId: doc.parentId,
+                                    notesByMonth: documentData.notesByMonth ?? doc.notesByMonth ?? {},
+                                    notesReviewByMonth: documentData.notesReviewByMonth ?? doc.notesReviewByMonth ?? {}
+                                }
                                 : doc
                         )
                     };
@@ -2932,6 +2968,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         collectionStatus: documentData.collectionStatus || {},
                         comments: documentData.comments || {},
                         notesByMonth: documentData.notesByMonth || {},
+                        notesReviewByMonth: documentData.notesReviewByMonth || {},
                         assignedTo: documentData.assignedTo ?? []
                     };
                     return {
@@ -3264,6 +3301,41 @@ const getAssigneeColor = (identifier, users) => {
                     if (String(doc.id) !== String(documentId)) return doc;
                     const nextNotes = setNotesForYear(doc.notesByMonth, month, text, selectedYear);
                     return { ...doc, notesByMonth: nextNotes };
+                })
+            };
+        });
+        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+        lastSavedDataRef.current = null;
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        saveToDatabase();
+        setTimeout(() => {
+            bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
+        }, 450);
+    }, [selectedYear, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
+
+    const handleToggleNotesReview = useCallback((sectionId, documentId, month, checked) => {
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
+            ? sectionsByYear
+            : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const user = getCurrentUser();
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: section.documents.map(doc => {
+                    if (String(doc.id) !== String(documentId)) return doc;
+                    const nextReview = setNotesReviewForYear(doc.notesReviewByMonth || {}, month, checked ? {
+                        reviewedAt: new Date().toISOString(),
+                        reviewedByName: user.name || user.email || 'Unknown',
+                        reviewedByUserId: user.id != null ? String(user.id) : ''
+                    } : null, selectedYear);
+                    return { ...doc, notesReviewByMonth: nextReview };
                 })
             };
         });
@@ -3817,7 +3889,22 @@ const getAssigneeColor = (identifier, users) => {
                         }).join('\n\n');
                         row.push(commentsText);
                         
-                        row.push(getNotesForYear(doc.notesByMonth, month, selectedYear) || '');
+                        let notesExport = getNotesForYear(doc.notesByMonth, month, selectedYear) || '';
+                        const notesRev = getNotesReviewForYear(doc.notesReviewByMonth, month, selectedYear);
+                        if (notesRev && notesRev.reviewedAt) {
+                            const rd = new Date(notesRev.reviewedAt);
+                            const stamp = Number.isNaN(rd.getTime())
+                                ? notesRev.reviewedAt
+                                : rd.toLocaleString('en-ZA', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+                            notesExport = `${notesExport}${notesExport ? '\n' : ''}[Reviewed ${stamp} by ${notesRev.reviewedByName || '?'}]`;
+                        }
+                        row.push(notesExport);
                     });
                     
                     excelData.push(row);
@@ -5020,6 +5107,51 @@ const baseTextColorClass = statusConfig && statusConfig.color
         const statusConfig = status ? getStatusConfig(status) : null;
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
         const cellBg = statusConfig?.cellColor || (isWorkingMonth ? 'bg-sky-50' : '');
+        const reviewRec = getNotesReviewForYear(doc.notesReviewByMonth, month, selectedYear);
+        const isReviewed = !!(reviewRec && reviewRec.reviewedAt);
+        let reviewDisplay = null;
+        if (reviewRec && reviewRec.reviewedAt) {
+            const d = new Date(reviewRec.reviewedAt);
+            if (!Number.isNaN(d.getTime())) {
+                reviewDisplay = {
+                    dateStr: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
+                    timeStr: d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+                    by: reviewRec.reviewedByName || 'Unknown',
+                    title: `${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${reviewRec.reviewedByName || '?'}`
+                };
+            }
+        }
+        const reviewAside = (
+            <div
+                className="flex flex-col items-center gap-0.5 shrink-0 w-[4.75rem] border-l border-slate-200/90 dark:border-slate-600/80 pl-1.5 ml-0.5 pt-0.5"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <label className="flex flex-col items-center gap-0.5 cursor-pointer select-none group/rv">
+                    <input
+                        type="checkbox"
+                        checked={isReviewed}
+                        onChange={(e) => {
+                            e.stopPropagation();
+                            handleToggleNotesReview(section.id, doc.id, month, e.target.checked);
+                        }}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0 dark:border-slate-500"
+                    />
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 group-hover/rv:text-slate-700 dark:text-slate-400">
+                        Reviewed
+                    </span>
+                </label>
+                {reviewDisplay && (
+                    <div
+                        className="text-[8px] text-slate-600 dark:text-slate-400 text-center leading-tight mt-0.5 w-full"
+                        title={reviewDisplay.title}
+                    >
+                        <div className="tabular-nums">{reviewDisplay.dateStr}</div>
+                        <div className="tabular-nums text-slate-500">{reviewDisplay.timeStr}</div>
+                        <div className="font-medium text-slate-700 dark:text-slate-200 truncate max-w-full">{reviewDisplay.by}</div>
+                    </div>
+                )}
+            </div>
+        );
         // Uncontrolled textarea: browser handles all key input (space, enter, etc.) natively.
         // We sync to state on change and save on blur. key resets the field when section/doc/month/year changes.
         const textarea = (
@@ -5041,13 +5173,19 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
             />
         );
+        const notesRow = (
+            <div className="flex flex-row gap-1 items-stretch w-full min-w-0">
+                <div className="flex-1 min-w-0 max-w-[calc(100%-4.875rem)]">{textarea}</div>
+                {reviewAside}
+            </div>
+        );
         if (variant === 'list') {
             return (
                 <div
                     className={`px-2 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-600 ${cellBg} align-top`}
                     role="group"
                 >
-                    {textarea}
+                    {notesRow}
                 </div>
             );
         }
@@ -5057,7 +5195,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 role="gridcell"
                 style={{ minWidth: jsonTrackerNotesColPx, width: jsonTrackerNotesColPx }}
             >
-                {textarea}
+                {notesRow}
             </td>
         );
     };

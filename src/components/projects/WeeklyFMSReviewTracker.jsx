@@ -350,7 +350,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 const keys = [
                     ...Object.keys(doc.collectionStatus || {}),
                     ...Object.keys(doc.comments || {}),
-                    ...Object.keys(doc.notesByWeek || {})
+                    ...Object.keys(doc.notesByWeek || {}),
+                    ...Object.keys(doc.notesReviewByWeek || {})
                 ];
                 keys.forEach(key => {
                     if (!key) return;
@@ -604,7 +605,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         const workingWeekIndex = weeks.findIndex(w => workingWeeks.includes(w.number));
         if (workingWeekIndex < 0) return;
         const STICKY_WIDTH = 300;
-        const WEEK_COLUMN_WIDTH = 360; // Status + Notes per week (2 * 180px)
+        const WEEK_COLUMN_WIDTH = 380; // Status + Notes per week (180px + 200px)
         const targetScrollLeft = Math.max(0, STICKY_WIDTH + workingWeekIndex * WEEK_COLUMN_WIDTH - 80);
         const run = () => {
             const root = scrollSyncRootRef.current;
@@ -1149,7 +1150,8 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 description: doc.description || '',
                 collectionStatus: {},
                 comments: {},
-                notesByWeek: {}
+                notesByWeek: {},
+                notesReviewByWeek: {}
             })) : []
         }));
         
@@ -1575,6 +1577,31 @@ const gridColumns = React.useMemo(() => (
         }
         return next;
     };
+
+    const getNotesReviewForYear = (notesReviewByWeek, week, year = selectedYear) => {
+        if (!notesReviewByWeek || typeof notesReviewByWeek !== 'object') return null;
+        const weekKey = getWeekKey(week, year);
+        if (!weekKey) return null;
+        const v = notesReviewByWeek[weekKey];
+        if (!v || typeof v !== 'object' || !v.reviewedAt) return null;
+        return v;
+    };
+
+    const setNotesReviewForYear = (notesReviewByWeek, week, record, year = selectedYear) => {
+        const weekKey = getWeekKey(week, year);
+        if (!weekKey || !weekKey.includes('-W')) return notesReviewByWeek || {};
+        const next = { ...(notesReviewByWeek && typeof notesReviewByWeek === 'object' ? notesReviewByWeek : {}) };
+        if (!record) {
+            delete next[weekKey];
+        } else {
+            next[weekKey] = {
+                reviewedAt: record.reviewedAt,
+                reviewedByName: record.reviewedByName,
+                reviewedByUserId: record.reviewedByUserId != null ? String(record.reviewedByUserId) : ''
+            };
+        }
+        return next;
+    };
     
     // ============================================================
     // STATUS OPTIONS
@@ -1932,9 +1959,14 @@ const gridColumns = React.useMemo(() => (
                     // Update existing document
                     return {
                         ...section,
-                        documents: section.documents.map(doc => 
+                        documents: section.documents.map(doc =>
 doc.id === editingDocument.id
-                                ? { ...doc, ...documentData, notesByWeek: documentData.notesByWeek ?? doc.notesByWeek ?? {} }
+                                ? {
+                                    ...doc,
+                                    ...documentData,
+                                    notesByWeek: documentData.notesByWeek ?? doc.notesByWeek ?? {},
+                                    notesReviewByWeek: documentData.notesReviewByWeek ?? doc.notesReviewByWeek ?? {}
+                                }
                                 : doc
                         )
                     };
@@ -1946,6 +1978,7 @@ doc.id === editingDocument.id
                         collectionStatus: documentData.collectionStatus || {},
                         comments: documentData.comments || {},
                         notesByWeek: documentData.notesByWeek || {},
+                        notesReviewByWeek: documentData.notesReviewByWeek || {},
                         assignedTo: documentData.assignedTo ?? []
                     };
                     return {
@@ -2296,6 +2329,32 @@ const getAssigneeColor = (identifier, users) => {
                     if (String(doc.id) !== String(documentId)) return doc;
                     const nextNotes = setNotesForYear(doc.notesByWeek || {}, week, text, selectedYear);
                     return { ...doc, notesByWeek: nextNotes };
+                })
+            };
+        });
+        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+    }, [selectedYear, sectionsByYear]);
+
+    const handleToggleNotesReview = useCallback((sectionId, documentId, week, checked) => {
+        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
+            ? sectionsByYear
+            : (sectionsRef.current || {});
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const user = getCurrentUser();
+        const updated = currentYearSections.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: section.documents.map(doc => {
+                    if (String(doc.id) !== String(documentId)) return doc;
+                    const nextReview = setNotesReviewForYear(doc.notesReviewByWeek || {}, week, checked ? {
+                        reviewedAt: new Date().toISOString(),
+                        reviewedByName: user.name || user.email || 'Unknown',
+                        reviewedByUserId: user.id != null ? String(user.id) : ''
+                    } : null, selectedYear);
+                    return { ...doc, notesReviewByWeek: nextReview };
                 })
             };
         });
@@ -2780,7 +2839,22 @@ const getAssigneeColor = (identifier, users) => {
                         }).join('\n\n');
                         row.push(commentsText);
                         
-                        row.push(getNotesForYear(doc.notesByWeek, week, selectedYear) || '');
+                        let notesExport = getNotesForYear(doc.notesByWeek, week, selectedYear) || '';
+                        const notesRev = getNotesReviewForYear(doc.notesReviewByWeek, week, selectedYear);
+                        if (notesRev && notesRev.reviewedAt) {
+                            const rd = new Date(notesRev.reviewedAt);
+                            const stamp = Number.isNaN(rd.getTime())
+                                ? notesRev.reviewedAt
+                                : rd.toLocaleString('en-ZA', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+                            notesExport = `${notesExport}${notesExport ? '\n' : ''}[Reviewed ${stamp} by ${notesRev.reviewedByName || '?'}]`;
+                        }
+                        row.push(notesExport);
                     });
                     
                     excelData.push(row);
@@ -3578,45 +3652,95 @@ const baseTextColorClass = statusConfig && statusConfig.color
         const isEditing = editingNotesCell === cellKey;
         const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
         const cellBg = statusConfig?.cellColor || (isWorkingWeek ? 'bg-primary-50' : '');
+        const reviewRec = getNotesReviewForYear(doc.notesReviewByWeek, week, selectedYear);
+        const isReviewed = !!(reviewRec && reviewRec.reviewedAt);
+        let reviewDisplay = null;
+        if (reviewRec && reviewRec.reviewedAt) {
+            const d = new Date(reviewRec.reviewedAt);
+            if (!Number.isNaN(d.getTime())) {
+                reviewDisplay = {
+                    dateStr: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
+                    timeStr: d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+                    by: reviewRec.reviewedByName || 'Unknown',
+                    title: `${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${reviewRec.reviewedByName || '?'}`
+                };
+            }
+        }
+        const reviewAside = (
+            <div
+                className="flex flex-col items-center gap-0.5 shrink-0 w-[4.75rem] border-l border-slate-200/90 pl-1.5 ml-0.5 pt-0.5"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <label className="flex flex-col items-center gap-0.5 cursor-pointer select-none group/rv">
+                    <input
+                        type="checkbox"
+                        checked={isReviewed}
+                        onChange={(e) => {
+                            e.stopPropagation();
+                            handleToggleNotesReview(section.id, doc.id, week, e.target.checked);
+                        }}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0"
+                    />
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 group-hover/rv:text-slate-700">
+                        Reviewed
+                    </span>
+                </label>
+                {reviewDisplay && (
+                    <div
+                        className="text-[8px] text-slate-600 text-center leading-tight mt-0.5 w-full"
+                        title={reviewDisplay.title}
+                    >
+                        <div className="tabular-nums">{reviewDisplay.dateStr}</div>
+                        <div className="tabular-nums text-slate-500">{reviewDisplay.timeStr}</div>
+                        <div className="font-medium text-slate-700 truncate max-w-full">{reviewDisplay.by}</div>
+                    </div>
+                )}
+            </div>
+        );
         return (
             <td
                 className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
                 role="gridcell"
-                style={{ minWidth: '180px', width: '180px' }}
+                style={{ minWidth: '200px', width: '200px' }}
             >
-                {isEditing ? (
-                    <textarea
-                        ref={notesInputRef}
-                        key={`notes-edit-${cellKey}`}
-                        defaultValue={notes}
-                        onChange={(e) => handleUpdateNotes(section.id, doc.id, week, e.target.value)}
-                        onBlur={() => {
-                            setEditingNotesCell(null);
-                            lastSavedDataRef.current = null;
-                            if (saveTimeoutRef.current) {
-                                clearTimeout(saveTimeoutRef.current);
-                                saveTimeoutRef.current = null;
-                            }
-                            saveToDatabase();
-                        }}
-placeholder="Notes..."
-                    rows={2}
-                    className="w-full min-w-0 px-2 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
-                        aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
-                        onClick={(e) => e.stopPropagation()}
-                    />
-                ) : (
-                    <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => { e.stopPropagation(); setEditingNotesCell(cellKey); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingNotesCell(cellKey); } }}
-                        className={`min-h-[3rem] w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
-                        title="Click to edit"
-                    >
-                        {notes ? linkifyNotes(notes) : 'Notes...'}
+                <div className="flex flex-row gap-1 items-stretch w-full">
+                    <div className="flex-1 min-w-0 max-w-[calc(100%-4.875rem)]">
+                        {isEditing ? (
+                            <textarea
+                                ref={notesInputRef}
+                                key={`notes-edit-${cellKey}`}
+                                defaultValue={notes}
+                                onChange={(e) => handleUpdateNotes(section.id, doc.id, week, e.target.value)}
+                                onBlur={() => {
+                                    setEditingNotesCell(null);
+                                    lastSavedDataRef.current = null;
+                                    if (saveTimeoutRef.current) {
+                                        clearTimeout(saveTimeoutRef.current);
+                                        saveTimeoutRef.current = null;
+                                    }
+                                    saveToDatabase();
+                                }}
+                                placeholder="Notes..."
+                                rows={2}
+                                className="w-full min-w-0 px-2 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
+                                aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        ) : (
+                            <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => { e.stopPropagation(); setEditingNotesCell(cellKey); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingNotesCell(cellKey); } }}
+                                className={`min-h-[3rem] w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
+                                title="Click to edit"
+                            >
+                                {notes ? linkifyNotes(notes) : 'Notes...'}
+                            </div>
+                        )}
                     </div>
-                )}
+                    {reviewAside}
+                </div>
             </td>
         );
     };
@@ -5001,7 +5125,7 @@ placeholder="Notes..."
                                                             className={`px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
                                                                 isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
                                                             }`}
-                                                            style={{ minWidth: '180px', width: '180px' }}
+                                                            style={{ minWidth: '200px', width: '200px' }}
                                                         >
                                                             Notes
                                                         </th>
