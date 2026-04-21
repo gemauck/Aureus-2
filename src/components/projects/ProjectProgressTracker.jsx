@@ -718,9 +718,18 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return false;
     };
 
+    const shouldExcludeFromMonthlyDataReviewPercent = (docName) => {
+        const name = String(docName || '').trim().toLowerCase();
+        if (!name) return false;
+        return /post\s*processing|post\s*process|prost\s*process/i.test(name);
+    };
+
     const getReviewProgressForMonth = (project, monthName, reviewType) => {
         const safeYear = Number(selectedYear) || currentYear;
-        const monthKey = `${String(monthName || '')}-${String(safeYear)}`;
+        const monthIdx = months.indexOf(monthName);
+        const monthNum = monthIdx >= 0 ? monthIdx + 1 : null;
+        const isoMonthKey = monthNum != null ? `${safeYear}-${String(monthNum).padStart(2, '0')}` : null;
+        const legacyMonthKey = `${String(monthName || '')}-${String(safeYear)}`;
         const sectionsField = reviewType === 'complianceReview' ? project?.complianceReviewSections : project?.monthlyDataReviewSections;
         const yearSections = getSectionsForYear(sectionsField, safeYear);
 
@@ -733,8 +742,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         yearSections.forEach((section) => {
             const docs = Array.isArray(section?.documents) ? section.documents : [];
             docs.forEach((doc) => {
+                if (reviewType === 'monthlyDataReview' && shouldExcludeFromMonthlyDataReviewPercent(doc?.name)) {
+                    return;
+                }
                 total += 1;
-                const rawStatus = doc?.collectionStatus?.[monthKey];
+                const rawStatus =
+                    (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
+                    doc?.collectionStatus?.[legacyMonthKey];
                 if (isCompletedReviewStatus(reviewType, rawStatus)) {
                     completed += 1;
                 }

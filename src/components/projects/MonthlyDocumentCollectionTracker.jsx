@@ -2326,8 +2326,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (!isMonthlyDataReview || !doc) return false;
         const name = String(doc?.name || '').trim().toLowerCase();
         if (!name) return false;
-        // Requested: exclude Post/Prost Process from Monthly Data Review %.
-        return name.includes('post process') || name.includes('prost process');
+        // Requested: exclude Post/Prost Process(ing) from Monthly Data Review %.
+        return /post\s*processing|post\s*process|prost\s*process/i.test(name);
     }
 
     const monthCompletionByIndex = useMemo(() => {
