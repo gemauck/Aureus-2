@@ -509,6 +509,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [deletingJobCardId, setDeletingJobCardId] = useState(null);
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [photoLightboxUrl, setPhotoLightboxUrl] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   /** Checklist / service form instances for the open detail view (GET /api/jobcards/:id/forms). */
   const [detailServiceForms, setDetailServiceForms] = useState([]);
@@ -832,6 +833,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     return date.toLocaleString();
   };
 
+  const closePhotoLightbox = useCallback(() => {
+    setPhotoLightboxUrl('');
+  }, []);
+
   const formatJobCardActivityAction = (action) => {
     const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
     if (h && typeof h.formatJobCardActivityAction === 'function') {
@@ -1107,6 +1112,17 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       console.error('❌ JobCards.jsx: Error registering global API:', error);
     }
   }, [handleNewJobCard]);
+
+  useEffect(() => {
+    if (!photoLightboxUrl) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        closePhotoLightbox();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [photoLightboxUrl, closePhotoLightbox]);
 
   return (
     <div className={`relative mt-6 rounded-2xl shadow-sm overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
@@ -2430,15 +2446,22 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         return (
                           <figure
                             key={idx}
-                            className="group relative overflow-hidden rounded-xl bg-slate-800"
+                            className="group relative h-28 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950 sm:h-32"
                           >
-                            <img
-                              src={url}
-                              alt={`Job card photo ${idx + 1}`}
-                              className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                              loading="lazy"
-                              decoding="async"
-                            />
+                            <button
+                              type="button"
+                              onClick={() => setPhotoLightboxUrl(url)}
+                              className="h-full w-full cursor-zoom-in"
+                              title="Open full photo"
+                            >
+                              <img
+                                src={url}
+                                alt={`Job card photo ${idx + 1}`}
+                                className="h-full w-full object-contain p-1 transition-transform duration-200 group-hover:scale-[1.02]"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            </button>
                           </figure>
                         );
                       })}
@@ -2520,6 +2543,30 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           </div>
         </div>
       )}
+      {photoLightboxUrl ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4 sm:p-6"
+          onClick={closePhotoLightbox}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo preview"
+        >
+          <button
+            type="button"
+            className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+            onClick={closePhotoLightbox}
+            aria-label="Close photo preview"
+          >
+            <i className="fa-solid fa-xmark" />
+          </button>
+          <img
+            src={photoLightboxUrl}
+            alt="Full-size job card photo"
+            className="max-h-[92vh] max-w-[96vw] rounded-lg object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
       {/* Classic manager modal for creating / editing job cards */}
       {window.JobCardModal ? (
         <window.JobCardModal

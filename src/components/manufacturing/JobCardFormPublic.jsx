@@ -3841,6 +3841,30 @@ const JobCardFormPublic = () => {
     }
   };
 
+  const handleDeleteLocalDraft = useCallback(
+    draftCard => {
+      if (!draftCard) return;
+      const draftId = draftCard.id;
+      if (draftId == null) return;
+      const normalizedStatus = String(draftCard.status || '').trim().toLowerCase();
+      if (normalizedStatus && normalizedStatus !== 'draft') return;
+      const title =
+        String(draftCard.jobCardNumber || '').trim() ||
+        String(draftCard.heading || parseHeadingFromComments(draftCard.otherComments || '') || '').trim() ||
+        'this draft';
+      let confirmed = true;
+      try {
+        confirmed = window.confirm(`Delete ${title}? This local draft will be removed from this device.`);
+      } catch {
+        confirmed = true;
+      }
+      if (!confirmed) return;
+      removeLocalPendingJobCard(draftId);
+      setLocalDraftsTick(t => t + 1);
+    },
+    [setLocalDraftsTick]
+  );
+
   useEffect(() => {
     if (wizardFlow !== 'stock_take') return;
     if (stockTakeSessionId) return;
@@ -6123,6 +6147,8 @@ const JobCardFormPublic = () => {
                 const headingShort = abbreviateHeading(headingLabel);
                 const clientLine = (jc.clientName && String(jc.clientName).trim()) || '—';
                 const isLocalPending = jc.source === 'local' || jc.synced === false;
+                const canDeleteLocalDraft =
+                  isLocalPending && String(jc.status || 'draft').trim().toLowerCase() === 'draft';
                 return (
                   <li key={`${jc.source || 'local'}-${getPriorCardOpenId(jc) || String(jc.id ?? 'row')}`}>
                     <button
@@ -6152,6 +6178,21 @@ const JobCardFormPublic = () => {
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {canDeleteLocalDraft ? (
+                            <button
+                              type="button"
+                              aria-label="Delete local draft"
+                              title="Delete local draft"
+                              onClick={e => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteLocalDraft(jc);
+                              }}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 touch-manipulation"
+                            >
+                              <i className="fa-regular fa-trash-can text-xs" aria-hidden />
+                            </button>
+                          ) : null}
                           {isLocalPending ? (
                             <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
                               Not synced
