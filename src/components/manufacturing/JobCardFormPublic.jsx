@@ -6049,7 +6049,13 @@ const JobCardFormPublic = () => {
             : undefined
         }
         aria-label="Scan inventory QR code"
-        className="job-card-stock-take-scan-fab pointer-events-auto fixed z-[80] inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation right-4 max-sm:right-3 bottom-[max(1rem,env(safe-area-inset-bottom,0px))] sm:bottom-6"
+        className="job-card-stock-take-scan-fab pointer-events-auto inline-flex items-center gap-2 rounded-full border border-blue-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+        style={{
+          position: 'fixed',
+          right: '1rem',
+          bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
+          zIndex: 1200
+        }}
       >
         <i className="fa-solid fa-camera text-base" aria-hidden />
         Scan QR
