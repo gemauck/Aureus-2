@@ -7761,7 +7761,12 @@ Abcotronics`;
                             }
                         }
                     }
-                    const commentRows = localComments.map((c) => ({
+                    const commentRows = localComments
+                        .filter((c) => {
+                            const author = (c?.author || '').trim();
+                            return author !== 'Sent request (platform)' && author !== 'Sent reply (platform)';
+                        })
+                        .map((c) => ({
                         id: `comment-${c.id}`,
                         kind: 'comment',
                         commentId: c.id,

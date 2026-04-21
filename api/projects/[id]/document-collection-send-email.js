@@ -368,7 +368,6 @@ async function handler(req, res) {
       : typeof html === 'string' && html
         ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
         : ''
-    const commentText = `Subject: ${(subject || '').slice(0, 500)}\n\n${bodyForStorage}`
     const toEmailsJson = JSON.stringify(validTo.map((e) => e.trim()))
     const ccEmailsJson = JSON.stringify(validCc.map((e) => e.trim()))
     if (sent.length > 0 && cell) {
@@ -421,22 +420,12 @@ async function handler(req, res) {
         }
       }
       if (!activityPersisted) {
-        try {
-          await prisma.documentItemComment.create({
-            data: {
-              itemId: cell.documentId,
-              year: cell.year,
-              month: cell.month,
-              text: commentText,
-              author: isReplyPersist ? 'Sent reply (platform)' : 'Sent request (platform)'
-            }
-          })
-          activityPersisted = true
-          savedCellInfo = { documentId: cell.documentId, month: cell.month, year: cell.year }
-          console.log('document-collection-send-email: activity fallback saved as comment', { documentId: cell.documentId, month: cell.month, year: cell.year })
-        } catch (commentErr) {
-          console.error('document-collection-send-email: fallback comment create failed:', commentErr.message, { documentId: cell.documentId, month: cell.month, year: cell.year })
-        }
+        warning = 'Email sent but could not be saved to email activity. Please refresh and retry if needed.'
+        console.error('document-collection-send-email: email activity log not persisted', {
+          documentId: cell.documentId,
+          month: cell.month,
+          year: cell.year
+        })
       }
 
       if (messageIdForReply) {
@@ -541,23 +530,8 @@ async function handler(req, res) {
           warning = 'Email sent, but activity context was reconstructed. Please verify the activity list.'
           console.log('document-collection-send-email: activity log created via fallback', { logId: log.id, projectId: fallbackCell.projectId, documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year })
         } catch (fallbackLogErr) {
-          try {
-            await prisma.documentItemComment.create({
-              data: {
-                itemId: fallbackCell.documentId,
-                year: fallbackCell.year,
-                month: fallbackCell.month,
-                text: commentText,
-                author: 'Sent request (platform)'
-              }
-            })
-            activityPersisted = true
-            savedCellInfo = { documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year }
-            warning = 'Email sent, activity saved as comment fallback.'
-            console.log('document-collection-send-email: activity fallback comment saved via fallback cell', { documentId: fallbackCell.documentId, month: fallbackCell.month, year: fallbackCell.year })
-          } catch (fallbackCommentErr) {
-            console.error('document-collection-send-email: fallback comment create failed:', fallbackCommentErr.message, { projectId, documentId })
-          }
+          warning = 'Email sent but could not be saved to email activity.'
+          console.error('document-collection-send-email: fallback email activity log create failed:', fallbackLogErr.message, { projectId, documentId })
         }
       } else {
         warning = 'Email sent but activity could not be saved (missing document/month/year).'

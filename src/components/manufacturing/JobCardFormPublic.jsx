@@ -5945,7 +5945,7 @@ const JobCardFormPublic = () => {
                     })
                   : '';
                 const num = jc.jobCardNumber || (jc.clientName ? 'Job card' : 'Job card draft');
-                const categoryLabel = String(jc.callOutCategory || '').trim() || 'Insert Category';
+                const categoryLabel = String(jc.callOutCategory || jc.category || '').trim();
                 const clientLine = (jc.clientName && String(jc.clientName).trim()) || '—';
                 const siteLine = (jc.siteName && String(jc.siteName).trim()) || '—';
                 const creatorLine =
@@ -5967,7 +5967,9 @@ const JobCardFormPublic = () => {
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-gray-900 truncate">
                             {num}
-                            <span className="ml-2 font-medium text-gray-500">- {categoryLabel}</span>
+                            {categoryLabel ? (
+                              <span className="ml-2 font-medium text-gray-500">- {categoryLabel}</span>
+                            ) : null}
                           </p>
                           <p className="text-sm text-gray-700 mt-1 leading-snug">
                             <span className="text-gray-500">Client</span>{' '}
