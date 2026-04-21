@@ -2331,18 +2331,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             /post\s*processing|post\s*process|prost\s*process/i.test(docName);
     }
 
-    const monthCompletionBySectionAndIndex = useMemo(() => {
+    const monthCompletionByIndex = useMemo(() => {
         if (!Array.isArray(months) || months.length === 0) return {};
 
         const completionMap = {};
-        (sections || []).forEach((section, sectionIdx) => {
-            const sectionKey = String(section?.id ?? `section-${sectionIdx}`);
-            const sectionMonthMap = {};
+        months.forEach((monthLabel, monthIdx) => {
+            let total = 0;
+            let completed = 0;
 
-            months.forEach((monthLabel, monthIdx) => {
-                let total = 0;
-                let completed = 0;
-
+            (sections || []).forEach((section) => {
                 (section?.documents || []).forEach((doc) => {
                     if (shouldExcludeFromMonthlyDataReviewPercent(section, doc)) {
                         return;
@@ -2353,12 +2350,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         completed += 1;
                     }
                 });
-
-                const percent = total > 0 ? Math.round((completed / total) * 100) : null;
-                sectionMonthMap[monthIdx] = { completed, total, percent };
             });
 
-            completionMap[sectionKey] = sectionMonthMap;
+            const percent = total > 0 ? Math.round((completed / total) * 100) : null;
+            completionMap[monthIdx] = { completed, total, percent };
         });
 
         return completionMap;
@@ -8699,11 +8694,7 @@ Abcotronics`;
                                                                     <span>{month.slice(0, 3)}</span>
                                                                     <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
                                                                     <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
-                                                                        {(() => {
-                                                                            const sectionKey = String(section?.id ?? `section-${sectionIndex}`);
-                                                                            const pct = monthCompletionBySectionAndIndex[sectionKey]?.[idx]?.percent;
-                                                                            return pct != null ? `${pct}% complete` : '--';
-                                                                        })()}
+                                                                        {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -8766,11 +8757,7 @@ Abcotronics`;
                                                         <span>{month.slice(0, 3)}</span>
                                                         <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
                                                         <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
-                                                            {(() => {
-                                                                const sectionKey = String(section?.id ?? `section-${sectionIndex}`);
-                                                                const pct = monthCompletionBySectionAndIndex[sectionKey]?.[idx]?.percent;
-                                                                return pct != null ? `${pct}% complete` : '--';
-                                                            })()}
+                                                            {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
                                                         </span>
                                                     </div>
                                                 </th>
