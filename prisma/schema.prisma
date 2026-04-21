@@ -559,6 +559,14 @@ model Project {
   @@index([createdAt])
 }
 
+/// Markers for one-off SQL shipped in repo (e.g. Progress Tracker allowlist). Keeps prisma db push from dropping the table.
+model ErpDataMigration {
+  id        String   @id
+  appliedAt DateTime @default(now()) @map("appliedAt")
+
+  @@map("_erp_data_migrations")
+}
+
 model ProjectTaskList {
   id        String   @id @default(cuid())
   projectId String
