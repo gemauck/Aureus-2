@@ -176,7 +176,15 @@ function partitionJobCardAttachments(photosInput, opts = {}) {
 }
 
 /** SafetyCulture media: backend proxy (refreshes tokens via issue_id when stale). */
-function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, idx, issueId }) {
+function JobCardSafetyCultureThumbnail({
+  mediaId,
+  token,
+  mediaType,
+  filename,
+  idx,
+  issueId,
+  onPreview
+}) {
   const [retryTick, setRetryTick] = useState(0);
   const [err, setErr] = useState(null);
   const [resolvedSrc, setResolvedSrc] = useState(null);
@@ -293,21 +301,30 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
         />
       ) : null}
       {canRender && !isVideo && resolvedSrc ? (
-        <figure className="group relative overflow-hidden bg-slate-800">
-                          <img
-                            src={resolvedSrc}
-                            alt={`SafetyCulture attachment ${idx + 1}`}
-                            className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                            loading="lazy"
-                            decoding="async"
-                            onError={() => {
-              if (retryTick < 2) {
-                setRetryTick((n) => n + 1);
-                return;
-              }
-              setErr('Could not load media');
+        <figure className="group relative h-28 overflow-hidden bg-slate-900 sm:h-32">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof onPreview === 'function') onPreview(resolvedSrc);
             }}
-          />
+            className="h-full w-full cursor-zoom-in"
+            title="Open full image"
+          >
+            <img
+              src={resolvedSrc}
+              alt={`SafetyCulture attachment ${idx + 1}`}
+              className="h-full w-full object-contain p-1 transition-transform duration-200 group-hover:scale-[1.02]"
+              loading="lazy"
+              decoding="async"
+              onError={() => {
+                if (retryTick < 2) {
+                  setRetryTick((n) => n + 1);
+                  return;
+                }
+                setErr('Could not load media');
+              }}
+            />
+          </button>
         </figure>
       ) : null}
       {canRender && !resolvedSrc && !err ? (
@@ -321,7 +338,7 @@ function JobCardSafetyCultureThumbnail({ mediaId, token, mediaType, filename, id
 }
 
 /** Photos/videos saved for one narrative block (public wizard: kind sectionMedia). Shown under Diagnosis / Actions / Future work. */
-function JobCardInlineSectionMediaStrip({ items, issueId }) {
+function JobCardInlineSectionMediaStrip({ items, issueId, onPreview }) {
   if (!items || items.length === 0) return null;
   return (
     <div className="mt-3">
@@ -339,6 +356,7 @@ function JobCardInlineSectionMediaStrip({ items, issueId }) {
                 filename={item.filename || 'media'}
                 issueId={issueId}
                 idx={item.idx}
+                onPreview={onPreview}
               />
             );
           }
@@ -357,8 +375,23 @@ function JobCardInlineSectionMediaStrip({ items, issueId }) {
             );
           }
           return (
-            <figure key={key} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
-              <img src={url} alt="" className="h-28 w-full object-cover" loading="lazy" decoding="async" />
+            <figure key={key} className="h-28 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 sm:h-32">
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof onPreview === 'function') onPreview(url);
+                }}
+                className="h-full w-full cursor-zoom-in"
+                title="Open full image"
+              >
+                <img
+                  src={url}
+                  alt=""
+                  className="h-full w-full object-contain p-1"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </button>
             </figure>
           );
         })}
@@ -1946,6 +1979,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <JobCardInlineSectionMediaStrip
                         items={attachmentParts.visualItemsBySection?.diagnosis}
                         issueId={selectedJobCard.safetyCultureIssueId}
+                        onPreview={setPhotoLightboxUrl}
                       />
                       <JobCardVoiceClips
                         tone="dark"
@@ -1962,6 +1996,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <JobCardInlineSectionMediaStrip
                         items={attachmentParts.visualItemsBySection?.actionsTaken}
                         issueId={selectedJobCard.safetyCultureIssueId}
+                        onPreview={setPhotoLightboxUrl}
                       />
                       <JobCardVoiceClips
                         tone="dark"
@@ -1986,6 +2021,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         <JobCardInlineSectionMediaStrip
                           items={attachmentParts.visualItemsBySection?.futureWorkRequired}
                           issueId={selectedJobCard.safetyCultureIssueId}
+                          onPreview={setPhotoLightboxUrl}
                         />
                         <JobCardVoiceClips
                           tone="dark"
@@ -2559,6 +2595,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           >
             <i className="fa-solid fa-xmark" />
           </button>
+          <a
+            href={photoLightboxUrl}
+            download
+            className="absolute left-3 top-3 inline-flex h-9 items-center gap-2 rounded-full bg-white/15 px-3 text-sm font-medium text-white hover:bg-white/25"
+            onClick={(event) => event.stopPropagation()}
+            aria-label="Download photo"
+          >
+            <i className="fa-solid fa-download" />
+            <span>Download</span>
+          </a>
           <img
             src={photoLightboxUrl}
             alt="Full-size job card photo"

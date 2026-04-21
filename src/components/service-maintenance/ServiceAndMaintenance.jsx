@@ -69,7 +69,16 @@ function parseHeadingFromComments(rawComments) {
 }
 
 /** Same as manufacturing JobCards: SC media via authenticated fetch (img/video cannot send Bearer headers). */
-function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filename, idx, isDark, issueId }) {
+function JobCardSafetyCultureThumbnailService({
+  mediaId,
+  token,
+  mediaType,
+  filename,
+  idx,
+  isDark,
+  issueId,
+  onPreview
+}) {
   const [retryTick, setRetryTick] = useState(0);
   const [err, setErr] = useState(null);
   const [resolvedSrc, setResolvedSrc] = useState(null);
@@ -190,21 +199,30 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
         />
       ) : null}
       {canRender && !isVideo && resolvedSrc ? (
-        <figure className={`group relative overflow-hidden ${figBg}`}>
-          <img
-            src={resolvedSrc}
-            alt={`SafetyCulture attachment ${idx + 1}`}
-            className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
-            loading="lazy"
-            decoding="async"
-            onError={() => {
-              if (retryTick < 2) {
-                setRetryTick((n) => n + 1);
-                return;
-              }
-              setErr('Could not load media');
+        <figure className={`group relative h-28 overflow-hidden sm:h-32 ${figBg}`}>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof onPreview === 'function') onPreview(resolvedSrc);
             }}
-          />
+            className="h-full w-full cursor-zoom-in"
+            title="Open full image"
+          >
+            <img
+              src={resolvedSrc}
+              alt={`SafetyCulture attachment ${idx + 1}`}
+              className="h-full w-full object-contain p-1 transition-transform duration-200 group-hover:scale-[1.02]"
+              loading="lazy"
+              decoding="async"
+              onError={() => {
+                if (retryTick < 2) {
+                  setRetryTick((n) => n + 1);
+                  return;
+                }
+                setErr('Could not load media');
+              }}
+            />
+          </button>
         </figure>
       ) : null}
       {canRender && !resolvedSrc && !err ? (
@@ -218,7 +236,7 @@ function JobCardSafetyCultureThumbnailService({ mediaId, token, mediaType, filen
 }
 
 /** Section-scoped photos (public job card sectionMedia) — matches JobCards JobCardInlineSectionMediaStrip. */
-function JobCardInlineSectionMediaStripService({ items, isDark, issueId }) {
+function JobCardInlineSectionMediaStripService({ items, isDark, issueId, onPreview }) {
   if (!items || items.length === 0) return null;
   const isVidFn = window.JobCardAttachmentUtils?.jobCardAttachmentUrlIsVideo;
   const labelCls = isDark ? 'text-gray-500' : 'text-gray-500';
@@ -239,6 +257,7 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId }) {
                 issueId={issueId}
                 idx={item.idx}
                 isDark={isDark}
+                onPreview={onPreview}
               />
             );
           }
@@ -263,9 +282,26 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId }) {
           return (
             <figure
               key={key}
-              className={`overflow-hidden rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}
+              className={`h-28 overflow-hidden rounded-xl border sm:h-32 ${
+                isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-100'
+              }`}
             >
-              <img src={url} alt="" className="h-28 w-full object-cover" loading="lazy" decoding="async" />
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof onPreview === 'function') onPreview(url);
+                }}
+                className="h-full w-full cursor-zoom-in"
+                title="Open full image"
+              >
+                <img
+                  src={url}
+                  alt=""
+                  className="h-full w-full object-contain p-1"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </button>
             </figure>
           );
         })}
@@ -316,6 +352,8 @@ const ServiceAndMaintenance = () => {
     typeof window !== 'undefined' && !!window.ServiceFormsManager
   );
   const [adminExtrasOpen, setAdminExtrasOpen] = useState(false);
+  const [createJobCardMenuOpen, setCreateJobCardMenuOpen] = useState(false);
+  const createJobCardMenuRef = useRef(null);
 
   // Load clients and users for JobCards (parallel — was sequential and added ~1–2× latency)
   useEffect(() => {
@@ -386,6 +424,27 @@ const ServiceAndMaintenance = () => {
       clearInterval(interval);
     };
   }, [jobCardsReady]);
+
+  useEffect(() => {
+    if (!createJobCardMenuOpen) return undefined;
+    const handleClickOutside = (event) => {
+      const root = createJobCardMenuRef.current;
+      if (!root) return;
+      if (root.contains(event.target)) return;
+      setCreateJobCardMenuOpen(false);
+    };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setCreateJobCardMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [createJobCardMenuOpen]);
 
   // Poll for ServiceFormsManager registration so the "Open form builder"
   // button never appears to do nothing if the script loads slightly later.
@@ -1524,6 +1583,20 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
     }
   };
 
+  const openClassicJobCardEditor = useCallback(() => {
+    if (window.JobCards?.openNewJobCardModal) {
+      window.JobCards.openNewJobCardModal();
+    } else {
+      window.dispatchEvent(new Event('jobcards:open'));
+    }
+    setCreateJobCardMenuOpen(false);
+  }, []);
+
+  const openJobCardWizard = useCallback(() => {
+    window.open('/job-card', '_blank', 'noopener,noreferrer');
+    setCreateJobCardMenuOpen(false);
+  }, []);
+
   return (
     <div className="erp-module-root relative min-w-0 max-w-full px-3 py-4 sm:p-6">
       <div className="flex flex-col gap-6 mb-6">
@@ -1568,20 +1641,76 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               <i className="fa-solid fa-mobile-screen-button text-sm" />
               Open mobile job card
             </a>
-            <button
-              type="button"
-              onClick={() => {
-                if (window.JobCards?.openNewJobCardModal) {
-                  window.JobCards.openNewJobCardModal();
-                } else {
-                  window.dispatchEvent(new Event('jobcards:open'));
-                }
-              }}
-              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors ${isDark ? 'border-gray-700 bg-gray-800/80 text-gray-100 hover:bg-gray-800' : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'}`}
-            >
-              <i className="fa-solid fa-plus text-xs" />
-              New job card
-            </button>
+            <div className="relative inline-flex" ref={createJobCardMenuRef}>
+              <button
+                type="button"
+                onClick={() => setCreateJobCardMenuOpen((prev) => !prev)}
+                className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors ${isDark ? 'border-gray-700 bg-gray-800/80 text-gray-100 hover:bg-gray-800' : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'}`}
+                aria-expanded={createJobCardMenuOpen}
+                aria-haspopup="menu"
+              >
+                <i className="fa-solid fa-plus text-xs" />
+                Create job card
+                <i className="fa-solid fa-chevron-down text-[10px]" />
+              </button>
+              {createJobCardMenuOpen ? (
+                <div
+                  className={`absolute left-0 top-[calc(100%+8px)] z-20 w-72 rounded-xl border p-1.5 shadow-xl ${
+                    isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
+                  }`}
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    onClick={openClassicJobCardEditor}
+                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
+                    }`}
+                    role="menuitem"
+                  >
+                    <i className="fa-solid fa-table-columns mt-0.5 text-xs" />
+                    <span>
+                      <span className="block font-medium">Classic Job Card Editor</span>
+                      <span className={`block text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Existing full editor in the Job Cards manager.
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openClassicJobCardEditor}
+                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
+                    }`}
+                    role="menuitem"
+                  >
+                    <i className="fa-solid fa-list-check mt-0.5 text-xs" />
+                    <span>
+                      <span className="block font-medium">Mobile-Field Editor</span>
+                      <span className={`block text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Same field set as the mobile job card app.
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openJobCardWizard}
+                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
+                    }`}
+                    role="menuitem"
+                  >
+                    <i className="fa-solid fa-wand-magic-sparkles mt-0.5 text-xs" />
+                    <span>
+                      <span className="block font-medium">Job Card Wizard</span>
+                      <span className={`block text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Open the mobile wizard flow in a new tab.
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={handleOpenClassic}
@@ -1996,6 +2125,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         items={attachmentParts.visualItemsBySection?.diagnosis}
                         isDark={isDark}
                         issueId={selectedJobCard.safetyCultureIssueId}
+                        onPreview={setPhotoLightboxUrl}
                       />
                       {DetailVoice ? (
                         <DetailVoice items={attachmentParts.voicesBySection.diagnosis} />
@@ -2012,6 +2142,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         items={attachmentParts.visualItemsBySection?.actionsTaken}
                         isDark={isDark}
                         issueId={selectedJobCard.safetyCultureIssueId}
+                        onPreview={setPhotoLightboxUrl}
                       />
                       {DetailVoice ? (
                         <DetailVoice items={attachmentParts.voicesBySection.actionsTaken} />
@@ -2033,6 +2164,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         items={attachmentParts.visualItemsBySection?.futureWorkRequired}
                         isDark={isDark}
                         issueId={selectedJobCard.safetyCultureIssueId}
+                        onPreview={setPhotoLightboxUrl}
                       />
                       {DetailVoice ? (
                         <DetailVoice items={attachmentParts.voicesBySection.futureWorkRequired} />
@@ -2686,6 +2818,16 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
           >
             <i className="fa-solid fa-xmark" />
           </button>
+          <a
+            href={photoLightboxUrl}
+            download
+            className="absolute left-3 top-3 inline-flex h-9 items-center gap-2 rounded-full bg-white/15 px-3 text-sm font-medium text-white hover:bg-white/25"
+            onClick={(event) => event.stopPropagation()}
+            aria-label="Download photo"
+          >
+            <i className="fa-solid fa-download" />
+            <span>Download</span>
+          </a>
           <img
             src={photoLightboxUrl}
             alt="Full-size job card photo"
