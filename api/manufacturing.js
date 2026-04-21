@@ -64,6 +64,61 @@ function normalizeProductionOrderStatus(status, fallback = 'requested') {
   return VALID_PRODUCTION_ORDER_STATUSES.has(normalized) ? normalized : null
 }
 
+function parseFiniteNumber(value, fallback = 0) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function parseNonNegativeFiniteNumber(value, fieldName) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) {
+    throw httpError(400, `${fieldName} must be a finite number >= 0`)
+  }
+  return n
+}
+
+function normalizeBomComponentsForCost(rawComponents = []) {
+  if (!Array.isArray(rawComponents)) return { components: [], totalMaterialCost: 0 }
+  let totalMaterialCost = 0
+  const components = rawComponents.map((component, idx) => {
+    const qty = parseFiniteNumber(component?.quantity, 0)
+    const unitCost = parseFiniteNumber(component?.unitCost, 0)
+    const totalCost = qty > 0 && unitCost >= 0 ? qty * unitCost : 0
+    totalMaterialCost += totalCost
+    return {
+      ...component,
+      id: component?.id || `component_${idx}`,
+      quantity: qty,
+      unitCost,
+      totalCost
+    }
+  })
+  return { components, totalMaterialCost }
+}
+
+function buildMovementId() {
+  const stamp = Date.now().toString(36).toUpperCase()
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase()
+  return `MOV-${stamp}-${rand}`
+}
+
+async function createStockMovementTxWithRetry(tx, payload) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await tx.stockMovement.create({
+        data: {
+          ...payload,
+          movementId: payload.movementId || buildMovementId()
+        }
+      })
+    } catch (error) {
+      if (error?.code === 'P2002') continue
+      throw error
+    }
+  }
+  throw new Error('Could not allocate a unique movementId')
+}
+
 /**
  * Activity list date filter: YYYY-MM-DD is interpreted as whole UTC calendar days; other strings use Date parsing.
  */
@@ -202,13 +257,6 @@ async function allocateStockCountSkuTx(tx) {
   throw new Error('Could not allocate a unique stock-count SKU')
 }
 
-async function nextMovementSeqStartTx(tx) {
-  const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-  if (!lastMovement?.movementId?.startsWith('MOV')) return 1
-  const n = parseInt(lastMovement.movementId.replace('MOV', ''), 10)
-  return Number.isFinite(n) ? n + 1 : 1
-}
-
 /**
  * Apply one adjustment at a location: StockMovement row, LocationInventory delta, InventoryItem aggregate.
  * Mirrors POST stock-movements adjustment branch for use by stock-count import.
@@ -216,7 +264,6 @@ async function nextMovementSeqStartTx(tx) {
 async function applyStockCountAdjustmentTx(tx, params) {
   const {
     req,
-    movementSeqRef,
     sku,
     itemName,
     quantityDelta,
@@ -236,7 +283,7 @@ async function applyStockCountAdjustmentTx(tx, params) {
   if (!sku || !String(sku).trim()) throw new Error('sku required')
   if (quantityDelta === 0) return { movement: null, item: null }
 
-  const movementId = `MOV${String(movementSeqRef.n++).padStart(4, '0')}`
+  const movementId = buildMovementId()
   const qty = quantityDelta
   const movDate = importDate || new Date()
 
@@ -1299,10 +1346,8 @@ async function handler(req, res) {
           }
 
           const now = body.date ? new Date(body.date) : new Date()
-          // Generate movement ID
-          const last = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-          const seq = last && last.movementId?.startsWith('MOV') ? (parseInt(last.movementId.replace('MOV','')) + 1) : 1
-          const movementId = body.movementId || `MOV${String(seq).padStart(4, '0')}`
+          // Generate movement ID (collision-safe)
+          const movementId = body.movementId || buildMovementId()
 
           let movementQuantity = qty
           // Adjust per type
@@ -2078,7 +2123,6 @@ async function handler(req, res) {
             throw httpError(400, `Submission is already ${submission.status}`)
           }
 
-          const movementSeqRef = { n: await nextMovementSeqStartTx(tx) }
           let movementsCreated = 0
           let skipped = 0
 
@@ -2103,7 +2147,6 @@ async function handler(req, res) {
               : line.sku
             const { movement } = await applyStockCountAdjustmentTx(tx, {
               req,
-              movementSeqRef,
               sku: applySku,
               itemName: line.itemName,
               quantityDelta: delta,
@@ -2497,7 +2540,6 @@ async function handler(req, res) {
         const batchId = `sc-${Date.now()}`
 
         const result = await prisma.$transaction(async (tx) => {
-          const movementSeqRef = { n: await nextMovementSeqStartTx(tx) }
           let movementsCreated = 0
           let skipped = 0
           const applied = []
@@ -2530,7 +2572,6 @@ async function handler(req, res) {
 
             const { movement } = await applyStockCountAdjustmentTx(tx, {
               req,
-              movementSeqRef,
               sku,
               itemName: pr.itemName,
               quantityDelta: delta,
@@ -2910,13 +2951,6 @@ async function handler(req, res) {
             // Always create movement if quantity > 0, even if no location (for audit trail)
             if (quantity > 0) {
               try {
-                const lastMovement = await prisma.stockMovement.findFirst({
-                  orderBy: { createdAt: 'desc' }
-                })
-                const nextNumber = lastMovement && lastMovement.movementId?.startsWith('MOV')
-                  ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-                  : 1
-                
                 let locationCode = ''
                 if (locationId) {
                   const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
@@ -2925,7 +2959,7 @@ async function handler(req, res) {
                 
                 await prisma.stockMovement.create({
                   data: {
-                    movementId: `MOV${String(nextNumber).padStart(4, '0')}`,
+                    movementId: buildMovementId(),
                     date: new Date(),
                     type: 'adjustment', // Starting balance is an adjustment
                     itemName: inventoryItem.name,
@@ -3093,13 +3127,6 @@ async function handler(req, res) {
         // Always create movement if quantity > 0, even if no location (for audit trail)
         if (quantity > 0) {
           try {
-            const lastMovement = await prisma.stockMovement.findFirst({
-              orderBy: { createdAt: 'desc' }
-            })
-            const nextNumber = lastMovement && lastMovement.movementId?.startsWith('MOV')
-              ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-              : 1
-            
             let locationCode = ''
             if (locationId) {
               const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
@@ -3108,7 +3135,7 @@ async function handler(req, res) {
             
             await prisma.stockMovement.create({
               data: {
-                movementId: `MOV${String(nextNumber).padStart(4, '0')}`,
+                movementId: buildMovementId(),
                 date: new Date(),
                 type: 'adjustment', // Starting balance is an adjustment
                 itemName: item.name,
@@ -3503,10 +3530,10 @@ async function handler(req, res) {
           return badRequest(res, `Product SKU (${body.productSku}) must match the selected inventory item SKU (${inventoryItem.sku})`)
         }
         
-        const components = Array.isArray(body.components) ? body.components : parseJson(body.components, [])
-        const totalMaterialCost = components.reduce((sum, comp) => sum + (parseFloat(comp.totalCost) || 0), 0)
-        const laborCost = parseFloat(body.laborCost) || 0
-        const overheadCost = parseFloat(body.overheadCost) || 0
+        const inputComponents = Array.isArray(body.components) ? body.components : parseJson(body.components, [])
+        const { components, totalMaterialCost } = normalizeBomComponentsForCost(inputComponents)
+        const laborCost = parseNonNegativeFiniteNumber(body.laborCost ?? 0, 'laborCost')
+        const overheadCost = parseNonNegativeFiniteNumber(body.overheadCost ?? 0, 'overheadCost')
         const totalCost = totalMaterialCost + laborCost + overheadCost
         
         // Create BOM
@@ -3546,6 +3573,9 @@ async function handler(req, res) {
           }
         })
       } catch (error) {
+        if (error?.httpStatus === 400) {
+          return badRequest(res, error.message || 'Invalid BOM values')
+        }
         console.error('❌ Failed to create BOM:', {
           error: error.message,
           code: error.code,
@@ -3603,8 +3633,8 @@ async function handler(req, res) {
         if (body.version !== undefined) updateData.version = body.version
         if (body.status !== undefined) updateData.status = body.status
         if (body.effectiveDate !== undefined) updateData.effectiveDate = body.effectiveDate ? new Date(body.effectiveDate) : null
-        if (body.laborCost !== undefined) updateData.laborCost = parseFloat(body.laborCost)
-        if (body.overheadCost !== undefined) updateData.overheadCost = parseFloat(body.overheadCost)
+        if (body.laborCost !== undefined) updateData.laborCost = parseNonNegativeFiniteNumber(body.laborCost, 'laborCost')
+        if (body.overheadCost !== undefined) updateData.overheadCost = parseNonNegativeFiniteNumber(body.overheadCost, 'overheadCost')
         if (body.estimatedTime !== undefined) updateData.estimatedTime = parseInt(body.estimatedTime)
         if (body.notes !== undefined) updateData.notes = body.notes
         if (body.thumbnail !== undefined) updateData.thumbnail = body.thumbnail || ''
@@ -3617,11 +3647,12 @@ async function handler(req, res) {
           const components = body.components !== undefined 
             ? (Array.isArray(body.components) ? body.components : parseJson(body.components, []))
             : parseJson(existing.components, [])
-          const totalMaterialCost = components.reduce((sum, comp) => sum + (parseFloat(comp.totalCost) || 0), 0)
-          const laborCost = body.laborCost !== undefined ? parseFloat(body.laborCost) : existing.laborCost
-          const overheadCost = body.overheadCost !== undefined ? parseFloat(body.overheadCost) : existing.overheadCost
+          const normalized = normalizeBomComponentsForCost(components)
+          const totalMaterialCost = normalized.totalMaterialCost
+          const laborCost = body.laborCost !== undefined ? parseNonNegativeFiniteNumber(body.laborCost, 'laborCost') : existing.laborCost
+          const overheadCost = body.overheadCost !== undefined ? parseNonNegativeFiniteNumber(body.overheadCost, 'overheadCost') : existing.overheadCost
           
-          updateData.components = JSON.stringify(components)
+          updateData.components = JSON.stringify(normalized.components)
           updateData.totalMaterialCost = totalMaterialCost
           updateData.totalCost = totalMaterialCost + laborCost + overheadCost
         }
@@ -3646,6 +3677,9 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to update BOM:', error)
+        if (error?.httpStatus === 400) {
+          return badRequest(res, error.message || 'Invalid BOM values')
+        }
         if (error.code === 'P2025') {
           return notFound(res, 'BOM not found')
         }
@@ -3896,13 +3930,9 @@ async function handler(req, res) {
             const components = parseJson(bom.components, [])
             const validComponents = components.filter(c => c.sku && c.quantity)
             
-            // Generate next movement number (within transaction)
-            const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-            let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-              ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-              : 1
-            
-            const quantityProduced = orderInTx.quantityProduced || orderInTx.quantity
+            const quantityProduced = parseInt(orderInTx.quantityProduced, 10) > 0
+              ? parseInt(orderInTx.quantityProduced, 10)
+              : parseInt(orderInTx.quantity, 10)
             
             // Process all components to deduct stock
             for (const component of validComponents) {
@@ -4017,9 +4047,7 @@ async function handler(req, res) {
               const componentLocationCode = componentLocation?.code || ''
                 
               // Create stock movement record (consumption should always be negative)
-              await tx.stockMovement.create({
-                data: {
-                  movementId: `MOV${String(seq++).padStart(4, '0')}`,
+              await createStockMovementTxWithRetry(tx, {
                   date: new Date(),
                   type: 'consumption',
                   itemName: component.name || component.sku,
@@ -4030,7 +4058,6 @@ async function handler(req, res) {
                   reference: orderInTx.workOrderNumber || id,
                   performedBy: req.user?.name || 'System',
                   notes: `Production completion - component consumption for ${orderInTx.productName} (${orderInTx.workOrderNumber || id})`
-                }
               })
             }
             
@@ -4166,9 +4193,7 @@ async function handler(req, res) {
             const location = toLocationId ? await tx.stockLocation.findUnique({ where: { id: toLocationId } }) : null
             const locationCode = location?.code || ''
             
-            const movement = await tx.stockMovement.create({
-              data: {
-                movementId: `MOV${String(seq++).padStart(4, '0')}`,
+            const movement = await createStockMovementTxWithRetry(tx, {
                 date: new Date(),
                 type: 'receipt', // Finished product receipt (increases stock)
                 itemName: finishedProduct.name,
@@ -4179,7 +4204,6 @@ async function handler(req, res) {
                 reference: orderInTx.workOrderNumber || id,
                 performedBy: req.user?.name || 'System',
                 notes: `Production completion for ${orderInTx.productName} - Cost: ${unitCost.toFixed(2)} per unit (sum of parts)`
-              }
             })
             
             
@@ -4279,10 +4303,6 @@ async function handler(req, res) {
                 }
                 
                 const now = new Date()
-                const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-                let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-                  ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-                  : 1
                 
                 for (const component of validComponents) {
                   const requiredQty = parseFloat(component.quantity) * orderInTx.quantity
@@ -4310,9 +4330,7 @@ async function handler(req, res) {
                   })
                   
                   // Create stock movement record for allocation
-                  await tx.stockMovement.create({
-                    data: {
-                      movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                  await createStockMovementTxWithRetry(tx, {
                       date: now,
                       type: 'adjustment',
                       itemName: component.name || component.sku,
@@ -4323,7 +4341,6 @@ async function handler(req, res) {
                       reference: orderInTx.workOrderNumber || id,
                       performedBy: req.user?.name || 'System',
                       notes: `Stock allocated for ${orderInTx.productName} (Order received) - ${requiredQty} reserved`
-                    }
                   })
                   
                 }
@@ -4461,12 +4478,6 @@ async function handler(req, res) {
             
             const now = new Date()
             
-            // Generate next movement number (within transaction)
-            const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-            let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-              ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-              : 1
-            
             // Process all components sequentially to avoid transaction conflicts
             // Sequential processing ensures one failure doesn't cause "transaction already closed" errors
             const validComponents = components.filter(c => c.sku && c.quantity)
@@ -4515,9 +4526,7 @@ async function handler(req, res) {
                   
                   // Create stock movement record for allocation (no quantity change, just tracking)
                   if (allocationDelta > 0) {
-                    await tx.stockMovement.create({
-                      data: {
-                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                    await createStockMovementTxWithRetry(tx, {
                         date: now,
                         type: 'adjustment',
                         itemName: component.name || component.sku,
@@ -4528,7 +4537,6 @@ async function handler(req, res) {
                         reference: orderInTx.workOrderNumber || id,
                         performedBy: req.user?.name || 'System',
                         notes: `Stock allocated for ${orderInTx.productName} (Order in production) - ${allocationDelta} reserved`
-                      }
                     })
                   }
               } catch (componentError) {
@@ -4572,9 +4580,7 @@ async function handler(req, res) {
                 
                 
                 // Create stock movement record for allocation
-                await tx.stockMovement.create({
-                  data: {
-                    movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                await createStockMovementTxWithRetry(tx, {
                     date: now,
                     type: 'adjustment',
                     itemName: finishedProduct.name,
@@ -4585,7 +4591,6 @@ async function handler(req, res) {
                     reference: orderInTx.workOrderNumber || id,
                     performedBy: req.user?.name || 'System',
                     notes: `Stock in production allocated for ${orderInTx.productName} - ${orderQuantity} units in production`
-                  }
                 })
               } else {
               }
@@ -4629,12 +4634,6 @@ async function handler(req, res) {
               }
               
               const now = new Date()
-              
-              // Generate next movement number
-              const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-              let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-                ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-                : 1
               
               // Process components sequentially
               const validComponents = components.filter(c => c.sku && c.quantity)
@@ -4726,9 +4725,7 @@ async function handler(req, res) {
                     
                     // Create stock movement record for return
                     const movementType = newStatus === 'cancelled' ? 'adjustment' : 'return'
-                    await tx.stockMovement.create({
-                      data: {
-                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                    await createStockMovementTxWithRetry(tx, {
                         date: now,
                         type: movementType,
                         itemName: component.name || component.sku,
@@ -4739,7 +4736,6 @@ async function handler(req, res) {
                         reference: orderInTx.workOrderNumber || id,
                         performedBy: req.user?.name || 'System',
                         notes: `Stock return for ${orderInTx.productName} - Order ${newStatus === 'cancelled' ? 'cancelled' : 'reverted to requested'} (${orderInTx.workOrderNumber || id})`
-                      }
                     })
                   }
                 } catch (componentError) {
@@ -4785,9 +4781,7 @@ async function handler(req, res) {
                   
                   
                   // Create stock movement record
-                  await tx.stockMovement.create({
-                    data: {
-                      movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                  await createStockMovementTxWithRetry(tx, {
                       date: now,
                       type: 'adjustment',
                       itemName: finishedProduct.name,
@@ -4798,7 +4792,6 @@ async function handler(req, res) {
                       reference: orderInTx.workOrderNumber || id,
                       performedBy: req.user?.name || 'System',
                       notes: `Stock in production deallocated for ${orderInTx.productName} - ${orderQuantity} units removed from production`
-                    }
                   })
                 }
               }
@@ -4913,12 +4906,6 @@ async function handler(req, res) {
               const components = parseJson(bom.components, [])
               const now = new Date()
               
-              // Generate next movement number
-              const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-              let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-                ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-                : 1
-              
               const validComponents = components.filter(c => c.sku && c.quantity)
               
               for (const component of validComponents) {
@@ -5032,9 +5019,7 @@ async function handler(req, res) {
                     }
                     
                     // Create stock movement record
-                    await tx.stockMovement.create({
-                      data: {
-                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                    await createStockMovementTxWithRetry(tx, {
                         date: now,
                         type: 'adjustment',
                         itemName: component.name || component.sku,
@@ -5045,7 +5030,6 @@ async function handler(req, res) {
                         reference: orderToDelete.workOrderNumber || id,
                         performedBy: req.user?.name || 'System',
                         notes: `Stock return - Production order deleted (${orderToDelete.workOrderNumber || id})`
-                      }
                     })
                   }
                 } catch (componentError) {
@@ -5188,17 +5172,8 @@ async function handler(req, res) {
       }
 
       try {
-        // Generate movement ID if not provided
-        let movementId = body.movementId || body.id
-        if (!movementId) {
-          const lastMovement = await prisma.stockMovement.findFirst({
-            orderBy: { createdAt: 'desc' }
-          })
-          const nextNumber = lastMovement && lastMovement.movementId?.startsWith('MOV')
-            ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-            : 1
-          movementId = `MOV${String(nextNumber).padStart(4, '0')}`
-        }
+        // Generate movement ID if not provided (collision-safe randomness)
+        const movementId = body.movementId || body.id || buildMovementId()
 
         let quantity = parseFloat(body.quantity)
         const isAdjustment = body.type === 'adjustment'
@@ -5799,7 +5774,6 @@ async function handler(req, res) {
           const sku = movement.sku
           const itemName = movement.itemName
           const now = new Date()
-          const movementSeq = { n: await nextMovementSeqStartTx(tx) }
 
           const master = await findCanonicalInventoryItemBySkuTx(tx, sku)
           const locationId = await resolveAdjustmentLocationIdTx(tx, {
@@ -5864,9 +5838,7 @@ async function handler(req, res) {
             })
           }
 
-          await tx.stockMovement.create({
-            data: {
-              movementId: `MOV${String(movementSeq.n).padStart(4, '0')}`,
+          await createStockMovementTxWithRetry(tx, {
               date: now,
               type: 'adjustment',
               itemName: movement.itemName,
@@ -5878,7 +5850,6 @@ async function handler(req, res) {
               performedBy: req.user?.name || 'System',
               notes: `Auto-reversal for deleted movement ${movement.movementId || id}`,
               ownerId: null
-            }
           })
 
           await tx.stockMovement.delete({ where: { id } })
@@ -5905,9 +5876,14 @@ async function handler(req, res) {
 
       // Determine consume quantity: from body.quantity or remaining to produce
       const body = req.body || {}
-      const consumeQuantity = parseInt(body.quantity) || (order.quantity - order.quantityProduced)
+      const remainingToProduce = Math.max(0, (parseInt(order.quantity, 10) || 0) - (parseInt(order.quantityProduced, 10) || 0))
+      const requestedConsume = body.quantity !== undefined ? parseInt(body.quantity, 10) : remainingToProduce
+      const consumeQuantity = Number.isFinite(requestedConsume) ? requestedConsume : remainingToProduce
       if (consumeQuantity <= 0) {
         return badRequest(res, 'quantity must be greater than 0')
+      }
+      if (consumeQuantity > remainingToProduce) {
+        return badRequest(res, `quantity exceeds remaining amount (${remainingToProduce})`)
       }
 
       // Load BOM
@@ -6006,12 +5982,6 @@ async function handler(req, res) {
           })
         }
 
-        // Generate next movement number base
-        const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-        let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-          ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-          : 1
-
         const createdMovements = []
         for (const reqComp of requirements) {
           const item = inventoryBySku.get(reqComp.sku)
@@ -6057,9 +6027,7 @@ async function handler(req, res) {
           }
 
           // Create movement per component (consumption should be negative)
-          const movement = await tx.stockMovement.create({
-            data: {
-              movementId: `MOV${String(seq++).padStart(4, '0')}`,
+          const movement = await createStockMovementTxWithRetry(tx, {
               date: now,
               type: 'consumption',
               itemName: reqComp.itemName || item.name,
@@ -6071,16 +6039,27 @@ async function handler(req, res) {
               performedBy: req.user?.name || 'System',
               notes: body.notes || '',
               ownerId: null
-            }
           })
           createdMovements.push(movement)
+        }
+
+        const incrementProducedRaw = body.incrementProduced !== undefined ? parseInt(body.incrementProduced, 10) : consumeQuantity
+        const incrementProduced = Number.isFinite(incrementProducedRaw) ? incrementProducedRaw : consumeQuantity
+        if (incrementProduced < 0) {
+          throw httpError(400, 'incrementProduced must be >= 0')
+        }
+        if (incrementProduced > consumeQuantity) {
+          throw httpError(400, 'incrementProduced cannot exceed consumed quantity')
+        }
+        if ((order.quantityProduced + incrementProduced) > order.quantity) {
+          throw httpError(400, 'incrementProduced exceeds remaining order quantity')
         }
 
         // Optionally update produced quantity progress
         const updatedOrder = await tx.productionOrder.update({
           where: { id: order.id },
           data: {
-            quantityProduced: order.quantityProduced + (body.incrementProduced ? parseInt(body.incrementProduced) : 0)
+            quantityProduced: order.quantityProduced + incrementProduced
           }
         })
 
@@ -6110,6 +6089,9 @@ async function handler(req, res) {
       })
     } catch (error) {
       console.error('❌ Failed to consume BOM for production order:', error)
+      if (error?.httpStatus === 400) {
+        return badRequest(res, error.message || 'Invalid consumption payload')
+      }
       return serverError(res, 'Failed to consume BOM for production order', error.message)
     }
   }

@@ -959,7 +959,9 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
     const s = new Set();
     forms.forEach((form) => {
       const tpl = templates.find((t) => t.id === form.templateId) || {};
-      const fieldList = Array.isArray(tpl.fields) ? tpl.fields : [];
+      const fieldList = Array.isArray(form.templateFields)
+        ? form.templateFields
+        : (Array.isArray(tpl.fields) ? tpl.fields : []);
       fieldList.forEach((field, idx) => {
         const fid = field.id || `field_${idx}`;
         s.add(`form_${form.id}_${fid}`);
@@ -1136,11 +1138,13 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
   const handleSaveForm = async (form, markComplete) => {
     if (!token) return;
     const tpl = templates.find((t) => t.id === form.templateId);
-    const fields = Array.isArray(tpl?.fields) ? tpl.fields : [];
+    const fields = Array.isArray(form.templateFields)
+      ? form.templateFields
+      : (Array.isArray(tpl?.fields) ? tpl.fields : []);
     const current = answersByForm[form.id] || {};
     const answers = fields.map((f, idx) => ({
       fieldId: f.id || `field_${idx}`,
-      value: current[f.id] ?? '',
+      value: current[f.id || `field_${idx}`] ?? '',
     }));
 
     try {
@@ -1260,7 +1264,9 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
         {!featureUnavailable &&
           forms.map((form) => {
           const tpl = templates.find((t) => t.id === form.templateId) || {};
-          const fields = Array.isArray(tpl.fields) ? tpl.fields : [];
+          const fields = Array.isArray(form.templateFields)
+            ? form.templateFields
+            : (Array.isArray(tpl.fields) ? tpl.fields : []);
           const answers = answersByForm[form.id] || {};
           const status = (form.status || 'not_started').toString().toLowerCase();
 
@@ -2191,7 +2197,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       <div className="mt-1 text-xs space-y-1">
                         <div>Departure from site: {formatDate(selectedJobCard.departureFromSite) || '—'}</div>
                         <div>Arrival at office: {formatDate(selectedJobCard.arrivalBackAtOffice) || '—'}</div>
-                        <div>Total time: {selectedJobCard.totalTimeMinutes ? `${selectedJobCard.totalTimeMinutes} min` : '—'}</div>
+                        <div>Total time: {selectedJobCard.totalTimeMinutes != null ? `${selectedJobCard.totalTimeMinutes} min` : '—'}</div>
                       </div>
                     </div>
                     <div>

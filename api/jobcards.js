@@ -46,6 +46,38 @@ function isTerminalJobCardStatus(s) {
   return s === 'submitted' || s === 'completed'
 }
 
+const ALLOWED_JOB_CARD_STATUSES = new Set(['draft', 'open', 'submitted', 'completed', 'cancelled'])
+
+function normalizeJobCardStatus(status, fallback = 'draft') {
+  if (status === undefined || status === null || String(status).trim() === '') return fallback
+  const normalized = String(status).trim().toLowerCase().replace(/\s+/g, '_')
+  return ALLOWED_JOB_CARD_STATUSES.has(normalized) ? normalized : null
+}
+
+function parseFiniteNumber(value, fallback = 0) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function parseNonNegativeFiniteNumber(value, fieldName) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`${fieldName} must be a finite number >= 0`)
+  }
+  return n
+}
+
+function parseCreatedToInclusive(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
+  }
+  const dt = new Date(raw)
+  return Number.isNaN(dt.getTime()) ? null : dt
+}
+
 async function resolveActorDisplayName(prismaClient, req) {
   const uid = req.user?.sub || req.user?.id
   if (!uid) return req.user?.name || req.user?.email || 'User'
@@ -344,8 +376,8 @@ async function handler(req, res) {
           if (!Number.isNaN(d.getTime())) createdRange.gte = d
         }
         if (createdToRaw) {
-          const d = new Date(createdToRaw)
-          if (!Number.isNaN(d.getTime())) createdRange.lte = d
+          const d = parseCreatedToInclusive(createdToRaw)
+          if (d) createdRange.lte = d
         }
         if (Object.keys(createdRange).length > 0) {
           baseFilters.createdAt = createdRange
@@ -602,14 +634,14 @@ async function handler(req, res) {
           : body.materialsBought || '[]'
         
         // Calculate travel kilometers
-        const kmBefore = parseFloat(body.kmReadingBefore) || 0
-        const kmAfter = parseFloat(body.kmReadingAfter) || 0
+        const kmBefore = parseFiniteNumber(body.kmReadingBefore, 0)
+        const kmAfter = parseFiniteNumber(body.kmReadingAfter, 0)
         const travelKilometers = Math.max(0, kmAfter - kmBefore)
         
         // Calculate total materials cost
-        const totalMaterialsCost = Array.isArray(body.materialsBought) 
-          ? body.materialsBought.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
-          : parseFloat(body.totalMaterialsCost) || 0
+        const totalMaterialsCost = Array.isArray(body.materialsBought)
+          ? body.materialsBought.reduce((sum, item) => sum + parseFiniteNumber(item?.cost, 0), 0)
+          : parseFiniteNumber(body.totalMaterialsCost, 0)
 
         const lat =
           body.locationLatitude != null && body.locationLatitude !== ''
@@ -650,8 +682,10 @@ async function handler(req, res) {
 
         const otherCommentsForCreate = mergeJobCardOtherComments(body)
 
-        const rawStatus = body.status || 'draft'
-        const statusForCreate = ['draft', 'submitted', 'completed'].includes(rawStatus) ? rawStatus : 'draft'
+        const statusForCreate = normalizeJobCardStatus(body.status, 'draft')
+        if (!statusForCreate) {
+          return badRequest(res, 'Invalid job card status')
+        }
 
         let completedByUserId = null
         let completedByName = ''
@@ -758,6 +792,9 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to create job card:', error)
+        if (error?.message && error.message.includes('must be a finite number >= 0')) {
+          return badRequest(res, error.message)
+        }
         
         // Check if it's a database connection error
         if (isConnectionError(error)) {
@@ -805,8 +842,8 @@ async function handler(req, res) {
         if (body.timeOfDeparture !== undefined) updateData.timeOfDeparture = body.timeOfDeparture ? new Date(body.timeOfDeparture) : null
         if (body.timeOfArrival !== undefined) updateData.timeOfArrival = body.timeOfArrival ? new Date(body.timeOfArrival) : null
         if (body.vehicleUsed !== undefined) updateData.vehicleUsed = body.vehicleUsed
-        if (body.kmReadingBefore !== undefined) updateData.kmReadingBefore = parseFloat(body.kmReadingBefore) || 0
-        if (body.kmReadingAfter !== undefined) updateData.kmReadingAfter = parseFloat(body.kmReadingAfter) || 0
+        if (body.kmReadingBefore !== undefined) updateData.kmReadingBefore = parseFiniteNumber(body.kmReadingBefore, 0)
+        if (body.kmReadingAfter !== undefined) updateData.kmReadingAfter = parseFiniteNumber(body.kmReadingAfter, 0)
         if (body.reasonForVisit !== undefined) updateData.reasonForVisit = body.reasonForVisit
         if (body.callOutCategory !== undefined) updateData.callOutCategory = body.callOutCategory
         if (body.diagnosis !== undefined) updateData.diagnosis = body.diagnosis
@@ -826,7 +863,7 @@ async function handler(req, res) {
             : body.materialsBought
         }
         if (body.totalMaterialsCost !== undefined) {
-          updateData.totalMaterialsCost = parseFloat(body.totalMaterialsCost) || 0
+          updateData.totalMaterialsCost = parseNonNegativeFiniteNumber(body.totalMaterialsCost, 'totalMaterialsCost')
         }
         if (
           body.otherComments !== undefined ||
@@ -874,21 +911,25 @@ async function handler(req, res) {
             ? JSON.stringify(body.photos) 
             : body.photos
         }
-        if (body.status !== undefined) updateData.status = body.status
+        if (body.status !== undefined) {
+          const normalizedStatus = normalizeJobCardStatus(body.status, null)
+          if (!normalizedStatus) return badRequest(res, 'Invalid job card status')
+          updateData.status = normalizedStatus
+        }
         if (body.submittedAt !== undefined) updateData.submittedAt = body.submittedAt ? new Date(body.submittedAt) : null
         if (body.completedAt !== undefined) updateData.completedAt = body.completedAt ? new Date(body.completedAt) : null
         
         // Recalculate travel kilometers if readings changed
         if (body.kmReadingBefore !== undefined || body.kmReadingAfter !== undefined) {
-          const kmBefore = body.kmReadingBefore !== undefined ? parseFloat(body.kmReadingBefore) || 0 : existing.kmReadingBefore
-          const kmAfter = body.kmReadingAfter !== undefined ? parseFloat(body.kmReadingAfter) || 0 : existing.kmReadingAfter
+          const kmBefore = body.kmReadingBefore !== undefined ? parseFiniteNumber(body.kmReadingBefore, 0) : existing.kmReadingBefore
+          const kmAfter = body.kmReadingAfter !== undefined ? parseFiniteNumber(body.kmReadingAfter, 0) : existing.kmReadingAfter
           updateData.travelKilometers = Math.max(0, kmAfter - kmBefore)
         }
         
         // Recalculate total materials cost if materials changed
         if (body.materialsBought !== undefined) {
           const materials = Array.isArray(body.materialsBought) ? body.materialsBought : parseJson(body.materialsBought || '[]')
-          updateData.totalMaterialsCost = materials.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
+          updateData.totalMaterialsCost = materials.reduce((sum, item) => sum + parseFiniteNumber(item?.cost, 0), 0)
         }
 
         const nextStatus =
@@ -981,6 +1022,9 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to update job card:', error)
+        if (error?.message && error.message.includes('must be a finite number >= 0')) {
+          return badRequest(res, error.message)
+        }
         
         // Check if it's a database connection error
         if (isConnectionError(error)) {
