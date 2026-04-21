@@ -4,6 +4,7 @@ const { useState, useEffect, useMemo, useCallback, useRef } = ReactGlobal;
 
 /** Same convention as mobile job card wizard — project line embedded in `otherComments`. */
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
+const HEADING_PREFIX = 'Heading:';
 
 function parseProjectAssociationFromComments(rawComments) {
   if (!rawComments || typeof rawComments !== 'string') {
@@ -32,6 +33,7 @@ function splitJobCardOtherCommentsForReport(rawComments) {
   for (const line of lines) {
     const t = line.trim();
     if (!t) continue;
+    if (t.startsWith(HEADING_PREFIX)) continue;
     if (t.startsWith(PROJECT_ASSOCIATION_PREFIX)) continue;
     if (t.startsWith('Customer:')) {
       customer.name = t.slice('Customer:'.length).trim();
@@ -56,6 +58,14 @@ function splitJobCardOtherCommentsForReport(rawComments) {
     customer,
     technicianNotes: kept.join('\n').trim()
   };
+}
+
+function parseHeadingFromComments(rawComments) {
+  if (!rawComments || typeof rawComments !== 'string') return '';
+  const headingLine = rawComments
+    .split('\n')
+    .find((line) => typeof line === 'string' && line.trim().startsWith(HEADING_PREFIX));
+  return headingLine ? headingLine.slice(HEADING_PREFIX.length).trim() : '';
 }
 
 /** Same as manufacturing JobCards: SC media via authenticated fetch (img/video cannot send Bearer headers). */
@@ -870,6 +880,11 @@ const ServiceAndMaintenance = () => {
     () => splitJobCardOtherCommentsForReport(selectedJobCard?.otherComments),
     [selectedJobCard?.otherComments]
   );
+  const selectedHeading = useMemo(() => {
+    const explicit = selectedJobCard?.heading;
+    if (explicit != null && String(explicit).trim()) return String(explicit).trim();
+    return parseHeadingFromComments(selectedJobCard?.otherComments || '');
+  }, [selectedJobCard?.heading, selectedJobCard?.otherComments]);
 
   const signatureAttachmentItems = useMemo(() => {
     const photos = selectedJobCard?.photos;
@@ -1772,6 +1787,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                   <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     {selectedJobCard.jobCardNumber || 'New job card'}
                   </h2>
+                  {selectedHeading ? (
+                    <span className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                      - {selectedHeading}
+                    </span>
+                  ) : null}
                   <span
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                       (selectedJobCard.status || 'draft').toString().toLowerCase() === 'completed'
