@@ -289,6 +289,90 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         load();
     }, []);
 
+    // Hydrate missing review sections from project detail endpoint.
+    // The list API is intentionally slim and may omit these heavy JSON fields.
+    useEffect(() => {
+        if (!Array.isArray(projects) || projects.length === 0) return;
+        if (!window.DatabaseAPI || typeof window.DatabaseAPI.getProject !== 'function') return;
+
+        const needsHydration = projects.filter((project) => {
+            if (!project || !project.id) return false;
+            const needsMonthlyData =
+                !!project.hasMonthlyDataReviewProcess &&
+                (project.monthlyDataReviewSections == null || project.monthlyDataReviewSections === '');
+            const needsCompliance =
+                !!project.hasComplianceReviewProcess &&
+                (project.complianceReviewSections == null || project.complianceReviewSections === '');
+            return needsMonthlyData || needsCompliance;
+        });
+
+        if (needsHydration.length === 0) return;
+
+        let cancelled = false;
+
+        const hydrate = async () => {
+            try {
+                const detailResponses = await Promise.allSettled(
+                    needsHydration.map((project) => window.DatabaseAPI.getProject(project.id))
+                );
+
+                if (cancelled) return;
+
+                const detailMap = new Map();
+                detailResponses.forEach((result) => {
+                    if (result.status !== 'fulfilled') return;
+                    const detailProject =
+                        result.value?.data?.project ||
+                        result.value?.project ||
+                        null;
+                    if (!detailProject || !detailProject.id) return;
+                    detailMap.set(String(detailProject.id), detailProject);
+                });
+
+                if (detailMap.size === 0) return;
+
+                setProjects((prevProjects) => {
+                    if (!Array.isArray(prevProjects) || prevProjects.length === 0) return prevProjects;
+
+                    let changed = false;
+                    const nextProjects = prevProjects.map((project) => {
+                        const detail = detailMap.get(String(project?.id));
+                        if (!detail) return project;
+
+                        const monthlyDataReviewSections =
+                            detail.monthlyDataReviewSections != null
+                                ? detail.monthlyDataReviewSections
+                                : project.monthlyDataReviewSections;
+                        const complianceReviewSections =
+                            detail.complianceReviewSections != null
+                                ? detail.complianceReviewSections
+                                : project.complianceReviewSections;
+
+                        const monthlyChanged = monthlyDataReviewSections !== project.monthlyDataReviewSections;
+                        const complianceChanged = complianceReviewSections !== project.complianceReviewSections;
+                        if (!monthlyChanged && !complianceChanged) return project;
+
+                        changed = true;
+                        return {
+                            ...project,
+                            monthlyDataReviewSections,
+                            complianceReviewSections
+                        };
+                    });
+
+                    return changed ? nextProjects : prevProjects;
+                });
+            } catch (error) {
+                console.warn('⚠️ ProjectProgressTracker: Failed to hydrate review sections from detail endpoint:', error);
+            }
+        };
+
+        hydrate();
+        return () => {
+            cancelled = true;
+        };
+    }, [projects]);
+
     /**
      * Lightweight self-test for monthlyProgress persistence.
      *
