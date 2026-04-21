@@ -62,6 +62,15 @@ function isIncludedInProgressTracker(value) {
     return false;
 }
 
+/** Single source of truth for which projects appear in this view (must match API opt-in). */
+function filterNormalizedProjectsForProgressTracker(normalizedProjects) {
+    if (!Array.isArray(normalizedProjects)) return [];
+    return normalizedProjects.filter((p) => {
+        if (!p || typeof p !== 'object') return false;
+        return isIncludedInProgressTracker(p.includeInProgressTracker);
+    });
+}
+
 // Main component - completely rebuilt for reliability
 const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const {
@@ -286,11 +295,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         };
                     });
                     
-                    // Only projects with Include in Progress Tracker checked (explicit true)
-                    const monthlyProjects = normalizedProjects.filter((p) => {
-                        if (!p || typeof p !== 'object') return false;
-                        return isIncludedInProgressTracker(p.includeInProgressTracker);
-                    });
+                    const monthlyProjects = filterNormalizedProjectsForProgressTracker(normalizedProjects);
                     
                     
                     // Log monthlyProgress data for each project to verify data is loaded
@@ -722,6 +727,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     if (!p || typeof p !== 'object') return false;
                     if (p.id === undefined || p.id === null) return false;
                     if (typeof p.name !== 'string' || p.name.trim() === '') return false;
+                    if (!isIncludedInProgressTracker(p.includeInProgressTracker)) return false;
                     return true;
                 } catch (e) {
                     console.warn('⚠️ ProjectProgressTracker: Error validating project:', p, e);
@@ -1630,22 +1636,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             };
                         });
                         
-                        const monthlyReloaded = normalizedReloaded.filter(p => {
-                            if (!p || typeof p !== 'object') return false;
-                            if (p.monthlyProgress && typeof p.monthlyProgress === 'object' && Object.keys(p.monthlyProgress).length > 0) {
-                                return true;
-                            }
-                            const rawType = p.type;
-                            if (rawType !== null && rawType !== undefined) {
-                                try {
-                                    const projectType = String(rawType || '').toUpperCase().trim();
-                                    if (projectType.length > 0 && projectType.startsWith('MONTHLY')) {
-                                        return true;
-                                    }
-                                } catch (e) {}
-                            }
-                            return false;
-                        });
+                        // Must match initial load: only includeInProgressTracker opt-in (never MONTHLY type / monthlyProgress heuristics).
+                        const monthlyReloaded = filterNormalizedProjectsForProgressTracker(normalizedReloaded);
                         
                         // Verify the saved data is in the reloaded projects
                         const reloadedProject = monthlyReloaded.find(p => String(p?.id) === String(project.id));
@@ -2722,7 +2714,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         className: 'px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm'
                                     }, 'Reload Page')
                                 )
-                                : projects.length === 0
+                                : projects.length === 0 ||
+                                      !projects.some((p) => isIncludedInProgressTracker(p?.includeInProgressTracker))
                                     ? React.createElement('div', { 
                                         className: 'flex flex-col items-center gap-4 max-w-md mx-auto',
                                         style: { padding: '24px' }
@@ -2735,7 +2728,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         ),
                                         React.createElement('div', { className: 'space-y-2 text-center' },
                                             React.createElement('h3', { className: 'text-lg font-semibold text-gray-900' }, 'No projects found'),
-                                            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Projects need monthly progress data or MONTHLY type to appear here')
+                                            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Turn on “Include in Project Progress Tracker” when editing a project.')
                                         )
                                     )
                                     : React.createElement('div', { 
