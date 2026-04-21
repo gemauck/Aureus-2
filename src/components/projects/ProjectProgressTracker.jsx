@@ -132,6 +132,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     // Wide cells + sticky column width (used for horizontal scroll alignment)
     const TRACK_CELL_WIDTH = 200;
     const TRACK_MONTH_GROUP_WIDTH = TRACK_CELL_WIDTH * 3;
+    /** Between month groups (after Comments, before next Compliance / after last month before PM) */
+    const TRACK_MONTH_SEPARATOR_BORDER = '3px solid #64748b';
     const TRACK_STICKY_PROJECT_WIDTH = 340;
     
     // State - always initialize with empty array to prevent undefined/null issues
@@ -253,6 +255,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     // This allows both explicitly MONTHLY type projects and any project with monthly progress data
                     const monthlyProjects = normalizedProjects.filter(p => {
                         if (!p || typeof p !== 'object') return false;
+
+                        if (p.includeInProgressTracker === false) return false;
                         
                         // Include if it has monthlyProgress data
                         if (p.monthlyProgress && typeof p.monthlyProgress === 'object' && Object.keys(p.monthlyProgress).length > 0) {
@@ -1843,11 +1847,18 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             editingCell.month === safeMonth && 
             editingCell.field === field;
         
+        const monthCount = Array.isArray(months) ? months.length : 0;
+        const isMonthGroupRightEdge =
+            field === 'comments' &&
+            monthIdx >= 0 &&
+            monthCount > 0 &&
+            monthIdx < monthCount - 1;
+        
         const cellStyle = {
             padding: '8px 10px',
             border: 'none',
             borderBottom: '1px solid #e5e7eb',
-            borderRight: '1px solid #e5e7eb',
+            borderRight: isMonthGroupRightEdge ? TRACK_MONTH_SEPARATOR_BORDER : '1px solid #e5e7eb',
             backgroundColor: calculatedBackground,
             minHeight: '100px',
             height: '100px',
@@ -2260,7 +2271,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     backgroundImage: 'none',
                                     color: isWorking ? '#1e3a8a' : '#334155',
                                     border: 'none',
-                                    borderLeft: idx === 0 ? '2px solid #475569' : '1px solid #e2e8f0',
+                                    borderLeft: idx === 0 ? '2px solid #475569' : TRACK_MONTH_SEPARATOR_BORDER,
                                     borderBottom: isWorking ? '3px solid #2563eb' : '2px solid #e5e7eb',
                                     minWidth: `${TRACK_MONTH_GROUP_WIDTH}px`,
                                     width: `${TRACK_MONTH_GROUP_WIDTH}px`,
@@ -2348,6 +2359,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         (Array.isArray(months) ? months : []).map((month, idx) => {
                             const safeMonth = String(month || '');
                             const isWorking = isWorkingMonthForYear(idx, safeYear);
+                            const monthLen = months.length;
+                            const isLastMonthCol = idx >= monthLen - 1;
                             return React.createElement(React.Fragment, { key: safeMonth + '-subheaders' },
                                 React.createElement('th', { 
                                     style: {
@@ -2406,7 +2419,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         color: '#78350f',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
-                                        borderRight: '1px solid #e5e7eb',
+                                        borderRight: isLastMonthCol ? '1px solid #e5e7eb' : TRACK_MONTH_SEPARATOR_BORDER,
                                         minWidth: `${TRACK_CELL_WIDTH}px`,
                                         width: `${TRACK_CELL_WIDTH}px`,
                                         maxWidth: `${TRACK_CELL_WIDTH}px`,

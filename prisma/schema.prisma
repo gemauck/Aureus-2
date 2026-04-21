@@ -533,6 +533,7 @@ model Project {
   createdAt                    DateTime                 @default(now())
   updatedAt                    DateTime                 @updatedAt
   monthlyProgress              String                   @default("{}") // Keep as JSON - simple key-value structure, no complex queries needed
+  includeInProgressTracker     Boolean                  @default(true)
   invoices                     Invoice[]
   client                       Client?                  @relation(fields: [clientId], references: [id])
   owner                        User?                    @relation("ProjectOwner", fields: [ownerId], references: [id])

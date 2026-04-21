@@ -1234,7 +1234,12 @@ async function handler(req, res) {
         // - activityLog → ProjectActivityLog table (via /api/project-activity-logs)
         // These fields are no longer stored in Project table - use dedicated APIs instead
         notes: body.notes,
-        hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? body.hasDocumentCollectionProcess : undefined
+        hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? body.hasDocumentCollectionProcess : undefined,
+        includeInProgressTracker: body.includeInProgressTracker !== undefined && body.includeInProgressTracker !== null
+          ? (typeof body.includeInProgressTracker === 'boolean'
+            ? body.includeInProgressTracker
+            : Boolean(body.includeInProgressTracker === true || body.includeInProgressTracker === 'true' || body.includeInProgressTracker === 1))
+          : undefined
       }
       
       // Handle documentSections separately if provided - ensure it's properly saved

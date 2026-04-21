@@ -3264,7 +3264,8 @@ const Projects = () => {
                     dueDate: projectData.dueDate,
                     assignedTo: projectData.assignedTo,
                     client: normalizedClient,
-                    clientName: normalizedClient
+                    clientName: normalizedClient,
+                    includeInProgressTracker: projectData.includeInProgressTracker !== false
                 };
 
                 const apiResponse = await window.DatabaseAPI.updateProject(selectedProject.id, updatePayload);
@@ -3305,6 +3306,7 @@ const Projects = () => {
                     startDate: projectData.startDate && projectData.startDate.trim() !== '' ? projectData.startDate : new Date().toISOString(),
                     dueDate: projectData.dueDate && projectData.dueDate.trim() !== '' ? projectData.dueDate : null,
                     assignedTo: projectData.assignedTo || '',
+                    includeInProgressTracker: projectData.includeInProgressTracker !== false,
                     budget: 0,
                     priority: 'Medium',
                     // JSON fields removed - data now stored in separate tables

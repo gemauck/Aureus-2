@@ -15,7 +15,9 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                 assignedTo: project.assignedTo || '',
                 description: project.description || '',
                 status: project.status || 'Active',
-                manager: project.manager || ''
+                manager: project.manager || '',
+                includeInProgressTracker:
+                    project.includeInProgressTracker === false ? false : true
             };
         }
         return {
@@ -27,7 +29,8 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
             assignedTo: '',
             description: '',
             status: 'Active',
-            manager: ''
+            manager: '',
+            includeInProgressTracker: true
         };
     });
 
@@ -313,6 +316,27 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                             <option value="Completed">Completed</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-0.5">
+                        <input
+                            id="project-include-progress-tracker"
+                            type="checkbox"
+                            checked={!!formData.includeInProgressTracker}
+                            onChange={(e) =>
+                                setFormData({
+                                    ...formData,
+                                    includeInProgressTracker: e.target.checked
+                                })
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <label
+                            htmlFor="project-include-progress-tracker"
+                            className="text-sm text-gray-800 cursor-pointer select-none"
+                        >
+                            Include in Project Progress Tracker
+                        </label>
                     </div>
                     
                     <div>

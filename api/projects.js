@@ -1839,7 +1839,8 @@ async function handler(req, res) {
               ALTER TABLE "Project" 
               ADD COLUMN IF NOT EXISTS "monthlyFMSReviewSections" TEXT DEFAULT '[]',
               ADD COLUMN IF NOT EXISTS "hasMonthlyFMSReviewProcess" BOOLEAN DEFAULT false,
-              ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false;
+              ADD COLUMN IF NOT EXISTS "hasTimeProcess" BOOLEAN DEFAULT false,
+              ADD COLUMN IF NOT EXISTS "includeInProgressTracker" BOOLEAN DEFAULT true;
             `;
             projectListColumnsMigrated = true;
             globalThis.projectListColumnsMigrated = true;
@@ -2240,7 +2241,12 @@ async function handler(req, res) {
               body.monthlyProgress && typeof body.monthlyProgress === 'object' && !Array.isArray(body.monthlyProgress)
                 ? body.monthlyProgress
                 : {}
-            )
+            ),
+        includeInProgressTracker: body.includeInProgressTracker !== undefined && body.includeInProgressTracker !== null
+          ? (typeof body.includeInProgressTracker === 'boolean'
+            ? body.includeInProgressTracker
+            : Boolean(body.includeInProgressTracker === true || body.includeInProgressTracker === 'true' || body.includeInProgressTracker === 1))
+          : true
       }
 
       
@@ -2550,6 +2556,12 @@ async function handler(req, res) {
           updateData.hasComplianceReviewProcess = typeof body.hasComplianceReviewProcess === 'boolean'
             ? body.hasComplianceReviewProcess
             : Boolean(body.hasComplianceReviewProcess === true || body.hasComplianceReviewProcess === 'true' || body.hasComplianceReviewProcess === 1);
+        }
+
+        if (body.includeInProgressTracker !== undefined && body.includeInProgressTracker !== null) {
+          updateData.includeInProgressTracker = typeof body.includeInProgressTracker === 'boolean'
+            ? body.includeInProgressTracker
+            : Boolean(body.includeInProgressTracker === true || body.includeInProgressTracker === 'true' || body.includeInProgressTracker === 1);
         }
 
         // Handle monthlyDataReviewSections separately if provided - ensure it's properly saved
