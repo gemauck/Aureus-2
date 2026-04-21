@@ -4,6 +4,7 @@ const storage = window.storage;
 
 const JOB_CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+const HEADING_PREFIX = 'Heading:';
 
 /** Same list as `JOB_CARD_CALL_OUT_CATEGORY_OPTIONS` in jobCardActivityDisplay.js (alphabetical). */
 const JOB_CARD_CALL_OUT_CATEGORY_OPTIONS = [
@@ -26,6 +27,14 @@ const parseJsonArrayField = (value) => {
         }
     }
     return [];
+};
+
+const parseHeadingFromComments = (rawComments) => {
+    if (!rawComments || typeof rawComments !== 'string') return '';
+    const headingLine = rawComments
+        .split('\n')
+        .find((line) => typeof line === 'string' && line.trim().startsWith(HEADING_PREFIX));
+    return headingLine ? headingLine.slice(HEADING_PREFIX.length).trim() : '';
 };
 
 function jobCardMediaIsVideoDataUrl(url) {
@@ -80,6 +89,7 @@ const VoiceNoteTextarea =
 
 const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const [formData, setFormData] = useState({
+        heading: '',
         agentName: '',
         otherTechnicians: [],
         clientId: '',
@@ -174,6 +184,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             );
 
             setFormData({
+                heading: jobCard.heading || parseHeadingFromComments(jobCard.otherComments || ''),
                 agentName: jobCard.agentName || '',
                 otherTechnicians: parseJsonArrayField(jobCard.otherTechnicians),
                 clientId: jobCard.clientId || '',
@@ -219,6 +230,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             setHasSignature(false);
         } else {
             setFormData({
+                heading: '',
                 agentName: '',
                 otherTechnicians: [],
                 clientId: '',
@@ -883,6 +895,20 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             onChange={handleChange}
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             placeholder="Specific location details"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
+                            Heading
+                        </label>
+                        <input
+                            type="text"
+                            name="heading"
+                            value={formData.heading || ''}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            placeholder="Short heading shown with this job card"
                         />
                     </div>
 

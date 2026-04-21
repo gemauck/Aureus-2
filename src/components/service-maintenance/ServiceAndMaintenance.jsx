@@ -1688,7 +1688,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     <span>
                       <span className="block font-medium">Mobile-Field Editor</span>
                       <span className={`block text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Same field set as the mobile job card app.
+                        Same field set as the mobile job card app, including Heading.
                       </span>
                     </span>
                   </button>
