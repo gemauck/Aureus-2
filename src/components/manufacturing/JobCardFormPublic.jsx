@@ -416,12 +416,22 @@ function extractVisualPhotoEntries(photosValue) {
       });
       return;
     }
-    const url = typeof p.url === 'string' ? p.url : '';
+    const candidateUrl =
+      (typeof p.url === 'string' && p.url) ||
+      (typeof p.dataUrl === 'string' && p.dataUrl) ||
+      (typeof p.src === 'string' && p.src) ||
+      (typeof p.imageUrl === 'string' && p.imageUrl) ||
+      (typeof p.uri === 'string' && p.uri) ||
+      '';
+    const url = candidateUrl ? String(candidateUrl) : '';
     if (!url) return;
     visualEntries.push({
       stored: p,
       url,
-      previewUrl: typeof p.thumbUrl === 'string' ? p.thumbUrl : '',
+      previewUrl:
+        (typeof p.thumbUrl === 'string' && p.thumbUrl) ||
+        (typeof p.previewUrl === 'string' && p.previewUrl) ||
+        '',
       name: p.name || `Photo ${idx + 1}`
     });
   });
@@ -1606,10 +1616,19 @@ const JobCardFormPublic = () => {
     sectionMediaEntries.forEach(item => {
       const sec = item.section;
       if (restoredSectionMedia[sec] != null) {
+        const mediaUrl =
+          (typeof item.url === 'string' && item.url) ||
+          (typeof item.dataUrl === 'string' && item.dataUrl) ||
+          (typeof item.src === 'string' && item.src) ||
+          '';
+        if (!mediaUrl) return;
         restoredSectionMedia[sec].push({
           name: item.name || `Attachment ${restoredSectionMedia[sec].length + 1}`,
-          url: item.url,
-          thumbUrl: item.thumbUrl || ''
+          url: mediaUrl,
+          thumbUrl:
+            (typeof item.thumbUrl === 'string' && item.thumbUrl) ||
+            (typeof item.previewUrl === 'string' && item.previewUrl) ||
+            ''
         });
       }
     });
