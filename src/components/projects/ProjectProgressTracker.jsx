@@ -334,7 +334,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const hydrate = async () => {
             try {
                 const detailResponses = await Promise.allSettled(
-                    needsHydration.map((project) => window.DatabaseAPI.getProject(project.id))
+                    needsHydration.map((project) =>
+                        window.DatabaseAPI.getProject(project.id, { forceRefresh: true })
+                    )
                 );
 
                 if (cancelled) return;
@@ -706,11 +708,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         manager: String(p.manager || p.assignedTo || '-'),
                         type: String(p.type || '-'),
                         status: String(p.status || 'Unknown'),
-                        monthlyProgress: monthlyProgress && typeof monthlyProgress === 'object' && !Array.isArray(monthlyProgress) ? monthlyProgress : {}
+                        monthlyProgress: monthlyProgress && typeof monthlyProgress === 'object' && !Array.isArray(monthlyProgress) ? monthlyProgress : {},
+                        // Required for Compliance / Monthly Data Review % (list payload omits these; hydration merges them back)
+                        monthlyDataReviewSections: p.monthlyDataReviewSections,
+                        complianceReviewSections: p.complianceReviewSections,
+                        hasMonthlyDataReviewProcess: p.hasMonthlyDataReviewProcess,
+                        hasComplianceReviewProcess: p.hasComplianceReviewProcess
                     };
                 } catch (e) {
                     console.warn('⚠️ ProjectProgressTracker: Error mapping project:', p, e);
-                    // Return a minimal valid project object to prevent crashes
+                    // Return a minimal valid project object to prevent crashes (keep review JSON if present)
                     return {
                         id: String(p?.id || 'unknown'),
                         name: String(p?.name || 'Invalid Project'),
@@ -718,7 +725,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         manager: '-',
                         type: String(p?.type || '-'),
                         status: 'Unknown',
-                        monthlyProgress: {}
+                        monthlyProgress: {},
+                        monthlyDataReviewSections: p?.monthlyDataReviewSections,
+                        complianceReviewSections: p?.complianceReviewSections,
+                        hasMonthlyDataReviewProcess: p?.hasMonthlyDataReviewProcess,
+                        hasComplianceReviewProcess: p?.hasComplianceReviewProcess
                     };
                 }
             });
@@ -928,7 +939,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         let total = 0;
         let completed = 0;
         yearSections.forEach((section) => {
-            const docs = Array.isArray(section?.documents) ? section.documents : [];
+            const docs = Array.isArray(section?.documents)
+                ? section.documents
+                : (Array.isArray(section?.items) ? section.items : []);
             docs.forEach((doc) => {
                 if (reviewType === 'monthlyDataReview' && shouldExcludeFromMonthlyDataReviewPercent(section?.name, doc?.name)) {
                     return;
