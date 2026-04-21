@@ -82,16 +82,27 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const onBack = typeof onBackProp === 'function' ? onBackProp : () => console.warn('onBack not available');
     
     // Safe constants
-    const currentYear = Number(new Date().getFullYear()) || 2025;
-    const currentMonth = Number(new Date().getMonth()) || 0;
+    const now = new Date();
+    const currentYear = Number(now.getFullYear()) || 2025;
+    const currentMonth = Number(now.getMonth()) || 0;
     
     // Working months calculation
     const getWorkingMonths = () => {
-        const lastMonth = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
-        return [Number(lastMonth), Number(currentMonth)];
+        const previousOne = new Date(currentYear, currentMonth, 1);
+        previousOne.setMonth(previousOne.getMonth() - 1);
+        const previousTwo = new Date(currentYear, currentMonth, 1);
+        previousTwo.setMonth(previousTwo.getMonth() - 2);
+        return [
+            { monthIndex: Number(previousOne.getMonth()), year: Number(previousOne.getFullYear()) },
+            { monthIndex: Number(previousTwo.getMonth()), year: Number(previousTwo.getFullYear()) }
+        ];
     };
     
     const workingMonths = getWorkingMonths();
+    const isWorkingMonthForYear = (monthIndex, year) => {
+        if (typeof monthIndex !== 'number' || typeof year !== 'number') return false;
+        return workingMonths.some((entry) => entry.monthIndex === monthIndex && entry.year === year);
+    };
     // Show whole year for comprehensive tracking
     const months = [
         'January',
@@ -135,15 +146,14 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     useEffect(() => {
         try {
             if (!tableRef?.current) return;
-            if (selectedYear !== currentYear) return;
             
-            const focusIndexes = Array.isArray(workingMonths) ? workingMonths : [];
-            const fallbackIndex = typeof currentMonth === 'number' ? currentMonth : 0;
-            const targetIndex = focusIndexes.length > 0
-                ? Number(focusIndexes[focusIndexes.length - 1])
-                : fallbackIndex;
+            const focusEntries = Array.isArray(workingMonths) ? workingMonths : [];
+            const sameYearTargets = focusEntries.filter((entry) => Number(entry?.year) === Number(selectedYear));
+            const targetIndex = sameYearTargets.length > 0
+                ? Number(sameYearTargets[0].monthIndex)
+                : null;
             
-            if (isNaN(targetIndex) || targetIndex < 0 || targetIndex >= months.length) return;
+            if (targetIndex == null || isNaN(targetIndex) || targetIndex < 0 || targetIndex >= months.length) return;
             
             const targetMonth = months[targetIndex];
             if (!targetMonth) return;
@@ -764,6 +774,19 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         if (!rawValue) return {};
         if (typeof rawValue === 'object') return rawValue;
         if (typeof rawValue !== 'string') return {};
+        let candidate = rawValue;
+        for (let i = 0; i < 2; i++) {
+            try {
+                const parsed = JSON.parse(candidate);
+                if (typeof parsed === 'string') {
+                    candidate = parsed;
+                    continue;
+                }
+                return parsed && typeof parsed === 'object' ? parsed : {};
+            } catch {
+                break;
+            }
+        }
         try {
             return JSON.parse(rawValue);
         } catch {
@@ -1608,7 +1631,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         
         const safeMonth = String(month || '');
         const monthIdx = months.indexOf(safeMonth);
-        const isWorking = Array.isArray(workingMonths) && workingMonths.includes(monthIdx) && selectedYear === currentYear;
+        const isWorking = isWorkingMonthForYear(monthIdx, Number(selectedYear));
         const cellKey = `${project.id}-${safeMonth}-${field}`;
         const cellIdentifier = providedKey || cellKey;
         const isFocusedCell = focusedCellKey === cellIdentifier;
@@ -1682,25 +1705,25 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const fieldConfig = {
             compliance: {
                 icon: 'fa-shield-check',
-                color: '#10b981', // green
-                bgColor: hasValue ? '#ecfdf5' : '#f0fdf4',
-                borderColor: hasValue ? '#10b981' : '#d1fae5',
+                color: '#334155',
+                bgColor: hasValue ? '#f8fafc' : '#f9fafb',
+                borderColor: hasValue ? '#cbd5e1' : '#e2e8f0',
                 label: 'Compliance Review',
                 placeholder: 'Open review'
             },
             data: {
                 icon: 'fa-database',
-                color: '#3b82f6', // blue
-                bgColor: hasValue ? '#eff6ff' : '#f0f9ff',
-                borderColor: hasValue ? '#3b82f6' : '#bfdbfe',
+                color: '#334155',
+                bgColor: hasValue ? '#f8fafc' : '#f9fafb',
+                borderColor: hasValue ? '#cbd5e1' : '#e2e8f0',
                 label: 'Monthly Data Review',
                 placeholder: 'Open review'
             },
             comments: {
                 icon: 'fa-comment-dots',
-                color: '#0284c7', // primary (brand)
-                bgColor: hasValue ? '#f5f3ff' : '#faf5ff',
-                borderColor: hasValue ? '#2563eb' : '#bfdbfe',
+                color: '#475569',
+                bgColor: hasValue ? '#f8fafc' : '#f9fafb',
+                borderColor: hasValue ? '#cbd5e1' : '#e2e8f0',
                 label: 'Comments',
                 placeholder: 'Add comments'
             }
@@ -1713,7 +1736,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const calculatedBackground = isFocusedCell
             ? config.bgColor
             : isWorking
-                ? 'rgba(59, 130, 246, 0.08)'
+                ? '#f1f5f9'
                 : defaultBgColor;
         
         // Slimmer cells with reduced padding
@@ -1728,15 +1751,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             borderBottom: '1px solid #e5e7eb',
             borderRight: '1px solid #e5e7eb',
             backgroundColor: calculatedBackground,
-            minHeight: '60px',
-            height: '60px',
+            minHeight: '84px',
+            height: '84px',
             verticalAlign: 'top',
             width: '140px',
             minWidth: '140px',
             maxWidth: '140px',
             transition: 'all 0.2s ease',
             position: 'relative',
-            boxShadow: isFocusedCell ? `0 0 0 2px ${config.color}40` : 'none',
+            boxShadow: isFocusedCell ? '0 0 0 1px #94a3b8' : 'none',
             cursor: isEditing ? 'text' : (field === 'comments' ? 'pointer' : 'default')
         };
         
@@ -1835,7 +1858,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             borderRadius: '4px',
                             border: `1px solid ${config.borderColor}`,
                             backgroundColor: '#ffffff',
-                            color: config.color,
+                            color: '#334155',
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1855,15 +1878,23 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             color: '#6b7280'
                         }
                     },
-                        React.createElement('span', { style: { fontWeight: '600', color: '#374151' } }, reviewPercent == null ? '--%' : `${reviewPercent}%`),
-                        React.createElement('span', null, reviewProgress?.total > 0 ? `${reviewProgress.completed}/${reviewProgress.total}` : 'No items')
+                        React.createElement('span', {
+                            style: {
+                                fontWeight: '800',
+                                fontSize: '15px',
+                                color: '#111827',
+                                letterSpacing: '-0.01em',
+                                lineHeight: '1'
+                            }
+                        }, reviewPercent == null ? '--%' : `${reviewPercent}%`),
+                        React.createElement('span', { style: { fontSize: '10px', color: '#475569' } }, reviewProgress?.total > 0 ? `${reviewProgress.completed}/${reviewProgress.total}` : 'No items')
                     ),
                     React.createElement('div', {
                         style: {
                             width: '100%',
                             height: '6px',
                             borderRadius: '999px',
-                            backgroundColor: '#e5e7eb',
+                            backgroundColor: '#e2e8f0',
                             overflow: 'hidden'
                         }
                     },
@@ -1871,7 +1902,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             style: {
                                 width: `${reviewPercent == null ? 0 : reviewPercent}%`,
                                 height: '100%',
-                                backgroundColor: config.color,
+                                backgroundColor: '#64748b',
                                 transition: 'width 0.25s ease'
                             }
                         })
@@ -1887,7 +1918,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         fontFamily: 'inherit',
                         border: `1.5px solid ${hasValue ? config.borderColor : '#e5e7eb'}`,
                         borderRadius: '4px',
-                        backgroundColor: hasValue ? '#ffffff' : config.bgColor,
+                        backgroundColor: field === 'comments' ? '#ffffff' : (hasValue ? '#ffffff' : config.bgColor),
                         color: hasValue ? '#111827' : '#9ca3af',
                         lineHeight: '1.3',
                         transition: 'all 0.2s ease',
@@ -1902,7 +1933,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         minHeight: '30px',
                         position: 'relative'
                     },
-                    className: field === 'comments' ? (hasValue ? 'hover:border-blue-400 hover:shadow-sm cursor-pointer' : 'hover:border-gray-400 cursor-pointer') : '',
+                    className: field === 'comments' ? (hasValue ? 'hover:border-slate-400 hover:shadow-sm cursor-pointer' : 'hover:border-gray-400 cursor-pointer') : '',
                     title: hasValue ? displayValue : `Click to ${config.placeholder.toLowerCase()}`
                 }, 
                     hasValue ? (
@@ -1973,7 +2004,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         }, 'Project Progress Tracker'),
                         React.createElement('p', { className: 'text-sm text-gray-600 flex items-center gap-2' },
                             React.createElement('i', { className: 'fas fa-info-circle text-xs text-blue-500' }),
-                            'Track monthly progress with emphasis on current and previous month'
+                            'Track monthly progress with emphasis on the previous two months'
                         )
                     )
                 ),
@@ -2023,10 +2054,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         ) : null,
         // Working Months Info - Modern Badge Design
         React.createElement('div', { 
-            className: 'flex flex-col md:flex-row md:items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-sky-50 rounded-xl border border-blue-200',
+            className: 'flex flex-col md:flex-row md:items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200',
         },
             React.createElement('div', {
-                className: 'px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm',
+                className: 'px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm',
                 style: { 
                     flexShrink: 0
                 }
@@ -2035,23 +2066,23 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 React.createElement('span', null, 'Working Months')
             ),
             React.createElement('div', { className: 'flex-1 flex items-center gap-2' },
-                React.createElement('i', { className: 'fas fa-lightbulb text-blue-500' }),
+                React.createElement('i', { className: 'fas fa-lightbulb text-slate-500' }),
                 React.createElement('span', { 
                     className: 'text-sm text-gray-700'
-                }, 'Highlighted columns mark the current month and the month before it')
+                }, 'Highlighted columns mark the previous two months')
             ),
             // Field type legend
             React.createElement('div', { className: 'flex items-center gap-4 flex-wrap' },
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
-                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#10b981' } }),
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#64748b' } }),
                     React.createElement('span', { className: 'text-xs text-gray-600' }, 'Compliance')
                 ),
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
-                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#3b82f6' } }),
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#64748b' } }),
                     React.createElement('span', { className: 'text-xs text-gray-600' }, 'Data')
                 ),
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
-                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#2563eb' } }),
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#64748b' } }),
                     React.createElement('span', { className: 'text-xs text-gray-600' }, 'Comments')
                 )
             )
@@ -2069,7 +2100,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 style: { borderSpacing: 0, tableLayout: 'auto' }
             },
                 React.createElement('thead', { 
-                    className: 'bg-gradient-to-r from-gray-50 to-gray-100',
+                    className: 'bg-gray-50',
                     style: { 
                         borderBottom: '2px solid #e5e7eb',
                         position: 'sticky',
@@ -2106,7 +2137,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         ),
                         (Array.isArray(months) ? months : []).map((month, idx) => {
                             const safeMonth = String(month || '');
-                            const isWorking = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeYear === currentYear;
+                            const isWorking = isWorkingMonthForYear(idx, safeYear);
                             return React.createElement('th', {
                                 key: safeMonth + '-header',
                                 colSpan: 3,
@@ -2115,12 +2146,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     fontSize: '12px',
                                     fontWeight: '700',
                                     textAlign: 'center',
-                                    backgroundColor: isWorking ? '#3b82f6' : '#f9fafb',
-                                    backgroundImage: isWorking ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'none',
-                                    color: isWorking ? '#ffffff' : '#374151',
+                                    backgroundColor: isWorking ? '#e2e8f0' : '#f9fafb',
+                                    backgroundImage: 'none',
+                                    color: '#374151',
                                     border: 'none',
                                     borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
-                                    borderBottom: '2px solid ' + (isWorking ? '#1e40af' : '#e5e7eb'),
+                                    borderBottom: '2px solid ' + (isWorking ? '#94a3b8' : '#e5e7eb'),
                                     minWidth: '420px',
                                     width: '420px',
                                     maxWidth: '420px',
@@ -2131,10 +2162,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 'data-month-header': safeMonth
                             }, 
                                 isWorking ? React.createElement('div', { className: 'flex items-center justify-center gap-2' },
-                                    React.createElement('i', { className: 'fas fa-star text-xs' }),
+                                    React.createElement('i', { className: 'fas fa-star text-xs text-slate-600' }),
                                     React.createElement('span', null, safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2)),
                                     React.createElement('span', { 
-                                        className: 'ml-1 px-1.5 py-0.5 bg-white bg-opacity-20 rounded text-[10px] font-bold'
+                                        className: 'ml-1 px-1.5 py-0.5 bg-white rounded text-[10px] font-bold text-slate-700'
                                     }, 'WORKING')
                                 ) : safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2)
                             );
@@ -2205,7 +2236,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     React.createElement('tr', null,
                         (Array.isArray(months) ? months : []).map((month, idx) => {
                             const safeMonth = String(month || '');
-                            const isWorking = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeYear === currentYear;
+                            const isWorking = isWorkingMonthForYear(idx, safeYear);
                             return React.createElement(React.Fragment, { key: safeMonth + '-subheaders' },
                                 React.createElement('th', { 
                                     style: {
@@ -2213,8 +2244,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         fontSize: '10px',
                                         fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? 'rgba(16, 185, 129, 0.1)' : '#ffffff',
-                                        color: isWorking ? '#059669' : '#10b981',
+                                        backgroundColor: isWorking ? '#f1f5f9' : '#ffffff',
+                                        color: '#475569',
                                         border: 'none',
                                         borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
                                         borderBottom: '1px solid #e5e7eb',
@@ -2227,7 +2258,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
-                                        React.createElement('i', { className: 'fas fa-shield-check text-xs', style: { color: '#10b981' } }),
+                                        React.createElement('i', { className: 'fas fa-shield-check text-xs', style: { color: '#64748b' } }),
                                         React.createElement('span', null, 'Compliance Review')
                                     )
                                 ),
@@ -2237,8 +2268,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         fontSize: '10px',
                                         fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? 'rgba(59, 130, 246, 0.1)' : '#ffffff',
-                                        color: isWorking ? '#2563eb' : '#3b82f6',
+                                        backgroundColor: isWorking ? '#f1f5f9' : '#ffffff',
+                                        color: '#475569',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
                                         borderRight: '1px solid #e5e7eb',
@@ -2250,7 +2281,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
-                                        React.createElement('i', { className: 'fas fa-database text-xs', style: { color: '#3b82f6' } }),
+                                        React.createElement('i', { className: 'fas fa-database text-xs', style: { color: '#64748b' } }),
                                         React.createElement('span', null, 'Monthly Data Review')
                                     )
                                 ),
@@ -2260,8 +2291,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         fontSize: '10px',
                                         fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? 'rgba(139, 92, 246, 0.1)' : '#ffffff',
-                                        color: isWorking ? '#1d4ed8' : '#2563eb',
+                                        backgroundColor: isWorking ? '#f1f5f9' : '#ffffff',
+                                        color: '#475569',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
                                         borderRight: '1px solid #e5e7eb',
@@ -2273,7 +2304,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
-                                        React.createElement('i', { className: 'fas fa-comment-dots text-xs', style: { color: '#2563eb' } }),
+                                        React.createElement('i', { className: 'fas fa-comment-dots text-xs', style: { color: '#64748b' } }),
                                         React.createElement('span', null, 'Comments')
                                     )
                                 )
