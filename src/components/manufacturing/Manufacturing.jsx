@@ -1,5 +1,4 @@
 // Use React from window
-console.log('🔵 Manufacturing.jsx: Script started loading...');
 
 // Safely access React hooks from the global window.React without throwing
 // If React isn't ready yet, we fall back to an empty object so the script
@@ -375,9 +374,19 @@ try {
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
   const [inventoryListPage, setInventoryListPage] = useState(1);
   const inventoryTableScrollRef = useRef(null);
+  const inventoryValueSummaryLastLoadedAtRef = useRef(0);
   const loadInventoryValueByLocationSummary = useCallback(async (options = {}) => {
     if (!window.DatabaseAPI?.getManufacturingInventoryLocationValueSummary) {
       return;
+    }
+    const forceRefresh = options?.forceRefresh === true;
+    const now = Date.now();
+    if (!forceRefresh && inventoryValueSummaryLastLoadedAtRef.current > 0) {
+      const elapsedMs = now - inventoryValueSummaryLastLoadedAtRef.current;
+      // This endpoint is expensive server-side; avoid refetch storms during routine UI updates.
+      if (elapsedMs < 60 * 1000) {
+        return;
+      }
     }
     try {
       const res = await window.DatabaseAPI.getManufacturingInventoryLocationValueSummary(options);
@@ -385,6 +394,7 @@ try {
       if (payload && typeof payload === 'object') {
         setInventoryValueByLocationSummary(payload);
       }
+      inventoryValueSummaryLastLoadedAtRef.current = now;
     } catch (error) {
       console.error('Manufacturing: failed to load inventory value by location', error);
     } finally {
@@ -421,7 +431,7 @@ try {
       setInventory(processed);
       setInventoryLoadedFromAPI(true);
       safeSetItem('manufacturing_inventory', JSON.stringify(processed));
-      void loadInventoryValueByLocationSummary({ forceRefresh: true });
+      void loadInventoryValueByLocationSummary();
 
       // Restore focus after state update if user was typing
       if (wasInputFocused) {
@@ -950,7 +960,7 @@ try {
         // Stock Movements
         if (typeof window.DatabaseAPI.getStockMovements === 'function') {
           apiCalls.push(
-            window.DatabaseAPI.getStockMovements()
+            window.DatabaseAPI.getStockMovements({ page: 1, pageSize: 120 })
               .then(movementsResponse => {
                 const movementsData = movementsResponse?.data?.movements || [];
                 const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
@@ -1010,60 +1020,6 @@ try {
           }
         }
 
-        // Clients (for production order allocation)
-        if (typeof window.DatabaseAPI.getClients === 'function') {
-          apiCalls.push(
-            window.DatabaseAPI.getClients()
-              .then(response => {
-                // Extract clients from response - handle different response structures
-                const allClients = response?.data?.clients || response?.data || (Array.isArray(response) ? response : []);
-                const processed = Array.isArray(allClients) ? allClients : [];
-                // Filter for active clients - also include clients without explicit status/type
-                const activeClients = processed.filter(c => {
-                  const status = (c.status || '').toLowerCase();
-                  const type = (c.type || 'client').toLowerCase();
-                  return (status === 'active' || status === '') && (type === 'client' || type === '');
-                });
-                setClients(activeClients);
-                return { type: 'clients', data: activeClients };
-              })
-              .catch(error => {
-                console.error('Error loading clients:', error);
-                // Try to load from localStorage as fallback
-                try {
-                  const cachedClients = JSON.parse(localStorage.getItem('clients') || '[]');
-                  if (Array.isArray(cachedClients) && cachedClients.length > 0) {
-                    const activeClients = cachedClients.filter(c => {
-                      const status = (c.status || '').toLowerCase();
-                      const type = (c.type || 'client').toLowerCase();
-                      return (status === 'active' || status === '') && (type === 'client' || type === '');
-                    });
-                    setClients(activeClients);
-                  }
-                } catch (cacheError) {
-                  console.error('Error loading clients from cache:', cacheError);
-                }
-                return { type: 'clients', error };
-              })
-          );
-        }
-
-        // Users (for job cards - technicians)
-        if (typeof window.DatabaseAPI.getUsers === 'function') {
-          apiCalls.push(
-            window.DatabaseAPI.getUsers()
-              .then(usersResponse => {
-                const usersData = usersResponse?.data?.users || usersResponse?.data || [];
-                setUsers(Array.isArray(usersData) ? usersData : []);
-                return { type: 'users', data: usersData };
-              })
-              .catch(error => {
-                console.error('Error loading users:', error);
-                return { type: 'users', error };
-              })
-          );
-        }
-
         // Execute all API calls in parallel
         if (apiCalls.length > 0) {
           const results = await Promise.all(apiCalls);
@@ -1077,6 +1033,67 @@ try {
 
     loadData();
   }, []);
+
+  useEffect(() => {
+    // These datasets are large and only needed for production/job card flows.
+    if (activeTab !== 'production') {
+      return;
+    }
+    if (!window.DatabaseAPI) {
+      return;
+    }
+
+    const calls = [];
+
+    if (clients.length === 0 && typeof window.DatabaseAPI.getClients === 'function') {
+      calls.push(
+        window.DatabaseAPI.getClients()
+          .then((response) => {
+            const allClients = response?.data?.clients || response?.data || (Array.isArray(response) ? response : []);
+            const processed = Array.isArray(allClients) ? allClients : [];
+            const activeClients = processed.filter((c) => {
+              const status = (c.status || '').toLowerCase();
+              const type = (c.type || 'client').toLowerCase();
+              return (status === 'active' || status === '') && (type === 'client' || type === '');
+            });
+            setClients(activeClients);
+          })
+          .catch((error) => {
+            console.error('Error loading clients:', error);
+            try {
+              const cachedClients = JSON.parse(localStorage.getItem('clients') || '[]');
+              if (Array.isArray(cachedClients) && cachedClients.length > 0) {
+                const activeClients = cachedClients.filter((c) => {
+                  const status = (c.status || '').toLowerCase();
+                  const type = (c.type || 'client').toLowerCase();
+                  return (status === 'active' || status === '') && (type === 'client' || type === '');
+                });
+                setClients(activeClients);
+              }
+            } catch (cacheError) {
+              console.error('Error loading clients from cache:', cacheError);
+            }
+          })
+      );
+    }
+
+    if (users.length === 0 && typeof window.DatabaseAPI.getUsers === 'function') {
+      calls.push(
+        window.DatabaseAPI.getUsers()
+          .then((usersResponse) => {
+            const usersData = usersResponse?.data?.users || usersResponse?.data || [];
+            setUsers(Array.isArray(usersData) ? usersData : []);
+          })
+          .catch((error) => {
+            console.error('Error loading users:', error);
+          })
+      );
+    }
+
+    if (calls.length > 0) {
+      void Promise.all(calls);
+    }
+  }, [activeTab, clients.length, users.length]);
 
   // Merge box numbers from loaded inventory into dropdown list (so existing items' box numbers appear)
   useEffect(() => {
@@ -1170,7 +1187,7 @@ try {
       // Movements
       if (window.DatabaseAPI?.getStockMovements) {
         apiCalls.push(
-          window.DatabaseAPI.getStockMovements()
+          window.DatabaseAPI.getStockMovements({ page: 1, pageSize: 120 })
             .then(movementsResponse => {
               const movementsData = movementsResponse?.data?.movements || [];
               const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
@@ -3099,7 +3116,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       }
       try {
         const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
-        const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, { forceRefresh: true });
+        const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad);
         const invData = invResponse?.data?.inventory || [];
         const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
 

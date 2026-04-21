@@ -2015,8 +2015,20 @@ const DatabaseAPI = {
     },
 
     // MANUFACTURING OPERATIONS - STOCK MOVEMENTS
-    async getStockMovements() {
-        const raw = await this.makeRequest('/manufacturing/stock-movements');
+    async getStockMovements(options = {}) {
+        const page = parseInt(options?.page, 10);
+        const pageSize = parseInt(options?.pageSize, 10);
+        const params = new URLSearchParams();
+        if (Number.isFinite(page) && page > 0) {
+            params.set('page', String(page));
+        }
+        if (Number.isFinite(pageSize) && pageSize > 0) {
+            params.set('pageSize', String(pageSize));
+        }
+        const endpoint = params.toString()
+            ? `/manufacturing/stock-movements?${params.toString()}`
+            : '/manufacturing/stock-movements';
+        const raw = await this.makeRequest(endpoint);
         const normalized = {
             data: {
                 movements: Array.isArray(raw?.data?.movements)
@@ -2025,7 +2037,8 @@ const DatabaseAPI = {
                         ? raw.movements
                         : Array.isArray(raw?.data)
                             ? raw.data
-                            : []
+                            : [],
+                pagination: raw?.data?.pagination || raw?.pagination || null
             }
         };
         return normalized;
