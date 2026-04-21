@@ -2331,16 +2331,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             /post\s*processing|post\s*process|prost\s*process/i.test(docName);
     }
 
-    const monthCompletionByIndex = useMemo(() => {
+    const monthCompletionBySectionAndIndex = useMemo(() => {
         if (!Array.isArray(months) || months.length === 0) return {};
 
         const completionMap = {};
-        months.forEach((_, monthIdx) => {
-            const monthLabel = months[monthIdx];
-            let total = 0;
-            let completed = 0;
+        (sections || []).forEach((section, sectionIdx) => {
+            const sectionKey = String(section?.id ?? `section-${sectionIdx}`);
+            const sectionMonthMap = {};
 
-            (sections || []).forEach((section) => {
+            months.forEach((monthLabel, monthIdx) => {
+                let total = 0;
+                let completed = 0;
+
                 (section?.documents || []).forEach((doc) => {
                     if (shouldExcludeFromMonthlyDataReviewPercent(section, doc)) {
                         return;
@@ -2351,10 +2353,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                         completed += 1;
                     }
                 });
+
+                const percent = total > 0 ? Math.round((completed / total) * 100) : null;
+                sectionMonthMap[monthIdx] = { completed, total, percent };
             });
 
-            const percent = total > 0 ? Math.round((completed / total) * 100) : null;
-            completionMap[monthIdx] = { completed, total, percent };
+            completionMap[sectionKey] = sectionMonthMap;
         });
 
         return completionMap;
@@ -8695,7 +8699,11 @@ Abcotronics`;
                                                                     <span>{month.slice(0, 3)}</span>
                                                                     <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
                                                                     <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
-                                                                        {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
+                                                                        {(() => {
+                                                                            const sectionKey = String(section?.id ?? `section-${sectionIndex}`);
+                                                                            const pct = monthCompletionBySectionAndIndex[sectionKey]?.[idx]?.percent;
+                                                                            return pct != null ? `${pct}% complete` : '--';
+                                                                        })()}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -8758,7 +8766,11 @@ Abcotronics`;
                                                         <span>{month.slice(0, 3)}</span>
                                                         <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
                                                         <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
-                                                            {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
+                                                            {(() => {
+                                                                const sectionKey = String(section?.id ?? `section-${sectionIndex}`);
+                                                                const pct = monthCompletionBySectionAndIndex[sectionKey]?.[idx]?.percent;
+                                                                return pct != null ? `${pct}% complete` : '--';
+                                                            })()}
                                                         </span>
                                                     </div>
                                                 </th>
