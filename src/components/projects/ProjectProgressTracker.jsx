@@ -142,6 +142,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     // Wide cells + sticky column width (used for horizontal scroll alignment)
     const TRACK_CELL_WIDTH = 200;
     const TRACK_MONTH_GROUP_WIDTH = TRACK_CELL_WIDTH * 4;
+    /** Row-2 header cells use top: this so they sit under row 1 (thead position:sticky is unreliable in browsers). */
+    const TRACK_HEADER_ROW1_STICKY_TOP = 58;
     /** Between month groups (after Comments, before next Compliance / after last month before PM) */
     const TRACK_MONTH_SEPARATOR_BORDER = '3px solid #64748b';
     /** Horizontal rule under each project row (full table width) */
@@ -2399,13 +2401,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             },
                 React.createElement('thead', { 
                     className: 'bg-slate-50',
+                    // Do not use position:sticky on <thead> — it is undefined/poorly supported; stick each <th> instead.
                     style: { 
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 30,
-                        backgroundColor: '#f8fafc',
-                        borderBottom: '2px solid #e2e8f0',
-                        boxShadow: '0 4px 8px -2px rgba(15, 23, 42, 0.12)'
+                        borderBottom: '2px solid #e2e8f0'
                     }
                 },
                     // First row: Month headers - Modern Design
@@ -2459,8 +2457,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     maxWidth: `${TRACK_MONTH_GROUP_WIDTH}px`,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
-                                    position: 'relative',
-                                    verticalAlign: 'middle'
+                                    position: 'sticky',
+                                    top: 0,
+                                    zIndex: 32,
+                                    verticalAlign: 'middle',
+                                    boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.06)'
                                 },
                                 'data-month-header': safeMonth
                             }, 
@@ -2488,7 +2489,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 width: '132px',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.05em',
-                                verticalAlign: 'middle'
+                                verticalAlign: 'middle',
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 34,
+                                boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.08)'
                             }
                         }, 
                             React.createElement('div', { className: 'flex items-center gap-2' },
@@ -2509,7 +2514,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 width: '152px',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.05em',
-                                verticalAlign: 'middle'
+                                verticalAlign: 'middle',
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 34,
+                                boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.08)'
                             }
                         }, 
                             React.createElement('div', { className: 'flex items-center gap-2' },
@@ -2530,7 +2539,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 width: '132px',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.05em',
-                                verticalAlign: 'middle'
+                                verticalAlign: 'middle',
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 34,
+                                boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.08)'
                             }
                         }, 
                             React.createElement('div', { className: 'flex items-center gap-2' },
@@ -2564,7 +2577,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         maxWidth: `${TRACK_CELL_WIDTH}px`,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em',
-                                        verticalAlign: 'middle'
+                                        verticalAlign: 'middle',
+                                        position: 'sticky',
+                                        top: TRACK_HEADER_ROW1_STICKY_TOP,
+                                        zIndex: 31,
+                                        boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.05)'
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
@@ -2589,7 +2606,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         maxWidth: `${TRACK_CELL_WIDTH}px`,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em',
-                                        verticalAlign: 'middle'
+                                        verticalAlign: 'middle',
+                                        position: 'sticky',
+                                        top: TRACK_HEADER_ROW1_STICKY_TOP,
+                                        zIndex: 31,
+                                        boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.05)'
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
@@ -2613,7 +2634,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         maxWidth: `${TRACK_CELL_WIDTH}px`,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em',
-                                        verticalAlign: 'middle'
+                                        verticalAlign: 'middle',
+                                        position: 'sticky',
+                                        top: TRACK_HEADER_ROW1_STICKY_TOP,
+                                        zIndex: 31,
+                                        boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.05)'
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
@@ -2637,7 +2662,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         maxWidth: `${TRACK_CELL_WIDTH}px`,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em',
-                                        verticalAlign: 'middle'
+                                        verticalAlign: 'middle',
+                                        position: 'sticky',
+                                        top: TRACK_HEADER_ROW1_STICKY_TOP,
+                                        zIndex: 31,
+                                        boxShadow: '0 1px 0 0 rgba(15, 23, 42, 0.05)'
                                     }
                                 }, 
                                     React.createElement('div', { className: 'flex items-center gap-1.5' },
