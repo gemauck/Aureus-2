@@ -2305,8 +2305,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return next;
     };
 
+    function isCompletedStatusForTracker(rawStatus) {
+        if (!rawStatus) return false;
+        const normalized = String(rawStatus).toLowerCase();
+
+        if (isMonthlyDataReview) {
+            const statusKey = resolveMonthlyDataReviewStatusKey(rawStatus);
+            return statusKey === 'done' || statusKey === 'complete-issues-outstanding' || statusKey === 'complete';
+        }
+
+        if (isComplianceReview) {
+            return normalized === 'reviewed-in-order' || normalized === 'reviewed-issue';
+        }
+
+        // Document Collection
+        return normalized === 'collected' || normalized === 'available-on-request' || normalized === 'not-required';
+    }
+
     const monthCompletionByIndex = useMemo(() => {
-        if (!isMonthlyDataReview || !Array.isArray(months) || months.length === 0) return {};
+        if (!Array.isArray(months) || months.length === 0) return {};
 
         const completionMap = {};
         months.forEach((_, monthIdx) => {
@@ -2318,8 +2335,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 (section?.documents || []).forEach((doc) => {
                     total += 1;
                     const rawStatus = getStatusForYear(doc?.collectionStatus || {}, monthLabel, selectedYear);
-                    const statusKey = resolveMonthlyDataReviewStatusKey(rawStatus);
-                    if (statusKey === 'done' || statusKey === 'complete-issues-outstanding' || statusKey === 'complete') {
+                    if (isCompletedStatusForTracker(rawStatus)) {
                         completed += 1;
                     }
                 });
@@ -2330,7 +2346,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         });
 
         return completionMap;
-    }, [isMonthlyDataReview, months, sections, selectedYear]);
+    }, [months, sections, selectedYear, isMonthlyDataReview, isComplianceReview]);
 
     // Email request per document/month: saved recipients, subject, body, recipientName, schedule (for "Request documents via email")
     const getEmailRequestForYear = (doc, month, year = selectedYear) => {
@@ -8666,11 +8682,9 @@ Abcotronics`;
                                                                 >
                                                                     <span>{month.slice(0, 3)}</span>
                                                                     <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
-                                                                    {isMonthlyDataReview ? (
-                                                                        <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
-                                                                            {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
-                                                                        </span>
-                                                                    ) : null}
+                                                                    <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
+                                                                        {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         </th>
@@ -8731,6 +8745,9 @@ Abcotronics`;
                                                     <div className="flex flex-col items-center gap-0.5">
                                                         <span>{month.slice(0, 3)}</span>
                                                         <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                        <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">
+                                                            {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
+                                                        </span>
                                                     </div>
                                                 </th>
                                             ))}

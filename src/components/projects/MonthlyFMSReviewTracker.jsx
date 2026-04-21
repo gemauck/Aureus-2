@@ -2192,6 +2192,30 @@ const getAssigneeColor = (identifier, users) => {
     const getDocumentStatus = (document, month) => {
         return getStatusForYear(document.collectionStatus, month, selectedYear);
     };
+
+    const monthCompletionByIndex = useMemo(() => {
+        const completion = {};
+        (months || []).forEach((month, idx) => {
+            let total = 0;
+            let completed = 0;
+            (sections || []).forEach((section) => {
+                (section?.documents || []).forEach((document) => {
+                    total += 1;
+                    const status = getStatusForYear(document?.collectionStatus || {}, month, selectedYear);
+                    const normalized = String(status || '').toLowerCase();
+                    if (normalized === 'checked' || normalized === 'issue') {
+                        completed += 1;
+                    }
+                });
+            });
+            completion[idx] = {
+                completed,
+                total,
+                percent: total > 0 ? Math.round((completed / total) * 100) : null
+            };
+        });
+        return completion;
+    }, [months, sections, selectedYear]);
     
     const getDocumentComments = (document, month) => {
         return getCommentsForYear(document.comments, month, selectedYear);
@@ -4478,6 +4502,9 @@ style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', max
                                                     <div className="flex flex-col items-center gap-0.5">
                                                         <span>{month.slice(0, 3)}</span>
                                                         <span className="text-[10px] font-normal">{String(selectedYear).slice(-2)}</span>
+                                                        <span className="text-[10px] font-semibold text-green-700">
+                                                            {monthCompletionByIndex[idx]?.percent != null ? `${monthCompletionByIndex[idx].percent}% complete` : '--'}
+                                                        </span>
                                                     </div>
                                                 </th>
                                             ))}

@@ -2575,6 +2575,35 @@ const getAssigneeColor = (identifier, users) => {
     const getDocumentStatus = (doc, week) => {
         return getStatusForYear(doc.collectionStatus, week, selectedYear);
     };
+
+    const weekCompletionByKey = useMemo(() => {
+        const completion = {};
+        (gridColumns || []).forEach((col) => {
+            const week = col.week;
+            const weekKey = getWeekKey(week, selectedYear);
+            if (!weekKey) return;
+
+            let total = 0;
+            let completed = 0;
+            (sections || []).forEach((section) => {
+                (section?.documents || []).forEach((doc) => {
+                    total += 1;
+                    const status = getStatusForYear(doc?.collectionStatus || {}, week, selectedYear);
+                    const normalized = String(status || '').toLowerCase();
+                    if (normalized === 'checked' || normalized === 'issue') {
+                        completed += 1;
+                    }
+                });
+            });
+
+            completion[weekKey] = {
+                completed,
+                total,
+                percent: total > 0 ? Math.round((completed / total) * 100) : null
+            };
+        });
+        return completion;
+    }, [gridColumns, sections, selectedYear]);
     
     const getDocumentComments = (doc, week) => {
         return getCommentsForYear(doc.comments, week, selectedYear);
@@ -4936,6 +4965,13 @@ placeholder="Notes..."
                                                     >
                                                         <div className="flex flex-col items-center gap-0.5">
                                                             <span className="text-[10px]">{week.label}</span>
+                                                            <span className="text-[10px] font-semibold text-green-700">
+                                                                {(() => {
+                                                                    const wk = getWeekKey(week, selectedYear);
+                                                                    const pct = wk ? weekCompletionByKey[wk]?.percent : null;
+                                                                    return pct != null ? `${pct}% complete` : '--';
+                                                                })()}
+                                                            </span>
                                                         </div>
                                                     </th>
                                                 );
