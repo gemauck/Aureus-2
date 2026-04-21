@@ -1634,7 +1634,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch">
             <a
               href="/job-card"
-              className={`inline-flex flex-1 min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:max-w-xs ${isDark ? 'bg-primary-500 text-white hover:bg-primary-600 focus-visible:ring-offset-gray-900' : 'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-offset-white'}`}
+              className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:w-auto sm:max-w-xs ${isDark ? 'bg-primary-500 text-white hover:bg-primary-600 focus-visible:ring-offset-gray-900' : 'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-offset-white'}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -1655,7 +1655,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               </button>
               {createJobCardMenuOpen ? (
                 <div
-                  className={`absolute left-0 top-[calc(100%+8px)] z-20 w-72 rounded-xl border p-1.5 shadow-xl ${
+                  className={`absolute left-0 top-[calc(100%+8px)] z-20 w-60 max-w-[calc(100vw-2rem)] rounded-xl border p-1.5 shadow-xl ${
                     isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
                   }`}
                   role="menu"
