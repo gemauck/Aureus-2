@@ -1964,6 +1964,7 @@ async function handler(req, res) {
               hasMonthlyFMSReviewProcess: true, // Include so Monthly FMS tab persists after refresh when opening from list
               hasMonthlyDataReviewProcess: true, // Include so Monthly Data Review tab persists after refresh when opening from list
               hasComplianceReviewProcess: true, // Include so Compliance Review tab persists after refresh when opening from list
+              includeInProgressTracker: true, // Progress Tracker list filter
               ...(includeTaskCount ? {
                 _count: {
                   select: {
@@ -2010,6 +2011,7 @@ async function handler(req, res) {
                 hasMonthlyFMSReviewProcess: true,
                 hasMonthlyDataReviewProcess: true,
                 hasComplianceReviewProcess: true,
+                includeInProgressTracker: true,
                 ...(includeTaskCount ? {
                   _count: {
                     select: {

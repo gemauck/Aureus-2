@@ -142,11 +142,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const [loadError, setLoadError] = useState(null);
     const [saving, setSaving] = useState(false);
     
-    // Modal state for editing progress data
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [modalData, setModalData] = useState(null); // {project, month, field, currentValue, tempValue}
-    
-    // Inline editing state for compliance and data fields
+    // Inline editing state (comments: textarea in cell; compliance/data reserved for future inline links)
     const [editingCell, setEditingCell] = useState(null); // {projectId, month, field}
     const [editingValue, setEditingValue] = useState('');
     
@@ -251,32 +247,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         };
                     });
                     
-                    // Filter to projects that have monthlyProgress data OR are MONTHLY type
-                    // This allows both explicitly MONTHLY type projects and any project with monthly progress data
-                    const monthlyProjects = normalizedProjects.filter(p => {
+                    // Only projects with "Include in Project Progress Tracker" enabled in Edit Project
+                    const monthlyProjects = normalizedProjects.filter((p) => {
                         if (!p || typeof p !== 'object') return false;
-
-                        if (p.includeInProgressTracker === false) return false;
-                        
-                        // Include if it has monthlyProgress data
-                        if (p.monthlyProgress && typeof p.monthlyProgress === 'object' && Object.keys(p.monthlyProgress).length > 0) {
-                            return true;
-                        }
-                        
-                        // Also include if type starts with MONTHLY (case-insensitive)
-                        const rawType = p.type;
-                        if (rawType !== null && rawType !== undefined) {
-                        try {
-                            const projectType = String(rawType || '').toUpperCase().trim();
-                                if (projectType.length > 0 && projectType.startsWith('MONTHLY')) {
-                                    return true;
-                                }
-                        } catch (e) {
-                                // If type conversion fails, continue to check other criteria
-                            }
-                        }
-                        
-                        return false;
+                        const v = p.includeInProgressTracker;
+                        return v === true || v === 1 || v === 'true';
                     });
                     
                     
@@ -287,7 +262,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     
                     if (monthlyProjects.length > 0) {
                     } else if (normalizedProjects.length > 0) {
-                        console.warn('⚠️ ProjectProgressTracker: No projects with monthly progress found');
+                        console.warn('⚠️ ProjectProgressTracker: No projects opted in (Include in Project Progress Tracker)');
                     } else {
                     }
                     
@@ -1612,12 +1587,6 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     // Don't fail the save if reload fails - the local state update above should be sufficient
                 }
                 
-                // Show success notification
-                
-                // Close modal after successful save
-                setIsModalOpen(false);
-                setModalData(null);
-                
                 // Optional: Show a brief success message (you can replace with a toast notification)
                 // For now, we'll just log it - the UI update should be visible immediately
             }
@@ -1633,80 +1602,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 `Please check the browser console for more details.`;
             
             alert(detailedError);
-            
-            // Don't close modal on error - let user retry or cancel
-            // Keep the modal open so user can see their data and try again
         } finally {
             setSaving(false);
         }
     };
     
-    // Open modal for editing a cell
-    const openEditModal = (project, month, field) => {
-        const currentValue = getProgressData(project, month, field);
-        setModalData({
-            project: project,
-            month: month,
-            field: field,
-            currentValue: currentValue || '',
-            tempValue: currentValue || ''
-        });
-        setIsModalOpen(true);
-    };
-    
     // Close modal without saving
-    const closeEditModal = () => {
-        setIsModalOpen(false);
-        setModalData(null);
-    };
-    
-    // Handle modal input change
-    const handleModalInputChange = (value) => {
-        if (modalData) {
-            setModalData({
-                ...modalData,
-                tempValue: value
-            });
-        }
-    };
-    
-    // Handle save from modal
-    const handleModalSave = async () => {
-        if (!modalData || saving) {
-            console.warn('⚠️ ProjectProgressTracker: handleModalSave called but modalData is missing or already saving', {
-                hasModalData: !!modalData,
-                saving: saving
-            });
-            return;
-        }
-        
-        
-        const { project, month, field, tempValue } = modalData;
-        await saveProgressData(project, month, field, tempValue);
-    };
-    
-    // Handle keyboard events for modal
-    useEffect(() => {
-        if (!isModalOpen) return;
-        
-        const handleKeyDown = (e) => {
-            if (e.key === 'Escape') {
-                closeEditModal();
-            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !saving && modalData) {
-                // Ctrl+Enter or Cmd+Enter to save
-                e.preventDefault();
-                const { project, month, field, tempValue } = modalData;
-                saveProgressData(project, month, field, tempValue);
-            }
-        };
-        
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [isModalOpen, saving, modalData]);
-    
-    // Render progress cell - clickable display cell that opens modal
+    // Render progress cell — comments edit inline in the cell
     const renderProgressCell = (project, month, field, rowBgColor = '#ffffff', providedKey = null) => {
         // Validate inputs
         if (!project || !project.id || !month || !field) {
@@ -1748,22 +1650,24 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             )
             : null;
         
-        // Handle cell click - open modal for comments, inline edit for compliance/data
+        // Handle cell click — start inline edit for comments (type directly in cell)
         const handleCellClick = async () => {
             if (field !== 'comments') return;
             // If another cell is being edited, save it first
-            if (editingCell && (editingCell.projectId !== project.id || 
+            if (editingCell && (editingCell.projectId !== project.id ||
                 editingCell.month !== safeMonth || editingCell.field !== field)) {
                 const editingProject = safeProjects.find(p => String(p.id) === String(editingCell.projectId));
                 if (editingProject) {
                     await saveProgressData(editingProject, editingCell.month, editingCell.field, editingValue);
                 }
             }
-            
-            // Close any inline editing before opening modal
-            setEditingCell(null);
-            setEditingValue('');
-            openEditModal(project, safeMonth, field);
+
+            setEditingCell({
+                projectId: project.id,
+                month: safeMonth,
+                field: 'comments'
+            });
+            setEditingValue(displayValue);
         };
         
         // Handle inline input change
@@ -1781,8 +1685,18 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             }
         };
         
-        // Handle inline input key down
+        // Handle inline input key down (comments: multi-line textarea — Enter = newline; Cmd/Ctrl+Enter saves)
         const handleInlineInputKeyDown = (e) => {
+            if (field === 'comments') {
+                if (e.key === 'Escape') {
+                    setEditingCell(null);
+                    setEditingValue('');
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    handleInlineInputBlur();
+                }
+                return;
+            }
             if (e.key === 'Enter') {
                 e.preventDefault();
                 handleInlineInputBlur();
@@ -1869,7 +1783,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             transition: 'background-color 0.2s ease, box-shadow 0.2s ease',
             position: 'relative',
             boxShadow: isFocusedCell ? `0 0 0 2px ${config.accent}55` : 'none',
-            cursor: isEditing ? 'text' : (field === 'comments' ? 'pointer' : 'default')
+            cursor: isEditing ? 'text' : (field === 'comments' ? 'text' : 'default')
         };
         
         // Render cell with inline editing for compliance/data, modal for comments
@@ -1916,8 +1830,34 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 React.createElement('i', { className: `fas ${config.icon}`, style: { fontSize: '10px', color: config.accent } }),
                 React.createElement('span', null, config.label)
             ),
-            // Content area - inline input for compliance/data when editing, display otherwise
-            isEditing && (field === 'compliance' || field === 'data') ? (
+            // Content area - inline input/textarea when editing, display otherwise
+            isEditing && field === 'comments' ? (
+                React.createElement('textarea', {
+                    value: editingValue,
+                    onChange: handleInlineInputChange,
+                    onBlur: handleInlineInputBlur,
+                    onKeyDown: handleInlineInputKeyDown,
+                    placeholder: config.placeholder,
+                    autoFocus: true,
+                    rows: 4,
+                    style: {
+                        width: '100%',
+                        flex: 1,
+                        minHeight: '72px',
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                        fontFamily: 'inherit',
+                        lineHeight: '1.35',
+                        border: `1.5px solid ${config.borderColor}`,
+                        borderRadius: '4px',
+                        backgroundColor: '#ffffff',
+                        color: '#111827',
+                        outline: 'none',
+                        boxShadow: `0 0 0 2px ${config.accent}40`,
+                        resize: 'vertical'
+                    }
+                })
+            ) : isEditing && (field === 'compliance' || field === 'data') ? (
                 React.createElement('input', {
                     type: 'text',
                     value: editingValue,
@@ -2053,7 +1993,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         position: 'relative'
                     },
                     className: field === 'comments' ? (hasValue ? 'hover:border-slate-400 hover:shadow-sm cursor-pointer' : 'hover:border-gray-400 cursor-pointer') : '',
-                    title: hasValue ? displayValue : `Click to ${config.placeholder.toLowerCase()}`
+                    title: hasValue
+                        ? displayValue
+                        : 'Click to type. Blur or ⌘/Ctrl+Enter saves.'
                 }, 
                     hasValue ? (
                         React.createElement('span', { style: { 
@@ -2073,9 +2015,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     )
                 )
             ),
-            // Link icon is only needed for comments now that compliance/data use open-review button.
-            // Status indicator dot (only show if no link icon)
-            hasValue && (field === 'comments' || !displayValue.trim()) ? React.createElement('div', {
+            // Status indicator dot for saved comments (hidden while editing inline)
+            hasValue && !isEditing && (field === 'comments' || !displayValue.trim()) ? React.createElement('div', {
                 style: {
                     position: 'absolute',
                     top: '8px',
@@ -2674,104 +2615,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     )
                 )
             )
-        ),
-        // Modal for editing progress data
-        isModalOpen && modalData ? React.createElement('div', {
-            className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4',
-            onClick: (e) => {
-                // Close modal when clicking backdrop
-                if (e.target === e.currentTarget) {
-                    closeEditModal();
-                }
-            },
-            style: { zIndex: 9999 }
-        }, React.createElement('div', {
-            className: 'bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-xl',
-            onClick: (e) => e.stopPropagation()
-        },
-            // Modal header
-            React.createElement('div', {
-                className: 'flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-gray-50'
-            },
-                React.createElement('div', null,
-                    React.createElement('h2', {
-                        className: 'text-lg font-semibold text-gray-900'
-                    }, modalData.field === 'comments' ? 'Edit Comments' : modalData.field === 'compliance' ? 'Edit Compliance Link' : 'Edit Data Link'),
-                    React.createElement('p', {
-                        className: 'text-sm text-gray-500 mt-1'
-                    }, `${modalData.project.name} • ${modalData.month} ${safeYear}`)
-                ),
-                React.createElement('button', {
-                    onClick: closeEditModal,
-                    className: 'text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors',
-                    type: 'button'
-                }, React.createElement('i', { className: 'fas fa-times text-lg' }))
-            ),
-            // Modal body
-            React.createElement('div', {
-                className: 'p-6 overflow-y-auto',
-                style: { maxHeight: 'calc(90vh - 140px)' }
-            },
-                modalData.field === 'comments' ? React.createElement('textarea', {
-                    value: modalData.tempValue || '',
-                    onChange: (e) => handleModalInputChange(e.target.value),
-                    placeholder: 'Add comments...',
-                    rows: 10,
-                    className: 'w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical',
-                    style: {
-                        fontFamily: 'inherit',
-                        lineHeight: '1.5',
-                        minHeight: '200px'
-                    },
-                    autoFocus: true
-                }) : React.createElement('input', {
-                    type: 'text',
-                    value: modalData.tempValue || '',
-                    onChange: (e) => handleModalInputChange(e.target.value),
-                    placeholder: modalData.field === 'compliance' ? 'Enter compliance link...' : 'Enter data link...',
-                    className: 'w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-                    autoFocus: true
-                }),
-                modalData.field !== 'comments' && modalData.tempValue && modalData.tempValue.trim() ? React.createElement('div', {
-                    className: 'mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg'
-                },
-                    React.createElement('p', {
-                        className: 'text-xs font-medium text-blue-900 mb-2'
-                    }, 'Preview:'),
-                    React.createElement('a', {
-                        href: modalData.tempValue.startsWith('http') ? modalData.tempValue : `https://${modalData.tempValue}`,
-                        target: '_blank',
-                        rel: 'noopener noreferrer',
-                        className: 'text-blue-600 hover:text-blue-800 text-sm break-all'
-                    }, modalData.tempValue)
-                ) : null
-            ),
-            // Modal footer
-            React.createElement('div', {
-                className: 'flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50'
-            },
-                React.createElement('button', {
-                    onClick: closeEditModal,
-                    type: 'button',
-                    className: 'px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors',
-                    disabled: saving
-                }, 'Cancel'),
-                React.createElement('button', {
-                    onClick: handleModalSave,
-                    type: 'button',
-                    className: 'px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2',
-                    disabled: saving
-                },
-                    saving ? [
-                        React.createElement('i', { key: 'icon', className: 'fas fa-spinner fa-spin' }),
-                        React.createElement('span', { key: 'text' }, 'Saving...')
-                    ] : [
-                        React.createElement('i', { key: 'icon', className: 'fas fa-save' }),
-                        React.createElement('span', { key: 'text' }, 'Save')
-                    ]
-                )
-            )
-        )) : null
+        )
     );
 };
 
