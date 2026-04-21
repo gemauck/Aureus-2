@@ -1409,9 +1409,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <thead className={`text-xs ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-50 text-slate-500'}`}>
               <tr>
                 <th className="px-4 py-2 text-left">
-                  <span className="font-semibold">Heading</span>
-                </th>
-                <th className="px-4 py-2 text-left">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
@@ -1420,6 +1417,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <span>Job Card</span>
                     {renderSortIcon('jobCardNumber')}
                   </button>
+                </th>
+                <th className="px-4 py-2 text-left">
+                  <span className="font-semibold">Heading</span>
                 </th>
                 <th className="px-4 py-2 text-left">
                   <button

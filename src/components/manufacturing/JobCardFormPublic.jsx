@@ -5988,11 +5988,10 @@ const JobCardFormPublic = () => {
                     })
                   : '';
                 const num = jc.jobCardNumber || (jc.clientName ? 'Job card' : 'Job card draft');
-                const categoryLabel = String(jc.callOutCategory || jc.category || '').trim();
+                const headingLabel = String(
+                  jc.heading || parseHeadingFromComments(jc.otherComments || '')
+                ).trim();
                 const clientLine = (jc.clientName && String(jc.clientName).trim()) || '—';
-                const siteLine = (jc.siteName && String(jc.siteName).trim()) || '—';
-                const creatorLine =
-                  String(jc.createdBy || jc.createdByName || jc.creatorName || '').trim();
                 const isLocalPending = jc.source === 'local' || jc.synced === false;
                 return (
                   <li key={`${jc.source || 'local'}-${getPriorCardOpenId(jc) || String(jc.id ?? 'row')}`}>
@@ -6010,24 +6009,13 @@ const JobCardFormPublic = () => {
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-gray-900 truncate">
                             {num}
-                            {categoryLabel ? (
-                              <span className="ml-2 font-medium text-gray-500">- {categoryLabel}</span>
+                            {headingLabel ? (
+                              <span className="ml-2 font-medium text-gray-500">- {headingLabel}</span>
                             ) : null}
                           </p>
                           <p className="text-sm text-gray-700 mt-1 leading-snug">
                             <span className="text-gray-500">Client</span>{' '}
                             <span className="text-gray-900">{clientLine}</span>
-                          </p>
-                          <p className="text-sm text-gray-700 mt-0.5 leading-snug">
-                            <span className="text-gray-500">Site</span>{' '}
-                            <span className="text-gray-900">{siteLine}</span>
-                          </p>
-                          <p className="text-sm text-gray-600 mt-1 truncate">
-                            {creatorLine ? (
-                              <span>{creatorLine}</span>
-                            ) : (
-                              <span className="text-gray-400">Creator not set</span>
-                            )}
                           </p>
                           {whenLabel && (
                             <p className="text-xs text-gray-500 mt-1.5">{whenLabel}</p>
