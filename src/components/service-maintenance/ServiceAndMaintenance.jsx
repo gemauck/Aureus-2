@@ -306,23 +306,31 @@ const ServiceAndMaintenance = () => {
   );
   const [adminExtrasOpen, setAdminExtrasOpen] = useState(false);
 
-  // Load clients and users for JobCards
+  // Load clients and users for JobCards (parallel — was sequential and added ~1–2× latency)
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Load clients
-        if (window.DatabaseAPI && window.DatabaseAPI.getClients) {
-          const response = await window.DatabaseAPI.getClients();
-          const clientsData = response?.data?.clients || response?.data || [];
-          setClients(Array.isArray(clientsData) ? clientsData : []);
-        }
+        const api = window.DatabaseAPI;
+        if (!api) return;
 
-        // Load users
-        if (window.DatabaseAPI && window.DatabaseAPI.getUsers) {
-          const response = await window.DatabaseAPI.getUsers();
-          const usersData = response?.data?.users || response?.data || [];
-          setUsers(Array.isArray(usersData) ? usersData : []);
+        const tasks = [];
+        if (typeof api.getClients === 'function') {
+          tasks.push(
+            api.getClients().then((response) => {
+              const clientsData = response?.data?.clients || response?.data || [];
+              setClients(Array.isArray(clientsData) ? clientsData : []);
+            })
+          );
         }
+        if (typeof api.getUsers === 'function') {
+          tasks.push(
+            api.getUsers().then((response) => {
+              const usersData = response?.data?.users || response?.data || [];
+              setUsers(Array.isArray(usersData) ? usersData : []);
+            })
+          );
+        }
+        await Promise.all(tasks);
       } catch (error) {
         console.error('Error loading data for Service and Maintenance:', error);
       }
@@ -331,31 +339,41 @@ const ServiceAndMaintenance = () => {
     loadData();
   }, []);
 
-  // Poll for JobCards component registration to avoid permanent loading state
+  // JobCards.jsx registers on load and dispatches `jobcardsComponentReady` — prefer that over slow polling
   useEffect(() => {
     if (jobCardsReady) {
-      return;
+      return undefined;
     }
 
     let cancelled = false;
-    const checkJobCards = () => {
+    const markReady = () => {
       if (!cancelled && window.JobCards) {
         setJobCardsReady(true);
+        return true;
       }
+      return false;
     };
 
-    // Initial check in case it became available between render and effect
-    checkJobCards();
-
-    if (!jobCardsReady) {
-      const interval = setInterval(checkJobCards, 500);
-      return () => {
-        cancelled = true;
-        clearInterval(interval);
-      };
+    if (markReady()) {
+      return undefined;
     }
 
-    return undefined;
+    const onReady = () => {
+      markReady();
+    };
+    window.addEventListener('jobcardsComponentReady', onReady);
+
+    const interval = setInterval(() => {
+      if (markReady()) {
+        clearInterval(interval);
+      }
+    }, 80);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('jobcardsComponentReady', onReady);
+      clearInterval(interval);
+    };
   }, [jobCardsReady]);
 
   // Poll for ServiceFormsManager registration so the "Open form builder"
@@ -380,7 +398,7 @@ const ServiceAndMaintenance = () => {
     checkFormsManager();
 
     if (!formsManagerReady) {
-      const interval = setInterval(checkFormsManager, 500);
+      const interval = setInterval(checkFormsManager, 100);
       return () => {
         cancelled = true;
         clearInterval(interval);
@@ -445,6 +463,8 @@ const ServiceAndMaintenance = () => {
         if (showJobCardDetail) {
           setShowJobCardDetail(false);
           setSelectedJobCard(null);
+          setJobCardActivities([]);
+          setJobCardActivitiesLoading(false);
         }
         setLoadingJobCard(false);
         return;
@@ -470,10 +490,13 @@ const ServiceAndMaintenance = () => {
       // Start loading
       currentJobCardId = jobCardId;
       setLoadingJobCard(true);
+      setJobCardActivities([]);
+      setJobCardActivitiesLoading(true);
 
       const token = window.storage?.getToken?.();
       if (!token) {
         setLoadingJobCard(false);
+        setJobCardActivitiesLoading(false);
         return;
       }
 
@@ -482,14 +505,27 @@ const ServiceAndMaintenance = () => {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         };
-        const response = await fetch(
-          `/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`,
-          { headers }
-        );
+        const activityUrl = `/api/jobcards/${encodeURIComponent(jobCardId)}/activity?order=asc`;
+        const [response, activityResponse] = await Promise.all([
+          fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`, { headers }),
+          fetch(activityUrl, { headers })
+        ]);
 
         if (isCancelled) {
           setLoadingJobCard(false);
+          setJobCardActivitiesLoading(false);
           return;
+        }
+
+        let activities = [];
+        if (activityResponse.ok) {
+          try {
+            const ad = await activityResponse.json();
+            const acts = ad?.data?.activities ?? ad?.activities;
+            activities = Array.isArray(acts) ? acts : [];
+          } catch {
+            activities = [];
+          }
         }
 
         if (response.ok) {
@@ -497,6 +533,7 @@ const ServiceAndMaintenance = () => {
           const jobCard = data.jobCard || data.data?.jobCard || data.data || data;
           if (jobCard && jobCard.id) {
             setSelectedJobCard(jobCard);
+            setJobCardActivities(activities);
             setShowJobCardDetail(true);
             if (jobCard.attachmentsPending === true) {
               void fetchJobCardPhotosMergeRef.current?.(jobCard.id);
@@ -505,6 +542,9 @@ const ServiceAndMaintenance = () => {
         } else if (response.status === 404) {
           setShowJobCardDetail(false);
           setSelectedJobCard(null);
+          setJobCardActivities([]);
+        } else {
+          setJobCardActivities([]);
         }
       } catch (error) {
         if (!isCancelled) {
@@ -513,6 +553,7 @@ const ServiceAndMaintenance = () => {
       } finally {
         if (!isCancelled) {
           setLoadingJobCard(false);
+          setJobCardActivitiesLoading(false);
         }
       }
     };
@@ -658,21 +699,35 @@ const ServiceAndMaintenance = () => {
     }
     setSelectedJobCard(jobCard);
     setShowJobCardDetail(true);
+    setJobCardActivities([]);
+    setJobCardActivitiesLoading(true);
     setLoadingJobCard(true);
     try {
       const token = window.storage?.getToken?.();
       const headers = token
         ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
         : { 'Content-Type': 'application/json' };
-      const response = await fetchWithTimeout(
-        `/api/jobcards/${encodeURIComponent(jobCard.id)}?omitPhotos=1`,
-        { headers }
-      );
+      const base = `/api/jobcards/${encodeURIComponent(jobCard.id)}`;
+      const [response, activityResponse] = await Promise.all([
+        fetchWithTimeout(`${base}?omitPhotos=1`, { headers }),
+        fetchWithTimeout(`${base}/activity?order=asc`, { headers })
+      ]);
+      let activities = [];
+      if (activityResponse.ok) {
+        try {
+          const ad = await activityResponse.json();
+          const acts = ad?.data?.activities ?? ad?.activities;
+          activities = Array.isArray(acts) ? acts : [];
+        } catch {
+          activities = [];
+        }
+      }
       if (response.ok) {
         const data = await response.json();
         const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
         if (full && full.id) {
           setSelectedJobCard(full);
+          setJobCardActivities(activities);
           if (full.attachmentsPending === true) {
             void fetchJobCardPhotosAndMerge(full.id);
           }
@@ -682,6 +737,7 @@ const ServiceAndMaintenance = () => {
       console.warn('Failed to load full job card details (photos etc.), showing list data', e);
     } finally {
       setLoadingJobCard(false);
+      setJobCardActivitiesLoading(false);
     }
   };
 
@@ -693,59 +749,29 @@ const ServiceAndMaintenance = () => {
     setJobCardActivitiesLoading(false);
   };
 
-  useEffect(() => {
-    if (!showJobCardDetail || !selectedJobCard?.id) {
-      setJobCardActivities([]);
-      setJobCardActivitiesLoading(false);
-      return;
-    }
-    let cancelled = false;
-    const id = selectedJobCard.id;
-    (async () => {
-      setJobCardActivitiesLoading(true);
-      try {
-        const token = window.storage?.getToken?.();
-        if (!token || cancelled) return;
-        const res = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(id)}/activity?order=asc`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!res.ok || cancelled) {
-          if (!cancelled) setJobCardActivities([]);
-          return;
-        }
-        const data = await res.json();
-        const acts = data?.data?.activities ?? data?.activities;
-        if (!cancelled) setJobCardActivities(Array.isArray(acts) ? acts : []);
-      } catch {
-        if (!cancelled) setJobCardActivities([]);
-      } finally {
-        if (!cancelled) setJobCardActivitiesLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [showJobCardDetail, selectedJobCard?.id]);
+  // Activity trail is loaded in parallel with the card in URL open / handleOpen / refetch — no separate effect (avoids duplicate GETs)
 
   const refetchJobCardDetailAfterSave = useCallback(async (jobCardId) => {
     const token = window.storage?.getToken?.();
     if (!token || !jobCardId) return;
+    setJobCardActivitiesLoading(true);
     try {
-      const response = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
-      if (full && full.id) {
-        setSelectedJobCard(full);
-        if (full.attachmentsPending === true) {
-          void fetchJobCardPhotosAndMerge(full.id);
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const base = `/api/jobcards/${encodeURIComponent(jobCardId)}`;
+      const [response, ar] = await Promise.all([
+        fetchWithTimeout(`${base}?omitPhotos=1`, { headers }),
+        fetchWithTimeout(`${base}/activity?order=asc`, { headers })
+      ]);
+      if (response.ok) {
+        const data = await response.json();
+        const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
+        if (full && full.id) {
+          setSelectedJobCard(full);
+          if (full.attachmentsPending === true) {
+            void fetchJobCardPhotosAndMerge(full.id);
+          }
         }
       }
-      const ar = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardId)}/activity?order=asc`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
       if (ar.ok) {
         const ad = await ar.json();
         const acts = ad?.data?.activities ?? ad?.activities;
@@ -753,6 +779,8 @@ const ServiceAndMaintenance = () => {
       }
     } catch (e) {
       console.warn('ServiceAndMaintenance: refetch after save failed', e);
+    } finally {
+      setJobCardActivitiesLoading(false);
     }
   }, [fetchJobCardPhotosAndMerge]);
 
