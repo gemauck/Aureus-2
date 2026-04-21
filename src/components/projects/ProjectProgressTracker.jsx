@@ -141,7 +141,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     };
     // Wide cells + sticky column width (used for horizontal scroll alignment)
     const TRACK_CELL_WIDTH = 200;
-    const TRACK_MONTH_GROUP_WIDTH = TRACK_CELL_WIDTH * 3;
+    const TRACK_MONTH_GROUP_WIDTH = TRACK_CELL_WIDTH * 4;
     /** Between month groups (after Comments, before next Compliance / after last month before PM) */
     const TRACK_MONTH_SEPARATOR_BORDER = '3px solid #64748b';
     const TRACK_STICKY_PROJECT_WIDTH = 340;
@@ -164,7 +164,28 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const usersLoadPromiseRef = useRef(null);
     const focusRequestRef = useRef(null);
     const pendingFocusRef = useRef(false);
-    
+    /** Debounced comment autosave (aligned with Monthly Data checklist notes pattern) */
+    const commentAutosaveTimerRef = useRef(null);
+    const projectsRef = useRef([]);
+    const editingCellRef = useRef(null);
+    const editingValueRef = useRef('');
+    const saveProgressDataRef = useRef(null);
+    const flushPendingCommentSaveRef = useRef(async () => {});
+    const selectedYearRef = useRef(selectedYear);
+
+    useEffect(() => {
+        projectsRef.current = projects;
+    }, [projects]);
+    useEffect(() => {
+        editingCellRef.current = editingCell;
+    }, [editingCell]);
+    useEffect(() => {
+        editingValueRef.current = editingValue;
+    }, [editingValue]);
+    useEffect(() => {
+        selectedYearRef.current = selectedYear;
+    }, [selectedYear]);
+
     // Scroll horizontally so the first working month column (chronologically) is in view after load / year change
     useEffect(() => {
         try {
@@ -306,8 +327,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             if (!project || !project.id) return false;
             const monthlyRaw = project.monthlyDataReviewSections;
             const complianceRaw = project.complianceReviewSections;
+            const documentRaw = project.documentSections;
             const monthlyTrimmed = typeof monthlyRaw === 'string' ? monthlyRaw.trim() : monthlyRaw;
             const complianceTrimmed = typeof complianceRaw === 'string' ? complianceRaw.trim() : complianceRaw;
+            const documentTrimmed = typeof documentRaw === 'string' ? documentRaw.trim() : documentRaw;
 
             // Hydrate whenever these fields are absent/empty on list payload.
             // Some projects contain review data even if process flags are false/missing.
@@ -321,7 +344,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 complianceTrimmed === '' ||
                 complianceTrimmed === '{}' ||
                 complianceTrimmed === 'null';
-            return needsMonthlyData || needsCompliance;
+            const needsDocumentCollection =
+                documentTrimmed == null ||
+                documentTrimmed === '' ||
+                documentTrimmed === '{}' ||
+                documentTrimmed === 'null';
+            return needsMonthlyData || needsCompliance || needsDocumentCollection;
         });
 
         if (needsHydration.length === 0) return;
@@ -367,16 +395,22 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             detail.complianceReviewSections != null
                                 ? detail.complianceReviewSections
                                 : project.complianceReviewSections;
+                        const documentSections =
+                            detail.documentSections != null
+                                ? detail.documentSections
+                                : project.documentSections;
 
                         const monthlyChanged = monthlyDataReviewSections !== project.monthlyDataReviewSections;
                         const complianceChanged = complianceReviewSections !== project.complianceReviewSections;
-                        if (!monthlyChanged && !complianceChanged) return project;
+                        const documentChanged = documentSections !== project.documentSections;
+                        if (!monthlyChanged && !complianceChanged && !documentChanged) return project;
 
                         changed = true;
                         return {
                             ...project,
                             monthlyDataReviewSections,
-                            complianceReviewSections
+                            complianceReviewSections,
+                            documentSections
                         };
                     });
 
@@ -551,6 +585,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             if (['comments', 'comment', 'commentinput', 'comment-input'].includes(normalized)) return 'comments';
             if (['data', 'datalink', 'data-link'].includes(normalized)) return 'data';
             if (['compliance', 'compliancelink', 'compliance-link'].includes(normalized)) return 'compliance';
+            if (['doccollection', 'documentcollection', 'doc-collection', 'monthly-document-collection'].includes(normalized)) {
+                return 'docCollection';
+            }
             return 'comments';
         };
         const normalizedFocusInput = normalizeFocusInput(focusInputProp);
@@ -706,9 +743,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         type: String(p.type || '-'),
                         status: String(p.status || 'Unknown'),
                         monthlyProgress: monthlyProgress && typeof monthlyProgress === 'object' && !Array.isArray(monthlyProgress) ? monthlyProgress : {},
-                        // Required for Compliance / Monthly Data Review % (list payload omits these; hydration merges them back)
+                        // Required for Doc Collection / Compliance / Monthly Data Review % (list may omit; hydration merges)
+                        documentSections: p.documentSections,
                         monthlyDataReviewSections: p.monthlyDataReviewSections,
                         complianceReviewSections: p.complianceReviewSections,
+                        hasDocumentCollectionProcess: p.hasDocumentCollectionProcess,
                         hasMonthlyDataReviewProcess: p.hasMonthlyDataReviewProcess,
                         hasComplianceReviewProcess: p.hasComplianceReviewProcess
                     };
@@ -760,7 +799,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const getProgressData = (project, month, field) => {
         try {
             if (!project || !month || !field) return '';
-            const safeYear = Number(selectedYear) || currentYear;
+            const safeYear = Number(selectedYearRef.current ?? selectedYear) || currentYear;
             if (isNaN(safeYear)) return '';
             
             const key = String(month || '') + '-' + String(safeYear);
@@ -895,15 +934,25 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             return null;
         }
 
-        const candidates = reviewType === 'complianceReview'
-            ? [
+        let candidates;
+        if (reviewType === 'complianceReview') {
+            candidates = [
                 monthData.compliancePercent,
                 monthData.compliance_percentage,
                 monthData.complianceProgressPercent,
                 monthData.complianceProgress,
                 monthData.compliance
-            ]
-            : [
+            ];
+        } else if (reviewType === 'documentCollection') {
+            candidates = [
+                monthData.docCollectionPercent,
+                monthData.documentCollectionPercent,
+                monthData.docCollectionProgressPercent,
+                monthData.docCollection,
+                monthData.documentCollection
+            ];
+        } else {
+            candidates = [
                 monthData.dataPercent,
                 monthData.data_percentage,
                 monthData.monthlyDataReviewPercent,
@@ -911,6 +960,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 monthData.dataProgress,
                 monthData.data
             ];
+        }
 
         for (let i = 0; i < candidates.length; i += 1) {
             const parsed = parsePercentValue(candidates[i]);
@@ -966,6 +1016,60 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         };
     };
 
+    const isCompletedDocumentCollectionStatus = (rawStatus) => {
+        if (!rawStatus) return false;
+        const normalized = String(rawStatus).toLowerCase();
+        return normalized === 'collected' || normalized === 'available-on-request' || normalized === 'not-required';
+    };
+
+    const getDocumentCollectionProgressForMonth = (project, monthName) => {
+        const safeYear = Number(selectedYear) || currentYear;
+        const monthIdx = months.indexOf(monthName);
+        const monthNum = monthIdx >= 0 ? monthIdx + 1 : null;
+        const isoMonthKey = monthNum != null ? `${safeYear}-${String(monthNum).padStart(2, '0')}` : null;
+        const legacyMonthKey = `${String(monthName || '')}-${String(safeYear)}`;
+        const sectionsField = project?.documentSections;
+        const yearSections = getSectionsForYear(sectionsField, safeYear);
+
+        if (!Array.isArray(yearSections) || yearSections.length === 0) {
+            const fallbackPercent = getMonthlyProgressPercentFallback(project, monthName, safeYear, 'documentCollection');
+            return {
+                completed: 0,
+                total: 0,
+                percent: fallbackPercent,
+                source: fallbackPercent != null ? 'monthlyProgress' : 'sections'
+            };
+        }
+
+        let total = 0;
+        let completed = 0;
+        yearSections.forEach((section) => {
+            const docs = Array.isArray(section?.documents) ? section.documents : [];
+            docs.forEach((doc) => {
+                total += 1;
+                const rawStatus =
+                    (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
+                    doc?.collectionStatus?.[legacyMonthKey];
+                if (isCompletedDocumentCollectionStatus(rawStatus)) {
+                    completed += 1;
+                }
+            });
+        });
+
+        const sectionPercent = total > 0 ? Math.round((completed / total) * 100) : null;
+        const fallbackPercent =
+            sectionPercent == null
+                ? getMonthlyProgressPercentFallback(project, monthName, safeYear, 'documentCollection')
+                : null;
+
+        return {
+            completed,
+            total,
+            percent: sectionPercent != null ? sectionPercent : fallbackPercent,
+            source: sectionPercent != null ? 'sections' : fallbackPercent != null ? 'monthlyProgress' : 'sections'
+        };
+    };
+
     const buildProjectReviewLink = (projectId, tab, monthName, monthIndex, year) => {
         try {
             const basePath = `${window.location.origin}${window.location.pathname}`;
@@ -996,7 +1100,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 }
                 
                 // Each month data should only contain valid fields
-                const validFields = ['compliance', 'data', 'comments'];
+                const validFields = ['docCollection', 'compliance', 'data', 'comments'];
                 for (const field in progress[key]) {
                     if (!validFields.includes(field)) {
                         console.warn(`⚠️ Unknown field in progress data: ${field}`);
@@ -1615,6 +1719,79 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             setSaving(false);
         }
     };
+
+    saveProgressDataRef.current = saveProgressData;
+
+    const COMMENT_AUTOSAVE_DEBOUNCE_MS = 500;
+
+    const flushPendingCommentSave = async () => {
+        if (commentAutosaveTimerRef.current) {
+            clearTimeout(commentAutosaveTimerRef.current);
+            commentAutosaveTimerRef.current = null;
+        }
+        const ec = editingCellRef.current;
+        if (!ec || ec.field !== 'comments') return;
+        const proj = projectsRef.current.find((p) => String(p.id) === String(ec.projectId));
+        if (!proj) return;
+        const value = editingValueRef.current;
+        const prev = getProgressData(proj, ec.month, 'comments');
+        if (String(value || '') === String(prev || '')) return;
+        await saveProgressData(proj, ec.month, 'comments', value);
+    };
+
+    flushPendingCommentSaveRef.current = flushPendingCommentSave;
+
+    const scheduleCommentAutosave = () => {
+        if (commentAutosaveTimerRef.current) {
+            clearTimeout(commentAutosaveTimerRef.current);
+        }
+        commentAutosaveTimerRef.current = setTimeout(() => {
+            commentAutosaveTimerRef.current = null;
+            void flushPendingCommentSave();
+        }, COMMENT_AUTOSAVE_DEBOUNCE_MS);
+    };
+
+    // Flush on refresh / tab hide / unmount — same lifecycle pattern as Monthly Data checklist notes
+    useEffect(() => {
+        const onBeforeUnload = (event) => {
+            const ec = editingCellRef.current;
+            if (!ec || ec.field !== 'comments') return;
+            const proj = projectsRef.current.find((p) => String(p.id) === String(ec.projectId));
+            if (!proj) return;
+            const val = editingValueRef.current;
+            const prev = getProgressData(proj, ec.month, 'comments');
+            if (String(val || '') === String(prev || '')) return;
+            if (commentAutosaveTimerRef.current) {
+                clearTimeout(commentAutosaveTimerRef.current);
+                commentAutosaveTimerRef.current = null;
+            }
+            void saveProgressDataRef.current?.(proj, ec.month, 'comments', val);
+            event.preventDefault();
+            event.returnValue = '';
+        };
+        const onHidden = () => {
+            if (document.visibilityState === 'hidden') {
+                void flushPendingCommentSaveRef.current?.();
+            }
+        };
+        const onPageHide = () => {
+            void flushPendingCommentSaveRef.current?.();
+        };
+        window.addEventListener('beforeunload', onBeforeUnload);
+        document.addEventListener('visibilitychange', onHidden);
+        window.addEventListener('pagehide', onPageHide);
+        return () => {
+            window.removeEventListener('beforeunload', onBeforeUnload);
+            document.removeEventListener('visibilitychange', onHidden);
+            window.removeEventListener('pagehide', onPageHide);
+        };
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            void flushPendingCommentSaveRef.current?.();
+        };
+    }, []);
     
     // Render progress cell — comments use an always-visible textarea (focus and type; no separate step)
     const renderProgressCell = (project, month, field, rowBgColor = '#ffffff', providedKey = null) => {
@@ -1641,38 +1818,46 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const currentValue = getProgressData(project, safeMonth, field);
         const displayValue = currentValue || '';
         const hasValue = displayValue && displayValue.trim().length > 0;
-        const reviewTypeByField = {
-            compliance: 'complianceReview',
-            data: 'monthlyDataReview'
-        };
-        const reviewType = reviewTypeByField[field] || null;
-        const reviewProgress = reviewType ? getReviewProgressForMonth(project, safeMonth, reviewType) : null;
-        const reviewPercent = reviewProgress?.percent;
-        const monthReviewLink = reviewType
-            ? buildProjectReviewLink(
+        let reviewProgress = null;
+        let monthReviewLink = null;
+        if (field === 'docCollection') {
+            reviewProgress = getDocumentCollectionProgressForMonth(project, safeMonth);
+            monthReviewLink = buildProjectReviewLink(
                 project.id,
-                reviewType,
+                'documentCollection',
                 safeMonth,
                 monthIdx,
                 Number(selectedYear) || currentYear
-            )
-            : null;
+            );
+        } else {
+            const reviewTypeByField = {
+                compliance: 'complianceReview',
+                data: 'monthlyDataReview'
+            };
+            const reviewType = reviewTypeByField[field] || null;
+            reviewProgress = reviewType ? getReviewProgressForMonth(project, safeMonth, reviewType) : null;
+            monthReviewLink = reviewType
+                ? buildProjectReviewLink(
+                    project.id,
+                    reviewType,
+                    safeMonth,
+                    monthIdx,
+                    Number(selectedYear) || currentYear
+                )
+                : null;
+        }
+        const reviewPercent = reviewProgress?.percent;
         
-        /** Claim this comments cell for editing (save another cell first if needed). */
+        /** Claim this comments cell — flush debounced draft from previous cell first (checklist-style). */
         const beginCommentEditIfNeeded = async () => {
             if (field !== 'comments') return;
+            await flushPendingCommentSave();
             const alreadyThis =
                 editingCell &&
                 String(editingCell.projectId) === String(project.id) &&
                 editingCell.month === safeMonth &&
                 editingCell.field === 'comments';
             if (alreadyThis) return;
-            if (editingCell && !alreadyThis) {
-                const editingProject = safeProjects.find(p => String(p.id) === String(editingCell.projectId));
-                if (editingProject) {
-                    await saveProgressData(editingProject, editingCell.month, editingCell.field, editingValue);
-                }
-            }
             setEditingCell({
                 projectId: project.id,
                 month: safeMonth,
@@ -1738,7 +1923,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 editingCell.month === safeMonth &&
                 editingCell.field === field
             ) {
-                await saveProgressData(project, safeMonth, field, editingValue);
+                if (field === 'comments') {
+                    if (commentAutosaveTimerRef.current) {
+                        clearTimeout(commentAutosaveTimerRef.current);
+                        commentAutosaveTimerRef.current = null;
+                    }
+                    await flushPendingCommentSave();
+                } else {
+                    await saveProgressData(project, safeMonth, field, editingValue);
+                }
                 setEditingCell(null);
                 setEditingValue('');
             }
@@ -1748,6 +1941,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const handleInlineInputKeyDown = (e) => {
             if (field === 'comments') {
                 if (e.key === 'Escape') {
+                    if (commentAutosaveTimerRef.current) {
+                        clearTimeout(commentAutosaveTimerRef.current);
+                        commentAutosaveTimerRef.current = null;
+                    }
                     setEditingCell(null);
                     setEditingValue('');
                 } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -1767,6 +1964,17 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         
         // Field-specific styling — distinct but restrained accents for scanability
         const fieldConfig = {
+            docCollection: {
+                icon: 'fa-clipboard-list',
+                accent: '#0284c7',
+                color: '#0c4a6e',
+                bgColor: hasValue ? '#e0f2fe' : '#f0f9ff',
+                hoverBg: '#bae6fd',
+                borderColor: hasValue ? '#38bdf8' : '#7dd3fc',
+                barColor: '#0ea5e9',
+                label: 'Monthly Doc Collection',
+                placeholder: 'Open checklist'
+            },
             compliance: {
                 icon: 'fa-shield-check',
                 accent: '#4f46e5',
@@ -1802,7 +2010,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             }
         };
         
-        const config = fieldConfig[field] || fieldConfig.data;
+        const config = fieldConfig[field] || fieldConfig.docCollection;
         
         const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f8fafc';
         let calculatedBackground = defaultBgColor;
@@ -1810,7 +2018,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             calculatedBackground = config.bgColor;
         } else if (isWorking) {
             const light = rowBgColor === '#ffffff';
-            if (field === 'compliance') calculatedBackground = light ? '#eef2ff' : '#e8eaf6';
+            if (field === 'docCollection') calculatedBackground = light ? '#e0f2fe' : '#d6ebfa';
+            else if (field === 'compliance') calculatedBackground = light ? '#eef2ff' : '#e8eaf6';
             else if (field === 'data') calculatedBackground = light ? '#ecfdf5' : '#dff7f2';
             else calculatedBackground = light ? '#fffbeb' : '#fef6e0';
         }
@@ -1918,7 +2127,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         resize: 'vertical'
                     }
                 })
-            ) : isEditing && (field === 'compliance' || field === 'data') ? (
+            ) : isEditing && (field === 'compliance' || field === 'data' || field === 'docCollection') ? (
                 React.createElement('input', {
                     type: 'text',
                     value: editingValue,
@@ -1941,7 +2150,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         boxShadow: `0 0 0 2px ${config.accent}40`
                     }
                 })
-            ) : (field === 'compliance' || field === 'data') ? (
+            ) : (field === 'compliance' || field === 'data' || field === 'docCollection') ? (
                 React.createElement('div', {
                     style: {
                         width: '100%',
@@ -1978,7 +2187,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         title: `Open ${config.label}`
                     },
                         React.createElement('i', { className: 'fas fa-external-link-alt', style: { fontSize: '10px', color: config.accent } }),
-                        React.createElement('span', null, 'Open Review')
+                        React.createElement('span', null, field === 'docCollection' ? 'Open checklist' : 'Open Review')
                     ),
                     React.createElement('div', {
                         style: {
@@ -2150,6 +2359,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             // Field type legend
             React.createElement('div', { className: 'flex items-center gap-4 flex-wrap' },
                 React.createElement('div', { className: 'flex items-center gap-1.5' },
+                    React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '4px', backgroundColor: '#0ea5e9' } }),
+                    React.createElement('span', { className: 'text-xs text-slate-600' }, 'Doc collection')
+                ),
+                React.createElement('div', { className: 'flex items-center gap-1.5' },
                     React.createElement('div', { style: { width: '12px', height: '12px', borderRadius: '4px', backgroundColor: '#6366f1' } }),
                     React.createElement('span', { className: 'text-xs text-slate-600' }, 'Compliance')
                 ),
@@ -2216,7 +2429,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             const isWorking = isWorkingMonthForYear(idx, safeYear);
                             return React.createElement('th', {
                                 key: safeMonth + '-header',
-                                colSpan: 3,
+                                colSpan: 4,
                                 style: {
                                     padding: '14px 16px',
                                     fontSize: '12px',
@@ -2323,10 +2536,34 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
+                                        backgroundColor: isWorking ? '#e0f2fe' : '#fafafa',
+                                        color: '#0c4a6e',
+                                        border: 'none',
+                                        borderLeft: idx === 0 ? '2px solid #475569' : '1px solid #e5e7eb',
+                                        borderBottom: '1px solid #e5e7eb',
+                                        borderRight: '1px solid #e5e7eb',
+                                        minWidth: `${TRACK_CELL_WIDTH}px`,
+                                        width: `${TRACK_CELL_WIDTH}px`,
+                                        maxWidth: `${TRACK_CELL_WIDTH}px`,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em'
+                                    }
+                                }, 
+                                    React.createElement('div', { className: 'flex items-center gap-1.5' },
+                                        React.createElement('i', { className: 'fas fa-clipboard-list text-xs', style: { color: '#0284c7' } }),
+                                        React.createElement('span', null, 'Monthly Doc Collection')
+                                    )
+                                ),
+                                React.createElement('th', { 
+                                    style: {
+                                        padding: '10px 12px',
+                                        fontSize: '11px',
+                                        fontWeight: '600',
+                                        textAlign: 'left',
                                         backgroundColor: isWorking ? '#e0e7ff' : '#fafafa',
                                         color: '#312e81',
                                         border: 'none',
-                                        borderLeft: idx === 0 ? '2px solid #475569' : '1px solid #e5e7eb',
+                                        borderLeft: '1px solid #e5e7eb',
                                         borderBottom: '1px solid #e5e7eb',
                                         borderRight: '1px solid #e5e7eb',
                                         minWidth: `${TRACK_CELL_WIDTH}px`,
@@ -2394,7 +2631,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 React.createElement('tbody', null,
                     safeProjects.length === 0 ? React.createElement('tr', null,
                         React.createElement('td', { 
-                            colSpan: months.length * 3 + 4, 
+                            colSpan: months.length * 4 + 4, 
                             className: 'px-8 py-16 text-center',
                             style: { 
                                 backgroundColor: '#f8fafc',
@@ -2470,6 +2707,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         const monthCells = (Array.isArray(months) ? months : []).reduce((acc, month) => {
                             const safeMonth = String(month || '');
                             acc.push(
+                                renderProgressCell(project, safeMonth, 'docCollection', rowBaseBgColor, `${project.id}-${safeMonth}-docCollection`),
                                 renderProgressCell(project, safeMonth, 'compliance', rowBaseBgColor, `${project.id}-${safeMonth}-compliance`),
                                 renderProgressCell(project, safeMonth, 'data', rowBaseBgColor, `${project.id}-${safeMonth}-data`),
                                 renderProgressCell(project, safeMonth, 'comments', rowBaseBgColor, `${project.id}-${safeMonth}-comments`)
@@ -2624,6 +2862,102 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 e.currentTarget.style.backgroundColor = rowBaseBgColor;
                                 e.currentTarget.style.boxShadow = isRowFocused ? 'inset 0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none';
                             }
+                        }, ...rowChildren);
+                    }).filter(item => item !== null) : []
+                    )
+                )
+            )
+        )
+    );
+};
+
+// Memoize component to prevent unnecessary re-renders
+let ProjectProgressTrackerMemo;
+try {
+    if (typeof memo === 'function' && memo !== null && memo !== undefined) {
+        ProjectProgressTrackerMemo = memo(ProjectProgressTracker);
+    } else {
+        ProjectProgressTrackerMemo = ProjectProgressTracker;
+    }
+} catch (memoError) {
+    console.warn('⚠️ ProjectProgressTracker: Failed to memoize, using component directly:', memoError);
+    ProjectProgressTrackerMemo = ProjectProgressTracker;
+}
+
+// Register globally - ensure React is available first
+const registerComponent = () => {
+    try {
+        if (typeof window === 'undefined') {
+            console.error('❌ ProjectProgressTracker: window is not available');
+            return;
+        }
+
+        // Ensure React is available before registering
+        if (typeof window.React === 'undefined') {
+            console.warn('⚠️ ProjectProgressTracker: React not available yet, deferring registration...');
+            // Retry after a short delay
+            setTimeout(registerComponent, 100);
+            return;
+        }
+
+        // Register the component
+        window.ProjectProgressTracker = ProjectProgressTrackerMemo;
+        console.log('✅ ProjectProgressTracker: Component registered successfully');
+        
+        // Dispatch componentLoaded event so other components know it's available
+        try {
+            const event = new CustomEvent('componentLoaded', { 
+                detail: { component: 'ProjectProgressTracker' } 
+            });
+            window.dispatchEvent(event);
+            console.log('✅ ProjectProgressTracker: componentLoaded event dispatched');
+        } catch (eventError) {
+            console.warn('⚠️ ProjectProgressTracker: Failed to dispatch componentLoaded event:', eventError);
+        }
+    } catch (error) {
+        console.error('❌ Failed to register ProjectProgressTracker:', error);
+        console.error('❌ Error stack:', error?.stack);
+        // Fallback: register a simple error component
+        if (typeof window !== 'undefined' && window.React && window.React.createElement) {
+            window.ProjectProgressTracker = function() {
+                try {
+                    return window.React.createElement('div', { className: 'p-4 bg-red-50' },
+                        window.React.createElement('p', { className: 'text-red-800' }, 
+                            'Component registration failed: ' + (error?.message || 'Unknown error')
+                        )
+                    );
+                } catch (e) {
+                    console.error('❌ Failed to create error component:', e);
+                    return null;
+                }
+            };
+            console.log('⚠️ ProjectProgressTracker: Registered fallback error component');
+        }
+    }
+};
+
+// Register immediately if React is available, otherwise wait
+if (typeof window !== 'undefined' && window.React) {
+    registerComponent();
+} else {
+    // Wait for React to be available
+    const checkReact = setInterval(() => {
+        if (typeof window !== 'undefined' && window.React) {
+            clearInterval(checkReact);
+            registerComponent();
+        }
+    }, 50);
+    
+    // Timeout after 10 seconds
+    setTimeout(() => {
+        clearInterval(checkReact);
+        if (typeof window !== 'undefined' && !window.ProjectProgressTracker) {
+            console.error('❌ ProjectProgressTracker: React did not become available after 10 seconds');
+            registerComponent(); // Try anyway
+        }
+    }, 10000);
+}
+
                         }, ...rowChildren);
                     }).filter(item => item !== null) : []
                     )

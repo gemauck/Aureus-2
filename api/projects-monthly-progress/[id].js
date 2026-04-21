@@ -49,7 +49,7 @@ async function handler(req, res) {
           throw new Error('monthlyProgress must be an object')
         }
 
-        const validFields = ['compliance', 'data', 'comments']
+        const validFields = ['docCollection', 'compliance', 'data', 'comments']
         for (const key in parsed) {
           if (typeof parsed[key] !== 'object' || Array.isArray(parsed[key]) || parsed[key] === null) {
             console.warn(`⚠️ Invalid month data structure for key: ${key}`)

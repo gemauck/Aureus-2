@@ -2641,7 +2641,7 @@ async function handler(req, res) {
                   // Don't fail, but log warning
                 } else {
                   // Check for valid field names (compliance, data, comments)
-                  const validFields = ['compliance', 'data', 'comments'];
+                  const validFields = ['docCollection', 'compliance', 'data', 'comments'];
                   for (const field in parsed[key]) {
                     if (validFields.includes(field) && typeof parsed[key][field] !== 'string') {
                       // Convert non-string values to strings for safety
