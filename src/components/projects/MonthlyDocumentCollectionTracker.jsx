@@ -2322,12 +2322,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return normalized === 'collected' || normalized === 'available-on-request' || normalized === 'not-required';
     }
 
-    function shouldExcludeFromMonthlyDataReviewPercent(doc) {
-        if (!isMonthlyDataReview || !doc) return false;
-        const name = String(doc?.name || '').trim().toLowerCase();
-        if (!name) return false;
+    function shouldExcludeFromMonthlyDataReviewPercent(section, doc) {
+        if (!isMonthlyDataReview) return false;
+        const sectionName = String(section?.name || '').trim().toLowerCase();
+        const docName = String(doc?.name || '').trim().toLowerCase();
         // Requested: exclude Post/Prost Process(ing) from Monthly Data Review %.
-        return /post\s*processing|post\s*process|prost\s*process/i.test(name);
+        return /post\s*processing|post\s*process|prost\s*process/i.test(sectionName) ||
+            /post\s*processing|post\s*process|prost\s*process/i.test(docName);
     }
 
     const monthCompletionByIndex = useMemo(() => {
@@ -2341,7 +2342,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
             (sections || []).forEach((section) => {
                 (section?.documents || []).forEach((doc) => {
-                    if (shouldExcludeFromMonthlyDataReviewPercent(doc)) {
+                    if (shouldExcludeFromMonthlyDataReviewPercent(section, doc)) {
                         return;
                     }
                     total += 1;

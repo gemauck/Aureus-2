@@ -695,6 +695,27 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const yearKey = String(year);
         const byYear = parsed[yearKey];
         if (Array.isArray(byYear)) return byYear;
+
+        // Be tolerant of year keys stored with slight format differences.
+        const matchingYearKey = Object.keys(parsed).find((k) => {
+            if (k == null) return false;
+            const parsedKeyYear = Number.parseInt(String(k), 10);
+            return Number.isFinite(parsedKeyYear) && parsedKeyYear === Number(year);
+        });
+        if (matchingYearKey && Array.isArray(parsed[matchingYearKey])) {
+            return parsed[matchingYearKey];
+        }
+
+        // Fallback for legacy/misaligned data: use first available year with rows.
+        const firstNonEmptyYear = Object.keys(parsed).find(
+            (k) => Array.isArray(parsed[k]) && parsed[k].length > 0
+        );
+        if (firstNonEmptyYear) {
+            return parsed[firstNonEmptyYear];
+        }
+
+        // Some legacy payloads may store rows directly under `sections`.
+        if (Array.isArray(parsed.sections)) return parsed.sections;
         return [];
     };
 
@@ -718,10 +739,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return false;
     };
 
-    const shouldExcludeFromMonthlyDataReviewPercent = (docName) => {
-        const name = String(docName || '').trim().toLowerCase();
-        if (!name) return false;
-        return /post\s*processing|post\s*process|prost\s*process/i.test(name);
+    const shouldExcludeFromMonthlyDataReviewPercent = (sectionName, docName) => {
+        const section = String(sectionName || '').trim().toLowerCase();
+        const doc = String(docName || '').trim().toLowerCase();
+        return /post\s*processing|post\s*process|prost\s*process/i.test(section) ||
+            /post\s*processing|post\s*process|prost\s*process/i.test(doc);
     };
 
     const getReviewProgressForMonth = (project, monthName, reviewType) => {
@@ -742,7 +764,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         yearSections.forEach((section) => {
             const docs = Array.isArray(section?.documents) ? section.documents : [];
             docs.forEach((doc) => {
-                if (reviewType === 'monthlyDataReview' && shouldExcludeFromMonthlyDataReviewPercent(doc?.name)) {
+                if (reviewType === 'monthlyDataReview' && shouldExcludeFromMonthlyDataReviewPercent(section?.name, doc?.name)) {
                     return;
                 }
                 total += 1;
