@@ -5935,7 +5935,7 @@ const JobCardFormPublic = () => {
               <p className="text-sm font-medium">Loading job cards…</p>
             </div>
           ) : (
-            <ul className="max-w-2xl mx-auto space-y-3">
+            <ul className="max-w-2xl mx-auto space-y-2">
               {mergedPriorJobCards.map(jc => {
                 const when = jc.updatedAt || jc.createdAt;
                 const whenLabel = when
@@ -5945,8 +5945,11 @@ const JobCardFormPublic = () => {
                     })
                   : '';
                 const num = jc.jobCardNumber || (jc.clientName ? 'Job card' : 'Job card draft');
+                const categoryLabel = String(jc.callOutCategory || '').trim() || 'Insert Category';
                 const clientLine = (jc.clientName && String(jc.clientName).trim()) || '—';
                 const siteLine = (jc.siteName && String(jc.siteName).trim()) || '—';
+                const creatorLine =
+                  String(jc.createdBy || jc.createdByName || jc.creatorName || '').trim();
                 const isLocalPending = jc.source === 'local' || jc.synced === false;
                 return (
                   <li key={`${jc.source || 'local'}-${getPriorCardOpenId(jc) || String(jc.id ?? 'row')}`}>
@@ -5957,13 +5960,16 @@ const JobCardFormPublic = () => {
                         e.stopPropagation();
                         void handleSelectPriorCard(jc);
                       }}
-                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation cursor-pointer relative z-[1]"
+                      className="w-full text-left rounded-xl border border-gray-200 bg-white p-3 shadow-sm hover:border-blue-300 hover:shadow-md transition touch-manipulation cursor-pointer relative z-[1]"
                       style={{ touchAction: 'manipulation' }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-gray-900 truncate">{num}</p>
-                          <p className="text-sm text-gray-700 mt-1.5 leading-snug">
+                          <p className="font-semibold text-gray-900 truncate">
+                            {num}
+                            <span className="ml-2 font-medium text-gray-500">- {categoryLabel}</span>
+                          </p>
+                          <p className="text-sm text-gray-700 mt-1 leading-snug">
                             <span className="text-gray-500">Client</span>{' '}
                             <span className="text-gray-900">{clientLine}</span>
                           </p>
@@ -5971,15 +5977,15 @@ const JobCardFormPublic = () => {
                             <span className="text-gray-500">Site</span>{' '}
                             <span className="text-gray-900">{siteLine}</span>
                           </p>
-                          <p className="text-sm text-gray-600 mt-1.5 truncate">
-                            {jc.agentName ? (
-                              <span>{jc.agentName}</span>
+                          <p className="text-sm text-gray-600 mt-1 truncate">
+                            {creatorLine ? (
+                              <span>{creatorLine}</span>
                             ) : (
-                              <span className="text-gray-400">Technician not set</span>
+                              <span className="text-gray-400">Creator not set</span>
                             )}
                           </p>
                           {whenLabel && (
-                            <p className="text-xs text-gray-500 mt-2">{whenLabel}</p>
+                            <p className="text-xs text-gray-500 mt-1.5">{whenLabel}</p>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
