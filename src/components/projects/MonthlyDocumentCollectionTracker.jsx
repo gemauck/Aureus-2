@@ -2481,12 +2481,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         { value: 'complete-issues-outstanding', label: 'Complete – Issues Outstanding', color: 'bg-red-200 text-red-800 font-semibold dark:bg-red-900/60 dark:text-red-200', cellColor: 'bg-red-200 border-l-4 border-red-500 shadow-sm dark:bg-red-900/60 dark:border-red-400', optionStyle: { backgroundColor: '#fecaca', color: '#991b1b' } },
         { value: 'done', label: 'Complete', color: 'bg-emerald-200 text-emerald-800 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-400 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } }
     ];
-    const resolveMonthlyDataReviewStatusKey = (status) => {
+    function resolveMonthlyDataReviewStatusKey(status) {
         if (!status) return status;
         const s = String(status).toLowerCase();
         if (s === 'in-progress') return 'started-minor-info';
         return status;
-    };
+    }
     // Compliance Review statuses only
     const complianceReviewStatusOptions = [
         { value: 'no-reviewed', label: 'Not Reviewed', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-700 dark:text-gray-200', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-700 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } },
