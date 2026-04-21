@@ -1229,9 +1229,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         <>
         <div className={`sm:hidden divide-y border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           {displayJobCards.map((jc) => {
+            const ownerUser = users.find((u) => u.id === jc.ownerId);
+            const createdByName =
+              ownerUser?.name ||
+              ownerUser?.email ||
+              (jc.ownerId ? `User ${String(jc.ownerId).slice(0, 8)}…` : '');
             const technicianName =
               jc.agentName ||
-              users.find((u) => u.id === jc.ownerId)?.name ||
+              ownerUser?.name ||
               '';
             const status =
               (jc.status || 'draft').toString().toLowerCase();
@@ -1286,6 +1291,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   <span>{technicianName || '–'}</span>
                   <span>{formatDate(jc.createdAt)}</span>
+                </div>
+                <div className={`mt-1 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                  Created by: {createdByName || '–'}
                 </div>
                 {canDeleteJobCards ? (
                   <div className="mt-3 flex justify-end">
@@ -1380,6 +1388,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     {renderSortIcon('createdAt')}
                   </button>
                 </th>
+                <th className="px-4 py-2 text-left">
+                  <span className="font-semibold">Created by</span>
+                </th>
                 {canDeleteJobCards ? (
                   <th className="px-4 py-2 text-right">
                     <span className="font-semibold">Actions</span>
@@ -1389,9 +1400,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             </thead>
             <tbody className={`divide-y ${isDark ? 'divide-slate-800 bg-slate-900' : 'divide-slate-100 bg-white'}`}>
               {displayJobCards.map((jc) => {
+                const ownerUser = users.find((u) => u.id === jc.ownerId);
+                const createdByName =
+                  ownerUser?.name ||
+                  ownerUser?.email ||
+                  (jc.ownerId ? `User ${String(jc.ownerId).slice(0, 8)}…` : '');
                 const technicianName =
                   jc.agentName ||
-                  users.find((u) => u.id === jc.ownerId)?.name ||
+                  ownerUser?.name ||
                   '';
 
                 const status =
@@ -1443,6 +1459,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       <div className="text-[11px]">
                         {formatDate(jc.createdAt)}
+                      </div>
+                    </td>
+                    <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      <div className="text-[11px]">
+                        {createdByName || '–'}
                       </div>
                     </td>
                     {canDeleteJobCards ? (
