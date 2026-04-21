@@ -181,6 +181,13 @@ function jobCardMediaIsVideoDataUrl(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
 
+function jobCardMediaIsVideoUrl(url, mediaType = '', filename = '') {
+  if (jobCardMediaIsVideoDataUrl(url)) return true;
+  if (typeof mediaType === 'string' && /video/i.test(mediaType)) return true;
+  const target = `${String(url || '')} ${String(filename || '')}`.toLowerCase();
+  return /\.(mp4|webm|mov|m4v|avi|mkv)(\?|$|\s)/i.test(target);
+}
+
 function jobCardFileLooksImageOrVideo(file) {
   if (file.type.startsWith('image/') || file.type.startsWith('video/')) return true;
   return /\.(jpe?g|png|gif|webp|heic|heif|bmp|mp4|webm|mov|mkv)$/i.test(file.name || '');
@@ -394,6 +401,21 @@ function extractVisualPhotoEntries(photosValue) {
     }
     if (!p || typeof p !== 'object') return;
     if (p.kind === 'voice' || p.kind === 'sectionMedia') return;
+    if (p.kind === 'safetyCultureMedia' && p.mediaId && p.token) {
+      visualEntries.push({
+        stored: p,
+        url: '',
+        previewUrl: '',
+        name: p.filename || `Photo ${idx + 1}`,
+        safetyCulture: true,
+        mediaId: String(p.mediaId),
+        token: String(p.token),
+        mediaType: p.mediaType != null ? String(p.mediaType) : '',
+        issueId: p.issueId != null ? String(p.issueId) : '',
+        filename: p.filename != null ? String(p.filename) : ''
+      });
+      return;
+    }
     const url = typeof p.url === 'string' ? p.url : '';
     if (!url) return;
     visualEntries.push({
@@ -482,17 +504,209 @@ const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove, on
   );
 };
 
-const JobCardWizardAttachmentPreview = ({ url, previewUrl, index, onRemove, onPreview }) => {
-  const isVideo = jobCardMediaIsVideoDataUrl(url);
+const JobCardWizardSafetyCultureAttachmentPreview = ({
+  mediaId,
+  token,
+  mediaType,
+  filename,
+  issueId,
+  index,
+  onRemove,
+  onPreview
+}) => {
+  const [retryTick, setRetryTick] = useState(0);
+  const [err, setErr] = useState('');
+  const [resolvedSrc, setResolvedSrc] = useState('');
+  const [renderFailed, setRenderFailed] = useState(false);
+  const blobUrlRef = useRef(null);
+
+  const proxyUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      id: String(mediaId || ''),
+      token: String(token || '')
+    });
+    if (mediaType) params.set('media_type', String(mediaType));
+    if (filename) params.set('filename', String(filename));
+    if (issueId) params.set('issue_id', String(issueId));
+    if (retryTick > 0) params.set('retry', String(retryTick));
+    return `/api/safety-culture/media/proxy?${params.toString()}`;
+  }, [mediaId, token, mediaType, filename, issueId, retryTick]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ac = new AbortController();
+
+    const revokeBlob = () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+
+    const authTok = typeof window !== 'undefined' ? window.storage?.getToken?.() : '';
+    if (!authTok || !mediaId || !token) {
+      setErr('Media unavailable');
+      setResolvedSrc('');
+      revokeBlob();
+      return () => {
+        cancelled = true;
+        ac.abort();
+        revokeBlob();
+      };
+    }
+
+    setErr('');
+    setResolvedSrc('');
+    setRenderFailed(false);
+    revokeBlob();
+
+    (async () => {
+      try {
+        const res = await fetch(proxyUrl, {
+          headers: { Authorization: `Bearer ${authTok}` },
+          signal: ac.signal
+        });
+        if (!res.ok) {
+          if (!cancelled && retryTick < 2) {
+            setRetryTick((n) => n + 1);
+            return;
+          }
+          if (!cancelled) setErr('Could not load media');
+          return;
+        }
+        const blob = await res.blob();
+        if (cancelled || ac.signal.aborted) return;
+        const u = URL.createObjectURL(blob);
+        blobUrlRef.current = u;
+        setResolvedSrc(u);
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        if (!cancelled && retryTick < 2) {
+          setRetryTick((n) => n + 1);
+          return;
+        }
+        if (!cancelled) setErr('Could not load media');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+      revokeBlob();
+      setResolvedSrc('');
+    };
+  }, [proxyUrl, mediaId, token, retryTick]);
+
+  const isVideo = jobCardMediaIsVideoUrl('', mediaType, filename);
+
   return (
-    <div className="relative group h-24 sm:h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
-      {isVideo ? (
+    <div className="relative group rounded-lg overflow-hidden border border-gray-200 bg-white">
+      {err ? (
+        <div className="min-h-[88px] w-full flex items-center justify-center text-[11px] text-red-500 px-2 text-center bg-red-50">
+          {err}
+        </div>
+      ) : renderFailed ? (
+        <div className="min-h-[88px] w-full flex items-center justify-center text-xs text-gray-500 bg-slate-50">
+          <span className="inline-flex items-center gap-2">
+            <i className="fas fa-image" />
+            Preview unavailable
+          </span>
+        </div>
+      ) : !resolvedSrc ? (
+        <div className="min-h-[88px] w-full flex items-center justify-center text-xs text-gray-500 bg-slate-50">
+          <i className="fas fa-spinner fa-spin mr-2" />
+          Loading...
+        </div>
+      ) : isVideo ? (
         <video
-          src={url}
-          className="h-full w-full object-contain bg-black"
+          src={resolvedSrc}
+          className="w-full max-h-44 object-contain bg-black"
           controls
           playsInline
           preload="metadata"
+          onError={() => setRenderFailed(true)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof onPreview === 'function') onPreview(resolvedSrc);
+          }}
+          className="h-full w-full cursor-zoom-in"
+          title="Open full photo"
+        >
+          <img
+            src={resolvedSrc}
+            alt={`Attachment ${index + 1}`}
+            loading="lazy"
+            decoding="async"
+            className="block w-full h-auto max-h-44 object-cover bg-white"
+            onError={() => setRenderFailed(true)}
+          />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRemove(index);
+        }}
+        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation z-10"
+        title="Remove"
+      >
+        <i className="fas fa-times text-xs"></i>
+      </button>
+    </div>
+  );
+};
+
+const JobCardWizardAttachmentPreview = ({
+  url,
+  previewUrl,
+  index,
+  onRemove,
+  onPreview,
+  safetyCulture,
+  mediaId,
+  token,
+  mediaType,
+  issueId,
+  filename
+}) => {
+  const [renderFailed, setRenderFailed] = useState(false);
+  if (safetyCulture && mediaId && token) {
+    return (
+      <JobCardWizardSafetyCultureAttachmentPreview
+        mediaId={mediaId}
+        token={token}
+        mediaType={mediaType}
+        filename={filename}
+        issueId={issueId}
+        index={index}
+        onRemove={onRemove}
+        onPreview={onPreview}
+      />
+    );
+  }
+  const isVideo = jobCardMediaIsVideoUrl(url, mediaType, filename);
+  return (
+    <div className="relative group rounded-lg overflow-hidden border border-gray-200 bg-white">
+      {renderFailed ? (
+        <div className="min-h-[88px] w-full flex items-center justify-center text-xs text-gray-500 bg-slate-50">
+          <span className="inline-flex items-center gap-2">
+            <i className="fas fa-image" />
+            Preview unavailable
+          </span>
+        </div>
+      ) : isVideo ? (
+        <video
+          src={url}
+          className="w-full max-h-44 object-contain bg-black"
+          controls
+          playsInline
+          preload="metadata"
+          onError={() => setRenderFailed(true)}
         />
       ) : (
         <button
@@ -508,7 +722,8 @@ const JobCardWizardAttachmentPreview = ({ url, previewUrl, index, onRemove, onPr
             alt={`Attachment ${index + 1}`}
             loading="lazy"
             decoding="async"
-            className="h-full w-full object-contain p-1"
+            className="block w-full h-auto max-h-44 object-cover bg-white"
+            onError={() => setRenderFailed(true)}
           />
         </button>
       )}
@@ -1413,7 +1628,13 @@ const JobCardFormPublic = () => {
         name: item.name || `Photo ${i + 1}`,
         url: item.url,
         previewUrl: item.previewUrl || '',
-        entry: item.stored
+        entry: item.stored,
+        safetyCulture: item.safetyCulture === true,
+        mediaId: item.mediaId || '',
+        token: item.token || '',
+        mediaType: item.mediaType || '',
+        issueId: item.issueId || '',
+        filename: item.filename || ''
       }))
     );
     setFormData(prev => {
@@ -5096,6 +5317,12 @@ const JobCardFormPublic = () => {
                 key={showAllSelectedPhotos ? idx : `${idx}-${hiddenSelectedPhotosCount}`}
                 url={typeof photo === 'string' ? photo : photo.url}
                 previewUrl={typeof photo === 'string' ? '' : (photo.previewUrl || photo.thumbUrl || '')}
+                safetyCulture={typeof photo === 'object' && photo?.safetyCulture === true}
+                mediaId={typeof photo === 'object' ? photo.mediaId : ''}
+                token={typeof photo === 'object' ? photo.token : ''}
+                mediaType={typeof photo === 'object' ? photo.mediaType : ''}
+                issueId={typeof photo === 'object' ? photo.issueId : ''}
+                filename={typeof photo === 'object' ? photo.filename : ''}
                 index={idx}
                 onRemove={handleRemovePhoto}
                 onPreview={setPhotoLightboxUrl}
@@ -5572,6 +5799,12 @@ const JobCardFormPublic = () => {
                     key={showAllSelectedPhotos ? idx : `${idx}-${hiddenSelectedPhotosCount}`}
                     url={typeof photo === 'string' ? photo : photo.url}
                     previewUrl={typeof photo === 'string' ? '' : (photo.previewUrl || photo.thumbUrl || '')}
+                    safetyCulture={typeof photo === 'object' && photo?.safetyCulture === true}
+                    mediaId={typeof photo === 'object' ? photo.mediaId : ''}
+                    token={typeof photo === 'object' ? photo.token : ''}
+                    mediaType={typeof photo === 'object' ? photo.mediaType : ''}
+                    issueId={typeof photo === 'object' ? photo.issueId : ''}
+                    filename={typeof photo === 'object' ? photo.filename : ''}
                     index={idx}
                     onRemove={handleRemovePhoto}
                     onPreview={setPhotoLightboxUrl}
