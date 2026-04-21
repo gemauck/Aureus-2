@@ -1409,6 +1409,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <thead className={`text-xs ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-50 text-slate-500'}`}>
               <tr>
                 <th className="px-4 py-2 text-left">
+                  <span className="font-semibold">Heading</span>
+                </th>
+                <th className="px-4 py-2 text-left">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
@@ -1416,6 +1419,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   >
                     <span>Job Card</span>
                     {renderSortIcon('jobCardNumber')}
+                  </button>
+                </th>
+                <th className="px-4 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
+                    onClick={() => handleSort('callOutCategory')}
+                  >
+                    <span>Category</span>
+                    {renderSortIcon('callOutCategory')}
                   </button>
                 </th>
                 <th className="px-4 py-2 text-left">
@@ -1439,16 +1452,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   >
                     <span>Technician</span>
                     {renderSortIcon('technician')}
-                  </button>
-                </th>
-                <th className="px-4 py-2 text-left">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
-                    onClick={() => handleSort('callOutCategory')}
-                  >
-                    <span>Category</span>
-                    {renderSortIcon('callOutCategory')}
                   </button>
                 </th>
                 <th className="px-4 py-2 text-left">
@@ -1513,6 +1516,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {jc.jobCardNumber || '–'}
                       </div>
                     </td>
+                    <td className={`px-4 py-2 align-top max-w-[14rem] ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                      <span className="block truncate" title={getHeadingFromJobCard(jc) || ''}>
+                        {getHeadingFromJobCard(jc) || '–'}
+                      </span>
+                    </td>
+                    <td className={`px-4 py-2 max-w-[10rem] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      <span className="line-clamp-2" title={jc.callOutCategory || ''}>
+                        {jc.callOutCategory || '–'}
+                      </span>
+                    </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {jc.clientName || '–'}
                     </td>
@@ -1523,11 +1536,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {technicianName || '–'}
-                    </td>
-                    <td className={`px-4 py-2 max-w-[10rem] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                      <span className="line-clamp-2" title={jc.callOutCategory || ''}>
-                        {jc.callOutCategory || '–'}
-                      </span>
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span
