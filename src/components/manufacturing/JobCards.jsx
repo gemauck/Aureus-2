@@ -301,7 +301,7 @@ function JobCardSafetyCultureThumbnail({
         />
       ) : null}
       {canRender && !isVideo && resolvedSrc ? (
-        <figure className="group relative h-36 overflow-hidden bg-slate-900 sm:h-40">
+        <figure className="group relative h-44 overflow-hidden bg-slate-900 sm:h-52">
           <button
             type="button"
             onClick={() => {
@@ -313,7 +313,7 @@ function JobCardSafetyCultureThumbnail({
             <img
               src={resolvedSrc}
               alt={`SafetyCulture attachment ${idx + 1}`}
-              className="h-full w-full object-contain p-0.5 transition-transform duration-200 group-hover:scale-[1.02]"
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
               loading="lazy"
               decoding="async"
               onError={() => {
@@ -343,7 +343,7 @@ function JobCardInlineSectionMediaStrip({ items, issueId, onPreview }) {
   return (
     <div className="mt-3">
       <div className="text-[11px] font-semibold uppercase text-slate-500 mb-2">Photos &amp; video</div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {items.map((item) => {
           const key = `sec-inline-${item.idx}`;
           if (item.safetyCulture) {
@@ -375,7 +375,7 @@ function JobCardInlineSectionMediaStrip({ items, issueId, onPreview }) {
             );
           }
           return (
-            <figure key={key} className="h-36 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 sm:h-40">
+            <figure key={key} className="h-44 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 sm:h-52">
               <button
                 type="button"
                 onClick={() => {
@@ -387,7 +387,7 @@ function JobCardInlineSectionMediaStrip({ items, issueId, onPreview }) {
                 <img
                   src={url}
                   alt=""
-                  className="h-full w-full object-contain p-0.5"
+                  className="h-full w-full object-cover"
                   loading="lazy"
                   decoding="async"
                 />
@@ -2482,7 +2482,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         return (
                           <figure
                             key={idx}
-                            className="group relative h-36 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900 sm:h-40"
+                            className="group relative h-44 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900 sm:h-52"
                           >
                             <button
                               type="button"
@@ -2493,7 +2493,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                               <img
                                 src={url}
                                 alt={`Job card photo ${idx + 1}`}
-                                className="h-full w-full object-contain p-0.5 transition-transform duration-200 group-hover:scale-[1.02]"
+                                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                                 loading="lazy"
                                 decoding="async"
                               />

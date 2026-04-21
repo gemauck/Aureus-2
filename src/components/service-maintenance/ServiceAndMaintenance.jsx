@@ -199,7 +199,7 @@ function JobCardSafetyCultureThumbnailService({
         />
       ) : null}
       {canRender && !isVideo && resolvedSrc ? (
-        <figure className={`group relative h-36 overflow-hidden sm:h-40 ${figBg}`}>
+        <figure className={`group relative h-44 overflow-hidden sm:h-52 ${figBg}`}>
           <button
             type="button"
             onClick={() => {
@@ -211,7 +211,7 @@ function JobCardSafetyCultureThumbnailService({
             <img
               src={resolvedSrc}
               alt={`SafetyCulture attachment ${idx + 1}`}
-              className="h-full w-full object-contain p-0.5 transition-transform duration-200 group-hover:scale-[1.02]"
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
               loading="lazy"
               decoding="async"
               onError={() => {
@@ -243,7 +243,7 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId, onPrevi
   return (
     <div className="mt-3">
       <div className={`text-[11px] font-semibold uppercase mb-2 ${labelCls}`}>Photos &amp; video</div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {items.map((item) => {
           const key = `sec-svc-${item.idx}`;
           if (item.safetyCulture) {
@@ -282,7 +282,7 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId, onPrevi
           return (
             <figure
               key={key}
-              className={`h-36 overflow-hidden rounded-xl border sm:h-40 ${
+              className={`h-44 overflow-hidden rounded-xl border sm:h-52 ${
                 isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
               }`}
             >
@@ -297,7 +297,7 @@ function JobCardInlineSectionMediaStripService({ items, isDark, issueId, onPrevi
                 <img
                   src={url}
                   alt=""
-                  className="h-full w-full object-contain p-0.5"
+                  className="h-full w-full object-cover"
                   loading="lazy"
                   decoding="async"
                 />
@@ -2699,7 +2699,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         return (
                           <figure
                             key={idx}
-                            className={`group relative h-36 overflow-hidden rounded-xl border sm:h-40 ${
+                            className={`group relative h-44 overflow-hidden rounded-xl border sm:h-52 ${
                               isDark
                                 ? 'border-gray-700 bg-gray-950'
                                 : 'border-gray-200 bg-white'
@@ -2718,7 +2718,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                                     : url
                                 }
                                 alt={`Job card photo ${idx + 1}`}
-                                className="h-full w-full object-contain p-0.5 transition-transform duration-200 group-hover:scale-[1.02]"
+                                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                                 loading="lazy"
                                 decoding="async"
                               />
