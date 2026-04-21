@@ -864,6 +864,53 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             /post\s*processing|post\s*process|prost\s*process/i.test(doc);
     };
 
+    const parsePercentValue = (rawValue) => {
+        if (rawValue == null) return null;
+        if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
+            return Math.max(0, Math.min(100, Math.round(rawValue)));
+        }
+        const match = String(rawValue).match(/(\d{1,3})(?:\.\d+)?\s*%?/);
+        if (!match) return null;
+        const parsed = Number.parseFloat(match[1]);
+        if (!Number.isFinite(parsed)) return null;
+        return Math.max(0, Math.min(100, Math.round(parsed)));
+    };
+
+    const getMonthlyProgressPercentFallback = (project, monthName, year, reviewType) => {
+        const monthlyProgress = project?.monthlyProgress;
+        if (!monthlyProgress || typeof monthlyProgress !== 'object' || Array.isArray(monthlyProgress)) {
+            return null;
+        }
+        const monthKey = `${String(monthName || '')}-${String(year)}`;
+        const monthData = monthlyProgress[monthKey];
+        if (!monthData || typeof monthData !== 'object' || Array.isArray(monthData)) {
+            return null;
+        }
+
+        const candidates = reviewType === 'complianceReview'
+            ? [
+                monthData.compliancePercent,
+                monthData.compliance_percentage,
+                monthData.complianceProgressPercent,
+                monthData.complianceProgress,
+                monthData.compliance
+            ]
+            : [
+                monthData.dataPercent,
+                monthData.data_percentage,
+                monthData.monthlyDataReviewPercent,
+                monthData.dataProgressPercent,
+                monthData.dataProgress,
+                monthData.data
+            ];
+
+        for (let i = 0; i < candidates.length; i += 1) {
+            const parsed = parsePercentValue(candidates[i]);
+            if (parsed != null) return parsed;
+        }
+        return null;
+    };
+
     const getReviewProgressForMonth = (project, monthName, reviewType) => {
         const safeYear = Number(selectedYear) || currentYear;
         const monthIdx = months.indexOf(monthName);
@@ -874,7 +921,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const yearSections = getSectionsForYear(sectionsField, safeYear);
 
         if (!Array.isArray(yearSections) || yearSections.length === 0) {
-            return { completed: 0, total: 0, percent: null };
+            const fallbackPercent = getMonthlyProgressPercentFallback(project, monthName, safeYear, reviewType);
+            return { completed: 0, total: 0, percent: fallbackPercent, source: fallbackPercent != null ? 'monthlyProgress' : 'sections' };
         }
 
         let total = 0;
@@ -895,10 +943,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             });
         });
 
+        const sectionPercent = total > 0 ? Math.round((completed / total) * 100) : null;
+        const fallbackPercent = sectionPercent == null
+            ? getMonthlyProgressPercentFallback(project, monthName, safeYear, reviewType)
+            : null;
+
         return {
             completed,
             total,
-            percent: total > 0 ? Math.round((completed / total) * 100) : null
+            percent: sectionPercent != null ? sectionPercent : fallbackPercent,
+            source: sectionPercent != null ? 'sections' : (fallbackPercent != null ? 'monthlyProgress' : 'sections')
         };
     };
 
@@ -1901,7 +1955,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 lineHeight: '1'
                             }
                         }, reviewPercent == null ? '--%' : `${reviewPercent}%`),
-                        React.createElement('span', { style: { fontSize: '10px', color: '#475569' } }, reviewProgress?.total > 0 ? `${reviewProgress.completed}/${reviewProgress.total}` : 'No items')
+                        React.createElement(
+                            'span',
+                            { style: { fontSize: '10px', color: '#475569' } },
+                            reviewProgress?.total > 0
+                                ? `${reviewProgress.completed}/${reviewProgress.total}`
+                                : (reviewProgress?.source === 'monthlyProgress' ? 'From monthly progress' : 'No items')
+                        )
                     ),
                     React.createElement('div', {
                         style: {
