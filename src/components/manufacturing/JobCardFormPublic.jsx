@@ -24,6 +24,7 @@ const JOB_CARD_SYNC_WARN_PAYLOAD_BYTES = 18 * 1024 * 1024;
 const JOB_CARD_SYNC_HARD_PAYLOAD_BYTES = 28 * 1024 * 1024;
 const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 45000;
 const JOB_CARD_SYNC_RETRY_ATTEMPTS = 3;
+const PRIOR_CARD_HEADING_MAX_CHARS = 36;
 
 /** Work-step fields that can each carry photos/videos (stored on JobCard.photos as { kind: 'sectionMedia', section, url, name }). */
 const SECTION_WORK_MEDIA_KEYS = ['diagnosis', 'actionsTaken', 'futureWorkRequired'];
@@ -431,6 +432,13 @@ function parseHeadingFromComments(rawComments) {
     .split('\n')
     .find(l => typeof l === 'string' && l.startsWith(HEADING_PREFIX));
   return line ? line.slice(HEADING_PREFIX.length).trim() : '';
+}
+
+function abbreviateHeading(value, maxChars = PRIOR_CARD_HEADING_MAX_CHARS) {
+  const heading = String(value || '').trim();
+  if (!heading) return '';
+  if (heading.length <= maxChars) return heading;
+  return `${heading.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }
 
 /** Inline photo/video strip for Diagnosis / Actions / Future work sections on the work step. */
@@ -1271,6 +1279,8 @@ const JobCardFormPublic = () => {
   const [priorSearchInput, setPriorSearchInput] = useState('');
   const [priorSearchDebounced, setPriorSearchDebounced] = useState('');
   const [priorClientId, setPriorClientId] = useState('');
+  const [priorSiteName, setPriorSiteName] = useState('');
+  const [priorTechnician, setPriorTechnician] = useState('');
   /** Bump when returning from login (another tab) or visibility — refetch job card list */
   const [priorListRefreshTick, setPriorListRefreshTick] = useState(0);
   /** Bump after local pending queue changes so landing / prior list re-read storage */
@@ -1471,6 +1481,72 @@ const JobCardFormPublic = () => {
         String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
       );
   }, [clients]);
+
+  const priorFilterRowsSource = useMemo(
+    () => (wizardFlow === 'prior_list' ? buildMergedWizardJobCardRows(serverPriorList) : []),
+    [wizardFlow, serverPriorList, localDraftsTick]
+  );
+
+  const priorSiteSelectOptions = useMemo(() => {
+    if (!priorClientId) return [];
+    const seen = new Set();
+    const out = [];
+    priorFilterRowsSource.forEach((jc) => {
+      if (String(jc?.clientId || '') !== String(priorClientId)) return;
+      const site = String(jc?.siteName || '').trim();
+      if (!site) return;
+      const key = site.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(site);
+    });
+    return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [priorFilterRowsSource, priorClientId]);
+
+  const priorTechnicianSelectOptions = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    priorFilterRowsSource.forEach((jc) => {
+      if (priorClientId && String(jc?.clientId || '') !== String(priorClientId)) return;
+      if (priorSiteName && String(jc?.siteName || '').trim() !== priorSiteName) return;
+      const primaryTech = String(jc?.agentName || '').trim();
+      if (primaryTech) {
+        const key = primaryTech.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push(primaryTech);
+        }
+      }
+      const team = Array.isArray(jc?.otherTechnicians) ? jc.otherTechnicians : [];
+      team.forEach((name) => {
+        const tech = String(name || '').trim();
+        if (!tech) return;
+        const key = tech.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(tech);
+      });
+    });
+    return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [priorFilterRowsSource, priorClientId, priorSiteName]);
+
+  useEffect(() => {
+    setPriorSiteName('');
+  }, [priorClientId]);
+
+  useEffect(() => {
+    if (!priorSiteName) return;
+    if (!priorSiteSelectOptions.includes(priorSiteName)) {
+      setPriorSiteName('');
+    }
+  }, [priorSiteName, priorSiteSelectOptions]);
+
+  useEffect(() => {
+    if (!priorTechnician) return;
+    if (!priorTechnicianSelectOptions.includes(priorTechnician)) {
+      setPriorTechnician('');
+    }
+  }, [priorTechnician, priorTechnicianSelectOptions]);
 
   const addVoiceClip = useCallback(
     clip => {
@@ -2127,16 +2203,32 @@ const JobCardFormPublic = () => {
 
   const mergedPriorJobCards = useMemo(() => {
     if (wizardFlow !== 'prior_list') return [];
-    const rows = buildMergedWizardJobCardRows(serverPriorList);
-    if (!priorSearchDebounced && !priorClientId) return rows;
+    const rows = priorFilterRowsSource;
+    if (!priorSearchDebounced && !priorClientId && !priorSiteName && !priorTechnician) return rows;
 
     const q = priorSearchDebounced.toLowerCase();
     return rows.filter(jc => {
       if (priorClientId && String(jc.clientId || '') !== priorClientId) return false;
+      if (priorSiteName && String(jc.siteName || '').trim() !== priorSiteName) return false;
+      if (priorTechnician) {
+        const primaryTech = String(jc.agentName || '').trim();
+        const team = Array.isArray(jc.otherTechnicians) ? jc.otherTechnicians : [];
+        const hasTechnician =
+          primaryTech === priorTechnician ||
+          team.some(name => String(name || '').trim() === priorTechnician);
+        if (!hasTechnician) return false;
+      }
       if (!priorSearchDebounced) return true;
       return priorListLocalSearchHay(jc).includes(q);
     });
-  }, [wizardFlow, serverPriorList, localDraftsTick, priorSearchDebounced, priorClientId]);
+  }, [
+    wizardFlow,
+    priorFilterRowsSource,
+    priorSearchDebounced,
+    priorClientId,
+    priorSiteName,
+    priorTechnician
+  ]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -5954,6 +6046,43 @@ const JobCardFormPublic = () => {
                   ))}
                 </select>
               </div>
+              <div>
+                <label htmlFor="jobcard-prior-site" className="block text-xs font-semibold text-gray-600 mb-1">
+                  Site
+                </label>
+                <select
+                  id="jobcard-prior-site"
+                  value={priorSiteName}
+                  onChange={e => setPriorSiteName(e.target.value)}
+                  disabled={!priorClientId}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                >
+                  <option value="">{priorClientId ? 'All sites' : 'Select client first'}</option>
+                  {priorSiteSelectOptions.map(site => (
+                    <option key={site} value={site}>
+                      {site}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="jobcard-prior-technician" className="block text-xs font-semibold text-gray-600 mb-1">
+                  Technician
+                </label>
+                <select
+                  id="jobcard-prior-technician"
+                  value={priorTechnician}
+                  onChange={e => setPriorTechnician(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                >
+                  <option value="">All technicians</option>
+                  {priorTechnicianSelectOptions.map(tech => (
+                    <option key={tech} value={tech}>
+                      {tech}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           ) : null}
           {mergedPriorJobCards.length === 0 && !serverPriorLoading ? (
@@ -5991,6 +6120,7 @@ const JobCardFormPublic = () => {
                 const headingLabel = String(
                   jc.heading || parseHeadingFromComments(jc.otherComments || '')
                 ).trim();
+                const headingShort = abbreviateHeading(headingLabel);
                 const clientLine = (jc.clientName && String(jc.clientName).trim()) || '—';
                 const isLocalPending = jc.source === 'local' || jc.synced === false;
                 return (
@@ -6009,8 +6139,8 @@ const JobCardFormPublic = () => {
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-gray-900 truncate">
                             {num}
-                            {headingLabel ? (
-                              <span className="ml-2 font-medium text-gray-500">- {headingLabel}</span>
+                            {headingShort ? (
+                              <span className="ml-2 font-medium text-gray-500">- {headingShort}</span>
                             ) : null}
                           </p>
                           <p className="text-sm text-gray-700 mt-1 leading-snug">

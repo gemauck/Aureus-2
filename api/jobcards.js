@@ -165,12 +165,21 @@ const LIST_SORT_WHITELIST = {
 
 /** List responses only: keeps mobile list/search payloads small (full text comes from GET /api/jobcards/:id). */
 const LIST_TEXT_PREVIEW_MAX = 420
+const HEADING_PREFIX = 'Heading:'
 
 function truncateJobCardListText(value, max = LIST_TEXT_PREVIEW_MAX) {
   if (value == null) return ''
   const s = String(value)
   if (s.length <= max) return s
   return `${s.slice(0, max)}…`
+}
+
+function extractHeadingFromComments(rawComments) {
+  if (!rawComments || typeof rawComments !== 'string') return ''
+  const line = rawComments
+    .split('\n')
+    .find((entry) => typeof entry === 'string' && entry.trim().startsWith(HEADING_PREFIX))
+  return line ? line.slice(HEADING_PREFIX.length).trim() : ''
 }
 
 /**
@@ -446,6 +455,7 @@ async function handler(req, res) {
           reasonForVisit: true,
           callOutCategory: true,
           diagnosis: true,
+          otherComments: true,
           ownerId: true,
           completedByUserId: true,
           completedByName: true,
@@ -502,9 +512,14 @@ async function handler(req, res) {
 
         // Format dates for response; flatten checklist count for clients
         const formatted = jobCards.map((jobCard) => {
-          const { _count, ...rest } = jobCard
+          const { _count, otherComments, ...rest } = jobCard
+          const heading =
+            rest.heading != null && String(rest.heading).trim() !== ''
+              ? String(rest.heading).trim()
+              : extractHeadingFromComments(otherComments)
           return {
             ...rest,
+            heading,
             serviceFormsCount: typeof _count?.serviceForms === 'number' ? _count.serviceForms : 0,
             reasonForVisit: truncateJobCardListText(rest.reasonForVisit),
             diagnosis: truncateJobCardListText(rest.diagnosis),
