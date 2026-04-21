@@ -1512,10 +1512,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <div className="font-semibold whitespace-nowrap">
                         {jc.jobCardNumber || '–'}
                       </div>
-                      <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {jc.reasonForVisit || jc.diagnosis || 'No summary'}
-                      </div>
-                      <JobCardListMetricChips jc={jc} isDark={isDark} />
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {jc.clientName || '–'}
