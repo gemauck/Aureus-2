@@ -307,12 +307,23 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
 
         const needsHydration = projects.filter((project) => {
             if (!project || !project.id) return false;
+            const monthlyRaw = project.monthlyDataReviewSections;
+            const complianceRaw = project.complianceReviewSections;
+            const monthlyTrimmed = typeof monthlyRaw === 'string' ? monthlyRaw.trim() : monthlyRaw;
+            const complianceTrimmed = typeof complianceRaw === 'string' ? complianceRaw.trim() : complianceRaw;
+
+            // Hydrate whenever these fields are absent/empty on list payload.
+            // Some projects contain review data even if process flags are false/missing.
             const needsMonthlyData =
-                !!project.hasMonthlyDataReviewProcess &&
-                (project.monthlyDataReviewSections == null || project.monthlyDataReviewSections === '');
+                monthlyTrimmed == null ||
+                monthlyTrimmed === '' ||
+                monthlyTrimmed === '{}' ||
+                monthlyTrimmed === 'null';
             const needsCompliance =
-                !!project.hasComplianceReviewProcess &&
-                (project.complianceReviewSections == null || project.complianceReviewSections === '');
+                complianceTrimmed == null ||
+                complianceTrimmed === '' ||
+                complianceTrimmed === '{}' ||
+                complianceTrimmed === 'null';
             return needsMonthlyData || needsCompliance;
         });
 
@@ -1875,13 +1886,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             fontSize: '10px',
-                            color: '#6b7280'
+                            color: '#6b7280',
+                            padding: '2px 0',
+                            borderTop: '1px solid #e5e7eb',
+                            borderBottom: '1px solid #e5e7eb'
                         }
                     },
                         React.createElement('span', {
                             style: {
                                 fontWeight: '800',
-                                fontSize: '15px',
+                                fontSize: '18px',
                                 color: '#111827',
                                 letterSpacing: '-0.01em',
                                 lineHeight: '1'
@@ -2241,7 +2255,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 React.createElement('th', { 
                                     style: {
                                         padding: '8px 10px',
-                                        fontSize: '10px',
+                            fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
                                         backgroundColor: isWorking ? '#f1f5f9' : '#ffffff',

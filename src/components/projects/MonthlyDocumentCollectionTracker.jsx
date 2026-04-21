@@ -5037,7 +5037,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 }}
                 placeholder="Notes..."
                 rows={variant === 'list' ? 2 : 3}
-                className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent dark:bg-gray-800/50"
+                className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                 aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
             />
         );

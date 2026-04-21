@@ -240,6 +240,7 @@ const Projects = () => {
     const routeCheckInProgressRef = useRef(false);
     const navigatingBackRef = useRef(false); // Track when user explicitly navigates back
     const lastHandleViewProjectCallRef = useRef({ projectId: null, timestamp: 0 });
+    const lastOpenEntityDetailRef = useRef({ key: null, timestamp: 0 });
     const reloadProjectsListRef = useRef(null);
     const listScrollRestoreFrameRef = useRef(null);
     // Track when projects were last loaded to avoid unnecessary refreshes
@@ -577,6 +578,15 @@ const Projects = () => {
                 console.log('⚠️ Projects: openEntityDetail event missing entityType or entityId');
                 return;
             }
+
+            // Ignore duplicate open events fired in quick succession by overlapping listeners.
+            const eventKey = `${entityType}:${String(entityId)}:${String(options?.task || '')}:${String(options?.tab || '')}:${String(options?.section || '')}`;
+            const now = Date.now();
+            if (lastOpenEntityDetailRef.current.key === eventKey && (now - lastOpenEntityDetailRef.current.timestamp) < 1200) {
+                console.log('⏭️ Projects: Duplicate openEntityDetail ignored:', { entityType, entityId, options });
+                return;
+            }
+            lastOpenEntityDetailRef.current = { key: eventKey, timestamp: now };
             
             console.log('🔍 Projects: Processing openEntityDetail:', { entityType, entityId, options, projectsCount: projects.length });
             
@@ -5632,6 +5642,15 @@ try {
             
             const { entityId, options } = event.detail;
             if (!entityId) return;
+
+            const globalEventKey = `project:${String(entityId)}:${String(options?.task || '')}:${String(options?.tab || '')}:${String(options?.section || '')}`;
+            const now = Date.now();
+            const lastGlobalEvent = window._projectsLastGlobalOpenEntityEvent || { key: null, timestamp: 0 };
+            if (lastGlobalEvent.key === globalEventKey && (now - lastGlobalEvent.timestamp) < 1200) {
+                console.log('⏭️ Projects: Global duplicate openEntityDetail ignored:', { entityId, options });
+                return;
+            }
+            window._projectsLastGlobalOpenEntityEvent = { key: globalEventKey, timestamp: now };
             
             console.log('🌐 Projects: Global openEntityDetail handler triggered:', { entityId, options });
             
