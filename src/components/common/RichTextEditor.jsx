@@ -31,6 +31,9 @@ const RichTextEditor = ({
     const isFocusedRef = useRef(false); // Track focus state reliably with events
     const ignorePropUpdatesRef = useRef(false); // Completely ignore prop updates when true
     const lastSyncedValueRef = useRef(value || ''); // Track last value we synced from props
+    /** Clone of selection for applying text color (picker would otherwise drop the range). */
+    const colorSelectionRef = useRef(null);
+    const [foreColorValue, setForeColorValue] = useState('#0f172a');
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -777,6 +780,19 @@ const RichTextEditor = ({
         }
     };
 
+    const captureSelectionForColor = useCallback(() => {
+        if (!editorRef.current) return;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        if (!editorRef.current.contains(range.commonAncestorContainer)) return;
+        try {
+            colorSelectionRef.current = range.cloneRange();
+        } catch (_) {
+            colorSelectionRef.current = null;
+        }
+    }, []);
+
     const getToolbarButton = (icon, command, label, value = null) => (
         <button
             type="button"
@@ -814,6 +830,48 @@ const RichTextEditor = ({
                 {getToolbarButton('fa-bold', 'bold', 'Bold')}
                 {getToolbarButton('fa-italic', 'italic', 'Italic')}
                 {getToolbarButton('fa-underline', 'underline', 'Underline')}
+                <label
+                    className={`inline-flex items-center justify-center cursor-pointer shrink-0 rounded border border-transparent ${
+                        isDark ? 'hover:border-slate-500' : 'hover:border-gray-300'
+                    } ${compact ? 'h-4' : 'h-6'}`}
+                    title="Text color"
+                >
+                    <span className="sr-only">Text color</span>
+                    <input
+                        type="color"
+                        value={foreColorValue}
+                        aria-label="Text color"
+                        className={
+                            compact
+                                ? 'h-4 w-[1.125rem] min-w-0 p-0 border-0 bg-transparent cursor-pointer'
+                                : 'h-6 w-7 min-w-0 p-0 border-0 bg-transparent cursor-pointer'
+                        }
+                        onMouseDown={captureSelectionForColor}
+                        onChange={(e) => {
+                            const color = e.target.value;
+                            if (!editorRef.current) return;
+                            editorRef.current.focus();
+                            if (colorSelectionRef.current) {
+                                const sel = window.getSelection();
+                                try {
+                                    sel.removeAllRanges();
+                                    sel.addRange(colorSelectionRef.current);
+                                } catch (_) {
+                                    /* range invalid */
+                                }
+                            }
+                            try {
+                                if (document.execCommand('foreColor', false, color)) {
+                                    setForeColorValue(color);
+                                    handleInput();
+                                }
+                            } catch (err) {
+                                console.error('foreColor', err);
+                            }
+                            colorSelectionRef.current = null;
+                        }}
+                    />
+                </label>
                 {tbDivider}
                 {getToolbarButton('fa-list-ul', 'insertUnorderedList', 'Bullet List')}
                 {getToolbarButton('fa-list-ol', 'insertOrderedList', 'Numbered List')}
