@@ -3720,8 +3720,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                     saveToDatabase();
                                 }}
                                 placeholder="Notes..."
-                                rows={2}
-                                className="w-full min-w-0 px-2 py-1 text-xs border border-gray-200 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
+                                rows={4}
+                                className="w-full min-w-0 h-[4.5rem] max-h-[4.5rem] px-2 py-1 text-xs border border-gray-200 rounded resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
                                 aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
                                 onClick={(e) => e.stopPropagation()}
                             />
@@ -3731,7 +3731,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                 tabIndex={0}
                                 onClick={(e) => { e.stopPropagation(); setEditingNotesCell(cellKey); }}
                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingNotesCell(cellKey); } }}
-                                className={`min-h-[3rem] w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
+                                className={`h-[4.5rem] max-h-[4.5rem] overflow-y-auto w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
                                 title="Click to edit"
                             >
                                 {notes ? linkifyNotes(notes) : 'Notes...'}

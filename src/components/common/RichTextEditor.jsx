@@ -45,6 +45,8 @@ const RichTextEditor = ({
     const isFocusedRef = useRef(false); // Track focus state reliably with events
     const ignorePropUpdatesRef = useRef(false); // Completely ignore prop updates when true
     const lastSyncedValueRef = useRef(value || ''); // Track last value we synced from props
+    /** Last HTML sent via onChange — prevents applying a stale `value` prop one frame behind (colour “reverting”). */
+    const lastOutgoingHtmlRef = useRef(value || '');
     const [colorMenuOpen, setColorMenuOpen] = useState(false);
     const colorMenuWrapRef = useRef(null);
     const savedRangeForColorRef = useRef(null);
@@ -395,6 +397,7 @@ const RichTextEditor = ({
                     setHtml(finalHtml);
                     // Update last synced value so we can detect actual changes
                     lastSyncedValueRef.current = finalHtml;
+                    lastOutgoingHtmlRef.current = finalHtml;
                     // Allow prop updates again
                     ignorePropUpdatesRef.current = false;
                 }
@@ -684,10 +687,20 @@ const RichTextEditor = ({
         // Only update if value actually changed AND we haven't already synced this value
         const currentHtml = editorRef.current.innerHTML || '';
         if (value !== lastSyncedValueRef.current && value !== currentHtml && value !== html) {
+            // Parent `value` often lags one render behind the HTML we already onChange’d (blur + batched setState).
+            if (
+                lastOutgoingHtmlRef.current != null &&
+                lastOutgoingHtmlRef.current !== '' &&
+                currentHtml === lastOutgoingHtmlRef.current &&
+                value !== lastOutgoingHtmlRef.current
+            ) {
+                return;
+            }
             setHtml(value || '');
             editorRef.current.innerHTML = value || '';
             domValueRef.current = value || '';
             lastSyncedValueRef.current = value || '';
+            lastOutgoingHtmlRef.current = value || '';
         }
         
         // Re-apply scroll protection in case React recreated the element
@@ -737,6 +750,7 @@ const RichTextEditor = ({
         if (immediate) {
             lastSyncedValueRef.current = newHtml;
             setHtml(newHtml);
+            lastOutgoingHtmlRef.current = newHtml;
             if (onChange) {
                 onChange(newHtml);
             }
@@ -745,6 +759,7 @@ const RichTextEditor = ({
                 if (onChange) {
                     onChange(newHtml);
                 }
+                lastOutgoingHtmlRef.current = newHtml;
                 window[onChangeTimeoutKey] = null;
             }, 200);
         }
@@ -947,6 +962,7 @@ const RichTextEditor = ({
             {/* Editor */}
             <div
                 ref={editorRef}
+                id={id || undefined}
                 contentEditable
                 onInput={() => handleInput(false)}
                 onFocus={(e) => {
@@ -1071,7 +1087,8 @@ const RichTextEditor = ({
                 className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} outline-none ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
                 style={{ 
                     minHeight: compact ? `${Math.max(rows, 2) * 1.125}rem` : `${rows * 1.5}rem`,
-                    maxHeight: compact ? '10rem' : '400px',
+                    height: compact ? `${Math.max(rows, 2) * 1.125}rem` : undefined,
+                    maxHeight: compact ? `${Math.max(rows, 2) * 1.125}rem` : '400px',
                     overflowY: 'auto'
                 }}
                 data-placeholder={placeholder}
@@ -1135,7 +1152,7 @@ const RichTextEditor = ({
             {(id || name) && (
                 <input
                     type="hidden"
-                    id={id}
+                    id={id ? `${id}-richform` : undefined}
                     name={name}
                     value={html}
                 />
