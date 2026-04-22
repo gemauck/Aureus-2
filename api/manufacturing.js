@@ -2396,6 +2396,10 @@ async function handler(req, res) {
 
     // BULK IMPORT (POST /api/manufacturing/inventory with items array)
     if (req.method === 'POST' && !id && Array.isArray(req.body?.items)) {
+      const canManageInventoryCatalog = isAdminRole(req.user?.role) || isSuperAdminUser(req.user)
+      if (!canManageInventoryCatalog) {
+        return forbidden(res, 'Only admin users can bulk import inventory items')
+      }
       const items = req.body.items || []
       
       if (items.length === 0) {
@@ -2639,6 +2643,12 @@ async function handler(req, res) {
     // CREATE (POST /api/manufacturing/inventory)
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
+      const canManageInventoryCatalog = isAdminRole(req.user?.role) || isSuperAdminUser(req.user)
+      const createSource = String(body.createSource || '').trim().toLowerCase()
+      const isPurchaseOrderCreate = createSource === 'purchase_order'
+      if (!canManageInventoryCatalog && !isPurchaseOrderCreate) {
+        return forbidden(res, 'Only admin users can create inventory items directly. Create via purchase order instead.')
+      }
       
       if (!body.name) {
         return badRequest(res, 'name required')

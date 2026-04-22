@@ -3226,6 +3226,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   }, []);
 
   const openAddItemModal = useCallback(() => {
+    if (!isAdmin) {
+      alert('Only admin users can add inventory items directly. Please create new items through a purchase order.');
+      return;
+    }
     // Set locationId based on selected location (or PMB / primary default)
     const locationId = selectedLocationId && selectedLocationId !== 'all' 
       ? selectedLocationId 
@@ -3250,7 +3254,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     });
     setModalType('add_item');
     setShowModal(true);
-  }, [selectedLocationId, stockLocations]);
+  }, [isAdmin, selectedLocationId, stockLocations]);
 
   const filteredInventoryList = useMemo(() => {
     let filtered = inventory.filter(item => {
@@ -3533,19 +3537,21 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 onChange={handleFileInputChange}
                 className="sr-only"
               />
-              <button
-                onClick={handleBulkUploadClick}
-                disabled={isBulkUploading}
-                className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
-                  isBulkUploading
-                    ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
-                    : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
-                }`}
-                title="Upload CSV or Excel file to bulk import inventory items"
-              >
-                <i className={`${isBulkUploading ? 'fas fa-spinner animate-spin' : 'fas fa-upload'} text-xs`}></i>
-                {isBulkUploading ? `Uploading... ${bulkUploadProgress.total > 0 ? `(${bulkUploadProgress.current}/${bulkUploadProgress.total})` : ''}` : 'Bulk Upload'}
-              </button>
+              {isAdmin ? (
+                <button
+                  onClick={handleBulkUploadClick}
+                  disabled={isBulkUploading}
+                  className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
+                    isBulkUploading
+                      ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
+                      : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
+                  }`}
+                  title="Upload CSV or Excel file to bulk import inventory items"
+                >
+                  <i className={`${isBulkUploading ? 'fas fa-spinner animate-spin' : 'fas fa-upload'} text-xs`}></i>
+                  {isBulkUploading ? `Uploading... ${bulkUploadProgress.total > 0 ? `(${bulkUploadProgress.current}/${bulkUploadProgress.total})` : ''}` : 'Bulk Upload'}
+                </button>
+              ) : null}
               <button
                 onClick={handleExportInventory}
                 disabled={isExportingInventory}
@@ -3559,13 +3565,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <i className={`${isExportingInventory ? 'fas fa-spinner animate-spin' : 'fas fa-download'} text-xs`}></i>
                 {isExportingInventory ? 'Exporting...' : 'Export'}
               </button>
-              <button
-                onClick={openAddItemModal}
-                className="px-4 py-2.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 transition-all duration-200"
-              >
-                <i className="fas fa-plus text-xs"></i>
-                Add Item
-              </button>
+              {isAdmin ? (
+                <button
+                  onClick={openAddItemModal}
+                  className="px-4 py-2.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 transition-all duration-200"
+                >
+                  <i className="fas fa-plus text-xs"></i>
+                  Add Item
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -6057,6 +6065,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       setPoNewItemSaving(true);
       const createData = {
         name: nm,
+        createSource: 'purchase_order',
         category: poNewItemForm.category,
         type: poNewItemForm.type,
         unit: poNewItemForm.unit,
@@ -7627,17 +7636,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <i className="fas fa-exclamation-triangle mr-2"></i>
                       No inventory items found. Please create inventory items first.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowModal(false);
-                        changeTab('inventory');
-                        setTimeout(() => openAddItemModal(), 100);
-                      }}
-                      className="text-sm text-yellow-900 underline hover:no-underline"
-                    >
-                      Go to Inventory tab to create items →
-                    </button>
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowModal(false);
+                          changeTab('inventory');
+                          setTimeout(() => openAddItemModal(), 100);
+                        }}
+                        className="text-sm text-yellow-900 underline hover:no-underline"
+                      >
+                        Go to Inventory tab to create items →
+                      </button>
+                    ) : (
+                      <p className="text-xs text-yellow-900">
+                        Non-admin users can only create new items through Purchase Orders.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <>
