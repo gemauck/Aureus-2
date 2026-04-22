@@ -32,13 +32,63 @@ function buildSupplierPartNumbersJson(supplierName, partNumber) {
   return JSON.stringify([{ supplier: s, partNumber: p }])
 }
 
+async function createZeroStockNewLineTx(tx, sku, pr) {
+  const status = 'out_of_stock'
+  const existingLi = await tx.locationInventory.findUnique({
+    where: { locationId_sku: { locationId: pr.locationId, sku } }
+  })
+  if (!existingLi) {
+    await tx.locationInventory.create({
+      data: {
+        locationId: pr.locationId,
+        sku,
+        itemName: pr.itemName,
+        quantity: 0,
+        unitCost: pr.unitCost ?? 0,
+        reorderPoint: pr.reorderPoint ?? 0,
+        status
+      }
+    })
+  }
+
+  const existingItem = await tx.inventoryItem.findFirst({
+    where: { sku, locationId: pr.locationId },
+    select: { id: true }
+  })
+  if (!existingItem) {
+    await tx.inventoryItem.create({
+      data: {
+        sku,
+        name: pr.itemName,
+        category: pr.categoryRaw || 'components',
+        type: pr.itemTypeRaw || 'component',
+        quantity: 0,
+        unit: pr.unit || 'pcs',
+        reorderPoint: pr.reorderPoint ?? 0,
+        reorderQty: pr.reorderQty ?? 0,
+        location: '',
+        unitCost: pr.unitCost ?? 0,
+        totalValue: 0,
+        supplier: pr.supplierName || '',
+        status,
+        legacyPartNumber: pr.legacyPartNumber || '',
+        supplierPartNumbers: pr.supplierPartNumbersJson || '[]',
+        locationId: pr.locationId,
+        manufacturingPartNumber: pr.manufacturingPartNumber || '',
+        boxNumber: pr.boxNumber || '',
+        needsCatalogReview: true
+      }
+    })
+  }
+}
+
 /**
  * Shared apply path after rows are parsed (template or location-based workbook).
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {object[]} parsedRows
  * @param {object[]} errors
- * @param {{ dryRun: boolean, forceCreateDuplicate: boolean }} options
+ * @param {{ dryRun: boolean, forceCreateDuplicate: boolean, includeZeroNewItems?: boolean }} options
  * @param {object} req
  * @param {{ referencePrefix?: string, batchIdPrefix?: string }} [pipelineOpts]
  */
@@ -50,7 +100,7 @@ export async function runStockCountImportPipeline(
   req,
   pipelineOpts = {}
 ) {
-  const { dryRun, forceCreateDuplicate } = options
+  const { dryRun, forceCreateDuplicate, includeZeroNewItems = false } = options
   const referencePrefix = pipelineOpts.referencePrefix || 'Stock count import'
   const batchIdPrefix = pipelineOpts.batchIdPrefix || 'sc'
 
@@ -179,6 +229,17 @@ export async function runStockCountImportPipeline(
         const currentQty = li?.quantity ?? 0
         const delta = pr.countedQty - currentQty
         if (Math.abs(delta) < 0.0001) {
+          if (pr.isNewLine && includeZeroNewItems) {
+            await createZeroStockNewLineTx(tx, sku, pr)
+            applied.push({
+              sku,
+              delta: 0,
+              movementId: null,
+              isNewLine: true,
+              createdWithoutMovement: true
+            })
+            continue
+          }
           skipped++
           continue
         }
@@ -242,7 +303,7 @@ export async function runStockCountImportPipeline(
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {Buffer} buffer
- * @param {{ dryRun: boolean, forceCreateDuplicate: boolean }} options
+ * @param {{ dryRun: boolean, forceCreateDuplicate: boolean, includeZeroNewItems?: boolean }} options
  * @param {object} req - request with user (for movements + audit)
  * @returns {Promise<{ kind: 'dry', payload: object } | { kind: 'badRequest', message: string } | { kind: 'ok', data: object }>}
  */

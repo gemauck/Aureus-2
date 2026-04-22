@@ -2149,6 +2149,7 @@ async function handler(req, res) {
         const body = await parseJsonBody(req)
         const dryRun = body.dryRun === true
         const forceCreateDuplicate = body.forceCreateDuplicate === true
+        const includeZeroNewItems = body.includeZeroNewItems === true
         const file = body.file
         if (!file?.dataUrl || typeof file.dataUrl !== 'string' || !file.dataUrl.startsWith('data:')) {
           return badRequest(res, 'file.dataUrl (data URL) is required')
@@ -2166,7 +2167,7 @@ async function handler(req, res) {
         const outcome = await runStockCountTemplateImport(
           prisma,
           buffer,
-          { dryRun, forceCreateDuplicate },
+          { dryRun, forceCreateDuplicate, includeZeroNewItems },
           req
         )
         if (outcome.kind === 'dry') {
@@ -2197,6 +2198,7 @@ async function handler(req, res) {
         const body = await parseJsonBody(req)
         const dryRun = body.dryRun === true
         const forceCreateDuplicate = body.forceCreateDuplicate === true
+        const includeZeroNewItems = body.includeZeroNewItems === true
         const file = body.file
         if (!file?.dataUrl || typeof file.dataUrl !== 'string' || !file.dataUrl.startsWith('data:')) {
           return badRequest(res, 'file.dataUrl (data URL) is required')
@@ -2214,7 +2216,7 @@ async function handler(req, res) {
         const outcome = await runFlexibleStockCountByLocationImport(
           prisma,
           buffer,
-          { dryRun, forceCreateDuplicate },
+          { dryRun, forceCreateDuplicate, includeZeroNewItems },
           req
         )
         if (outcome.kind === 'dry') {

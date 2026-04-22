@@ -10474,12 +10474,21 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Sales Order Details</h2>
-              <button
-                onClick={() => { setShowModal(false); setSelectedItem(null); }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <i className="fas fa-times"></i>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintSalesOrder}
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <i className="fas fa-print mr-1"></i>
+                  Print / Save PDF
+                </button>
+                <button
+                  onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
             </div>
             <div className="p-4">
               {selectedItem && (

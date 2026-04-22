@@ -6557,7 +6557,8 @@ const JobCardFormPublic = () => {
         style={{
           position: 'fixed',
           right: '1rem',
-          bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
+          // Keep FAB above bottom action row on narrow phones.
+          bottom: 'calc(5.25rem + env(safe-area-inset-bottom, 0px))',
           zIndex: 1200
         }}
       >
@@ -6996,7 +6997,7 @@ const JobCardFormPublic = () => {
               </div>
             ) : null}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pb-20 sm:pb-0">
               <button
                 type="button"
                 onClick={() => setWizardFlow('landing')}

@@ -3,7 +3,7 @@
  * Stock count template import (same logic as Manufacturing → Stock count → Excel upload).
  *
  * Usage:
- *   node scripts/import-stock-count-template.mjs "/path/to/template.xlsx" [--dry-run] [--force-duplicate]
+ *   node scripts/import-stock-count-template.mjs "/path/to/template.xlsx" [--dry-run] [--force-duplicate] [--include-zero-new]
  *
  * Mode:
  *   - If STOCK_COUNT_IMPORT_EMAIL + STOCK_COUNT_IMPORT_PASSWORD (or TEST_EMAIL / TEST_PASSWORD)
@@ -25,6 +25,7 @@ const args = process.argv.slice(2).filter((a) => !a.startsWith('--'))
 const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--')))
 const dryRun = flags.has('--dry-run')
 const forceDup = flags.has('--force-duplicate')
+const includeZeroNew = flags.has('--include-zero-new')
 
 const filePath =
   args[0] ||
@@ -92,7 +93,8 @@ async function importViaApi(buf) {
     body: JSON.stringify({
       file: { name: filePath.split(/[/\\]/).pop(), dataUrl },
       dryRun,
-      forceCreateDuplicate: forceDup
+      forceCreateDuplicate: forceDup,
+      includeZeroNewItems: includeZeroNew
     })
   })
   const text = await res.text()
@@ -143,7 +145,7 @@ async function importDirectDb(buf) {
   const outcome = await runStockCountTemplateImport(
     prisma,
     buf,
-    { dryRun, forceCreateDuplicate: forceDup },
+    { dryRun, forceCreateDuplicate: forceDup, includeZeroNewItems: includeZeroNew },
     mockReq
   )
 
