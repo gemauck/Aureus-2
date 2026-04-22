@@ -5152,21 +5152,42 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 )}
             </div>
         );
-        // Uncontrolled textarea: browser handles all key input (space, enter, etc.) natively.
-        // We sync to state on change and save on blur. key resets the field when section/doc/month/year changes.
-        const textarea = (
+        // Rich text when RichTextEditor is loaded (Monthly Data Review / Compliance JSON trackers); else plain textarea.
+        const notesKey = `notes-${section.id}-${doc.id}-${month}-${selectedYear}`;
+        const flushNotesSave = () => {
+            lastSavedDataRef.current = null;
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            saveToDatabase();
+        };
+        const RichTextEditorCmp = typeof window !== 'undefined' ? window.RichTextEditor : null;
+        const notesIsDark =
+            typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+        const notesEditor = RichTextEditorCmp ? (
+            <RichTextEditorCmp
+                key={notesKey}
+                value={notes || ''}
+                onChange={(html) => handleUpdateNotes(section.id, doc.id, month, html)}
+                onBlur={(html) => {
+                    if (typeof html === 'string') {
+                        handleUpdateNotes(section.id, doc.id, month, html);
+                    }
+                    flushNotesSave();
+                }}
+                placeholder="Notes..."
+                rows={variant === 'list' ? 2 : 3}
+                compact
+                isDark={notesIsDark}
+                className="w-full min-w-0 shadow-none border-gray-200 dark:border-gray-600"
+            />
+        ) : (
             <textarea
-                key={`notes-${section.id}-${doc.id}-${month}-${selectedYear}`}
+                key={notesKey}
                 defaultValue={notes}
                 onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
-                onBlur={() => {
-                    lastSavedDataRef.current = null;
-                    if (saveTimeoutRef.current) {
-                        clearTimeout(saveTimeoutRef.current);
-                        saveTimeoutRef.current = null;
-                    }
-                    saveToDatabase();
-                }}
+                onBlur={flushNotesSave}
                 placeholder="Notes..."
                 rows={variant === 'list' ? 2 : 3}
                 className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
@@ -5175,7 +5196,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
         );
         const notesRow = (
             <div className="flex flex-row gap-1 items-stretch w-full min-w-0">
-                <div className="flex-1 min-w-0 max-w-[calc(100%-4.875rem)]">{textarea}</div>
+                <div className="flex-1 min-w-0 max-w-[calc(100%-4.875rem)]">{notesEditor}</div>
                 {reviewAside}
             </div>
         );

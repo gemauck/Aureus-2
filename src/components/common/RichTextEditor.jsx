@@ -10,7 +10,9 @@ const RichTextEditor = ({
     isDark = false,
     className = '',
     id = null,
-    name = null
+    name = null,
+    /** Dense layout: small toolbar buttons, tighter padding (e.g. tracker grid cells). */
+    compact = false
 }) => {
     const editorRef = useRef(null);
     // Use a ref to store the actual DOM value - this is the source of truth when focused
@@ -782,25 +784,40 @@ const RichTextEditor = ({
                 e.preventDefault();
                 handleCommand(command, value);
             }}
-            className={`p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`}
+            className={
+                compact
+                    ? `p-0.5 rounded-sm leading-none hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`
+                    : `p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`
+            }
             title={label}
             onMouseDown={(e) => e.preventDefault()} // Prevent focus loss
         >
-            <i className={`fas ${icon} text-sm`}></i>
+            <i className={`fas ${icon} ${compact ? 'text-[10px]' : 'text-sm'}`}></i>
         </button>
     );
 
+    const tbDivider = (
+        <div
+            className={`w-px shrink-0 ${compact ? 'h-3 mx-0.5' : 'h-4 mx-1'} ${isDark ? 'bg-slate-600' : 'bg-gray-300'}`}
+            aria-hidden
+        />
+    );
+
     return (
-        <div className={`border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-white border-gray-300'} ${className}`}>
+        <div
+            className={`border ${compact ? 'rounded-md' : 'rounded-lg'} ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-white border-gray-300'} ${className}`}
+        >
             {/* Toolbar */}
-            <div className={`flex items-center gap-1 p-2 border-b ${isDark ? 'border-slate-600' : 'border-gray-200'}`}>
+            <div
+                className={`flex items-center border-b ${compact ? 'flex-wrap gap-0.5 px-1 py-0.5' : 'gap-1 p-2'} ${isDark ? 'border-slate-600' : 'border-gray-200'}`}
+            >
                 {getToolbarButton('fa-bold', 'bold', 'Bold')}
                 {getToolbarButton('fa-italic', 'italic', 'Italic')}
                 {getToolbarButton('fa-underline', 'underline', 'Underline')}
-                <div className={`w-px h-4 mx-1 ${isDark ? 'bg-slate-600' : 'bg-gray-300'}`}></div>
+                {tbDivider}
                 {getToolbarButton('fa-list-ul', 'insertUnorderedList', 'Bullet List')}
                 {getToolbarButton('fa-list-ol', 'insertOrderedList', 'Numbered List')}
-                <div className={`w-px h-4 mx-1 ${isDark ? 'bg-slate-600' : 'bg-gray-300'}`}></div>
+                {tbDivider}
                 {getToolbarButton('fa-align-left', 'justifyLeft', 'Align Left')}
                 {getToolbarButton('fa-align-center', 'justifyCenter', 'Align Center')}
                 {getToolbarButton('fa-align-right', 'justifyRight', 'Align Right')}
@@ -930,10 +947,10 @@ const RichTextEditor = ({
                     const text = e.clipboardData.getData('text/plain');
                     document.execCommand('insertText', false, text);
                 }}
-                className={`px-3 py-2 text-sm outline-none ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
+                className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} outline-none ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
                 style={{ 
-                    minHeight: `${rows * 1.5}rem`,
-                    maxHeight: '400px',
+                    minHeight: compact ? `${Math.max(rows, 2) * 1.125}rem` : `${rows * 1.5}rem`,
+                    maxHeight: compact ? '10rem' : '400px',
                     overflowY: 'auto'
                 }}
                 data-placeholder={placeholder}
