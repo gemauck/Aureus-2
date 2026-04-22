@@ -1931,23 +1931,29 @@
                                   ),
                                   React.createElement(
                                     'div',
-                                    { className: 'sm:col-span-6 min-w-0' },
+                                    { className: 'sm:col-span-6 min-w-0 overflow-hidden' },
                                     React.createElement(
                                       'p',
-                                      { className: 'text-sm font-medium truncate leading-tight ' + text },
+                                      {
+                                        className: 'text-sm font-medium leading-tight ' + text,
+                                        style: { overflowWrap: 'anywhere', wordBreak: 'break-word' }
+                                      },
                                       row?.name || sku
                                     ),
                                     sku
                                       ? React.createElement(
                                           'p',
-                                          { className: 'text-[11px] ' + muted + ' leading-tight truncate' },
+                                          {
+                                            className: 'text-[11px] ' + muted + ' leading-tight',
+                                            style: { overflowWrap: 'anywhere', wordBreak: 'break-word' }
+                                          },
                                           sku
                                         )
                                       : null
                                   ),
                                   React.createElement(
                                     'div',
-                                    { className: 'sm:col-span-5 flex sm:justify-end' },
+                                    { className: 'sm:col-span-5 min-w-0 flex sm:justify-end' },
                                     React.createElement('input', {
                                       id: 'erp-st-qty-' + encodeURIComponent(sku),
                                       type: 'number',
@@ -2567,7 +2573,15 @@
           'ul',
           { className: 'mt-2 text-sm list-disc pl-5 space-y-1 ' + muted },
           React.createElement('li', null, 'Download the template — one sheet per location.'),
-          React.createElement('li', null, 'Fill ', React.createElement('strong', null, 'CountedQty'), ' only; do not rename columns.'),
+          React.createElement(
+            'li',
+            null,
+            'Fill ',
+            React.createElement('strong', null, 'CountedQty'),
+            ' for each row you want to post; do not rename columns. Optional columns (Category, Type, SupplierName, SupplierPartNumber, AbcoName, LegacyPartNumber, BoxNumber, ReorderQty, CatalogNote) are read for ',
+            React.createElement('strong', null, 'new'),
+            ' items (blank SKU).'
+          ),
           React.createElement(
             'li',
             null,
@@ -2575,7 +2589,9 @@
             React.createElement('strong', null, 'SKU'),
             ' blank; set ',
             React.createElement('strong', null, 'ItemName'),
-            ' and ',
+            ' (or ',
+            React.createElement('strong', null, 'AbcoName'),
+            ') and ',
             React.createElement('strong', null, 'CountedQty'),
             '.'
           ),
