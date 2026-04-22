@@ -88,7 +88,7 @@ async function createZeroStockNewLineTx(tx, sku, pr) {
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {object[]} parsedRows
  * @param {object[]} errors
- * @param {{ dryRun: boolean, forceCreateDuplicate: boolean, includeZeroNewItems?: boolean }} options
+ * @param {{ dryRun: boolean, forceCreateDuplicate: boolean, includeZeroNewItems?: boolean, includeNonNumericNewItems?: boolean }} options
  * @param {object} req
  * @param {{ referencePrefix?: string, batchIdPrefix?: string }} [pipelineOpts]
  */
@@ -100,7 +100,12 @@ export async function runStockCountImportPipeline(
   req,
   pipelineOpts = {}
 ) {
-  const { dryRun, forceCreateDuplicate, includeZeroNewItems = false } = options
+  const {
+    dryRun,
+    forceCreateDuplicate,
+    includeZeroNewItems = false,
+    includeNonNumericNewItems = false
+  } = options
   const referencePrefix = pipelineOpts.referencePrefix || 'Stock count import'
   const batchIdPrefix = pipelineOpts.batchIdPrefix || 'sc'
 
@@ -308,6 +313,7 @@ export async function runStockCountImportPipeline(
  * @returns {Promise<{ kind: 'dry', payload: object } | { kind: 'badRequest', message: string } | { kind: 'ok', data: object }>}
  */
 export async function runStockCountTemplateImport(prisma, buffer, options, req) {
+  const { includeNonNumericNewItems = false } = options
   const workbook = XLSX.read(buffer, { type: 'buffer' })
   const normHeader = (h) => String(h ?? '').trim().toLowerCase().replace(/\s+/g, '')
 
@@ -377,12 +383,6 @@ export async function runStockCountTemplateImport(prisma, buffer, options, req) 
       if (!line || !line.length) continue
       const locationId = String(line[col.locationId] ?? '').trim()
       if (!locationId) continue
-      const countedRaw = col.countedQty !== undefined ? line[col.countedQty] : ''
-      const counted = parseStockCountDecimal(countedRaw)
-      if (countedRaw === '' || countedRaw === null || counted === null || counted === undefined) {
-        continue
-      }
-
       let sku = col.sku !== undefined ? String(line[col.sku] ?? '').trim() : ''
       const rawItem = col.itemName !== undefined ? String(line[col.itemName] ?? '').trim() : ''
       const rawAbco = col.abcoName !== undefined ? String(line[col.abcoName] ?? '').trim() : ''
@@ -397,6 +397,17 @@ export async function runStockCountTemplateImport(prisma, buffer, options, req) 
       if (!sku && !itemName) {
         errors.push({ sheet: sheetName, row: r + 1, error: 'ItemName required when SKU is empty' })
         continue
+      }
+      const isNewLine = !sku
+
+      const countedRaw = col.countedQty !== undefined ? line[col.countedQty] : ''
+      const counted = parseStockCountDecimal(countedRaw)
+      const allowMissingCountedForNewItem =
+        includeNonNumericNewItems &&
+        isNewLine &&
+        (countedRaw === '' || countedRaw === null || counted === null || counted === undefined)
+      if (countedRaw === '' || countedRaw === null || counted === null || counted === undefined) {
+        if (!allowMissingCountedForNewItem) continue
       }
 
       const systemQtyFile =
@@ -432,14 +443,13 @@ export async function runStockCountTemplateImport(prisma, buffer, options, req) 
         continue
       }
 
-      const isNewLine = !sku
       parsedRows.push({
         sheet: sheetName,
         rowNum: r + 1,
         locationId,
         sku: sku || null,
         itemName: itemName || sku,
-        countedQty: counted,
+        countedQty: counted ?? 0,
         systemQtyFile: systemQtyFile ?? null,
         unit,
         unitCost: unitCost ?? 0,

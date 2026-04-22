@@ -6553,7 +6553,7 @@ const JobCardFormPublic = () => {
             : undefined
         }
         aria-label="Scan inventory QR code"
-        className="job-card-stock-take-scan-fab pointer-events-auto inline-flex items-center gap-2 rounded-full border border-blue-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+        className="job-card-stock-take-scan-fab pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-blue-700 bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         style={{
           position: 'fixed',
           right: '1rem',
@@ -6562,7 +6562,7 @@ const JobCardFormPublic = () => {
           zIndex: 1200
         }}
       >
-        <i className="fa-solid fa-camera text-base" aria-hidden />
+        <i className="fa-solid fa-camera text-sm" aria-hidden />
         Scan QR
       </button>
     );
@@ -6734,22 +6734,25 @@ const JobCardFormPublic = () => {
                         return (
                           <div
                             key={`${stockTakeLocationId}-${sku}`}
-                            className={`px-3 py-1.5 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center transition-shadow ${
+                            className={`px-3 py-2 grid grid-cols-[minmax(0,1fr)_5.25rem] sm:grid-cols-12 gap-2 items-center transition-shadow ${
                               stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
                             }`}
                           >
-                            <div className="sm:col-span-1 flex items-center justify-start sm:justify-center shrink-0">
+                            <div className="hidden sm:col-span-1 sm:flex items-center justify-start sm:justify-center shrink-0">
                               <span className="text-xs font-semibold text-gray-500 tabular-nums w-8 text-center">
                                 {lineNo}
                               </span>
                             </div>
-                            <div className="sm:col-span-6 min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate leading-tight">{row?.name || sku}</p>
+                            <div className="min-w-0 sm:col-span-6">
+                              <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate leading-tight">
+                                <span className="inline sm:hidden text-gray-500 mr-1">#{lineNo}</span>
+                                {row?.name || sku}
+                              </p>
                               {sku ? (
-                                <p className="text-[11px] text-gray-500 leading-tight truncate">{sku}</p>
+                                <p className="text-[10px] sm:text-[11px] text-gray-500 leading-tight truncate">{sku}</p>
                               ) : null}
                             </div>
-                            <div className="sm:col-span-5 flex sm:justify-end">
+                            <div className="flex justify-end sm:col-span-5 sm:justify-end">
                               <input
                                 id={'jc-st-qty-' + encodeURIComponent(sku)}
                                 type="number"
@@ -6773,7 +6776,7 @@ const JobCardFormPublic = () => {
                                   }
                                 }}
                                 placeholder="Qty"
-                                className="w-full max-w-[5.5rem] rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
+                                className="w-full max-w-[5.25rem] rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 touch-manipulation"
                               />
                             </div>
                           </div>
