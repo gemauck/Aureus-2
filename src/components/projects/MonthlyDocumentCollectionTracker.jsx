@@ -2311,10 +2311,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const setNotesForYear = (notesByMonth, month, text, year = selectedYear) => {
         const monthKey = getMonthKey(month, year);
         const next = { ...(notesByMonth && typeof notesByMonth === 'object' ? notesByMonth : {}) };
-        if (text == null || String(text).trim() === '') {
+        if (text == null) {
             delete next[monthKey];
         } else {
-            next[monthKey] = String(text).trim();
+            const s = String(text);
+            // Rich text (e.g. foreColor / spans): do not .trim() — can desync from editor innerHTML vs React value.
+            const isHtml = /<\/?[a-z][\s\S]*?>/i.test(s);
+            if (isHtml) {
+                next[monthKey] = s;
+            } else if (s.trim() === '') {
+                delete next[monthKey];
+            } else {
+                next[monthKey] = s.trim();
+            }
         }
         return next;
     };
@@ -5165,6 +5174,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
         const notesEditor = RichTextEditorCmp ? (
             <RichTextEditorCmp
                 key={notesKey}
+                id={notesKey}
                 value={notes || ''}
                 onChange={(html) => handleUpdateNotes(section.id, doc.id, month, html)}
                 onBlur={(html) => {
@@ -5174,7 +5184,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                     flushNotesSave();
                 }}
                 placeholder="Notes..."
-                rows={variant === 'list' ? 2 : 3}
+                rows={4}
                 compact
                 isDark={notesIsDark}
                 className="w-full min-w-0 shadow-none border-gray-200 dark:border-gray-600"
@@ -5186,8 +5196,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 onChange={(e) => handleUpdateNotes(section.id, doc.id, month, e.target.value)}
                 onBlur={flushNotesSave}
                 placeholder="Notes..."
-                rows={variant === 'list' ? 2 : 3}
-                className="w-full min-w-0 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded resize-y focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+                rows={4}
+                className="w-full min-w-0 h-[4.5rem] max-h-[4.5rem] px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                 aria-label={`Notes for ${doc.name || 'document'} in ${month} ${selectedYear}`}
             />
         );
@@ -7905,6 +7915,11 @@ Abcotronics`;
                 const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseCellKey(hoverCommentCell);
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+                const isNotesActivityRow = (row) => (
+                    row &&
+                    row.kind === 'activity' &&
+                    /_notes_change$/.test(String(row.activityType || ''))
+                );
                 const activityTypeLabel = (t) => {
                     if (t === 'document_section_status_change') return 'Status';
                     if (t === 'document_section_notes_change') return 'Notes';
@@ -7918,10 +7933,12 @@ Abcotronics`;
                 };
                 let activityRows = [];
                 if (!isJsonOnlyTracker) {
-                    activityRows = Array.isArray(cellActivityTimeline) ? cellActivityTimeline : [];
+                    activityRows = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
+                        (r) => !isNotesActivityRow(r)
+                    );
                 } else {
                     const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
-                        (r) => r && r.kind === 'activity'
+                        (r) => r && r.kind === 'activity' && !isNotesActivityRow(r)
                     );
                     let localComments = doc ? getDocumentComments(doc, month) : [];
                     let urlCommentId = null;

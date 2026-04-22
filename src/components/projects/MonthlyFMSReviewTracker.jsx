@@ -2515,7 +2515,7 @@ const getAssigneeColor = (identifier, users) => {
         const comments = doc ? getDocumentComments(doc, month) : [];
 
         const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
-            (r) => r && r.kind === 'activity'
+            (r) => r && r.kind === 'activity' && !/_notes_change$/.test(String(r.activityType || ''))
         );
         const apiLen = apiActivity.length;
         const commentLen = comments.length;
@@ -3826,7 +3826,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 const comments = doc ? getDocumentComments(doc, month) : [];
                 const activityTypeLabel = (t) => (t === 'monthly_fms_status_change' ? 'Status' : 'Activity');
                 const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
-                    (r) => r && r.kind === 'activity'
+                    (r) => r && r.kind === 'activity' && !/_notes_change$/.test(String(r.activityType || ''))
                 );
                 const commentRows = comments.map((c) => ({
                     id: `comment-${c.id}`,
