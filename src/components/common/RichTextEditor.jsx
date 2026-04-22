@@ -1,7 +1,7 @@
 // Rich text editor component with formatting toolbar
 const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
 
-/** ~10 basic colours — swatch buttons (with mousedown preventDefault) keep editor focus; native <input type="color" blurred the field and reverted HTML. */
+/** Basic colours — shown in a popover from one toolbar button (avoids a busy inline row in dense grids). */
 const BASIC_TEXT_COLORS = [
     { color: '#000000', label: 'Black' },
     { color: '#6b7280', label: 'Gray' },
@@ -45,6 +45,22 @@ const RichTextEditor = ({
     const isFocusedRef = useRef(false); // Track focus state reliably with events
     const ignorePropUpdatesRef = useRef(false); // Completely ignore prop updates when true
     const lastSyncedValueRef = useRef(value || ''); // Track last value we synced from props
+    const [colorMenuOpen, setColorMenuOpen] = useState(false);
+    const colorMenuWrapRef = useRef(null);
+    const savedRangeForColorRef = useRef(null);
+
+    const saveSelectionForColor = useCallback(() => {
+        if (!editorRef.current) return;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        if (!editorRef.current.contains(range.commonAncestorContainer)) return;
+        try {
+            savedRangeForColorRef.current = range.cloneRange();
+        } catch (_) {
+            savedRangeForColorRef.current = null;
+        }
+    }, []);
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -681,6 +697,24 @@ const RichTextEditor = ({
         }
     }, [value, setupScrollProtection, html]);
 
+    useEffect(() => {
+        if (!colorMenuOpen) return undefined;
+        const onDocMouseDown = (e) => {
+            if (colorMenuWrapRef.current && !colorMenuWrapRef.current.contains(e.target)) {
+                setColorMenuOpen(false);
+            }
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') setColorMenuOpen(false);
+        };
+        document.addEventListener('mousedown', onDocMouseDown, true);
+        document.addEventListener('keydown', onKey, true);
+        return () => {
+            document.removeEventListener('mousedown', onDocMouseDown, true);
+            document.removeEventListener('keydown', onKey, true);
+        };
+    }, [colorMenuOpen]);
+
     /** Toolbar execCommand: notify parent immediately so value prop does not stomp colour. Typing: debounce. */
     const handleInput = (immediate = false) => {
         if (!editorRef.current) return;
@@ -833,32 +867,73 @@ const RichTextEditor = ({
                 {getToolbarButton('fa-bold', 'bold', 'Bold')}
                 {getToolbarButton('fa-italic', 'italic', 'Italic')}
                 {getToolbarButton('fa-underline', 'underline', 'Underline')}
-                <div
-                    className={`flex items-center flex-wrap ${compact ? 'gap-0.5' : 'gap-1'} shrink-0 max-w-full`}
-                    role="group"
-                    aria-label="Text color"
-                >
-                    {BASIC_TEXT_COLORS.map(({ color, label }) => (
-                        <button
-                            key={color}
-                            type="button"
-                            title={label}
-                            aria-label={label}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={(e) => {
-                                e.preventDefault();
-                                handleCommand('foreColor', color);
-                            }}
-                            className={`shrink-0 rounded-full p-0.5 ring-1 ring-black/20 hover:ring-2 hover:ring-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500 ${
-                                compact ? '' : 'p-px'
+                <div className="relative shrink-0" ref={colorMenuWrapRef}>
+                    <button
+                        type="button"
+                        title="Text color"
+                        aria-label="Text color"
+                        aria-haspopup="listbox"
+                        aria-expanded={colorMenuOpen}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            saveSelectionForColor();
+                        }}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setColorMenuOpen((open) => !open);
+                        }}
+                        className={
+                            compact
+                                ? `p-0.5 rounded-sm leading-none hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${colorMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
+                                : `p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${colorMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
+                        }
+                    >
+                        <i className={`fas fa-palette ${compact ? 'text-[10px]' : 'text-sm'}`} />
+                    </button>
+                    {colorMenuOpen ? (
+                        <div
+                            className={`absolute left-0 top-full z-[300] mt-0.5 min-w-[7.5rem] rounded-md border p-1.5 shadow-lg grid grid-cols-5 gap-1 ${
+                                isDark ? 'bg-slate-800 border-slate-600' : 'bg-white border-gray-200'
                             }`}
+                            role="listbox"
+                            aria-label="Text colors"
                         >
-                            <span
-                                className={`block rounded-full ${compact ? 'h-2 w-2' : 'h-2.5 w-2.5'}`}
-                                style={{ backgroundColor: color }}
-                            />
-                        </button>
-                    ))}
+                            {BASIC_TEXT_COLORS.map(({ color, label }) => (
+                                <button
+                                    key={color}
+                                    type="button"
+                                    title={label}
+                                    aria-label={label}
+                                    role="option"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (!editorRef.current) return;
+                                        editorRef.current.focus();
+                                        if (savedRangeForColorRef.current) {
+                                            const sel = window.getSelection();
+                                            try {
+                                                sel.removeAllRanges();
+                                                sel.addRange(savedRangeForColorRef.current);
+                                            } catch (_) {
+                                                /* range invalid */
+                                            }
+                                        }
+                                        handleCommand('foreColor', color);
+                                        setColorMenuOpen(false);
+                                    }}
+                                    className="rounded p-0.5 hover:ring-2 hover:ring-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                >
+                                    <span
+                                        className={`block rounded-full ring-1 ring-black/20 mx-auto ${compact ? 'h-2.5 w-2.5' : 'h-3 w-3'}`}
+                                        style={{ backgroundColor: color }}
+                                    />
+                                </button>
+                            ))}
+                        </div>
+                    ) : null}
                 </div>
                 {tbDivider}
                 {getToolbarButton('fa-list-ul', 'insertUnorderedList', 'Bullet List')}
