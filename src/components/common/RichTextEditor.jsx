@@ -1,6 +1,20 @@
 // Rich text editor component with formatting toolbar
 const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
 
+/** ~10 basic colours — swatch buttons (with mousedown preventDefault) keep editor focus; native <input type="color" blurred the field and reverted HTML. */
+const BASIC_TEXT_COLORS = [
+    { color: '#000000', label: 'Black' },
+    { color: '#6b7280', label: 'Gray' },
+    { color: '#dc2626', label: 'Red' },
+    { color: '#ea580c', label: 'Orange' },
+    { color: '#ca8a04', label: 'Amber' },
+    { color: '#16a34a', label: 'Green' },
+    { color: '#0891b2', label: 'Cyan' },
+    { color: '#2563eb', label: 'Blue' },
+    { color: '#7c3aed', label: 'Violet' },
+    { color: '#db2777', label: 'Pink' }
+];
+
 const RichTextEditor = ({ 
     value = '', 
     onChange, 
@@ -31,9 +45,6 @@ const RichTextEditor = ({
     const isFocusedRef = useRef(false); // Track focus state reliably with events
     const ignorePropUpdatesRef = useRef(false); // Completely ignore prop updates when true
     const lastSyncedValueRef = useRef(value || ''); // Track last value we synced from props
-    /** Clone of selection for applying text color (picker would otherwise drop the range). */
-    const colorSelectionRef = useRef(null);
-    const [foreColorValue, setForeColorValue] = useState('#0f172a');
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -670,10 +681,10 @@ const RichTextEditor = ({
         }
     }, [value, setupScrollProtection, html]);
 
-    const handleInput = () => {
+    /** Toolbar execCommand: notify parent immediately so value prop does not stomp colour. Typing: debounce. */
+    const handleInput = (immediate = false) => {
         if (!editorRef.current) return;
         
-        // Simple: just update refs and call onChange - let browser handle cursor
         isFocusedRef.current = true;
         isUserTypingRef.current = true;
         lastUserInputTimeRef.current = Date.now();
@@ -681,24 +692,29 @@ const RichTextEditor = ({
         
         const newHtml = editorRef.current.innerHTML;
         domValueRef.current = newHtml;
-        
-        // Save cursor position for restoration after auto-save (only when NOT typing)
         savedCursorPositionRef.current = saveCursorPosition();
-        
-        // Debounced onChange
+
         const onChangeTimeoutKey = `richTextEditorOnChange_${editorRef.current.id || 'default'}`;
         if (window[onChangeTimeoutKey]) {
             clearTimeout(window[onChangeTimeoutKey]);
+            window[onChangeTimeoutKey] = null;
         }
         
-        window[onChangeTimeoutKey] = setTimeout(() => {
+        if (immediate) {
+            lastSyncedValueRef.current = newHtml;
+            setHtml(newHtml);
             if (onChange) {
                 onChange(newHtml);
             }
-            window[onChangeTimeoutKey] = null;
-        }, 200);
+        } else {
+            window[onChangeTimeoutKey] = setTimeout(() => {
+                if (onChange) {
+                    onChange(newHtml);
+                }
+                window[onChangeTimeoutKey] = null;
+            }, 200);
+        }
         
-        // Clear typing flag after 2 seconds of no typing
         const timeoutKey = `richTextEditorTypingTimeout_${editorRef.current.id || 'default'}`;
         if (window[timeoutKey]) {
             clearTimeout(window[timeoutKey]);
@@ -763,7 +779,7 @@ const RichTextEditor = ({
                             }
                         }
                     }
-                    handleInput();
+                    handleInput(true);
                     return;
                 }
             }
@@ -771,7 +787,7 @@ const RichTextEditor = ({
             // For other commands
             const success = document.execCommand(command, false, value);
             if (success) {
-                handleInput();
+                handleInput(true);
             } else {
                 console.warn(`Command ${command} was not successful`);
             }
@@ -779,19 +795,6 @@ const RichTextEditor = ({
             console.error(`Error executing command ${command}:`, error);
         }
     };
-
-    const captureSelectionForColor = useCallback(() => {
-        if (!editorRef.current) return;
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
-        const range = sel.getRangeAt(0);
-        if (!editorRef.current.contains(range.commonAncestorContainer)) return;
-        try {
-            colorSelectionRef.current = range.cloneRange();
-        } catch (_) {
-            colorSelectionRef.current = null;
-        }
-    }, []);
 
     const getToolbarButton = (icon, command, label, value = null) => (
         <button
@@ -830,48 +833,33 @@ const RichTextEditor = ({
                 {getToolbarButton('fa-bold', 'bold', 'Bold')}
                 {getToolbarButton('fa-italic', 'italic', 'Italic')}
                 {getToolbarButton('fa-underline', 'underline', 'Underline')}
-                <label
-                    className={`inline-flex items-center justify-center cursor-pointer shrink-0 rounded border border-transparent ${
-                        isDark ? 'hover:border-slate-500' : 'hover:border-gray-300'
-                    } ${compact ? 'h-4' : 'h-6'}`}
-                    title="Text color"
+                <div
+                    className={`flex items-center flex-wrap ${compact ? 'gap-0.5' : 'gap-1'} shrink-0 max-w-full`}
+                    role="group"
+                    aria-label="Text color"
                 >
-                    <span className="sr-only">Text color</span>
-                    <input
-                        type="color"
-                        value={foreColorValue}
-                        aria-label="Text color"
-                        className={
-                            compact
-                                ? 'h-4 w-[1.125rem] min-w-0 p-0 border-0 bg-transparent cursor-pointer'
-                                : 'h-6 w-7 min-w-0 p-0 border-0 bg-transparent cursor-pointer'
-                        }
-                        onMouseDown={captureSelectionForColor}
-                        onChange={(e) => {
-                            const color = e.target.value;
-                            if (!editorRef.current) return;
-                            editorRef.current.focus();
-                            if (colorSelectionRef.current) {
-                                const sel = window.getSelection();
-                                try {
-                                    sel.removeAllRanges();
-                                    sel.addRange(colorSelectionRef.current);
-                                } catch (_) {
-                                    /* range invalid */
-                                }
-                            }
-                            try {
-                                if (document.execCommand('foreColor', false, color)) {
-                                    setForeColorValue(color);
-                                    handleInput();
-                                }
-                            } catch (err) {
-                                console.error('foreColor', err);
-                            }
-                            colorSelectionRef.current = null;
-                        }}
-                    />
-                </label>
+                    {BASIC_TEXT_COLORS.map(({ color, label }) => (
+                        <button
+                            key={color}
+                            type="button"
+                            title={label}
+                            aria-label={label}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleCommand('foreColor', color);
+                            }}
+                            className={`shrink-0 rounded-full p-0.5 ring-1 ring-black/20 hover:ring-2 hover:ring-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                                compact ? '' : 'p-px'
+                            }`}
+                        >
+                            <span
+                                className={`block rounded-full ${compact ? 'h-2 w-2' : 'h-2.5 w-2.5'}`}
+                                style={{ backgroundColor: color }}
+                            />
+                        </button>
+                    ))}
+                </div>
                 {tbDivider}
                 {getToolbarButton('fa-list-ul', 'insertUnorderedList', 'Bullet List')}
                 {getToolbarButton('fa-list-ol', 'insertOrderedList', 'Numbered List')}
@@ -885,7 +873,7 @@ const RichTextEditor = ({
             <div
                 ref={editorRef}
                 contentEditable
-                onInput={handleInput}
+                onInput={() => handleInput(false)}
                 onFocus={(e) => {
                     // CRITICAL: Save scroll position BEFORE any browser behavior
                     const scrollBeforeFocus = window.scrollY || window.pageYOffset;
