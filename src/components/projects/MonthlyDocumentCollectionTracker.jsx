@@ -586,6 +586,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         });
     };
 
+    /** Prefer `sectionsRef`: it is updated synchronously; `sectionsByYear` can lag one render and lose fields when another handler runs in the same gesture (e.g. review toggle then notes blur). */
+    const getLatestSectionsByYear = useCallback(() => {
+        const refData = sectionsRef.current;
+        if (refData && typeof refData === 'object' && Object.keys(refData).length > 0) {
+            return refData;
+        }
+        if (sectionsByYear && typeof sectionsByYear === 'object' && Object.keys(sectionsByYear).length > 0) {
+            return sectionsByYear;
+        }
+        return {};
+    }, [sectionsByYear]);
+
     const [driveLinkModal, setDriveLinkModal] = useState(null);
     const driveHoverTimerRef = useRef(null);
 
@@ -2175,9 +2187,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
         if (sourceYear === targetYear) return;
 
-        const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0
-            ? sectionsRef.current
-            : sectionsByYear;
+        const latestSectionsByYear = getLatestSectionsByYear();
         const sourceSections = latestSectionsByYear?.[String(sourceYear)];
         if (!Array.isArray(sourceSections) || sourceSections.length === 0) {
             console.warn('No sections to copy for year:', sourceYear);
@@ -2215,7 +2225,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (project?.id && typeof window !== 'undefined') {
             localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(targetYear));
         }
-    }, [isValidYear, project?.id, sectionsByYear, setSelectedYear, setSectionsByYear]);
+    }, [isValidYear, project?.id, getLatestSectionsByYear, setSelectedYear, setSectionsByYear]);
     const yearOptions = [];
     for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {
         yearOptions.push(i);
@@ -2400,7 +2410,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Merges onto existing cell data so lastSentAt and any future fields are preserved unless overwritten.
     // Returns Promise so caller can await persistence.
     const saveEmailRequestForCell = (sectionId, documentId, month, data) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         const monthKey = month != null ? getMonthKey(month, selectedYear) : null;
         if (!monthKey) {
@@ -2451,7 +2461,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Replaces the source month/year in subject & body with each target month so periods stay correct.
     // Preserves existing lastSentAt per month (scheduled-send bookkeeping).
     const saveEmailRequestTemplateForYear = (sectionId, documentId, data, sourceMonthName) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 ? sectionsByYear : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         const yearLabel = String(selectedYear);
         const fromPeriod =
@@ -3189,10 +3199,7 @@ const getAssigneeColor = (identifier, users) => {
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
         
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
         // Always use ref to get the latest selectedCells value (avoids stale closure)
@@ -3286,12 +3293,10 @@ const getAssigneeColor = (identifier, users) => {
                 selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear, isJsonOnlyTracker, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
+    }, [selectedYear, isJsonOnlyTracker, getLatestSectionsByYear, bumpCellActivityIfPopupMatchesCell]);
 
     const handleUpdateNotes = useCallback((sectionId, documentId, month, text) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
-            ? sectionsByYear
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         const updated = currentYearSections.map(section => {
             if (String(section.id) !== String(sectionId)) return section;
@@ -3316,12 +3321,10 @@ const getAssigneeColor = (identifier, users) => {
         setTimeout(() => {
             bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
         }, 450);
-    }, [selectedYear, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
+    }, [selectedYear, getLatestSectionsByYear, bumpCellActivityIfPopupMatchesCell]);
 
     const handleToggleNotesReview = useCallback((sectionId, documentId, month, checked) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
-            ? sectionsByYear
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         const user = getCurrentUser();
         const updated = currentYearSections.map(section => {
@@ -3351,7 +3354,7 @@ const getAssigneeColor = (identifier, users) => {
         setTimeout(() => {
             bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
         }, 450);
-    }, [selectedYear, sectionsByYear, bumpCellActivityIfPopupMatchesCell]);
+    }, [selectedYear, getLatestSectionsByYear, bumpCellActivityIfPopupMatchesCell]);
 
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -3397,10 +3400,7 @@ const getAssigneeColor = (identifier, users) => {
             attachments: Array.isArray(attachments) ? attachments : []
         };
         
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         // Capture prior participants for this cell so we can notify them (even if not @mentioned in new comment)
         const priorSection = currentYearSections.find((s) => String(s.id) === String(sectionId));
@@ -3578,10 +3578,7 @@ const getAssigneeColor = (identifier, users) => {
         
         const currentUser = getCurrentUser();
         
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
@@ -5589,9 +5586,7 @@ Abcotronics`;
 
         const getLatestEmailRequest = () => {
             if (!ctx?.section?.id || !ctx?.doc?.id || !ctx?.month) return {};
-            const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0
-                ? sectionsRef.current
-                : sectionsByYear;
+            const latestSectionsByYear = getLatestSectionsByYear();
             const currentYearSections = latestSectionsByYear?.[selectedYear] || [];
             const sectionMatch = currentYearSections.find((s) => String(s.id) === String(ctx.section.id));
             const docMatch = (sectionMatch?.documents || []).find((d) => String(d.id) === String(ctx.doc.id));
@@ -6403,7 +6398,7 @@ Abcotronics`;
                 setTimeout(() => fetchEmailActivity(), 1200);
                 // Mark this document/month as "Requested" when email is sent successfully
                 if (ctx?.section?.id != null && ctx?.doc?.id != null && ctx?.month) {
-                    const latestSectionsByYear = sectionsRef.current && Object.keys(sectionsRef.current).length > 0 ? sectionsRef.current : sectionsByYear;
+                    const latestSectionsByYear = getLatestSectionsByYear();
                     const currentYearSections = latestSectionsByYear[selectedYear] || [];
                     const updated = currentYearSections.map(section => {
                         if (String(section.id) !== String(ctx.section.id)) return section;

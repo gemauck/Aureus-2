@@ -476,6 +476,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         });
     };
 
+    /** Prefer `sectionsRef`: it is updated synchronously; `sectionsByYear` can lag one render and lose fields when another handler runs in the same gesture (e.g. review toggle then notes blur). */
+    const getLatestSectionsByYear = useCallback(() => {
+        const refData = sectionsRef.current;
+        if (refData && typeof refData === 'object' && Object.keys(refData).length > 0) {
+            return refData;
+        }
+        if (sectionsByYear && typeof sectionsByYear === 'object' && Object.keys(sectionsByYear).length > 0) {
+            return sectionsByYear;
+        }
+        return {};
+    }, [sectionsByYear]);
+
     const [isLoading, setIsLoading] = useState(true);
     
     // Keep refs in sync with latest state
@@ -2181,10 +2193,7 @@ const getAssigneeColor = (identifier, users) => {
     
     const handleUpdateStatus = useCallback(async (sectionId, documentId, week, status, applyToSelected = false) => {
         
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
         // Always use ref to get the latest selectedCells value (avoids stale closure)
@@ -2314,12 +2323,10 @@ const getAssigneeColor = (identifier, users) => {
                 selectedCellsRef.current = new Set();
             }, 100);
         }
-    }, [selectedYear, sectionsByYear]);
+    }, [selectedYear, getLatestSectionsByYear]);
     
     const handleUpdateNotes = useCallback((sectionId, documentId, week, text) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
-            ? sectionsByYear
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         const updated = currentYearSections.map(section => {
             if (String(section.id) !== String(sectionId)) return section;
@@ -2335,12 +2342,10 @@ const getAssigneeColor = (identifier, users) => {
         const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
         sectionsRef.current = updatedSectionsByYear;
         setSectionsByYear(updatedSectionsByYear);
-    }, [selectedYear, sectionsByYear]);
+    }, [selectedYear, getLatestSectionsByYear]);
 
     const handleToggleNotesReview = useCallback((sectionId, documentId, week, checked) => {
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0
-            ? sectionsByYear
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         const user = getCurrentUser();
         const updated = currentYearSections.map(section => {
@@ -2361,7 +2366,7 @@ const getAssigneeColor = (identifier, users) => {
         const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
         sectionsRef.current = updatedSectionsByYear;
         setSectionsByYear(updatedSectionsByYear);
-    }, [selectedYear, sectionsByYear]);
+    }, [selectedYear, getLatestSectionsByYear]);
     
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -2405,10 +2410,7 @@ const getAssigneeColor = (identifier, users) => {
             attachments: Array.isArray(attachments) ? attachments : []
         };
         
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         // Capture prior participants for this cell so we can notify them (and so backend can notify @mentioned)
         const priorSection = currentYearSections.find((s) => String(s.id) === String(sectionId));
@@ -2540,10 +2542,7 @@ const getAssigneeColor = (identifier, users) => {
         
         const currentUser = getCurrentUser();
         
-        // Use current state (most up-to-date) or fallback to ref
-        const latestSectionsByYear = sectionsByYear && Object.keys(sectionsByYear).length > 0 
-            ? sectionsByYear 
-            : (sectionsRef.current || {});
+        const latestSectionsByYear = getLatestSectionsByYear();
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
