@@ -1035,8 +1035,8 @@ try {
   }, []);
 
   useEffect(() => {
-    // These datasets are large and only needed for production/job card flows.
-    if (activeTab !== 'production') {
+    // Clients are needed by both production flows and sales-order creation.
+    if (activeTab !== 'production' && activeTab !== 'sales') {
       return;
     }
     if (!window.DatabaseAPI) {
@@ -5695,7 +5695,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
   };
 
-  const openAddSalesOrderModal = () => {
+  const openAddSalesOrderModal = async () => {
+    if (clients.length === 0 && typeof window.DatabaseAPI?.getClients === 'function') {
+      try {
+        const response = await window.DatabaseAPI.getClients(true);
+        const allClients = response?.data?.clients || response?.data || (Array.isArray(response) ? response : []);
+        const processed = Array.isArray(allClients) ? allClients : [];
+        const activeClients = processed.filter((c) => {
+          const status = (c.status || '').toLowerCase();
+          const type = (c.type || 'client').toLowerCase();
+          return (status === 'active' || status === '') && (type === 'client' || type === '');
+        });
+        setClients(activeClients);
+      } catch (error) {
+        console.error('Error loading clients for sales order modal:', error);
+      }
+    }
+
     setFormData({
       clientId: '',
       clientName: '',
@@ -5732,12 +5748,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       total: total
     };
     
-    setSalesOrderItems([...salesOrderItems, item]);
+    setSalesOrderItems((prev) => [...prev, item]);
     setNewSalesOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
   };
 
   const handleRemoveSalesOrderItem = (itemId) => {
-    setSalesOrderItems(salesOrderItems.filter(item => item.id !== itemId));
+    setSalesOrderItems((prev) => prev.filter(item => item.id !== itemId));
   };
 
   const handleSaveSalesOrder = async () => {
@@ -10289,6 +10305,170 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     // VIEW SALES ORDER
     if (modalType === 'view_sales') {
+      const escapeHtml = (value) =>
+        String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      const formatPrintDate = (value) => {
+        if (!value) return '—';
+        const dt = new Date(value);
+        if (Number.isNaN(dt.getTime())) return '—';
+        return dt.toISOString().split('T')[0];
+      };
+      const formatPrintMoney = (value) => {
+        const amount = parseFloat(value);
+        if (!Number.isFinite(amount)) return 'R 0.00';
+        return `R ${amount.toFixed(2)}`;
+      };
+      const handlePrintSalesOrder = async () => {
+        if (!selectedItem) return;
+        const printWin = window.open('', '_blank');
+        if (!printWin) {
+          alert('Please allow pop-ups to print.');
+          return;
+        }
+        try {
+          let companyName = 'Abcotronics';
+          let letterhead = {};
+          if (window.DatabaseAPI?.getDocumentSettings) {
+            const response = await window.DatabaseAPI.getDocumentSettings();
+            const documentSettings = response?.data || {};
+            companyName = documentSettings.companyName || companyName;
+            letterhead = documentSettings.poLetterhead || {};
+          } else {
+            try {
+              const saved = JSON.parse(localStorage.getItem('systemSettings') || '{}');
+              companyName = saved.companyName || companyName;
+            } catch (_) {}
+          }
+
+          const items = typeof selectedItem.items === 'string'
+            ? JSON.parse(selectedItem.items || '[]')
+            : (Array.isArray(selectedItem.items) ? selectedItem.items : []);
+          const safeItems = Array.isArray(items) ? items : [];
+          const addressLines = Array.isArray(letterhead.addressLines) ? letterhead.addressLines : [];
+          const logoMarkup = letterhead.logoDataUrl
+            ? `<img src="${escapeHtml(letterhead.logoDataUrl)}" alt="Logo" class="brand-logo" />`
+            : '';
+          const itemsMarkup = safeItems.length > 0
+            ? safeItems.map((item) => {
+                const qty = parseFloat(item.quantity) || 0;
+                const unitPrice = parseFloat(item.unitPrice) || 0;
+                const lineTotal = parseFloat(item.total);
+                const total = Number.isFinite(lineTotal) ? lineTotal : (qty * unitPrice);
+                return `<tr>
+                  <td>${escapeHtml(item.sku || '—')}</td>
+                  <td>${escapeHtml(item.name || item.itemName || '—')}</td>
+                  <td class="num">${escapeHtml(qty)}</td>
+                  <td class="num">${escapeHtml(formatPrintMoney(unitPrice))}</td>
+                  <td class="num">${escapeHtml(formatPrintMoney(total))}</td>
+                </tr>`;
+              }).join('')
+            : '<tr><td colspan="5" class="empty">No order items</td></tr>';
+
+          const content = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sales Order ${escapeHtml(selectedItem.orderNumber || selectedItem.id || '')}</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    body { font-family: Arial, sans-serif; color: #111827; margin: 0; }
+    .sheet { width: 100%; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 14px; }
+    .brand-logo { max-height: 58px; max-width: 180px; object-fit: contain; }
+    .brand { text-align: right; font-size: 12px; color: #374151; }
+    .brand h1 { margin: 0; font-size: 20px; color: #111827; }
+    .doc-title { font-size: 18px; margin: 0 0 8px; color: #1d4ed8; letter-spacing: 0.4px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin-bottom: 14px; font-size: 12px; }
+    .box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+    .label { font-size: 11px; color: #6b7280; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .value { font-size: 12px; font-weight: 600; color: #111827; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #d1d5db; padding: 7px; font-size: 12px; }
+    th { background: #f3f4f6; text-align: left; }
+    td.num, th.num { text-align: right; }
+    .empty { text-align: center; color: #6b7280; font-style: italic; }
+    .totals { margin-top: 10px; display: flex; justify-content: flex-end; }
+    .totals table { width: 280px; }
+    .totals td { border: none; padding: 3px 0; }
+    .totals .grand { font-size: 14px; font-weight: 700; color: #1d4ed8; }
+    .footer-note { margin-top: 16px; font-size: 11px; color: #6b7280; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="header">
+      <div>${logoMarkup}</div>
+      <div class="brand">
+        <h1>${escapeHtml(companyName)}</h1>
+        ${addressLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}
+        ${letterhead.phone ? `<div>Tel: ${escapeHtml(letterhead.phone)}</div>` : ''}
+        ${letterhead.email ? `<div>Email: ${escapeHtml(letterhead.email)}</div>` : ''}
+        ${letterhead.vatNumber ? `<div>VAT: ${escapeHtml(letterhead.vatNumber)}</div>` : ''}
+      </div>
+    </div>
+    <h2 class="doc-title">SALES ORDER</h2>
+    <div class="meta">
+      <div><strong>Order No:</strong> ${escapeHtml(selectedItem.orderNumber || '—')}</div>
+      <div><strong>Status:</strong> ${escapeHtml((selectedItem.status || '').replace(/_/g, ' '))}</div>
+      <div><strong>Order Date:</strong> ${escapeHtml(formatPrintDate(selectedItem.orderDate))}</div>
+      <div><strong>Required Date:</strong> ${escapeHtml(formatPrintDate(selectedItem.requiredDate))}</div>
+      <div><strong>Priority:</strong> ${escapeHtml(selectedItem.priority || 'normal')}</div>
+      <div><strong>Printed:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
+    </div>
+    <div class="box">
+      <div class="label">Client</div>
+      <div class="value">${escapeHtml(selectedItem.clientName || '—')}</div>
+    </div>
+    ${(selectedItem.shippingAddress || selectedItem.shippingMethod) ? `
+      <div class="box">
+        <div class="label">Shipping</div>
+        ${selectedItem.shippingAddress ? `<div>${escapeHtml(selectedItem.shippingAddress)}</div>` : ''}
+        ${selectedItem.shippingMethod ? `<div>Method: ${escapeHtml(selectedItem.shippingMethod)}</div>` : ''}
+      </div>
+    ` : ''}
+    <table>
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Description</th>
+          <th class="num">Qty</th>
+          <th class="num">Unit Price</th>
+          <th class="num">Line Total</th>
+        </tr>
+      </thead>
+      <tbody>${itemsMarkup}</tbody>
+    </table>
+    <div class="totals">
+      <table>
+        <tr><td>Subtotal</td><td class="num">${escapeHtml(formatPrintMoney(selectedItem.subtotal || 0))}</td></tr>
+        <tr><td>Tax</td><td class="num">${escapeHtml(formatPrintMoney(selectedItem.tax || 0))}</td></tr>
+        <tr><td class="grand">Total</td><td class="num grand">${escapeHtml(formatPrintMoney(selectedItem.total || 0))}</td></tr>
+      </table>
+    </div>
+    ${selectedItem.notes ? `<div class="box" style="margin-top: 12px;"><div class="label">Notes</div><div>${escapeHtml(selectedItem.notes)}</div></div>` : ''}
+    ${letterhead.footerNote ? `<div class="footer-note">${escapeHtml(letterhead.footerNote)}</div>` : ''}
+  </div>
+</body>
+</html>`;
+
+          printWin.document.write(content);
+          printWin.document.close();
+          printWin.focus();
+          setTimeout(() => {
+            printWin.print();
+            printWin.close();
+          }, 300);
+        } catch (error) {
+          printWin.close();
+          alert(error?.message || 'Failed to prepare print layout.');
+        }
+      };
+
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -10459,6 +10639,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
             <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
               <button
+                onClick={handlePrintSalesOrder}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <i className="fas fa-print mr-1"></i>
+                Print / PDF
+              </button>
+              <button
                 onClick={() => { setShowModal(false); setSelectedItem(null); }}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
               >
@@ -10497,7 +10684,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <select
                     value={formData.clientId || ''}
                     onChange={(e) => {
-                      const selectedClient = clients.find(c => c.id === e.target.value);
+                      const selectedClient = clients.find(c => String(c.id) === String(e.target.value));
                       if (selectedClient) {
                         // Parse client sites with error handling
                         let clientSites = [];
@@ -10646,26 +10833,29 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   {/* Add Item Form */}
                   <div className="grid grid-cols-12 gap-2 mb-3">
                     <div className="col-span-4">
-                      <select
+                      <input
+                        type="text"
+                        list="sales-order-inventory-options"
                         value={newSalesOrderItem.sku}
                         onChange={(e) => {
                           const sku = e.target.value;
-                          const invItem = inventory.find(item => item.sku === sku || item.id === sku);
+                          const invItem = inventory.find((item) => String(item.sku) === String(sku) || String(item.id) === String(sku));
                           setNewSalesOrderItem({
                             ...newSalesOrderItem,
-                            sku: sku,
+                            sku,
                             name: invItem ? invItem.name : newSalesOrderItem.name
                           });
                         }}
+                        placeholder="Search inventory by SKU or name"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Select from inventory</option>
-                        {inventory.map(item => (
+                      />
+                      <datalist id="sales-order-inventory-options">
+                        {inventory.map((item) => (
                           <option key={item.id || item.sku} value={item.sku || item.id}>
                             {item.name} ({item.sku || item.id})
                           </option>
                         ))}
-                      </select>
+                      </datalist>
                     </div>
                     <div className="col-span-4">
                       <input
