@@ -6553,10 +6553,8 @@ const JobCardFormPublic = () => {
             : undefined
         }
         aria-label="Scan inventory QR code"
-        className="job-card-stock-take-scan-fab pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-blue-700 bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+        className="job-card-stock-take-scan-fab pointer-events-auto fixed left-3 sm:left-auto sm:right-4 inline-flex items-center gap-1.5 rounded-full border border-blue-700 bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         style={{
-          position: 'fixed',
-          right: '1rem',
           // Keep FAB above bottom action row on narrow phones.
           bottom: 'calc(5.25rem + env(safe-area-inset-bottom, 0px))',
           zIndex: 1200
@@ -6734,7 +6732,7 @@ const JobCardFormPublic = () => {
                         return (
                           <div
                             key={`${stockTakeLocationId}-${sku}`}
-                            className={`px-3 py-2 grid grid-cols-[minmax(0,1fr)_5.25rem] sm:grid-cols-12 gap-2 items-center transition-shadow ${
+                            className={`px-3 py-2 grid grid-cols-[minmax(0,1fr)_5.25rem] sm:grid-cols-12 gap-2 items-center overflow-hidden transition-shadow ${
                               stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
                             }`}
                           >
@@ -6743,13 +6741,21 @@ const JobCardFormPublic = () => {
                                 {lineNo}
                               </span>
                             </div>
-                            <div className="min-w-0 sm:col-span-6">
-                              <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate leading-tight">
+                            <div className="min-w-0 max-w-full overflow-hidden sm:col-span-6">
+                              <p
+                                className="text-xs sm:text-sm font-semibold text-gray-900 leading-tight whitespace-normal break-words"
+                                style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                              >
                                 <span className="inline sm:hidden text-gray-500 mr-1">#{lineNo}</span>
                                 {row?.name || sku}
                               </p>
                               {sku ? (
-                                <p className="text-[10px] sm:text-[11px] text-gray-500 leading-tight truncate">{sku}</p>
+                                <p
+                                  className="text-[10px] sm:text-[11px] text-gray-500 leading-tight whitespace-normal break-words"
+                                  style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                                >
+                                  {sku}
+                                </p>
                               ) : null}
                             </div>
                             <div className="flex justify-end sm:col-span-5 sm:justify-end">

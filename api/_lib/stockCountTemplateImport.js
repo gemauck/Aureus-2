@@ -207,7 +207,7 @@ export async function runStockCountImportPipeline(
 
   const result = await prisma.$transaction(
     async (tx) => {
-      await tx.$executeRaw`SET LOCAL statement_timeout = '180s'`
+      await tx.$executeRaw`SET LOCAL statement_timeout = '360s'`
       let movementsCreated = 0
       let skipped = 0
       const applied = []
@@ -287,7 +287,7 @@ export async function runStockCountImportPipeline(
     },
     {
       maxWait: 60000,
-      timeout: 180000
+      timeout: 360000
     }
   )
 
