@@ -1084,12 +1084,13 @@ const RichTextEditor = ({
                     const text = e.clipboardData.getData('text/plain');
                     document.execCommand('insertText', false, text);
                 }}
-                className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} outline-none ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
+                className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} outline-none cursor-text ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
                 style={{ 
                     minHeight: compact ? `${Math.max(rows, 2) * 1.125}rem` : `${rows * 1.5}rem`,
                     height: compact ? `${Math.max(rows, 2) * 1.125}rem` : undefined,
                     maxHeight: compact ? `${Math.max(rows, 2) * 1.125}rem` : '400px',
-                    overflowY: 'auto'
+                    overflowY: 'auto',
+                    cursor: 'text'
                 }}
                 data-placeholder={placeholder}
                 suppressContentEditableWarning
@@ -1101,6 +1102,7 @@ const RichTextEditor = ({
                 [contenteditable="true"] {
                     scroll-margin: 0 !important;
                     scroll-padding: 0 !important;
+                    cursor: text !important;
                 }
                 
                 [contenteditable][data-placeholder]:empty:before {
