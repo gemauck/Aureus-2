@@ -1200,6 +1200,22 @@ async function handler(req, res) {
       
       const normalizedStartDate = typeof body.startDate === 'string' ? body.startDate.trim() : ''
       const normalizedDueDate = typeof body.dueDate === 'string' ? body.dueDate.trim() : ''
+      const parseTrackerSectionsPayload = (raw) => {
+        if (raw == null) return null
+        if (typeof raw === 'string') {
+          const trimmed = raw.trim()
+          if (!trimmed) return null
+          try {
+            return JSON.parse(trimmed)
+          } catch {
+            return undefined
+          }
+        }
+        if (typeof raw === 'object') return raw
+        return undefined
+      }
+      let blockedMonthlyDataReviewClear = false
+      let blockedComplianceReviewClear = false
 
       const updateData = {
         name: body.name,
@@ -1401,19 +1417,18 @@ async function handler(req, res) {
 
       // Handle monthlyDataReviewSections separately if provided - same shape as documentSections (year -> sections)
       if (body.monthlyDataReviewSections !== undefined && body.monthlyDataReviewSections !== null) {
-        try {
-          const val = body.monthlyDataReviewSections;
-          if (typeof val === 'string') {
-            const trimmed = val.trim();
-            updateData.monthlyDataReviewSections = trimmed === '' ? '{}' : trimmed;
-          } else if (typeof val === 'object') {
-            updateData.monthlyDataReviewSections = JSON.stringify(val);
-          } else {
-            updateData.monthlyDataReviewSections = '{}';
+        const parsedMdrSections = parseTrackerSectionsPayload(body.monthlyDataReviewSections)
+        if (parsedMdrSections === undefined) {
+          console.warn('Invalid monthlyDataReviewSections payload - skipping update')
+        } else if (!documentSectionsPayloadHasRows(parsedMdrSections)) {
+          blockedMonthlyDataReviewClear = true
+          console.warn('⚠️ PUT /api/projects/[id]: Ignoring empty monthlyDataReviewSections (wipe protection)')
+        } else {
+          try {
+            updateData.monthlyDataReviewSections = JSON.stringify(parsedMdrSections)
+          } catch (e) {
+            console.warn('Invalid monthlyDataReviewSections:', e)
           }
-        } catch (e) {
-          console.warn('Invalid monthlyDataReviewSections:', e);
-          updateData.monthlyDataReviewSections = '{}';
         }
       }
 
@@ -1444,19 +1459,18 @@ async function handler(req, res) {
 
       // Handle complianceReviewSections separately if provided - same shape as documentSections (year -> sections)
       if (body.complianceReviewSections !== undefined && body.complianceReviewSections !== null) {
-        try {
-          const val = body.complianceReviewSections;
-          if (typeof val === 'string') {
-            const trimmed = val.trim();
-            updateData.complianceReviewSections = trimmed === '' ? '{}' : trimmed;
-          } else if (typeof val === 'object') {
-            updateData.complianceReviewSections = JSON.stringify(val);
-          } else {
-            updateData.complianceReviewSections = '{}';
+        const parsedComplianceSections = parseTrackerSectionsPayload(body.complianceReviewSections)
+        if (parsedComplianceSections === undefined) {
+          console.warn('Invalid complianceReviewSections payload - skipping update')
+        } else if (!documentSectionsPayloadHasRows(parsedComplianceSections)) {
+          blockedComplianceReviewClear = true
+          console.warn('⚠️ PUT /api/projects/[id]: Ignoring empty complianceReviewSections (wipe protection)')
+        } else {
+          try {
+            updateData.complianceReviewSections = JSON.stringify(parsedComplianceSections)
+          } catch (e) {
+            console.warn('Invalid complianceReviewSections:', e)
           }
-        } catch (e) {
-          console.warn('Invalid complianceReviewSections:', e);
-          updateData.complianceReviewSections = '{}';
         }
       }
       
@@ -1781,6 +1795,36 @@ async function handler(req, res) {
               }
             });
           }
+        }
+        if (blockedMonthlyDataReviewClear) {
+          await logProjectActivity(prisma, {
+            projectId: id,
+            userId: activityUserId,
+            userName: activityUserName,
+            type: 'monthly_data_review_sections_clear_blocked',
+            description: 'Blocked empty Monthly Data Review sections payload (wipe protection)',
+            metadata: {
+              entityType: 'monthly_data_review',
+              entityId: id,
+              field: 'monthlyDataReviewSections',
+              action: 'blocked_empty_payload'
+            }
+          });
+        }
+        if (blockedComplianceReviewClear) {
+          await logProjectActivity(prisma, {
+            projectId: id,
+            userId: activityUserId,
+            userName: activityUserName,
+            type: 'compliance_review_sections_clear_blocked',
+            description: 'Blocked empty Compliance Review sections payload (wipe protection)',
+            metadata: {
+              entityType: 'compliance_review',
+              entityId: id,
+              field: 'complianceReviewSections',
+              action: 'blocked_empty_payload'
+            }
+          });
         }
         if (body.monthlyDataReviewSections !== undefined && body.monthlyDataReviewSections !== null) {
           try {

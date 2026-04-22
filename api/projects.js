@@ -2568,53 +2568,33 @@ async function handler(req, res) {
 
         // Handle monthlyDataReviewSections separately if provided - ensure it's properly saved
         if (body.monthlyDataReviewSections !== undefined && body.monthlyDataReviewSections !== null) {
-          try {
-            if (typeof body.monthlyDataReviewSections === 'string') {
-              const trimmed = body.monthlyDataReviewSections.trim();
-              if (trimmed === '') {
-                updateData.monthlyDataReviewSections = JSON.stringify({});
-              } else {
-                try {
-                  JSON.parse(trimmed);
-                  updateData.monthlyDataReviewSections = trimmed;
-                } catch (parseError) {
-                  console.error('❌ Invalid monthlyDataReviewSections JSON string:', parseError);
-                  updateData.monthlyDataReviewSections = JSON.stringify(body.monthlyDataReviewSections);
-                }
-              }
-            } else if (typeof body.monthlyDataReviewSections === 'object' || Array.isArray(body.monthlyDataReviewSections)) {
-              updateData.monthlyDataReviewSections = JSON.stringify(body.monthlyDataReviewSections);
-            } else {
-              updateData.monthlyDataReviewSections = JSON.stringify(body.monthlyDataReviewSections);
+          const parsedMdrSections = parseDocumentSectionsBody(body.monthlyDataReviewSections)
+          if (parsedMdrSections === undefined) {
+            console.error('❌ Invalid monthlyDataReviewSections JSON string');
+          } else if (!documentSectionsPayloadHasRows(parsedMdrSections)) {
+            console.warn('⚠️ projects.js PUT: Ignoring empty monthlyDataReviewSections (wipe protection)');
+          } else {
+            try {
+              updateData.monthlyDataReviewSections = JSON.stringify(parsedMdrSections);
+            } catch (error) {
+              console.error('❌ Error processing monthlyDataReviewSections:', error);
             }
-          } catch (error) {
-            console.error('❌ Error processing monthlyDataReviewSections:', error);
           }
         }
 
         // Handle complianceReviewSections separately if provided - ensure it's properly saved
         if (body.complianceReviewSections !== undefined && body.complianceReviewSections !== null) {
-          try {
-            if (typeof body.complianceReviewSections === 'string') {
-              const trimmed = body.complianceReviewSections.trim();
-              if (trimmed === '') {
-                updateData.complianceReviewSections = JSON.stringify({});
-              } else {
-                try {
-                  JSON.parse(trimmed);
-                  updateData.complianceReviewSections = trimmed;
-                } catch (parseError) {
-                  console.error('❌ Invalid complianceReviewSections JSON string:', parseError);
-                  updateData.complianceReviewSections = JSON.stringify(body.complianceReviewSections);
-                }
-              }
-            } else if (typeof body.complianceReviewSections === 'object' || Array.isArray(body.complianceReviewSections)) {
-              updateData.complianceReviewSections = JSON.stringify(body.complianceReviewSections);
-            } else {
-              updateData.complianceReviewSections = JSON.stringify(body.complianceReviewSections);
+          const parsedComplianceSections = parseDocumentSectionsBody(body.complianceReviewSections)
+          if (parsedComplianceSections === undefined) {
+            console.error('❌ Invalid complianceReviewSections JSON string');
+          } else if (!documentSectionsPayloadHasRows(parsedComplianceSections)) {
+            console.warn('⚠️ projects.js PUT: Ignoring empty complianceReviewSections (wipe protection)');
+          } else {
+            try {
+              updateData.complianceReviewSections = JSON.stringify(parsedComplianceSections);
+            } catch (error) {
+              console.error('❌ Error processing complianceReviewSections:', error);
             }
-          } catch (error) {
-            console.error('❌ Error processing complianceReviewSections:', error);
           }
         }
 

@@ -1657,17 +1657,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             : sectionsByYear;
         const serialized = JSON.stringify(payload);
 
-        // Never POST empty document collection to the server: API used to delete-all then no-op,
-        // which wiped every row (e.g. race after tab switch or failed load + autosave).
-        if (!isJsonOnlyTracker) {
-            const hasRows =
-                yearMapHasSections(payload) || (Array.isArray(payload) && payload.length > 0);
-            if (!hasRows) {
-                console.warn(
-                    '⏸️ Save skipped: empty document sections — not sent (avoids accidental wipe)'
-                );
-                return;
-            }
+        // Never send empty sections payloads on autosave.
+        // For all tracker types this can overwrite server data with "{}" during load/save races.
+        const hasRows =
+            yearMapHasSections(payload) || (Array.isArray(payload) && payload.length > 0);
+        if (!hasRows) {
+            console.warn(
+                `⏸️ Save skipped: empty ${isComplianceReview ? 'compliance review' : isMonthlyDataReview ? 'monthly data review' : 'document collection'} sections — not sent (avoids accidental wipe)`
+            );
+            return;
         }
         
         // Skip if data hasn't changed
