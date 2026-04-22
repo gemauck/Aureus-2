@@ -1777,7 +1777,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
                 // Fire-and-forget save; we can't await during beforeunload
-                saveToDatabase({ skipParentUpdate: true });
+                saveToDatabase({ skipParentUpdate: true, skipLoadingGuard: true });
                 event.preventDefault();
                 event.returnValue = '';
             }
@@ -1797,7 +1797,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
                 // Fire-and-forget save on unmount
-                saveToDatabase({ skipParentUpdate: true });
+                saveToDatabase({ skipParentUpdate: true, skipLoadingGuard: true });
             }
         };
     }, [project?.id]);
@@ -3359,7 +3359,7 @@ const getAssigneeColor = (identifier, users) => {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
-        saveToDatabase();
+        saveToDatabase({ skipLoadingGuard: true });
         setTimeout(() => {
             bumpCellActivityIfPopupMatchesCell(sectionId, documentId, month);
         }, 450);
