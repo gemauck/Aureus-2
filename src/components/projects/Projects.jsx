@@ -228,7 +228,9 @@ const Projects = () => {
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [viewingProject, setViewingProject] = useState(null);
-    const [showProgressTracker, setShowProgressTracker] = useState(false);
+    /** null | 'monthly' (Project progress) | 'weeklyFms' (Weekly FMS review grid) */
+    const [progressTrackerMode, setProgressTrackerMode] = useState(null);
+    const showProgressTracker = progressTrackerMode != null;
     const [showAllTasksView, setShowAllTasksView] = useState(false);
     const [trackerFocus, setTrackerFocus] = useState(null);
     const [draggedProject, setDraggedProject] = useState(null);
@@ -321,6 +323,7 @@ const Projects = () => {
             const basePath = '#/projects';
             const searchParams = new URLSearchParams();
             searchParams.set('progressTracker', '1');
+            searchParams.delete('weeklyFmsGrid');
 
             if (params.projectId) {
                 searchParams.set('projectId', params.projectId);
@@ -350,7 +353,7 @@ const Projects = () => {
 
             // Ensure tracker UI always opens when button is clicked,
             // even if the router/hash handling changes
-            setShowProgressTracker(true);
+            setProgressTrackerMode('monthly');
             setTrackerFocus({
                 projectId: params.projectId || null,
                 monthIndex: typeof params.monthIndex === 'number' && !Number.isNaN(params.monthIndex) ? params.monthIndex : null,
@@ -361,19 +364,38 @@ const Projects = () => {
             });
         } catch (error) {
             console.error('❌ Projects: Failed to set progress tracker hash:', error);
-            setShowProgressTracker(true);
+            setProgressTrackerMode('monthly');
+        }
+    };
+
+    const openWeeklyFmsProgressHash = () => {
+        try {
+            const searchParams = new URLSearchParams();
+            searchParams.set('weeklyFmsGrid', '1');
+            searchParams.delete('progressTracker');
+            const newHash = `#/projects?${searchParams.toString()}`;
+            if (window.location.hash !== newHash) {
+                window.location.hash = newHash;
+            }
+            setProgressTrackerMode('weeklyFms');
+            setTrackerFocus(null);
+        } catch (error) {
+            console.error('❌ Projects: Failed to set weekly FMS progress hash:', error);
+            setProgressTrackerMode('weeklyFms');
+            setTrackerFocus(null);
         }
     };
 
     const clearProgressTrackerHash = () => {
         try {
-            setShowProgressTracker(false);
+            setProgressTrackerMode(null);
             setTrackerFocus(null);
             const hash = window.location.hash || '#/projects';
             const trimmed = hash.startsWith('#') ? hash.substring(1) : hash;
             const [pathPart = '/projects', queryString = ''] = trimmed.split('?');
             const params = new URLSearchParams(queryString);
             params.delete('progressTracker');
+            params.delete('weeklyFmsGrid');
             params.delete('projectId');
             params.delete('monthIndex');
             params.delete('month');
@@ -403,7 +425,10 @@ const Projects = () => {
                 }
 
                 const params = new URLSearchParams(queryString);
-                if (params.get('progressTracker')) {
+                if (params.get('weeklyFmsGrid') === '1') {
+                    setProgressTrackerMode('weeklyFms');
+                    setTrackerFocus(null);
+                } else if (params.get('progressTracker')) {
                     const rawMonthIndex = params.get('monthIndex');
                     const rawYear = params.get('year');
                     const focusInput = params.get('focusInput');
@@ -418,10 +443,10 @@ const Projects = () => {
                         year: parsedYear !== null && !Number.isNaN(parsedYear) ? parsedYear : null,
                         focusInput: focusInput || null
                     });
-                    setShowProgressTracker(true);
+                    setProgressTrackerMode('monthly');
                 } else {
                     setTrackerFocus(null);
-                    setShowProgressTracker(prev => (prev ? false : prev));
+                    setProgressTrackerMode((prev) => (prev != null ? null : prev));
                 }
             } catch (error) {
                 console.error('❌ Projects: Error parsing hash for progress tracker:', error);
@@ -1254,71 +1279,88 @@ const Projects = () => {
         }
     }, []);
     
-    // Wait for ProjectProgressTracker component to load when needed
+    const progressTrackerPollRef = React.useRef(null);
+
+    // Wait for ProjectProgressTracker / WeeklyFMSProgressTracker when a tracker view is open
     useEffect(() => {
-        if (showProgressTracker && !window.ProjectProgressTracker && !waitingForTracker) {
-            console.warn('⚠️ Projects: ProjectProgressTracker not available yet, waiting...');
-            setWaitingForTracker(true);
-            let attempts = 0;
-            const maxAttempts = 50; // 5 seconds max (increased from 2 seconds)
-            
-            // Listen for componentLoaded event
-            const handleComponentLoaded = (event) => {
-                if (event.detail && event.detail.component === 'ProjectProgressTracker') {
-                    console.log('✅ Projects: Received componentLoaded event for ProjectProgressTracker');
-                    setWaitingForTracker(false);
-                    setForceRender(prev => prev + 1);
-                }
-            };
-            window.addEventListener('componentLoaded', handleComponentLoaded);
-            
-            // Also try to manually trigger component loading if it's not loaded
-            const tryLoadComponent = () => {
-                // Check if component-loader has loaded it
-                const script = document.querySelector('script[data-component-path*="ProjectProgressTracker"]');
-                if (!script) {
-                    console.warn('⚠️ Projects: ProjectProgressTracker script tag not found, component may not be loading');
-                    // Try to trigger component-loader to load it
-                    if (typeof window.loadComponent === 'function') {
-                        console.log('🔄 Projects: Attempting to manually load ProjectProgressTracker...');
-                        window.loadComponent('components/projects/ProjectProgressTracker.jsx');
-                    }
-                }
-            };
-            
-            // Try loading immediately
-            tryLoadComponent();
-            
-            const checkInterval = setInterval(() => {
-                attempts++;
-                if (window.ProjectProgressTracker) {
-                    console.log('✅ Projects: ProjectProgressTracker is now available');
-                    clearInterval(checkInterval);
-                    window.removeEventListener('componentLoaded', handleComponentLoaded);
-                    setWaitingForTracker(false);
-                    setForceRender(prev => prev + 1);
-                } else if (attempts >= maxAttempts) {
-                    clearInterval(checkInterval);
-                    window.removeEventListener('componentLoaded', handleComponentLoaded);
-                    setWaitingForTracker(false);
-                    console.error('❌ ProjectProgressTracker still not available after waiting', {
-                        attempts,
-                        maxAttempts,
-                        windowHasReact: typeof window.React !== 'undefined',
-                        scriptExists: !!document.querySelector('script[data-component-path*="ProjectProgressTracker"]')
-                    });
-                    // Try one more time to load
-                    tryLoadComponent();
-                }
-            }, 100);
-            
-            // Cleanup function
-            return () => {
-                clearInterval(checkInterval);
-                window.removeEventListener('componentLoaded', handleComponentLoaded);
-            };
+        if (progressTrackerPollRef.current) {
+            clearInterval(progressTrackerPollRef.current);
+            progressTrackerPollRef.current = null;
         }
-    }, [showProgressTracker, waitingForTracker]);
+
+        if (!showProgressTracker) {
+            setWaitingForTracker(false);
+            return undefined;
+        }
+
+        const needMonthly = progressTrackerMode === 'monthly' && !window.ProjectProgressTracker;
+        const needWeekly = progressTrackerMode === 'weeklyFms' && !window.WeeklyFMSProgressTracker;
+        if (!needMonthly && !needWeekly) {
+            setWaitingForTracker(false);
+            return undefined;
+        }
+
+        console.warn('⚠️ Projects: Progress tracker component not available yet, waiting...');
+        setWaitingForTracker(true);
+
+        let attempts = 0;
+        const maxAttempts = 50;
+
+        const handleComponentLoaded = (event) => {
+            const name = event?.detail?.component;
+            if (name === 'ProjectProgressTracker' || name === 'WeeklyFMSProgressTracker') {
+                setForceRender((prev) => prev + 1);
+            }
+        };
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+
+        const tryLoadComponent = () => {
+            if (needMonthly && typeof window.loadComponent === 'function') {
+                window.loadComponent('components/projects/ProjectProgressTracker.jsx');
+            }
+            if (needWeekly && typeof window.loadComponent === 'function') {
+                window.loadComponent('components/projects/WeeklyFMSProgressTracker.jsx');
+            }
+        };
+
+        tryLoadComponent();
+
+        progressTrackerPollRef.current = setInterval(() => {
+            attempts += 1;
+            const monthlyOk = !needMonthly || window.ProjectProgressTracker;
+            const weeklyOk = !needWeekly || window.WeeklyFMSProgressTracker;
+            if (monthlyOk && weeklyOk) {
+                if (progressTrackerPollRef.current) {
+                    clearInterval(progressTrackerPollRef.current);
+                    progressTrackerPollRef.current = null;
+                }
+                window.removeEventListener('componentLoaded', handleComponentLoaded);
+                setWaitingForTracker(false);
+                setForceRender((prev) => prev + 1);
+            } else if (attempts >= maxAttempts) {
+                if (progressTrackerPollRef.current) {
+                    clearInterval(progressTrackerPollRef.current);
+                    progressTrackerPollRef.current = null;
+                }
+                window.removeEventListener('componentLoaded', handleComponentLoaded);
+                setWaitingForTracker(false);
+                console.error('❌ Progress tracker component still not available after waiting', {
+                    attempts,
+                    needMonthly,
+                    needWeekly
+                });
+                tryLoadComponent();
+            }
+        }, 100);
+
+        return () => {
+            if (progressTrackerPollRef.current) {
+                clearInterval(progressTrackerPollRef.current);
+                progressTrackerPollRef.current = null;
+            }
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
+    }, [showProgressTracker, progressTrackerMode]);
     
     // Load projects from data service on mount
     useEffect(() => {
@@ -3945,6 +3987,36 @@ const Projects = () => {
         }
     };
 
+    const renderWeeklyFmsProgressTracker = () => {
+        const ErrorBoundary = window.ErrorBoundary || (({ children }) => children);
+        const WeeklyFMSProgressTracker = window.WeeklyFMSProgressTracker;
+        const isValidComponent = WeeklyFMSProgressTracker && (
+            typeof WeeklyFMSProgressTracker === 'function' ||
+            (typeof WeeklyFMSProgressTracker === 'object' && (WeeklyFMSProgressTracker.$$typeof || WeeklyFMSProgressTracker.type))
+        );
+        if (!isValidComponent) {
+            return (
+                <div className="space-y-3">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <p className="text-sm text-red-700">Weekly FMS progress tracker is not available. Refresh the page or try again.</p>
+                    </div>
+                </div>
+            );
+        }
+        let ComponentToRender = WeeklyFMSProgressTracker;
+        if (typeof WeeklyFMSProgressTracker === 'object' && WeeklyFMSProgressTracker.type) {
+            ComponentToRender = WeeklyFMSProgressTracker.type;
+        }
+        if (typeof ComponentToRender !== 'function') {
+            return null;
+        }
+        return React.createElement(
+            ErrorBoundary,
+            null,
+            React.createElement(ComponentToRender, { onBack: () => clearProgressTrackerHash() })
+        );
+    };
+
     // BULLETPROOF: Aggressive monitoring when viewing a project
     useEffect(() => {
         if (!viewingProject) return;
@@ -4594,52 +4666,87 @@ const Projects = () => {
     }
 
     if (showProgressTracker) {
-        if (!window.ProjectProgressTracker) {
-            console.warn('⚠️ Projects: ProjectProgressTracker not available yet');
-            return React.createElement('div', { className: 'space-y-3' },
-                React.createElement('div', { className: 'flex items-center justify-between' },
-                    React.createElement('button', {
-                        onClick: () => clearProgressTrackerHash(),
-                        className: 'p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors'
-                    }, React.createElement('i', { className: 'fas fa-arrow-left' })),
-                    React.createElement('h1', { className: 'text-lg font-semibold text-gray-900' }, 'Project Progress Tracker')
-                ),
-                React.createElement('div', { className: 'bg-yellow-50 border border-yellow-200 rounded-lg p-4' },
-                    React.createElement('div', { className: 'flex items-start' },
-                        React.createElement('i', { className: 'fas fa-spinner fa-spin text-yellow-600 mt-0.5 mr-3' }),
-                        React.createElement('div', { className: 'flex-1' },
-                            React.createElement('h3', { className: 'text-sm font-semibold text-yellow-800 mb-1' }, 'Loading Progress Tracker...'),
-                            React.createElement('p', { className: 'text-sm text-yellow-700' },
-                                'The Progress Tracker component is still loading. Please wait a moment...')
-                        )
-                    )
-                )
+        const trackerKind = progressTrackerMode || 'monthly';
+        const needMonthlyComponent = trackerKind === 'monthly' && !window.ProjectProgressTracker;
+        const needWeeklyComponent = trackerKind === 'weeklyFms' && !window.WeeklyFMSProgressTracker;
+        const progressTrackerTabClass = (active) =>
+            `px-3 py-1.5 text-sm font-semibold transition-all rounded-full ${
+                active
+                    ? isDark
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'bg-primary-600 text-white shadow-sm'
+                    : isDark
+                      ? 'text-gray-400 hover:text-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+            }`;
+
+        const progressTrackerChrome = (children) => (
+            <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <div
+                        className={`inline-flex items-center rounded-full border p-1 min-w-0 ${
+                            isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200 shadow-sm'
+                        }`}
+                        role="tablist"
+                        aria-label="Progress tracker views"
+                    >
+                            <button
+                                type="button"
+                                onClick={() => openProgressTrackerHash()}
+                                className={progressTrackerTabClass(trackerKind === 'monthly')}
+                                aria-pressed={trackerKind === 'monthly'}
+                            >
+                                Monthly
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => openWeeklyFmsProgressHash()}
+                                className={progressTrackerTabClass(trackerKind === 'weeklyFms')}
+                                aria-pressed={trackerKind === 'weeklyFms'}
+                            >
+                                Weekly FMS
+                            </button>
+                    </div>
+                </div>
+                {children}
+            </div>
+        );
+
+        if (needMonthlyComponent || needWeeklyComponent) {
+            if (needMonthlyComponent) {
+                console.warn('⚠️ Projects: ProjectProgressTracker not available yet');
+            }
+            if (needWeeklyComponent) {
+                console.warn('⚠️ Projects: WeeklyFMSProgressTracker not available yet');
+            }
+            return progressTrackerChrome(
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                        <i className="fas fa-spinner fa-spin text-yellow-600 mt-0.5 mr-3" />
+                        <div className="flex-1">
+                            <h3 className="text-sm font-semibold text-yellow-800 mb-1">Loading progress tracker…</h3>
+                            <p className="text-sm text-yellow-700">
+                                The {trackerKind === 'weeklyFms' ? 'weekly FMS' : 'monthly progress'} view is still
+                                loading. Please wait a moment.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             );
         }
         try {
-            return renderProgressTracker();
+            return progressTrackerChrome(
+                trackerKind === 'weeklyFms' ? renderWeeklyFmsProgressTracker() : renderProgressTracker()
+            );
         } catch (error) {
             console.error('❌ Fatal error rendering Progress Tracker:', error);
-            return (
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <button
-                            onClick={() => clearProgressTrackerHash()}
-                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            <i className="fas fa-arrow-left"></i>
-                        </button>
-                        <h1 className="text-lg font-semibold text-gray-900">Project Progress Tracker</h1>
-                    </div>
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-start">
-                            <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-3"></i>
-                            <div className="flex-1">
-                                <h3 className="text-sm font-semibold text-red-800 mb-1">Fatal Error</h3>
-                                <p className="text-sm text-red-700">
-                                    {error.message || 'An unexpected error occurred'}
-                                </p>
-                            </div>
+            return progressTrackerChrome(
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                        <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-3" />
+                        <div className="flex-1">
+                            <h3 className="text-sm font-semibold text-red-800 mb-1">Fatal Error</h3>
+                            <p className="text-sm text-red-700">{error.message || 'An unexpected error occurred'}</p>
                         </div>
                     </div>
                 </div>
@@ -4941,10 +5048,21 @@ const Projects = () => {
                             className={`px-3.5 py-2.5 rounded-xl transition-all text-sm font-medium min-h-[44px] sm:min-h-0 flex items-center ${
                                 isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm'
                             }`}
-                            aria-label="Open progress tracker"
+                            aria-label="Open monthly progress tracker"
                         >
                             <i className="fas fa-chart-line mr-2 text-xs" aria-hidden="true"></i>
                             Progress
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => openWeeklyFmsProgressHash()}
+                            className={`px-3.5 py-2.5 rounded-xl transition-all text-sm font-medium min-h-[44px] sm:min-h-0 flex items-center ${
+                                isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm'
+                            }`}
+                            aria-label="Open weekly FMS review progress tracker"
+                        >
+                            <i className="fas fa-calendar-week mr-2 text-xs" aria-hidden="true"></i>
+                            Weekly FMS
                         </button>
                         <button
                             type="button"

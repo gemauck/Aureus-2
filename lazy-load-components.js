@@ -55,6 +55,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/projects/ListModal.jsx',
         './src/components/projects/ProjectModal.jsx',
         './src/components/projects/ProjectProgressTracker.jsx',
+        './src/components/projects/WeeklyFMSProgressTracker.jsx',
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
         './src/components/projects/WeeklyFMSReviewTracker.jsx', // Added as fallback if vite-projects fails
         './src/components/projects/MonthlyFMSReviewTracker.jsx', // Monthly FMS Review tracker
@@ -320,6 +321,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
             // Also check the original src path to catch components before path conversion
             const needsCacheBusting = src.includes('DailyNotes') || src.includes('Manufacturing') || 
                                      src.includes('ProjectProgressTracker') || 
+                                     src.includes('WeeklyFMSProgressTracker') ||
                                      src.includes('ProjectDetail') || 
                                      src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') ||
                                      src.includes('MonthlyDataReview') ||
@@ -331,6 +333,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                                      src.includes('AuditTrail') || src.includes('Reports') ||
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
                                      scriptSrc.includes('ProjectProgressTracker') || 
+                                     scriptSrc.includes('WeeklyFMSProgressTracker') ||
                                      scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') ||
                                      scriptSrc.includes('MonthlyDataReview') ||
                                      scriptSrc.includes('WeeklyFMSReviewTracker') ||
@@ -375,6 +378,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                     scriptSrc.includes('DailyNotes') ||
                     scriptSrc.includes('Manufacturing') ||
                     scriptSrc.includes('ProjectProgressTracker') ||
+                    scriptSrc.includes('WeeklyFMSProgressTracker') ||
                     scriptSrc.includes('ManagementMeetingNotes') ||
                     scriptSrc.includes('WeeklyFMSReviewTracker') ||
                     scriptSrc.includes('Teams.jsx') ||

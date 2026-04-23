@@ -137,6 +137,7 @@
         'components/projects/ListModal.jsx',
         'components/projects/ProjectModal.jsx',
         'components/projects/ProjectProgressTracker.jsx',
+        'components/projects/WeeklyFMSProgressTracker.jsx',
         'components/projects/CommentsPopup.jsx',
         'components/projects/DocumentCollectionModal.jsx',
         'components/projects/ProjectDetail.jsx',
@@ -318,7 +319,7 @@
                 applyDynamicCacheBust(componentCacheVersions[path] || 'service-maintenance-ui-v20251111');
             }
 
-            if (path.includes('components/projects/ProjectDetail') || path.includes('components/projects/Projects.jsx') || path.includes('components/projects/ProjectProgressTracker.jsx')) {
+            if (path.includes('components/projects/ProjectDetail') || path.includes('components/projects/Projects.jsx') || path.includes('components/projects/ProjectProgressTracker.jsx') || path.includes('components/projects/WeeklyFMSProgressTracker.jsx')) {
                 // Force cache-bust for task list UI changes
                 if (path.includes('components/projects/ProjectDetail')) {
                     applyDynamicCacheBust('task-list-columns-v20251115-' + Date.now());
