@@ -775,12 +775,13 @@ try {
 
         const startTime = performance.now();
 
-        // Create parallel API calls
-        const apiCalls = [];
+        // Split into high-priority calls for initial paint and deferred background calls.
+        const primaryApiCalls = [];
+        const deferredApiCalls = [];
 
         // Stock Locations - Load on every data refresh
         if (typeof window.DatabaseAPI.getStockLocations === 'function') {
-          apiCalls.push(
+          primaryApiCalls.push(
             window.DatabaseAPI.getStockLocations()
               .then(locResponse => {
                 const locData = sortManufacturingStockLocations(locResponse?.data?.locations || []);
@@ -810,7 +811,7 @@ try {
         // Inventory - Load based on selected location
         if (typeof window.DatabaseAPI.getInventory === 'function') {
           const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
-          apiCalls.push(
+          primaryApiCalls.push(
             window.DatabaseAPI.getInventory(locationIdToLoad)
               .then(invResponse => {
                 const invData = invResponse?.data?.inventory || [];
@@ -828,7 +829,7 @@ try {
         }
 
         if (typeof window.DatabaseAPI.getManufacturingInventoryLocationValueSummary === 'function') {
-          apiCalls.push(
+          primaryApiCalls.push(
             window.DatabaseAPI
               .getManufacturingInventoryLocationValueSummary()
               .then((res) => {
@@ -849,7 +850,7 @@ try {
 
         // BOMs
         if (typeof window.DatabaseAPI.getBOMs === 'function') {
-          apiCalls.push(
+          deferredApiCalls.push(
             window.DatabaseAPI.getBOMs()
               .then(bomResponse => {
                 const bomData = bomResponse?.data?.boms || [];
@@ -871,7 +872,7 @@ try {
 
         // BOM Groups
         if (typeof window.DatabaseAPI.getBOMGroups === 'function') {
-          apiCalls.push(
+          deferredApiCalls.push(
             window.DatabaseAPI.getBOMGroups()
               .then(res => {
                 const list = res?.data?.groups || res?.data || [];
@@ -884,7 +885,7 @@ try {
 
         // Production Orders
         if (typeof window.DatabaseAPI.getProductionOrders === 'function') {
-          apiCalls.push(
+          deferredApiCalls.push(
             window.DatabaseAPI.getProductionOrders()
               .then(ordersResponse => {
                 const ordersData = ordersResponse?.data?.productionOrders || [];
@@ -902,7 +903,7 @@ try {
 
         // Sales Orders
         if (typeof window.DatabaseAPI.getSalesOrders === 'function') {
-          apiCalls.push(
+          deferredApiCalls.push(
             window.DatabaseAPI.getSalesOrders()
               .then(ordersResponse => {
                 const ordersData = ordersResponse?.data?.salesOrders || [];
@@ -920,7 +921,7 @@ try {
 
         // Purchase Orders
         if (typeof window.DatabaseAPI.getPurchaseOrders === 'function') {
-          apiCalls.push(
+          deferredApiCalls.push(
             window.DatabaseAPI.getPurchaseOrders()
               .then(ordersResponse => {
                 const ordersData = ordersResponse?.data?.purchaseOrders || [];
@@ -965,7 +966,7 @@ try {
 
         // Stock Movements
         if (typeof window.DatabaseAPI.getStockMovements === 'function') {
-          apiCalls.push(
+          deferredApiCalls.push(
             window.DatabaseAPI.getStockMovements({ page: 1, pageSize: 120 })
               .then(movementsResponse => {
                 const movementsData = movementsResponse?.data?.movements || [];
@@ -994,7 +995,7 @@ try {
 
         // Suppliers
         if (typeof window.DatabaseAPI.getSuppliers === 'function') {
-          apiCalls.push(
+          deferredApiCalls.push(
             window.DatabaseAPI.getSuppliers()
               .then(suppliersResponse => {
                 const suppliersData = suppliersResponse?.data?.suppliers || [];
@@ -1026,12 +1027,22 @@ try {
           }
         }
 
-        // Execute all API calls in parallel
-        if (apiCalls.length > 0) {
-          const results = await Promise.all(apiCalls);
-          const endTime = performance.now();
-          const loadTime = ((endTime - startTime) / 1000).toFixed(2);
+        // Execute high-priority calls first so inventory view renders fast.
+        if (primaryApiCalls.length > 0) {
+          await Promise.all(primaryApiCalls);
         }
+
+        // Continue loading secondary datasets in the background.
+        if (deferredApiCalls.length > 0) {
+          setTimeout(() => {
+            Promise.all(deferredApiCalls).catch((error) => {
+              console.error('Error loading deferred manufacturing datasets:', error);
+            });
+          }, 0);
+        }
+
+        const endTime = performance.now();
+        const loadTime = ((endTime - startTime) / 1000).toFixed(2);
       } catch (error) {
         console.error('Error loading manufacturing data:', error);
       }
