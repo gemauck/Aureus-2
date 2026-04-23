@@ -3481,14 +3481,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         )}
         {/* Controls */}
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
-          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-            <div className="flex flex-col xl:flex-row xl:items-start gap-3 flex-1">
-              <div className="flex flex-col gap-1.5 min-w-[220px]">
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 items-start min-w-0">
+                <div className="flex flex-col gap-1.5 min-w-0 md:col-span-2 xl:col-span-5">
                 {/* Location Selector */}
                 <select
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value)}
-                  className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
+                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
                     isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
                   }`}
                   title="Select Stock Location"
@@ -3536,7 +3537,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       Out
                     </button>
                   </div>
-                  <div className={`rounded-md border px-2.5 py-1 min-w-[170px] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                  <div className={`rounded-md border px-2.5 py-1 min-w-[150px] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
                     <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                       Stock Value
                     </p>
@@ -3548,8 +3549,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </p>
                   </div>
                 </div>
-              </div>
-              <div className="relative flex-1 min-w-[220px] xl:max-w-md">
+                <div className="relative min-w-0 md:col-span-1 xl:col-span-4">
                 <i className={`fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                 <input
                   key="inventory-search-input"
@@ -3596,57 +3596,53 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
                   }`}
                 />
+                </div>
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors md:col-span-1 xl:col-span-3 ${
+                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                  }`}
+                >
+                  <option value="all">All Categories</option>
+                  {uniqueCategories.map(cat => (
+                    <option key={cat} value={cat}>
+                      {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
-                }`}
-              >
-                <option value="all">All Categories</option>
-                {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat}>
-                    {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                  </option>
-                ))}
-              </select>
-              <div className={`text-xs whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <div className="flex flex-wrap items-center gap-1 justify-start xl:justify-end xl:pl-2">
+                <button
+                  onClick={handleExportInventory}
+                  disabled={isExportingInventory}
+                  className={`px-2 py-1 text-[11px] rounded-md flex items-center gap-1 border transition-all duration-200 whitespace-nowrap ${
+                    isExportingInventory
+                      ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
+                      : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
+                  }`}
+                  title="Export the full inventory dataset to Excel"
+                >
+                  <i className={`${isExportingInventory ? 'fas fa-spinner animate-spin' : 'fas fa-download'} text-xs`}></i>
+                  {isExportingInventory ? 'Exporting...' : 'Export'}
+                </button>
+                {isAdmin ? (
+                  <button
+                    onClick={openAddItemModal}
+                    className="px-2 py-1 text-[11px] bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-1 transition-all duration-200 whitespace-nowrap"
+                  >
+                    <i className="fas fa-plus text-xs"></i>
+                    Add Item
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {invFilteredTotal === 0
                   ? `Showing 0 of ${inventory.length} in catalog`
                   : `Showing ${invPageStart + 1}–${Math.min(invPageStart + INVENTORY_LIST_PAGE_SIZE, invFilteredTotal)} of ${invFilteredTotal} (${inventory.length} in catalog)`}
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-1 xl:justify-end">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileInputChange}
-                className="sr-only"
-              />
-              <button
-                onClick={handleExportInventory}
-                disabled={isExportingInventory}
-                className={`px-2 py-1 text-[11px] rounded-md flex items-center gap-1 border transition-all duration-200 ${
-                  isExportingInventory
-                    ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
-                    : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
-                }`}
-                title="Export the full inventory dataset to Excel"
-              >
-                <i className={`${isExportingInventory ? 'fas fa-spinner animate-spin' : 'fas fa-download'} text-xs`}></i>
-                {isExportingInventory ? 'Exporting...' : 'Export'}
-              </button>
-              {isAdmin ? (
-                <button
-                  onClick={openAddItemModal}
-                  className="px-2 py-1 text-[11px] bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-1 transition-all duration-200"
-                >
-                  <i className="fas fa-plus text-xs"></i>
-                  Add Item
-                </button>
-              ) : null}
             </div>
           </div>
         </div>
