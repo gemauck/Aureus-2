@@ -264,12 +264,28 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
     useEffect(() => {
         selectedYearRef.current = selectedYear;
     }, [selectedYear]);
-    useEffect(() => {
-        workingWeekScrollDoneRef.current = false;
-    }, [selectedYear]);
 
     const allWeeks = useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
     const workingWeekNums = useMemo(() => getWorkingWeekNumbers(allWeeks), [allWeeks]);
+    const workingWeek = useMemo(() => {
+        if (!Array.isArray(allWeeks) || allWeeks.length === 0 || workingWeekNums.length === 0) return null;
+        return allWeeks.find((w) => workingWeekNums.includes(w.number)) || null;
+    }, [allWeeks, workingWeekNums]);
+    const displayedWeeks = useMemo(() => {
+        if (!Array.isArray(allWeeks) || allWeeks.length === 0) return [];
+        // For the current year show a rolling window: working week + previous 4 months.
+        if (selectedYear !== currentYear || !workingWeek) return allWeeks;
+        const cutoff = new Date(workingWeek.startDate);
+        cutoff.setHours(0, 0, 0, 0);
+        cutoff.setMonth(cutoff.getMonth() - 4);
+        const windowEnd = new Date(workingWeek.endDate || workingWeek.startDate);
+        windowEnd.setHours(23, 59, 59, 999);
+        const weeksInWindow = allWeeks.filter((week) => {
+            const weekStart = new Date(week.startDate);
+            return weekStart >= cutoff && weekStart <= windowEnd;
+        });
+        return weeksInWindow.length > 0 ? weeksInWindow : allWeeks;
+    }, [allWeeks, selectedYear, currentYear, workingWeek]);
 
     useEffect(() => {
         const load = async (retryCount = 0) => {
@@ -346,7 +362,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
         if (workingWeekScrollDoneRef.current) return;
         try {
             if (!tableRef?.current) return;
-            if (!allWeeks.length) return;
+            if (!displayedWeeks.length) return;
             const wn = workingWeekNums[0];
             if (wn == null) return;
             const run = () => {
@@ -363,7 +379,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
         } catch (e) {
             console.warn('WeeklyFMSProgressTracker: scroll to working week failed', e);
         }
-    }, [projects, selectedYear, allWeeks, workingWeekNums]);
+    }, [projects, selectedYear, displayedWeeks, workingWeekNums]);
 
     const minYear = 2015;
     const maxYear = currentYear + 5;
@@ -463,7 +479,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
             ReactElement('div', { className: 'space-y-1' },
                 ReactElement('h1', { className: 'text-lg font-semibold text-gray-900' }, 'Weekly FMS review progress'),
                 ReactElement('p', { className: 'text-sm text-gray-600' },
-                    'Per-project weekly FMS checklist completion for the selected year. The highlighted column is the current working week (one week in arrears).')),
+                    'Per-project weekly FMS checklist completion for the selected year. The grid auto-focuses the working week and shows the prior 4 months.')),
             ReactElement('div', { className: 'flex flex-wrap items-center gap-2' },
                 ReactElement(
                     'label',
@@ -547,7 +563,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                             },
                             'Project'
                         ),
-                        allWeeks.map((week) => {
+                        displayedWeeks.map((week) => {
                             const isWorking = workingWeekNums.includes(week.number);
                             return ReactElement(
                                 'th',
@@ -606,7 +622,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                               ReactElement(
                                   'td',
                                   {
-                                      colSpan: 1 + allWeeks.length + 3,
+                                      colSpan: 1 + displayedWeeks.length + 3,
                                       className: 'px-8 py-12 text-center text-sm text-slate-600'
                                   },
                                   loadError
@@ -643,7 +659,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                                           : null,
                                       ReactElement('div', { className: 'text-xs text-slate-600 mt-0.5' }, pr.client)
                                   ),
-                                  allWeeks.map((week) =>
+                                  displayedWeeks.map((week) =>
                                       renderCell(
                                           { ...pr, weeklyFMSReviewSections: pr.weeklyFMSReviewSections },
                                           week,
@@ -682,8 +698,4 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
 
 if (typeof window !== 'undefined') {
     window.WeeklyFMSProgressTracker = WeeklyFMSProgressTracker;
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = WeeklyFMSProgressTracker;
 }
