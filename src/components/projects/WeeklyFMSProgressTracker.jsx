@@ -590,7 +590,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                                 ReactElement('div', { style: { fontWeight: 500, color: '#64748b' } }, week.dateRange || '')
                             );
                         }),
-                        ['PM', 'Type', 'Status'].map((label) =>
+                        ['PM'].map((label) =>
                             ReactElement(
                                 'th',
                                 {
@@ -622,7 +622,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                               ReactElement(
                                   'td',
                                   {
-                                      colSpan: 1 + displayedWeeks.length + 3,
+                                      colSpan: 1 + displayedWeeks.length + 1,
                                       className: 'px-8 py-12 text-center text-sm text-slate-600'
                                   },
                                   loadError
@@ -678,16 +678,7 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                                       },
                                       pr.manager && pr.manager !== '-' ? pr.manager : '—'
                                   ),
-                                  ReactElement(
-                                      'td',
-                                      { style: { padding: '8px', background: rowBg, borderBottom: TRACK_PROJECT_ROW_SEPARATOR, fontSize: '11px' } },
-                                      pr.type && pr.type !== '-' ? pr.type : '—'
-                                  ),
-                                  ReactElement(
-                                      'td',
-                                      { style: { padding: '8px', background: rowBg, borderBottom: TRACK_PROJECT_ROW_SEPARATOR, fontSize: '11px' } },
-                                      pr.status
-                                  )
+                                  
                               );
                           })
                       )

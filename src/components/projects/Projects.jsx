@@ -5055,17 +5055,6 @@ const Projects = () => {
                         </button>
                         <button
                             type="button"
-                            onClick={() => openWeeklyFmsProgressHash()}
-                            className={`px-3.5 py-2.5 rounded-xl transition-all text-sm font-medium min-h-[44px] sm:min-h-0 flex items-center ${
-                                isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm'
-                            }`}
-                            aria-label="Open weekly FMS review progress tracker"
-                        >
-                            <i className="fas fa-calendar-week mr-2 text-xs" aria-hidden="true"></i>
-                            Weekly FMS
-                        </button>
-                        <button
-                            type="button"
                             onClick={handleAddProject}
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold min-h-[44px] sm:min-h-0 bg-primary-600 text-white hover:bg-primary-700 shadow-md shadow-primary-600/20 transition-colors"
                             aria-label="Create new project"
