@@ -18,8 +18,16 @@ const USER_SETTINGS_DEFAULTS = {
     emailProvider: 'gmail',
     googleCalendar: false,
     quickbooks: false,
-    slack: false
+    slack: false,
+    inventoryStockView: 'all'
 };
+
+const INVENTORY_STOCK_VIEW_OPTIONS = ['all', 'in_stock', 'out_of_stock'];
+
+function normalizeInventoryStockView(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return INVENTORY_STOCK_VIEW_OPTIONS.includes(normalized) ? normalized : null;
+}
 
 async function getCompanyName() {
     const system = await prisma.systemSettings.findUnique({
@@ -58,7 +66,8 @@ async function handler(req, res) {
                     emailProvider: userSettings.emailProvider ?? USER_SETTINGS_DEFAULTS.emailProvider,
                     googleCalendar: userSettings.googleCalendar ?? USER_SETTINGS_DEFAULTS.googleCalendar,
                     quickbooks: userSettings.quickbooks ?? USER_SETTINGS_DEFAULTS.quickbooks,
-                    slack: userSettings.slack ?? USER_SETTINGS_DEFAULTS.slack
+                    slack: userSettings.slack ?? USER_SETTINGS_DEFAULTS.slack,
+                    inventoryStockView: normalizeInventoryStockView(userSettings.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView
                 };
             }
             const companyName = await getCompanyName();
@@ -84,7 +93,10 @@ async function handler(req, res) {
                 emailProvider: body.emailProvider !== undefined ? body.emailProvider : undefined,
                 googleCalendar: body.googleCalendar !== undefined ? body.googleCalendar : undefined,
                 quickbooks: body.quickbooks !== undefined ? body.quickbooks : undefined,
-                slack: body.slack !== undefined ? body.slack : undefined
+                slack: body.slack !== undefined ? body.slack : undefined,
+                inventoryStockView: body.inventoryStockView !== undefined
+                    ? (normalizeInventoryStockView(body.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView)
+                    : undefined
             };
             const filtered = Object.fromEntries(Object.entries(update).filter(([, v]) => v !== undefined));
             const settings = await prisma.userSettings.upsert({

@@ -16,6 +16,11 @@ const getReactForError = () => window.React || ReactGlobal;
 
 const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'activity'];
 const INVENTORY_AUTO_REFRESH_INTERVAL_MS = 15000;
+const INVENTORY_STOCK_VIEW_OPTIONS = ['all', 'in_stock', 'out_of_stock'];
+const normalizeInventoryStockView = (value = 'all') => {
+  const normalized = (value || 'all').toString().toLowerCase();
+  return INVENTORY_STOCK_VIEW_OPTIONS.includes(normalized) ? normalized : 'all';
+};
 const normalizeManufacturingTab = (value = 'dashboard') => {
   const normalized = (value || 'dashboard').toLowerCase();
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
@@ -369,6 +374,7 @@ try {
   const [filterCategory, setFilterCategory] = useState('all');
   /** When true, inventory list shows only items flagged from stock-count import. */
   const [showCatalogReviewOnly, setShowCatalogReviewOnly] = useState(false);
+  const [inventoryStockView, setInventoryStockView] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
@@ -3261,6 +3267,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const name = (item.name || '').toString().toLowerCase();
       const sku = (item.sku || '').toString().toLowerCase();
       const category = (item.category || '').toString();
+      const metrics = getInventoryDetailMetrics(item);
       const matchesSearch = name.includes(searchTerm.toLowerCase()) || sku.includes(searchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'all' || category === filterCategory;
 
@@ -3287,9 +3294,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
       const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
       const matchesCatalogReview = !showCatalogReviewOnly || item.needsCatalogReview;
+      const matchesStockView = inventoryStockView === 'all' || metrics.status === inventoryStockView;
 
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart &&
-             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesBoxNumber && matchesType && matchesStatus && matchesLocation && matchesCatalogReview;
+             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesBoxNumber && matchesType && matchesStatus && matchesLocation && matchesCatalogReview && matchesStockView;
     });
 
     if (sortConfig.key) {
@@ -3355,11 +3363,43 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
 
     return filtered;
-  }, [inventory, searchTerm, filterCategory, columnFilters, sortConfig, showCatalogReviewOnly]);
+  }, [inventory, searchTerm, filterCategory, columnFilters, sortConfig, showCatalogReviewOnly, inventoryStockView]);
 
   useEffect(() => {
     setInventoryListPage(1);
-  }, [searchTerm, filterCategory, showCatalogReviewOnly, selectedLocationId, sortConfig.key, sortConfig.direction, columnFilters]);
+  }, [searchTerm, filterCategory, showCatalogReviewOnly, selectedLocationId, sortConfig.key, sortConfig.direction, columnFilters, inventoryStockView]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadInventoryStockView = async () => {
+      if (!window.DatabaseAPI?.getInventoryStockViewPreference) return;
+      try {
+        const savedMode = normalizeInventoryStockView(
+          await window.DatabaseAPI.getInventoryStockViewPreference()
+        );
+        if (!cancelled) {
+          setInventoryStockView(savedMode);
+        }
+      } catch (error) {
+        console.warn('Manufacturing: failed to load inventory stock view preference', error);
+      }
+    };
+    loadInventoryStockView();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, currentUser?.email]);
+
+  const handleInventoryStockViewChange = useCallback(async (nextMode) => {
+    const normalizedMode = normalizeInventoryStockView(nextMode);
+    setInventoryStockView(normalizedMode);
+    if (!window.DatabaseAPI?.updateInventoryStockViewPreference) return;
+    try {
+      await window.DatabaseAPI.updateInventoryStockViewPreference(normalizedMode);
+    } catch (error) {
+      console.warn('Manufacturing: failed to save inventory stock view preference', error);
+    }
+  }, []);
 
   useEffect(() => {
     const total = filteredInventoryList.length;
@@ -3500,6 +3540,41 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </option>
                 ))}
               </select>
+              <div className={`inline-flex rounded-lg border p-1 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                <button
+                  type="button"
+                  onClick={() => handleInventoryStockViewChange('all')}
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    inventoryStockView === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                  }`}
+                >
+                  Show All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInventoryStockViewChange('in_stock')}
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    inventoryStockView === 'in_stock'
+                      ? 'bg-blue-600 text-white'
+                      : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                  }`}
+                >
+                  In Stock
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInventoryStockViewChange('out_of_stock')}
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    inventoryStockView === 'out_of_stock'
+                      ? 'bg-blue-600 text-white'
+                      : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                  }`}
+                >
+                  Out of Stock
+                </button>
+              </div>
               <div className={`text-xs whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {invFilteredTotal === 0
                   ? `Showing 0 of ${inventory.length} in catalog`

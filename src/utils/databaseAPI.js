@@ -1614,6 +1614,17 @@ const DatabaseAPI = {
         return response;
     },
 
+    async getInventoryStockViewPreference() {
+        const response = await this.getSettings();
+        const settings = response?.data?.settings || response?.settings || {};
+        return settings.inventoryStockView || 'all';
+    },
+
+    async updateInventoryStockViewPreference(mode) {
+        const normalized = ['all', 'in_stock', 'out_of_stock'].includes(mode) ? mode : 'all';
+        return this.updateSettings({ inventoryStockView: normalized });
+    },
+
     // BULK OPERATIONS
     async bulkUpdateClients(clientsData) {
         const response = await this.makeRequest('/clients/bulk', {
