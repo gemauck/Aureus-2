@@ -3537,16 +3537,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         Out
                       </button>
                     </div>
-                    <div className={`rounded-md border px-2.5 py-1 min-w-[150px] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                      <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Stock Value
-                      </p>
-                      <p className="text-xs font-semibold leading-tight tabular-nums">
-                        {hasInventoryValueSummary ? formatCurrency(selectedLocationStockValue) : '—'}
-                      </p>
-                      <p className={`text-[10px] leading-tight truncate ${isDark ? 'text-gray-500' : 'text-gray-500'}`} title={selectedLocationLabel}>
-                        {selectedLocationLabel}
-                      </p>
+                    <div className={`rounded-md border px-2.5 py-1 min-w-[180px] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                      <div className="flex items-center gap-1.5 text-[11px] leading-none whitespace-nowrap">
+                        <span className={`uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Value</span>
+                        <span className="font-semibold tabular-nums">
+                          {hasInventoryValueSummary ? formatCurrency(selectedLocationStockValue) : '—'}
+                        </span>
+                        <span className={`${isDark ? 'text-gray-500' : 'text-gray-500'} truncate`} title={selectedLocationLabel}>
+                          {selectedLocationLabel}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
