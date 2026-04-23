@@ -3418,6 +3418,27 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   const renderInventoryView = () => {
     // Get unique categories from inventory items
     const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
+    const hasInventoryValueSummary =
+      inventoryValueByLocationSummaryLoaded && inventoryValueByLocationSummary != null;
+    const summaryLocations = Array.isArray(inventoryValueByLocationSummary?.locations)
+      ? inventoryValueByLocationSummary.locations
+      : [];
+    const selectedLocationMeta = selectedLocationId === 'all'
+      ? null
+      : stockLocations.find((loc) => String(loc.id) === String(selectedLocationId));
+    const selectedLocationValueRow = selectedLocationId === 'all'
+      ? null
+      : summaryLocations.find((row) => String(row.locationId) === String(selectedLocationId));
+    const selectedLocationLabel = selectedLocationId === 'all'
+      ? 'All Locations'
+      : (
+        [selectedLocationMeta?.code, selectedLocationMeta?.name]
+          .filter(Boolean)
+          .join(' - ') || 'Selected Location'
+      );
+    const selectedLocationStockValue = selectedLocationId === 'all'
+      ? Number(inventoryValueByLocationSummary?.grandTotal) || 0
+      : Number(selectedLocationValueRow?.totalValue) || 0;
 
     const filteredInventory = filteredInventoryList;
     const invFilteredTotal = filteredInventory.length;
@@ -3461,7 +3482,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         {/* Controls */}
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-3 flex-1">
+            <div className="flex flex-col xl:flex-row xl:items-start gap-3 flex-1">
               <div className="flex flex-col gap-1.5 min-w-[220px]">
                 {/* Location Selector */}
                 <select
@@ -3479,43 +3500,56 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </option>
                   ))}
                 </select>
-                <div className={`inline-flex w-fit rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                  <button
-                    type="button"
-                    onClick={() => handleInventoryStockViewChange('all')}
-                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                      inventoryStockView === 'all'
-                        ? 'bg-blue-600 text-white'
-                        : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                    }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInventoryStockViewChange('in_stock')}
-                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                      inventoryStockView === 'in_stock'
-                        ? 'bg-blue-600 text-white'
-                        : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                    }`}
-                  >
-                    In
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInventoryStockViewChange('out_of_stock')}
-                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                      inventoryStockView === 'out_of_stock'
-                        ? 'bg-blue-600 text-white'
-                        : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                    }`}
-                  >
-                    Out
-                  </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className={`inline-flex w-fit rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                    <button
+                      type="button"
+                      onClick={() => handleInventoryStockViewChange('all')}
+                      className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                        inventoryStockView === 'all'
+                          ? 'bg-blue-600 text-white'
+                          : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInventoryStockViewChange('in_stock')}
+                      className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                        inventoryStockView === 'in_stock'
+                          ? 'bg-blue-600 text-white'
+                          : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                      }`}
+                    >
+                      In
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInventoryStockViewChange('out_of_stock')}
+                      className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                        inventoryStockView === 'out_of_stock'
+                          ? 'bg-blue-600 text-white'
+                          : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                      }`}
+                    >
+                      Out
+                    </button>
+                  </div>
+                  <div className={`rounded-md border px-2.5 py-1 min-w-[170px] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                    <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Stock Value
+                    </p>
+                    <p className="text-xs font-semibold leading-tight tabular-nums">
+                      {hasInventoryValueSummary ? formatCurrency(selectedLocationStockValue) : '—'}
+                    </p>
+                    <p className={`text-[10px] leading-tight truncate ${isDark ? 'text-gray-500' : 'text-gray-500'}`} title={selectedLocationLabel}>
+                      {selectedLocationLabel}
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="relative flex-1 max-w-md">
+              <div className="relative flex-1 min-w-[220px] xl:max-w-md">
                 <i className={`fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                 <input
                   key="inventory-search-input"
@@ -3583,7 +3617,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   : `Showing ${invPageStart + 1}–${Math.min(invPageStart + INVENTORY_LIST_PAGE_SIZE, invFilteredTotal)} of ${invFilteredTotal} (${inventory.length} in catalog)`}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <button
                 onClick={refreshAllManufacturingData}
                 className={`px-4 py-2.5 text-sm rounded-lg border transition-all duration-200 flex items-center gap-2 ${
