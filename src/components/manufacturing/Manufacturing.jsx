@@ -3617,10 +3617,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   : `Showing ${invPageStart + 1}–${Math.min(invPageStart + INVENTORY_LIST_PAGE_SIZE, invFilteredTotal)} of ${invFilteredTotal} (${inventory.length} in catalog)`}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
               <button
                 onClick={refreshAllManufacturingData}
-                className={`px-4 py-2.5 text-sm rounded-lg border transition-all duration-200 flex items-center gap-2 ${
+                className={`px-2.5 py-1.5 text-xs rounded-md border transition-all duration-200 flex items-center gap-1.5 ${
                   isRefreshing
                     ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700' : 'bg-gray-100 text-gray-500 border-gray-200'
                     : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200'
@@ -3633,13 +3633,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </button>
               <button
                 onClick={handleDownloadTemplate}
-                className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
+                className={`px-2.5 py-1.5 text-xs rounded-md flex items-center gap-1.5 border transition-all duration-200 ${
                   isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
                 }`}
                 title="Download Excel template with dropdowns for bulk upload"
               >
                 <i className="fas fa-file-download text-xs"></i>
-                Download Template
+                Template
               </button>
               <input
                 ref={fileInputRef}
@@ -3652,7 +3652,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <button
                   onClick={handleBulkUploadClick}
                   disabled={isBulkUploading}
-                  className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
+                  className={`px-2.5 py-1.5 text-xs rounded-md flex items-center gap-1.5 border transition-all duration-200 ${
                     isBulkUploading
                       ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
                       : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
@@ -3660,13 +3660,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   title="Upload CSV or Excel file to bulk import inventory items"
                 >
                   <i className={`${isBulkUploading ? 'fas fa-spinner animate-spin' : 'fas fa-upload'} text-xs`}></i>
-                  {isBulkUploading ? `Uploading... ${bulkUploadProgress.total > 0 ? `(${bulkUploadProgress.current}/${bulkUploadProgress.total})` : ''}` : 'Bulk Upload'}
+                  {isBulkUploading ? `Uploading... ${bulkUploadProgress.total > 0 ? `(${bulkUploadProgress.current}/${bulkUploadProgress.total})` : ''}` : 'Upload'}
                 </button>
               ) : null}
               <button
                 onClick={handleExportInventory}
                 disabled={isExportingInventory}
-                className={`px-4 py-2.5 text-sm rounded-lg flex items-center gap-2 border transition-all duration-200 ${
+                className={`px-2.5 py-1.5 text-xs rounded-md flex items-center gap-1.5 border transition-all duration-200 ${
                   isExportingInventory
                     ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
                     : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
@@ -3679,7 +3679,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               {isAdmin ? (
                 <button
                   onClick={openAddItemModal}
-                  className="px-4 py-2.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 transition-all duration-200"
+                  className="px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-1.5 transition-all duration-200"
                 >
                   <i className="fas fa-plus text-xs"></i>
                   Add Item
