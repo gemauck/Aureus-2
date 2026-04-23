@@ -3513,6 +3513,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     ))}
                   </select>
                   <div className="flex flex-wrap items-center gap-2">
+                    <span className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Stock
+                    </span>
                     <div className={`inline-flex w-fit rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
                       <button
                         type="button"
