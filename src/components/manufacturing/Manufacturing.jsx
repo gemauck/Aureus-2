@@ -3489,7 +3489,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <select
                     value={selectedLocationId}
                     onChange={(e) => setSelectedLocationId(e.target.value)}
-                    className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
+                    className={`w-full px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
                       isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
                     }`}
                     title="Select Stock Location"
@@ -3594,7 +3594,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         activeInputRef.current = null;
                       }, 300);
                     }}
-                    className={`w-full pl-9 pr-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                    className={`w-full pl-8 pr-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
                       isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
                     }`}
                   />
@@ -3603,7 +3603,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
-                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors md:col-span-1 xl:col-span-3 ${
+                  className={`w-full px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors md:col-span-1 xl:col-span-3 ${
                     isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
                   }`}
                 >
@@ -3879,11 +3879,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             ref={inventoryTableScrollRef}
             className="inventory-desktop-xscroll overflow-x-auto rounded-t-lg"
           >
-            <table className="w-full min-w-max">
+            <table className="w-full min-w-max text-[12px]">
               <thead className="bg-gray-50 border-b border-gray-200">
                 {/* Header Row */}
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('sku', e)}
@@ -3894,8 +3894,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('sku')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Image</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Image</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('name', e)}
@@ -3906,10 +3906,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('name')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Supplier Part No.</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Manufacturing Part Number</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Abcotronics Part Number (Legacy)</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Supplier Part No.</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Manufacturing Part Number</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Abcotronics Part Number (Legacy)</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('category', e)}
@@ -3920,8 +3920,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('category')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Box Number</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Box Number</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('type', e)}
@@ -3932,7 +3932,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('type')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('quantity', e)}
@@ -3943,7 +3943,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('quantity')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('allocated', e)}
@@ -3954,7 +3954,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('allocated')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('available', e)}
@@ -3965,7 +3965,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('available')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('location', e)}
@@ -3976,7 +3976,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('location')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('unitCost', e)}
@@ -3987,7 +3987,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('unitCost')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('totalValue', e)}
@@ -3998,7 +3998,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('totalValue')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('status', e)}
@@ -4009,11 +4009,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('status')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Actions</th>
                 </tr>
                 {/* Filter Row */}
                 <tr key="inventory-filter-row" className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-sku-input"
                       ref={(el) => { if (el) filterInputRefs.current.sku = el; }}
@@ -4041,8 +4041,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2"></th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-name-input"
                       ref={(el) => { if (el) filterInputRefs.current.name = el; }}
@@ -4066,7 +4066,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-supplier-input"
                       ref={(el) => { if (el) filterInputRefs.current.supplierPart = el; }}
@@ -4090,7 +4090,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-mfg-part-input"
                       ref={(el) => { if (el) filterInputRefs.current.manufacturingPart = el; }}
@@ -4114,7 +4114,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-legacy-part-input"
                       ref={(el) => { if (el) filterInputRefs.current.legacyPart = el; }}
@@ -4138,7 +4138,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-category-input"
                       ref={(el) => { if (el) filterInputRefs.current.category = el; }}
@@ -4162,7 +4162,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-boxNumber-input"
                       ref={(el) => { if (el) filterInputRefs.current.boxNumber = el; }}
@@ -4186,7 +4186,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-type-input"
                       ref={(el) => { if (el) filterInputRefs.current.type = el; }}
@@ -4210,10 +4210,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2"></th>
-                  <th className="px-3 py-2"></th>
-                  <th className="px-3 py-2"></th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-location-input"
                       ref={(el) => { if (el) filterInputRefs.current.location = el; }}
@@ -4237,9 +4237,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2"></th>
-                  <th className="px-3 py-2"></th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5">
                     <input
                       key="filter-status-input"
                       ref={(el) => { if (el) filterInputRefs.current.status = el; }}
@@ -4263,7 +4263,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-3 py-1.5">
                     {(Object.keys(columnFilters).length > 0) && (
                       <button
                         onClick={() => setColumnFilters({})}
@@ -4286,8 +4286,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => setViewingInventoryItemDetail(item)}
                     >
-                    <td className="px-3 py-2 text-sm font-medium text-gray-900">{item.sku}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5 text-xs font-medium text-gray-900">{item.sku}</td>
+                    <td className="px-3 py-1.5">
                       {item.thumbnail ? (
                         <>
                           <img 
@@ -4314,13 +4314,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                    <td className="px-3 py-1.5">
+                      <div className="text-xs font-medium text-gray-900">{item.name}</div>
                       {item.reorderPoint > 0 && (
                         <div className="text-xs text-gray-500">Reorder: {item.reorderPoint} {item.unit}</div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-600">
+                    <td className="px-3 py-1.5 text-xs text-gray-600">
                       {(() => {
                         try {
                           const supplierParts = (item.supplierPartNumbers !== undefined && item.supplierPartNumbers !== null)
@@ -4343,29 +4343,29 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         }
                       })()}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-600">
+                    <td className="px-3 py-1.5 text-xs text-gray-600">
                       {(item.manufacturingPartNumber !== undefined && item.manufacturingPartNumber) 
                         ? item.manufacturingPartNumber 
                         : <span className="text-gray-400">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-600">
+                    <td className="px-3 py-1.5 text-xs text-gray-600">
                       {(item.legacyPartNumber !== undefined && item.legacyPartNumber) 
                         ? item.legacyPartNumber 
                         : <span className="text-gray-400">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{item.boxNumber || '—'}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600 capitalize">
+                    <td className="px-3 py-1.5 text-xs text-gray-600 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</td>
+                    <td className="px-3 py-1.5 text-xs text-gray-600">{item.boxNumber || '—'}</td>
+                    <td className="px-3 py-1.5 text-xs text-gray-600 capitalize">
                       {item.type === 'final_product'
                         ? 'Final Product'
                         : item.type === 'component'
                           ? 'Component'
                           : (item.type || '').replace('_', ' ')}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1.5 text-right">
                       {item.type === 'final_product' ? (
                         <div className="space-y-1">
-                          <div className="text-sm font-semibold text-gray-900">Total: {item.quantity || 0}</div>
+                          <div className="text-xs font-semibold text-gray-900">Total: {item.quantity || 0}</div>
                           <div className="text-xs">
                             <span className="text-orange-600">In-Prod: {(item.inProductionQuantity || 0)}</span>
                             {' • '}
@@ -4375,36 +4375,36 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         </div>
                       ) : (
                         <>
-                          <div className={`text-sm font-semibold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
+                          <div className={`text-xs font-semibold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
                           <div className="text-xs text-gray-500">{item.unit}</div>
                         </>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="text-sm font-medium text-yellow-700">{(item.allocatedQuantity || 0)}</div>
+                    <td className="px-3 py-1.5 text-right">
+                      <div className="text-xs font-medium text-yellow-700">{(item.allocatedQuantity || 0)}</div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className={`text-sm font-semibold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                    <td className="px-3 py-1.5 text-right">
+                      <div className={`text-xs font-semibold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>
                         {availableQty}
                       </div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-600">
+                    <td className="px-3 py-1.5 text-xs text-gray-600">
                       {item.location ? item.location : <span className="text-gray-400">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-sm text-right text-gray-900">
+                    <td className="px-3 py-1.5 text-xs text-right text-gray-900">
                       {item.unitCost > 0 ? formatCurrency(item.unitCost) : <span className="text-gray-400">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
+                    <td className="px-3 py-1.5 text-xs font-semibold text-right text-gray-900">
                       {lineTotalValue > 0 ? formatCurrency(lineTotalValue) : <span className="text-gray-400">-</span>}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(item.status || '')}`}>
                           {(item.status || '').replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => { setSelectedItem(item); setModalType('view_item'); setShowModal(true); }}
