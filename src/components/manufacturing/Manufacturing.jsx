@@ -3617,30 +3617,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   : `Showing ${invPageStart + 1}–${Math.min(invPageStart + INVENTORY_LIST_PAGE_SIZE, invFilteredTotal)} of ${invFilteredTotal} (${inventory.length} in catalog)`}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
-              <button
-                onClick={refreshAllManufacturingData}
-                className={`px-2.5 py-1.5 text-xs rounded-md border transition-all duration-200 flex items-center gap-1.5 ${
-                  isRefreshing
-                    ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700' : 'bg-gray-100 text-gray-500 border-gray-200'
-                    : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200'
-                }`}
-                disabled={isRefreshing}
-                title="Force refresh from server"
-              >
-                <i className={`fas fa-rotate-right text-xs ${isRefreshing ? 'animate-spin' : ''}`}></i>
-                {isRefreshing ? 'Refreshing…' : 'Refresh'}
-              </button>
-              <button
-                onClick={handleDownloadTemplate}
-                className={`px-2.5 py-1.5 text-xs rounded-md flex items-center gap-1.5 border transition-all duration-200 ${
-                  isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
-                }`}
-                title="Download Excel template with dropdowns for bulk upload"
-              >
-                <i className="fas fa-file-download text-xs"></i>
-                Template
-              </button>
+            <div className="flex flex-wrap items-center gap-1 xl:justify-end">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -3648,25 +3625,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 onChange={handleFileInputChange}
                 className="sr-only"
               />
-              {isAdmin ? (
-                <button
-                  onClick={handleBulkUploadClick}
-                  disabled={isBulkUploading}
-                  className={`px-2.5 py-1.5 text-xs rounded-md flex items-center gap-1.5 border transition-all duration-200 ${
-                    isBulkUploading
-                      ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
-                      : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
-                  }`}
-                  title="Upload CSV or Excel file to bulk import inventory items"
-                >
-                  <i className={`${isBulkUploading ? 'fas fa-spinner animate-spin' : 'fas fa-upload'} text-xs`}></i>
-                  {isBulkUploading ? `Uploading... ${bulkUploadProgress.total > 0 ? `(${bulkUploadProgress.current}/${bulkUploadProgress.total})` : ''}` : 'Upload'}
-                </button>
-              ) : null}
               <button
                 onClick={handleExportInventory}
                 disabled={isExportingInventory}
-                className={`px-2.5 py-1.5 text-xs rounded-md flex items-center gap-1.5 border transition-all duration-200 ${
+                className={`px-2 py-1 text-[11px] rounded-md flex items-center gap-1 border transition-all duration-200 ${
                   isExportingInventory
                     ? isDark ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
                     : isDark ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
@@ -3679,7 +3641,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               {isAdmin ? (
                 <button
                   onClick={openAddItemModal}
-                  className="px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-1.5 transition-all duration-200"
+                  className="px-2 py-1 text-[11px] bg-blue-500 text-white rounded-md hover:bg-blue-600 flex items-center gap-1 transition-all duration-200"
                 >
                   <i className="fas fa-plus text-xs"></i>
                   Add Item
