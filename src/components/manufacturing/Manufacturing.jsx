@@ -3485,118 +3485,121 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 items-start min-w-0">
                 <div className="flex flex-col gap-1.5 min-w-0 md:col-span-2 xl:col-span-5">
-                {/* Location Selector */}
-                <select
-                  value={selectedLocationId}
-                  onChange={(e) => setSelectedLocationId(e.target.value)}
-                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
-                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
-                  }`}
-                  title="Select Stock Location"
-                >
-                  <option value="all">All Locations</option>
-                  {stockLocations.map(loc => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.code} - {loc.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className={`inline-flex w-fit rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                    <button
-                      type="button"
-                      onClick={() => handleInventoryStockViewChange('all')}
-                      className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                        inventoryStockView === 'all'
-                          ? 'bg-blue-600 text-white'
-                          : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                      }`}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleInventoryStockViewChange('in_stock')}
-                      className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                        inventoryStockView === 'in_stock'
-                          ? 'bg-blue-600 text-white'
-                          : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                      }`}
-                    >
-                      In
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleInventoryStockViewChange('out_of_stock')}
-                      className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                        inventoryStockView === 'out_of_stock'
-                          ? 'bg-blue-600 text-white'
-                          : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                      }`}
-                    >
-                      Out
-                    </button>
-                  </div>
-                  <div className={`rounded-md border px-2.5 py-1 min-w-[150px] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                    <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Stock Value
-                    </p>
-                    <p className="text-xs font-semibold leading-tight tabular-nums">
-                      {hasInventoryValueSummary ? formatCurrency(selectedLocationStockValue) : '—'}
-                    </p>
-                    <p className={`text-[10px] leading-tight truncate ${isDark ? 'text-gray-500' : 'text-gray-500'}`} title={selectedLocationLabel}>
-                      {selectedLocationLabel}
-                    </p>
+                  {/* Location Selector */}
+                  <select
+                    value={selectedLocationId}
+                    onChange={(e) => setSelectedLocationId(e.target.value)}
+                    className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
+                      isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                    }`}
+                    title="Select Stock Location"
+                  >
+                    <option value="all">All Locations</option>
+                    {stockLocations.map(loc => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.code} - {loc.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className={`inline-flex w-fit rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                      <button
+                        type="button"
+                        onClick={() => handleInventoryStockViewChange('all')}
+                        className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                          inventoryStockView === 'all'
+                            ? 'bg-blue-600 text-white'
+                            : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInventoryStockViewChange('in_stock')}
+                        className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                          inventoryStockView === 'in_stock'
+                            ? 'bg-blue-600 text-white'
+                            : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        In
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInventoryStockViewChange('out_of_stock')}
+                        className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                          inventoryStockView === 'out_of_stock'
+                            ? 'bg-blue-600 text-white'
+                            : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        Out
+                      </button>
+                    </div>
+                    <div className={`rounded-md border px-2.5 py-1 min-w-[150px] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                      <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Stock Value
+                      </p>
+                      <p className="text-xs font-semibold leading-tight tabular-nums">
+                        {hasInventoryValueSummary ? formatCurrency(selectedLocationStockValue) : '—'}
+                      </p>
+                      <p className={`text-[10px] leading-tight truncate ${isDark ? 'text-gray-500' : 'text-gray-500'}`} title={selectedLocationLabel}>
+                        {selectedLocationLabel}
+                      </p>
+                    </div>
                   </div>
                 </div>
+
                 <div className="relative min-w-0 md:col-span-1 xl:col-span-4">
-                <i className={`fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
-                <input
-                  key="inventory-search-input"
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search by name or SKU..."
-                  defaultValue={searchTerm}
-                  onFocus={(e) => {
-                    isUserTypingRef.current = true;
-                    activeInputRef.current = e.target;
-                    searchInputRef.current = e.target;
-                  }}
-                  onBlur={(e) => {
-                    // Sync value to state on blur
-                    setSearchTerm(e.target.value);
-                    setTimeout(() => {
-                      if (document.activeElement !== activeInputRef.current) {
+                  <i className={`fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                  <input
+                    key="inventory-search-input"
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search by name or SKU..."
+                    defaultValue={searchTerm}
+                    onFocus={(e) => {
+                      isUserTypingRef.current = true;
+                      activeInputRef.current = e.target;
+                      searchInputRef.current = e.target;
+                    }}
+                    onBlur={(e) => {
+                      // Sync value to state on blur
+                      setSearchTerm(e.target.value);
+                      setTimeout(() => {
+                        if (document.activeElement !== activeInputRef.current) {
+                          isUserTypingRef.current = false;
+                          activeInputRef.current = null;
+                        }
+                      }, 100);
+                    }}
+                    onChange={(e) => {
+                      // Mark that user is typing
+                      isUserTypingRef.current = true;
+                      activeInputRef.current = e.target;
+
+                      // Update ref immediately for filtering
+                      searchTermRef.current = e.target.value;
+
+                      // Clear existing timeout
+                      if (typingTimeoutRef.current) {
+                        clearTimeout(typingTimeoutRef.current);
+                      }
+
+                      // Update state after user stops typing (debounced)
+                      typingTimeoutRef.current = setTimeout(() => {
+                        setSearchTerm(e.target.value);
                         isUserTypingRef.current = false;
                         activeInputRef.current = null;
-                      }
-                    }, 100);
-                  }}
-                  onChange={(e) => {
-                    // Mark that user is typing
-                    isUserTypingRef.current = true;
-                    activeInputRef.current = e.target;
-                    
-                    // Update ref immediately for filtering
-                    searchTermRef.current = e.target.value;
-                    
-                    // Clear existing timeout
-                    if (typingTimeoutRef.current) {
-                      clearTimeout(typingTimeoutRef.current);
-                    }
-                    
-                    // Update state after user stops typing (debounced)
-                    typingTimeoutRef.current = setTimeout(() => {
-                      setSearchTerm(e.target.value);
-                      isUserTypingRef.current = false;
-                      activeInputRef.current = null;
-                    }, 300);
-                  }}
-                  className={`w-full pl-9 pr-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
-                  }`}
-                />
+                      }, 300);
+                    }}
+                    className={`w-full pl-9 pr-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                      isDark ? 'bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
+                    }`}
+                  />
                 </div>
+
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
@@ -3612,6 +3615,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   ))}
                 </select>
               </div>
+
               <div className="flex flex-wrap items-center gap-1 justify-start xl:justify-end xl:pl-2">
                 <button
                   onClick={handleExportInventory}
@@ -3637,6 +3641,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 ) : null}
               </div>
             </div>
+
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {invFilteredTotal === 0
