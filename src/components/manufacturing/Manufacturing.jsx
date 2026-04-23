@@ -3462,22 +3462,59 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
             <div className="flex flex-col lg:flex-row lg:items-center gap-3 flex-1">
-              {/* Location Selector */}
-              <select
-                value={selectedLocationId}
-                onChange={(e) => setSelectedLocationId(e.target.value)}
-                className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
-                  isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
-                }`}
-                title="Select Stock Location"
-              >
-                <option value="all">All Locations</option>
-                {stockLocations.map(loc => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.code} - {loc.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-col gap-1.5 min-w-[220px]">
+                {/* Location Selector */}
+                <select
+                  value={selectedLocationId}
+                  onChange={(e) => setSelectedLocationId(e.target.value)}
+                  className={`px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
+                    isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
+                  }`}
+                  title="Select Stock Location"
+                >
+                  <option value="all">All Locations</option>
+                  {stockLocations.map(loc => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.code} - {loc.name}
+                    </option>
+                  ))}
+                </select>
+                <div className={`inline-flex w-fit rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                  <button
+                    type="button"
+                    onClick={() => handleInventoryStockViewChange('all')}
+                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                      inventoryStockView === 'all'
+                        ? 'bg-blue-600 text-white'
+                        : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInventoryStockViewChange('in_stock')}
+                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                      inventoryStockView === 'in_stock'
+                        ? 'bg-blue-600 text-white'
+                        : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                    }`}
+                  >
+                    In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInventoryStockViewChange('out_of_stock')}
+                    className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
+                      inventoryStockView === 'out_of_stock'
+                        ? 'bg-blue-600 text-white'
+                        : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                    }`}
+                  >
+                    Out
+                  </button>
+                </div>
+              </div>
               <div className="relative flex-1 max-w-md">
                 <i className={`fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                 <input
@@ -3540,41 +3577,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </option>
                 ))}
               </select>
-              <div className={`inline-flex rounded-lg border p-1 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                <button
-                  type="button"
-                  onClick={() => handleInventoryStockViewChange('all')}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    inventoryStockView === 'all'
-                      ? 'bg-blue-600 text-white'
-                      : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                  }`}
-                >
-                  Show All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleInventoryStockViewChange('in_stock')}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    inventoryStockView === 'in_stock'
-                      ? 'bg-blue-600 text-white'
-                      : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                  }`}
-                >
-                  In Stock
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleInventoryStockViewChange('out_of_stock')}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    inventoryStockView === 'out_of_stock'
-                      ? 'bg-blue-600 text-white'
-                      : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
-                  }`}
-                >
-                  Out of Stock
-                </button>
-              </div>
               <div className={`text-xs whitespace-nowrap ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {invFilteredTotal === 0
                   ? `Showing 0 of ${inventory.length} in catalog`
