@@ -564,10 +564,91 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
 const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects }) => {
     const m = typeof window !== 'undefined' ? window.projectProgressMonthMetrics : null;
     const last = React.useMemo(() => (m ? m.getLastWorkingMonth() : null), [m]);
+
+    // List API is slim: no document/compliance/data sections. Hydrate from /projects/:id (same as ProjectProgressTracker).
+    const trackerIdsKey = React.useMemo(() => {
+        if (!m || !projects || !projects.length) return '';
+        return m
+            .filterProjectsForProgressTracker(projects)
+            .map((p) => String(p.id))
+            .sort()
+            .join(',');
+    }, [m, projects]);
+
+    const [sectionDetails, setSectionDetails] = React.useState({});
+    const [hydrationLoading, setHydrationLoading] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!m || !trackerIdsKey) {
+            setSectionDetails({});
+            setHydrationLoading(false);
+            return;
+        }
+        const ids = trackerIdsKey.split(',').filter(Boolean);
+        if (ids.length === 0) {
+            setSectionDetails({});
+            setHydrationLoading(false);
+            return;
+        }
+        if (!window.DatabaseAPI || typeof window.DatabaseAPI.getProject !== 'function') {
+            setHydrationLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setHydrationLoading(true);
+
+        (async () => {
+            try {
+                const results = await Promise.allSettled(
+                    ids.map((id) => window.DatabaseAPI.getProject(id, { forceRefresh: false }))
+                );
+                if (cancelled) return;
+                const next = {};
+                results.forEach((result) => {
+                    if (result.status !== 'fulfilled') return;
+                    const detail = result.value?.data?.project || result.value?.project;
+                    if (!detail || detail.id == null) return;
+                    next[String(detail.id)] = {
+                        documentSections: detail.documentSections,
+                        complianceReviewSections: detail.complianceReviewSections,
+                        monthlyDataReviewSections: detail.monthlyDataReviewSections
+                    };
+                });
+                setSectionDetails(next);
+            } catch (e) {
+                console.warn('LastWorkingMonthProgressWidget: failed to load project details', e);
+            } finally {
+                if (!cancelled) {
+                    setHydrationLoading(false);
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [m, trackerIdsKey]);
+
+    const mergedProjects = React.useMemo(() => {
+        if (!m || !projects) return [];
+        const list = m.filterProjectsForProgressTracker(projects).map(m.normalizeProjectMonthlyProgress);
+        return list.map((p) => {
+            const d = sectionDetails[String(p.id)];
+            if (!d) return p;
+            return m.normalizeProjectMonthlyProgress({
+                ...p,
+                documentSections: d.documentSections != null ? d.documentSections : p.documentSections,
+                complianceReviewSections: d.complianceReviewSections != null ? d.complianceReviewSections : p.complianceReviewSections,
+                monthlyDataReviewSections: d.monthlyDataReviewSections != null ? d.monthlyDataReviewSections : p.monthlyDataReviewSections
+            });
+        });
+    }, [m, projects, sectionDetails]);
+
     const rows = React.useMemo(() => {
         if (!m || !last) return [];
-        return m.buildSnapshotRows(projects || [], last);
-    }, [m, last, projects]);
+        return m.buildSnapshotRows(mergedProjects, last);
+    }, [m, last, mergedProjects]);
 
     const borderSep = isDark ? 'border-gray-800' : 'border-gray-100';
     const tableHead = isDark ? 'text-gray-500' : 'text-gray-500';
@@ -626,6 +707,11 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
             {rows.length === 0 ? (
                 <p className={`text-sm ${subText}`}>
                     No projects are opted into the monthly progress tracker. Enable &quot;Include in progress tracker&quot; on a project, or open Projects to review.
+                </p>
+            ) : hydrationLoading ? (
+                <p className={`text-sm ${subText} border-t ${borderSep} pt-3`}>
+                    <i className="fas fa-circle-notch fa-spin text-primary-500 mr-2" aria-hidden="true" />
+                    Loading project metrics (document, compliance, and data review sections)…
                 </p>
             ) : (
                 <div className={`overflow-x-auto -mx-1 min-h-0 max-h-80 overflow-y-auto border-t ${borderSep} pt-3`}>
