@@ -560,6 +560,198 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     );
 };
 
+/** Last calendar month’s working progress (doc / compliance / data / comments) for projects opted into the monthly tracker. */
+const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects }) => {
+    const m = typeof window !== 'undefined' ? window.projectProgressMonthMetrics : null;
+    const last = React.useMemo(() => (m ? m.getLastWorkingMonth() : null), [m]);
+    const rows = React.useMemo(() => {
+        if (!m || !last) return [];
+        return m.buildSnapshotRows(projects || [], last);
+    }, [m, last, projects]);
+
+    const borderSep = isDark ? 'border-gray-800' : 'border-gray-100';
+    const tableHead = isDark ? 'text-gray-500' : 'text-gray-500';
+    const barBg = isDark ? 'bg-gray-800' : 'bg-gray-200';
+
+    const fmtPct = (p) => (p == null || Number.isNaN(p) ? '—' : `${p}%`);
+    const fmtRatio = (done, tot) => (tot > 0 ? `${done}/${tot}` : '');
+
+    if (!m || !last) {
+        return (
+            <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
+                <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Last working month</h3>
+                <p className={`text-sm ${subText}`}>Progress metrics are loading…</p>
+            </div>
+        );
+    }
+
+    const trackHref = m.buildProgressTrackerLink(
+        rows[0]?.id,
+        last.monthName,
+        last.monthIndex,
+        last.year,
+        'comments'
+    );
+
+    return (
+        <div className={`${cardBase} border rounded-xl p-5 shadow-sm flex flex-col min-h-0`}>
+            <div className="flex items-start justify-between gap-2 mb-3">
+                <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className={`text-sm font-semibold ${headerText}`}>Project progress</h3>
+                        <span
+                            className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                            style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#1d4ed8' }}
+                        >
+                            {last.shortLabel}
+                        </span>
+                        <span
+                            className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                        >
+                            Working
+                        </span>
+                    </div>
+                    <p className={`text-xs mt-0.5 ${subText}`}>
+                        {last.monthName} {last.year} — same month highlighted in Project Progress Tracker
+                    </p>
+                </div>
+                <a
+                    href={trackHref}
+                    className="text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 whitespace-nowrap"
+                >
+                    Open tracker
+                </a>
+            </div>
+
+            {rows.length === 0 ? (
+                <p className={`text-sm ${subText}`}>
+                    No projects are opted into the monthly progress tracker. Enable &quot;Include in progress tracker&quot; on a project, or open Projects to review.
+                </p>
+            ) : (
+                <div className={`overflow-x-auto -mx-1 min-h-0 max-h-80 overflow-y-auto border-t ${borderSep} pt-3`}>
+                    <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr className={`${tableHead} uppercase tracking-wide`}>
+                                <th className="pr-2 pb-2 font-medium">Project</th>
+                                <th className="pr-2 pb-2 font-medium text-center w-20" style={{ color: '#2563eb' }}>Docs</th>
+                                <th className="pr-2 pb-2 font-medium text-center w-20" style={{ color: '#7c3aed' }}>Comp.</th>
+                                <th className="pr-2 pb-2 font-medium text-center w-20" style={{ color: '#059669' }}>Data</th>
+                                <th className="pb-2 font-medium min-w-[7rem]">Comment</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((row) => {
+                                const docL = m.buildProjectReviewTabLink(
+                                    row.id,
+                                    'documentCollection',
+                                    row.monthName,
+                                    row.monthIndex,
+                                    row.year
+                                );
+                                const compL = m.buildProjectReviewTabLink(
+                                    row.id,
+                                    'complianceReview',
+                                    row.monthName,
+                                    row.monthIndex,
+                                    row.year
+                                );
+                                const dataL = m.buildProjectReviewTabLink(
+                                    row.id,
+                                    'monthlyDataReview',
+                                    row.monthName,
+                                    row.monthIndex,
+                                    row.year
+                                );
+                                return (
+                                    <tr key={String(row.id)} className={`border-t ${borderSep} align-top`}>
+                                        <td className="py-2 pr-2">
+                                            <a
+                                                href={docL}
+                                                className={`font-medium ${headerText} hover:text-primary-600 line-clamp-2`}
+                                            >
+                                                {row.name}
+                                            </a>
+                                            {row.client ? (
+                                                <div className={`text-[10px] ${subText} truncate max-w-[10rem]`} title={row.client}>
+                                                    {row.client}
+                                                </div>
+                                            ) : null}
+                                        </td>
+                                        <td className="py-2 pr-2 text-center">
+                                            <a href={docL} className="block" title="Open document collection">
+                                                <div className={`font-semibold ${headerText}`}>{fmtPct(row.doc.percent)}</div>
+                                                <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
+                                                    <div
+                                                        className="h-full rounded-full transition-all"
+                                                        style={{
+                                                            width: `${row.doc.percent != null ? Math.min(100, row.doc.percent) : 0}%`,
+                                                            background: '#3b82f6'
+                                                        }}
+                                                    />
+                                                </div>
+                                                {row.doc.total > 0 ? (
+                                                    <div className={`text-[10px] ${subText} mt-0.5`}>{fmtRatio(row.doc.completed, row.doc.total)}</div>
+                                                ) : null}
+                                            </a>
+                                        </td>
+                                        <td className="py-2 pr-2 text-center">
+                                            <a href={compL} className="block" title="Open compliance review">
+                                                <div className={`font-semibold ${headerText}`}>{fmtPct(row.compliance.percent)}</div>
+                                                <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
+                                                    <div
+                                                        className="h-full rounded-full"
+                                                        style={{
+                                                            width: `${row.compliance.percent != null ? Math.min(100, row.compliance.percent) : 0}%`,
+                                                            background: '#8b5cf6'
+                                                        }}
+                                                    />
+                                                </div>
+                                                {row.compliance.total > 0 ? (
+                                                    <div className={`text-[10px] ${subText} mt-0.5`}>
+                                                        {fmtRatio(row.compliance.completed, row.compliance.total)}
+                                                    </div>
+                                                ) : null}
+                                            </a>
+                                        </td>
+                                        <td className="py-2 pr-2 text-center">
+                                            <a href={dataL} className="block" title="Open monthly data review">
+                                                <div className={`font-semibold ${headerText}`}>{fmtPct(row.data.percent)}</div>
+                                                <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
+                                                    <div
+                                                        className="h-full rounded-full"
+                                                        style={{
+                                                            width: `${row.data.percent != null ? Math.min(100, row.data.percent) : 0}%`,
+                                                            background: '#10b981'
+                                                        }}
+                                                    />
+                                                </div>
+                                                {row.data.total > 0 ? (
+                                                    <div className={`text-[10px] ${subText} mt-0.5`}>
+                                                        {fmtRatio(row.data.completed, row.data.total)}
+                                                    </div>
+                                                ) : null}
+                                            </a>
+                                        </td>
+                                        <td className="py-2 text-[10px]">
+                                            {row.comments && String(row.comments).trim() ? (
+                                                <p className={`line-clamp-3 ${subText} whitespace-pre-wrap`} title={row.comments}>
+                                                    {row.comments}
+                                                </p>
+                                            ) : (
+                                                <span className="text-gray-400">—</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const DashboardLive = () => {
     // Version indicator - logged to console for verification
     React.useEffect(() => {
@@ -596,6 +788,8 @@ const DashboardLive = () => {
     const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
     const [liveSyncStatus, setLiveSyncStatus] = useState('disconnected');
     const { isDark } = window.useTheme();
+    const isDashboardAdmin =
+        typeof window.isAdminRole === 'function' && window.isAdminRole(window.storage?.getUser?.()?.role);
     const [userName, setUserName] = useState('User');
     const [calendarReady, setCalendarReady] = useState(false);
     const [manageOpen, setManageOpen] = useState(false);
@@ -816,6 +1010,24 @@ const DashboardLive = () => {
                 title: 'My Tasks',
                 render: () => <MyProjectTasksWidget cardBase={cardBase} headerText={headerText} subText={subText} isDark={isDark} />
             },
+            ...(isDashboardAdmin
+                ? [
+                      {
+                          id: 'last-working-month-progress',
+                          group: 'Projects',
+                          title: 'Last working month',
+                          render: (data) => (
+                              <LastWorkingMonthProgressWidget
+                                  cardBase={cardBase}
+                                  headerText={headerText}
+                                  subText={subText}
+                                  isDark={isDark}
+                                  projects={data.projects}
+                              />
+                          )
+                      }
+                  ]
+                : []),
             {
                 id: 'recent-activity',
                 group: 'Activity',
@@ -861,7 +1073,7 @@ const DashboardLive = () => {
                 }
             }
         ];
-    }, [isDark]);
+    }, [isDark, isDashboardAdmin]);
 
     // Helper function to persist widget preferences
     const persistWidgets = (ids) => {
@@ -903,6 +1115,7 @@ const DashboardLive = () => {
         // Most widgets start as 1x1, tasks can be larger
         const defaultSizes = {
             'my-project-tasks': { w: 2, h: 1 },
+            'last-working-month-progress': { w: 2, h: 2 },
             'leads-by-stage': { w: 1, h: 1 },
             'recent-activity': { w: 1, h: 1 }
         };
@@ -925,14 +1138,27 @@ const DashboardLive = () => {
             setAvailableWidgets(widgetRegistry);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 const valid = parsed.filter(id => widgetRegistry.some(w => w.id === id));
+                if (valid.length !== parsed.length) {
+                    persistWidgets(valid);
+                }
                 // Auto-add new 'my-project-tasks' widget if it exists in registry but not in saved preferences
                 if (widgetRegistry.some(w => w.id === 'my-project-tasks') && !valid.includes('my-project-tasks')) {
                     valid.push('my-project-tasks');
                     persistWidgets(valid);
                 }
+                if (
+                    isDashboardAdmin &&
+                    widgetRegistry.some(w => w.id === 'last-working-month-progress') &&
+                    !valid.includes('last-working-month-progress')
+                ) {
+                    valid.push('last-working-month-progress');
+                    persistWidgets(valid);
+                }
                 setSelectedWidgets(valid);
             } else {
-                const defaults = ['my-project-tasks'];
+                const defaults = isDashboardAdmin
+                    ? ['my-project-tasks', 'last-working-month-progress']
+                    : ['my-project-tasks'];
                 const validDefaults = defaults.filter(id => widgetRegistry.some(w => w.id === id));
                 setSelectedWidgets(validDefaults);
             }
@@ -942,10 +1168,12 @@ const DashboardLive = () => {
             setWidgetLayouts(layouts);
         } catch (_) {
             setAvailableWidgets(widgetRegistry);
-            setSelectedWidgets(['my-project-tasks']);
+            setSelectedWidgets(
+                isDashboardAdmin ? ['my-project-tasks', 'last-working-month-progress'] : ['my-project-tasks']
+            );
             setWidgetLayouts({});
         }
-    }, [widgetRegistry]);
+    }, [widgetRegistry, isDashboardAdmin]);
 
     const handleToggleWidget = (id) => {
         setSelectedWidgets(prev => {
