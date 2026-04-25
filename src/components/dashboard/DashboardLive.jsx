@@ -563,7 +563,20 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
 /** Last calendar month’s working progress (doc / compliance / data / comments) for projects opted into the monthly tracker. */
 const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects }) => {
     const m = typeof window !== 'undefined' ? window.projectProgressMonthMetrics : null;
-    const last = React.useMemo(() => (m ? m.getLastWorkingMonth() : null), [m]);
+    const workingCandidates = React.useMemo(() => {
+        if (!m) return [];
+        const entries = m.getWorkingMonthEntries();
+        return entries.map((entry) => {
+            const monthName = m.TRACKER_MONTH_NAMES?.[entry.monthIndex] || '';
+            const shortYear = String(entry.year).slice(-2);
+            return {
+                monthIndex: entry.monthIndex,
+                year: entry.year,
+                monthName,
+                shortLabel: `${monthName.slice(0, 3).toUpperCase()} '${shortYear}`
+            };
+        });
+    }, [m]);
 
     // List API is slim: no document/compliance/data sections. Hydrate from /projects/:id (same as ProjectProgressTracker).
     const trackerIdsKey = React.useMemo(() => {
@@ -601,7 +614,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         (async () => {
             try {
                 const results = await Promise.allSettled(
-                    ids.map((id) => window.DatabaseAPI.getProject(id, { forceRefresh: false }))
+                    ids.map((id) => window.DatabaseAPI.getProject(id, { forceRefresh: true }))
                 );
                 if (cancelled) return;
                 const next = {};
@@ -645,10 +658,36 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         });
     }, [m, projects, sectionDetails]);
 
+    const bestWorkingMonth = React.useMemo(() => {
+        if (!m || !workingCandidates.length) return null;
+        let fallback = workingCandidates[0];
+        let best = null;
+        let bestScore = -1;
+        workingCandidates.forEach((candidate, idx) => {
+            const snap = m.buildSnapshotRows(mergedProjects, candidate);
+            const score = snap.reduce((acc, row) => {
+                let value = acc;
+                if (row?.doc?.percent != null) value += 1;
+                if (row?.compliance?.percent != null) value += 1;
+                if (row?.data?.percent != null) value += 1;
+                if (row?.doc?.total > 0) value += 1;
+                if (row?.compliance?.total > 0) value += 1;
+                if (row?.data?.total > 0) value += 1;
+                return value;
+            }, 0);
+            if (idx === 0) fallback = candidate;
+            if (score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        });
+        return bestScore > 0 ? best : fallback;
+    }, [m, mergedProjects, workingCandidates]);
+
     const rows = React.useMemo(() => {
-        if (!m || !last) return [];
-        return m.buildSnapshotRows(mergedProjects, last);
-    }, [m, last, mergedProjects]);
+        if (!m || !bestWorkingMonth) return [];
+        return m.buildSnapshotRows(mergedProjects, bestWorkingMonth);
+    }, [m, bestWorkingMonth, mergedProjects]);
 
     const borderSep = isDark ? 'border-gray-800' : 'border-gray-100';
     const tableHead = isDark ? 'text-gray-500' : 'text-gray-500';
@@ -657,7 +696,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     const fmtPct = (p) => (p == null || Number.isNaN(p) ? '—' : `${p}%`);
     const fmtRatio = (done, tot) => (tot > 0 ? `${done}/${tot}` : '');
 
-    if (!m || !last) {
+    if (!m || !bestWorkingMonth) {
         return (
             <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
                 <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Last working month</h3>
@@ -668,9 +707,9 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
     const trackHref = m.buildProgressTrackerLink(
         rows[0]?.id,
-        last.monthName,
-        last.monthIndex,
-        last.year,
+        bestWorkingMonth.monthName,
+        bestWorkingMonth.monthIndex,
+        bestWorkingMonth.year,
         'comments'
     );
 
@@ -684,7 +723,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                             className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
                             style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#1d4ed8' }}
                         >
-                            {last.shortLabel}
+                            {bestWorkingMonth.shortLabel}
                         </span>
                         <span
                             className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
@@ -693,7 +732,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                         </span>
                     </div>
                     <p className={`text-xs mt-0.5 ${subText}`}>
-                        {last.monthName} {last.year} — same month highlighted in Project Progress Tracker
+                        {bestWorkingMonth.monthName} {bestWorkingMonth.year} — active working month with available progress data
                     </p>
                 </div>
                 <a
