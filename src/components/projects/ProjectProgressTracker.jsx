@@ -1545,159 +1545,38 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     );
                 }
                 
-                // CRITICAL: Reload projects from database after successful save to ensure persistence
-                // This ensures that when the component remounts or user navigates away and back, data is there
-                try {
-                    // Wait a bit for the database to commit the transaction
-                    // Increased delay to ensure database has time to commit
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
-                    
-                    // Clear cache again before reload to ensure fresh data
-                    if (window.DatabaseAPI) {
-                        if (window.DatabaseAPI._responseCache) {
-                            window.DatabaseAPI._responseCache.delete('GET:/projects');
-                            window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
-                        }
-                        if (window.DatabaseAPI._pendingRequests) {
-                            window.DatabaseAPI._pendingRequests.delete('/projects');
-                            window.DatabaseAPI._pendingRequests.delete(`/projects/${project.id}`);
-                        }
-                    }
-                    
-                    // First, directly fetch the updated project to verify it's in the database
-                    if (window.DatabaseAPI && window.DatabaseAPI.getProject) {
+                // Do not force-reload the full project list after comment/progress saves.
+                // Full list replacement causes a visible page refresh/jump; keep the local in-place state update above.
+                // A lightweight background verification is enough to catch persistence issues without touching UI state.
+                if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
+                    void (async () => {
                         try {
                             const directProjectResponse = await window.DatabaseAPI.getProject(project.id);
                             const directProject = directProjectResponse?.data?.project || directProjectResponse?.project || directProjectResponse?.data;
-                            
-                            if (directProject) {
-                                let directMonthlyProgress = directProject.monthlyProgress;
-                                if (typeof directMonthlyProgress === 'string' && directMonthlyProgress.trim()) {
-                                    try {
-                                        directMonthlyProgress = JSON.parse(directMonthlyProgress);
-                                    } catch (e) {
-                                        console.warn('⚠️ ProjectProgressTracker: Failed to parse direct project monthlyProgress:', e);
-                                        directMonthlyProgress = {};
-                                    }
+                            if (!directProject) return;
+
+                            let directMonthlyProgress = directProject.monthlyProgress;
+                            if (typeof directMonthlyProgress === 'string' && directMonthlyProgress.trim()) {
+                                try {
+                                    directMonthlyProgress = JSON.parse(directMonthlyProgress);
+                                } catch (e) {
+                                    directMonthlyProgress = {};
                                 }
-                                
-                                const directMonthData = directMonthlyProgress?.[key];
-                                const directFieldValue = directMonthData?.[field];
-                                
-                                
-                                if (directFieldValue !== sanitizedValue) {
-                                    console.error('❌ ProjectProgressTracker: CRITICAL - Saved value does not match database value!', {
-                                        expected: sanitizedValue,
-                                        actual: directFieldValue,
-                                        monthKey: key,
-                                        field: field
-                                    });
-                                } else {
-                                }
-                            } else {
-                                console.warn('⚠️ ProjectProgressTracker: Direct project fetch returned no data');
+                            }
+
+                            const directFieldValue = directMonthlyProgress?.[key]?.[field];
+                            if (directFieldValue !== sanitizedValue) {
+                                console.error('❌ ProjectProgressTracker: Saved value does not match database value', {
+                                    expected: sanitizedValue,
+                                    actual: directFieldValue,
+                                    monthKey: key,
+                                    field
+                                });
                             }
                         } catch (directFetchErr) {
-                            console.warn('⚠️ ProjectProgressTracker: Failed to directly fetch project (non-critical):', directFetchErr);
+                            console.warn('⚠️ ProjectProgressTracker: Background save verification failed (non-blocking):', directFetchErr);
                         }
-                    }
-                    
-                    if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
-                        const reloadResponse = await window.DatabaseAPI.getProjects({ forceRefresh: true });
-                        let reloadedProjs = [];
-                        
-                        if (reloadResponse?.data?.projects && Array.isArray(reloadResponse.data.projects)) {
-                            reloadedProjs = reloadResponse.data.projects;
-                        } else if (reloadResponse?.data?.data?.projects && Array.isArray(reloadResponse.data.data.projects)) {
-                            reloadedProjs = reloadResponse.data.data.projects;
-                        } else if (reloadResponse?.projects && Array.isArray(reloadResponse.projects)) {
-                            reloadedProjs = reloadResponse.projects;
-                        } else if (Array.isArray(reloadResponse?.data)) {
-                            reloadedProjs = reloadResponse.data;
-                        } else if (Array.isArray(reloadResponse)) {
-                            reloadedProjs = reloadResponse;
-                        }
-                        
-                        // Normalize and filter projects
-                        const normalizedReloaded = (Array.isArray(reloadedProjs) ? reloadedProjs : []).map(p => {
-                            let monthlyProgress = p.monthlyProgress;
-                            if (typeof monthlyProgress === 'string' && monthlyProgress.trim()) {
-                                try {
-                                    monthlyProgress = JSON.parse(monthlyProgress);
-                                } catch (e) {
-                                    monthlyProgress = {};
-                                }
-                            }
-                            return {
-                                ...p,
-                                client: p.clientName || p.client || '',
-                                monthlyProgress: monthlyProgress && typeof monthlyProgress === 'object' && !Array.isArray(monthlyProgress) ? monthlyProgress : {}
-                            };
-                        });
-                        
-                        // Must match initial load: only includeInProgressTracker opt-in (never MONTHLY type / monthlyProgress heuristics).
-                        const monthlyReloaded = filterNormalizedProjectsForProgressTracker(normalizedReloaded);
-                        
-                        // Verify the saved data is in the reloaded projects
-                        const reloadedProject = monthlyReloaded.find(p => String(p?.id) === String(project.id));
-                        if (reloadedProject) {
-                            const reloadedMonthlyProgress = reloadedProject.monthlyProgress || {};
-                            const savedMonthKey = key;
-                            const savedFieldValue = reloadedMonthlyProgress[savedMonthKey]?.[field];
-                            
-                            if (savedFieldValue !== sanitizedValue) {
-                                console.error('❌ ProjectProgressTracker: CRITICAL - Saved value does not match reloaded value!', {
-                                    saved: sanitizedValue,
-                                    reloaded: savedFieldValue,
-                                    monthKey: savedMonthKey,
-                                    field: field,
-                                    fullMonthData: reloadedMonthlyProgress[savedMonthKey]
-                                });
-                                
-                                // Try fetching the project directly from the database
-                                try {
-                                    if (window.DatabaseAPI && window.DatabaseAPI.getProject) {
-                                        const directProject = await window.DatabaseAPI.getProject(project.id);
-                                        const directMonthlyProgress = directProject?.data?.project?.monthlyProgress || directProject?.project?.monthlyProgress;
-                                        let parsedDirect = directMonthlyProgress;
-                                        if (typeof parsedDirect === 'string') {
-                                            parsedDirect = JSON.parse(parsedDirect);
-                                        }
-                                        const directValue = parsedDirect?.[savedMonthKey]?.[field];
-                                        
-                                        if (directValue === sanitizedValue) {
-                                            // Update the reloaded project with correct data
-                                            const correctedProject = {
-                                                ...reloadedProject,
-                                                monthlyProgress: parsedDirect
-                                            };
-                                            setProjects(prevProjects => prevProjects.map(p => 
-                                                String(p?.id) === String(project.id) ? correctedProject : p
-                                            ));
-                                        } else {
-                                            console.error('❌ ProjectProgressTracker: Data NOT in database! Save may have failed.');
-                                        }
-                                    }
-                                } catch (directFetchErr) {
-                                    console.error('❌ ProjectProgressTracker: Failed to fetch project directly:', directFetchErr);
-                                }
-                            } else {
-                            }
-                        } else {
-                            console.warn('⚠️ ProjectProgressTracker: Saved project not found in reloaded projects!', {
-                                projectId: project.id,
-                                reloadedCount: monthlyReloaded.length,
-                                reloadedIds: monthlyReloaded.map(p => p.id)
-                            });
-                        }
-                        
-                        // Update state with reloaded data
-                        setProjects(Array.isArray(monthlyReloaded) ? monthlyReloaded : []);
-                    }
-                } catch (reloadErr) {
-                    console.warn('⚠️ ProjectProgressTracker: Failed to reload projects after save (non-critical):', reloadErr);
-                    // Don't fail the save if reload fails - the local state update above should be sufficient
+                    })();
                 }
                 
                 // Optional: Show a brief success message (you can replace with a toast notification)
