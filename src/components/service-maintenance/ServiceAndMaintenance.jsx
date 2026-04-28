@@ -329,6 +329,15 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = DETAIL_FETCH_TIME
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const ServiceAndMaintenance = () => {
   const { user } = window.useAuth();
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
@@ -347,6 +356,7 @@ const ServiceAndMaintenance = () => {
   const fetchJobCardPhotosMergeRef = useRef(null);
   const [jobCardActivities, setJobCardActivities] = useState([]);
   const [jobCardActivitiesLoading, setJobCardActivitiesLoading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showFormsManager, setShowFormsManager] = useState(false);
   const [formsManagerReady, setFormsManagerReady] = useState(
     typeof window !== 'undefined' && !!window.ServiceFormsManager
@@ -1009,6 +1019,317 @@ const ServiceAndMaintenance = () => {
   const closePhotoLightbox = useCallback(() => {
     setPhotoLightboxUrl('');
   }, []);
+
+  const handleDownloadJobCardPdf = useCallback(async () => {
+    if (!selectedJobCard || downloadingPdf) return;
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      window.alert('Please allow pop-ups to generate the PDF.');
+      return;
+    }
+
+    const formatPdfDate = (value) => {
+      if (!value) return '—';
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return '—';
+      return dt.toLocaleString();
+    };
+
+    const formatPdfMoney = (value) => {
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return 'R 0.00';
+      return `R ${amount.toFixed(2)}`;
+    };
+
+    const toDataUrl = (blob) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+    const fetchProtectedImageAsDataUrl = async (url, token) => {
+      if (!url) return '';
+      try {
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch(url, { headers });
+        if (!res.ok) return '';
+        const blob = await res.blob();
+        const dataUrl = await toDataUrl(blob);
+        return typeof dataUrl === 'string' ? dataUrl : '';
+      } catch {
+        return '';
+      }
+    };
+
+    const resolvePrintableImageSrc = async (item, token) => {
+      if (!item) return '';
+      if (item.safetyCulture && item.mediaId && item.token) {
+        const mediaParams = new URLSearchParams({
+          id: String(item.mediaId),
+          token: String(item.token)
+        });
+        if (item.mediaType) mediaParams.set('media_type', String(item.mediaType));
+        if (item.filename) mediaParams.set('filename', String(item.filename));
+        if (item.issueId) mediaParams.set('issue_id', String(item.issueId));
+        return fetchProtectedImageAsDataUrl(`/api/safety-culture/media/proxy?${mediaParams.toString()}`, token);
+      }
+
+      const url = item.url;
+      if (!url || typeof url !== 'string') return '';
+      if (/^data:image\//i.test(url)) return url;
+      if (/^blob:/i.test(url)) return fetchProtectedImageAsDataUrl(url, token);
+      if (/^https?:\/\//i.test(url)) return url;
+      if (url.startsWith('/api/')) return fetchProtectedImageAsDataUrl(url, token);
+      return url;
+    };
+
+    try {
+      setDownloadingPdf(true);
+      const token = window.storage?.getToken?.();
+
+      let companyName = 'Abcotronics';
+      let letterhead = {};
+      if (window.DatabaseAPI?.getDocumentSettings) {
+        try {
+          const response = await window.DatabaseAPI.getDocumentSettings();
+          const documentSettings = response?.data || {};
+          companyName = documentSettings.companyName || companyName;
+          letterhead =
+            documentSettings.jobCardLetterhead ||
+            documentSettings.poLetterhead ||
+            documentSettings.serviceLetterhead ||
+            {};
+        } catch (error) {
+          console.warn('Could not load document settings for Job Card PDF', error);
+        }
+      }
+
+      const coords = getJobCardCoordinates(selectedJobCard);
+      const mapImageUrl = coords
+        ? `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(
+            `${coords.lat},${coords.lng}`
+          )}&zoom=15&size=900x360&markers=${encodeURIComponent(`${coords.lat},${coords.lng},red-pushpin`)}`
+        : '';
+      const mapOpenUrl = coords
+        ? `https://www.openstreetmap.org/?mlat=${encodeURIComponent(
+            coords.lat
+          )}&mlon=${encodeURIComponent(coords.lng)}&zoom=15`
+        : '';
+
+      const visualImageCandidates = (galleryVisualItems || [])
+        .filter((item) => {
+          if (!item) return false;
+          if (item.safetyCulture) {
+            const mediaType = String(item.mediaType || '').toLowerCase();
+            const filename = String(item.filename || '').toLowerCase();
+            return !mediaType.includes('video') && !/\.(mp4|webm|mov|m4v)$/.test(filename);
+          }
+          const url = String(item.url || '');
+          const isVideo = window.JobCardAttachmentUtils?.jobCardAttachmentUrlIsVideo
+            ? window.JobCardAttachmentUtils.jobCardAttachmentUrlIsVideo(url)
+            : /^data:video\//i.test(url);
+          return !isVideo;
+        })
+        .slice(0, 12);
+
+      const resolvedImageSources = await Promise.all(
+        visualImageCandidates.map((item) => resolvePrintableImageSrc(item, token))
+      );
+      const pdfImages = resolvedImageSources.filter((src) => typeof src === 'string' && src.trim());
+
+      const stockRows = stockRowsForDisplay(selectedJobCard);
+      const materialRows = materialsRowsForDisplay(selectedJobCard);
+      const addressLines = Array.isArray(letterhead.addressLines) ? letterhead.addressLines : [];
+      const logoMarkup = letterhead.logoDataUrl
+        ? `<img src="${escapeHtml(letterhead.logoDataUrl)}" alt="Company logo" class="brand-logo" />`
+        : '';
+
+      const stockMarkup =
+        stockRows.length > 0
+          ? stockRows
+              .map((item) => {
+                if (typeof item === 'string' || typeof item === 'number') {
+                  return `<tr><td colspan="4">${escapeHtml(item)}</td></tr>`;
+                }
+                const qty = item?.quantity != null && item.quantity !== '' ? String(item.quantity) : '—';
+                return `<tr>
+                  <td>${escapeHtml(item?.itemName || item?.sku || 'Item')}</td>
+                  <td>${escapeHtml(item?.sku || '—')}</td>
+                  <td>${escapeHtml(qty)}</td>
+                  <td>${escapeHtml(item?.locationName || item?.locationId || '—')}</td>
+                </tr>`;
+              })
+              .join('')
+          : '<tr><td colspan="4" class="muted">No stock lines recorded.</td></tr>';
+
+      const purchasesMarkup =
+        materialRows.length > 0
+          ? materialRows
+              .map((item) => {
+                if (typeof item === 'string' || typeof item === 'number') {
+                  return `<tr><td>${escapeHtml(item)}</td><td>—</td><td>—</td></tr>`;
+                }
+                return `<tr>
+                  <td>${escapeHtml(item?.itemName || 'Purchase')}</td>
+                  <td>${escapeHtml(item?.reason || item?.description || '—')}</td>
+                  <td class="num">${escapeHtml(
+                    item?.cost != null && item?.cost !== '' ? formatPdfMoney(item.cost) : '—'
+                  )}</td>
+                </tr>`;
+              })
+              .join('')
+          : '<tr><td colspan="3" class="muted">No purchase lines recorded.</td></tr>';
+
+      const imageMarkup =
+        pdfImages.length > 0
+          ? `<div class="image-grid">
+              ${pdfImages.map((src, idx) => `<figure><img src="${escapeHtml(src)}" alt="Job image ${idx + 1}" /></figure>`).join('')}
+            </div>`
+          : '<p class="muted">No images were available for this job card.</p>';
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Job Card ${escapeHtml(selectedJobCard.jobCardNumber || selectedJobCard.id || '')}</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    body { margin: 0; font-family: Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .sheet { width: 100%; }
+    .header { display: flex; justify-content: space-between; gap: 12px; border-bottom: 3px solid #2563eb; padding-bottom: 10px; margin-bottom: 12px; }
+    .brand-logo { max-height: 60px; max-width: 180px; object-fit: contain; }
+    .brand h1 { margin: 0; font-size: 19px; color: #111827; }
+    .brand-meta { font-size: 11px; color: #4b5563; margin-top: 4px; text-align: right; }
+    .doc-title { margin: 0 0 8px; color: #1d4ed8; font-size: 18px; letter-spacing: 0.3px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .meta-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; min-height: 56px; }
+    .label { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.4px; margin-bottom: 2px; }
+    .value { font-size: 12px; color: #111827; font-weight: 600; white-space: pre-wrap; }
+    .section { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; page-break-inside: avoid; }
+    .section h3 { margin: 0 0 6px; font-size: 13px; color: #111827; }
+    p { margin: 4px 0; font-size: 12px; line-height: 1.45; }
+    .muted { color: #6b7280; font-style: italic; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    th, td { border: 1px solid #d1d5db; padding: 6px; font-size: 11px; text-align: left; vertical-align: top; }
+    th { background: #f3f4f6; font-weight: 600; }
+    td.num, th.num { text-align: right; }
+    .map-image { border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+    .map-image img { display: block; width: 100%; height: auto; }
+    .image-grid { margin-top: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .image-grid figure { margin: 0; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
+    .image-grid img { width: 100%; height: 180px; object-fit: cover; display: block; }
+    .footer { margin-top: 10px; font-size: 10px; color: #6b7280; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="header">
+      <div>${logoMarkup}</div>
+      <div class="brand">
+        <h1>${escapeHtml(companyName)}</h1>
+        <div class="brand-meta">
+          ${addressLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}
+          ${letterhead.phone ? `<div>Tel: ${escapeHtml(letterhead.phone)}</div>` : ''}
+          ${letterhead.email ? `<div>Email: ${escapeHtml(letterhead.email)}</div>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <h2 class="doc-title">JOB CARD REPORT</h2>
+    <div class="meta-grid">
+      <div class="meta-card"><div class="label">Job card number</div><div class="value">${escapeHtml(selectedJobCard.jobCardNumber || selectedJobCard.id || '—')}</div></div>
+      <div class="meta-card"><div class="label">Client / site</div><div class="value">${escapeHtml(selectedJobCard.clientName || '—')}${selectedJobCard.siteName ? `\n${escapeHtml(selectedJobCard.siteName)}` : ''}</div></div>
+      <div class="meta-card"><div class="label">Technician</div><div class="value">${escapeHtml(selectedJobCard.agentName || '—')}</div></div>
+      <div class="meta-card"><div class="label">Status</div><div class="value">${escapeHtml(String(selectedJobCard.status || 'draft').toUpperCase())}</div></div>
+      <div class="meta-card"><div class="label">Created</div><div class="value">${escapeHtml(formatPdfDate(selectedJobCard.createdAt))}</div></div>
+      <div class="meta-card"><div class="label">Printed</div><div class="value">${escapeHtml(new Date().toLocaleString())}</div></div>
+    </div>
+
+    <section class="section">
+      <h3>Visit narrative</h3>
+      <p><strong>Heading:</strong> ${escapeHtml(selectedHeading || '—')}</p>
+      <p><strong>Call out category:</strong> ${escapeHtml(selectedJobCard.callOutCategory || '—')}</p>
+      <p><strong>Reason for visit:</strong> ${escapeHtml(selectedJobCard.reasonForVisit || '—')}</p>
+      <p><strong>Diagnosis:</strong> ${escapeHtml(selectedJobCard.diagnosis || '—')}</p>
+      <p><strong>Actions taken:</strong> ${escapeHtml(selectedJobCard.actionsTaken || '—')}</p>
+      <p><strong>Future actions:</strong> ${escapeHtml(selectedJobCard.futureWorkRequired || '—')}</p>
+      ${
+        otherCommentsReport.technicianNotes
+          ? `<p><strong>Additional notes:</strong> ${escapeHtml(otherCommentsReport.technicianNotes)}</p>`
+          : ''
+      }
+    </section>
+
+    <section class="section">
+      <h3>Travel and costs</h3>
+      <p><strong>Vehicle:</strong> ${escapeHtml(selectedJobCard.vehicleUsed || 'Not specified')}</p>
+      <p><strong>Kilometers:</strong> ${escapeHtml(String(selectedJobCard.kmReadingBefore ?? '—'))} -> ${escapeHtml(String(selectedJobCard.kmReadingAfter ?? '—'))}</p>
+      <p><strong>Travel distance:</strong> ${Number.isFinite(Number(selectedJobCard.travelKilometers)) ? `${Number(selectedJobCard.travelKilometers).toFixed(1)} km` : '—'}</p>
+      <p><strong>Total materials cost:</strong> ${escapeHtml(formatPdfMoney(selectedJobCard.totalMaterialsCost || 0))}</p>
+    </section>
+
+    <section class="section">
+      <h3>Stock used</h3>
+      <table>
+        <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Location</th></tr></thead>
+        <tbody>${stockMarkup}</tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h3>Purchases</h3>
+      <table>
+        <thead><tr><th>Item</th><th>Reason / Description</th><th class="num">Cost</th></tr></thead>
+        <tbody>${purchasesMarkup}</tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h3>Map</h3>
+      <p><strong>Location:</strong> ${escapeHtml(selectedJobCard.location || selectedJobCard.siteName || selectedJobCard.clientName || 'Not specified')}</p>
+      ${coords ? `<p><strong>Coordinates:</strong> ${escapeHtml(coords.lat.toFixed(6))}, ${escapeHtml(coords.lng.toFixed(6))}</p>` : '<p class="muted">No GPS coordinates recorded.</p>'}
+      ${mapImageUrl ? `<div class="map-image"><img src="${escapeHtml(mapImageUrl)}" alt="Job location map" /></div>` : ''}
+      ${mapOpenUrl ? `<p><strong>Map link:</strong> ${escapeHtml(mapOpenUrl)}</p>` : ''}
+    </section>
+
+    <section class="section">
+      <h3>Site photos</h3>
+      ${imageMarkup}
+    </section>
+
+    <div class="footer">
+      ${escapeHtml(companyName)} • Job Card ${escapeHtml(selectedJobCard.jobCardNumber || selectedJobCard.id || '')}
+    </div>
+  </div>
+</body>
+</html>`;
+
+      printWin.document.write(html);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => {
+        printWin.print();
+        printWin.close();
+      }, 350);
+    } catch (error) {
+      printWin.close();
+      console.error('Failed to generate job card PDF:', error);
+      window.alert(error?.message || 'Failed to generate job card PDF.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [
+    selectedJobCard,
+    downloadingPdf,
+    getJobCardCoordinates,
+    galleryVisualItems,
+    stockRowsForDisplay,
+    materialsRowsForDisplay,
+    selectedHeading,
+    otherCommentsReport.technicianNotes
+  ]);
 
   useEffect(() => {
     if (!photoLightboxUrl) return undefined;
@@ -1957,22 +2278,33 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.JobCards?.openEditJobCardModal) {
-                    window.JobCards.openEditJobCardModal(selectedJobCard);
-                  } else if (window.JobCardModal) {
-                    window.dispatchEvent(
-                      new CustomEvent('jobcards:edit', { detail: { jobCard: selectedJobCard } })
-                    );
-                  }
-                }}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600"
-              >
-                <i className="fa-solid fa-pen" />
-                Edit full job card
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadJobCardPdf}
+                  disabled={downloadingPdf}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <i className={`fa-solid ${downloadingPdf ? 'fa-spinner fa-spin' : 'fa-file-pdf'}`} />
+                  {downloadingPdf ? 'Preparing PDF…' : 'Download PDF'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.JobCards?.openEditJobCardModal) {
+                      window.JobCards.openEditJobCardModal(selectedJobCard);
+                    } else if (window.JobCardModal) {
+                      window.dispatchEvent(
+                        new CustomEvent('jobcards:edit', { detail: { jobCard: selectedJobCard } })
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600"
+                >
+                  <i className="fa-solid fa-pen" />
+                  Edit full job card
+                </button>
+              </div>
               <p className={`max-w-xs text-right text-[10px] leading-snug ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                 Same fields as the mobile capture form: client, site, visit, work, stock, photos, customer sign-off, and checklists.
               </p>
