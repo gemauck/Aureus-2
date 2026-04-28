@@ -28,6 +28,7 @@ PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-abcotronics-erp}"
 MIN_FREE_MB="${MIN_FREE_MB:-4096}"
 MIN_FREE_INODES="${MIN_FREE_INODES:-10000}"
 PRE_DEPLOY_CLEANUP="${PRE_DEPLOY_CLEANUP:-0}"
+RUN_POST_DEPLOY_HEALTH_CHECK="${RUN_POST_DEPLOY_HEALTH_CHECK:-1}"
 
 echo "=== ABCOTRONICS ERP DEPLOY START ==="
 echo "App directory     : ${APP_DIR}"
@@ -207,6 +208,12 @@ if command -v nginx >/dev/null 2>&1; then
   nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || true
 elif systemctl is-active nginx >/dev/null 2>&1; then
   systemctl reload nginx 2>/dev/null || true
+fi
+
+if [ "${RUN_POST_DEPLOY_HEALTH_CHECK}" = "1" ] && [ -f "${APP_DIR}/scripts/post-deploy-health-check.sh" ]; then
+  echo
+  echo "-> Running post-deploy health check..."
+  PM2_PROCESS_NAME="${PM2_PROCESS_NAME}" APP_URL="${APP_URL:-http://127.0.0.1:3000}" bash "${APP_DIR}/scripts/post-deploy-health-check.sh"
 fi
 
 echo
