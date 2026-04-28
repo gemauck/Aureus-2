@@ -7168,6 +7168,11 @@ Abcotronics`;
         });
         const [bulkStatus, setBulkStatus] = useState('');
         const [bulkComment, setBulkComment] = useState('');
+        const trackerLabel = isComplianceReview
+            ? 'Compliance Review'
+            : isMonthlyDataReview
+                ? 'Monthly Data Review'
+                : 'Document Collection';
         
         useEffect(() => {
             setFormData({
@@ -7181,11 +7186,11 @@ Abcotronics`;
             setBulkComment('');
         }, [editingDocument]);
         
-        const handleApplyBulkToAllMonths = () => {
+        const buildBulkAppliedDocument = (sourceDoc) => {
             const note = bulkComment.trim();
             if (!bulkStatus && !note) {
                 alert('Select a status or add a comment to apply.');
-                return;
+                return null;
             }
 
             const nowIso = new Date().toISOString();
@@ -7197,42 +7202,51 @@ Abcotronics`;
                 currentUser?.email ||
                 'System';
 
-            setFormData(prev => {
-                let nextCollectionStatus = { ...(prev.collectionStatus || {}) };
-                let nextComments = { ...(prev.comments || {}) };
+            let nextCollectionStatus = { ...(sourceDoc?.collectionStatus || {}) };
+            let nextComments = { ...(sourceDoc?.comments || {}) };
 
-                months.forEach((monthLabel, idx) => {
-                    if (bulkStatus) {
-                        nextCollectionStatus = setStatusForYear(nextCollectionStatus, monthLabel, bulkStatus, selectedYear);
-                    }
-                    if (note) {
-                        const existingComments = getCommentsForYear(nextComments, monthLabel, selectedYear);
-                        const normalizedExisting = Array.isArray(existingComments) ? existingComments : [];
-                        nextComments = setCommentsForYear(
-                            nextComments,
-                            monthLabel,
-                            [
-                                ...normalizedExisting,
-                                {
-                                    id: `bulk-${Date.now()}-${idx}`,
-                                    text: note,
-                                    author: authorName,
-                                    createdAt: nowIso
-                                }
-                            ],
-                            selectedYear
-                        );
-                    }
-                });
-
-                return {
-                    ...prev,
-                    collectionStatus: nextCollectionStatus,
-                    comments: nextComments
-                };
+            months.forEach((monthLabel, idx) => {
+                if (bulkStatus) {
+                    nextCollectionStatus = setStatusForYear(nextCollectionStatus, monthLabel, bulkStatus, selectedYear);
+                }
+                if (note) {
+                    const existingComments = getCommentsForYear(nextComments, monthLabel, selectedYear);
+                    const normalizedExisting = Array.isArray(existingComments) ? existingComments : [];
+                    nextComments = setCommentsForYear(
+                        nextComments,
+                        monthLabel,
+                        [
+                            ...normalizedExisting,
+                            {
+                                id: `bulk-${Date.now()}-${idx}`,
+                                text: note,
+                                author: authorName,
+                                createdAt: nowIso
+                            }
+                        ],
+                        selectedYear
+                    );
+                }
             });
 
+            return {
+                ...sourceDoc,
+                collectionStatus: nextCollectionStatus,
+                comments: nextComments
+            };
+        };
+
+        const handleApplyBulkToAllMonths = () => {
+            const next = buildBulkAppliedDocument(formData);
+            if (!next) return;
+            setFormData(next);
             setBulkComment('');
+        };
+
+        const handleApplyBulkAndSave = () => {
+            const next = buildBulkAppliedDocument(formData);
+            if (!next) return;
+            handleSaveDocument(next);
         };
 
         const handleSubmit = (e) => {
@@ -7282,7 +7296,9 @@ Abcotronics`;
 
                         {editingDocument && (
                             <div className="rounded-lg border border-gray-200 p-3 space-y-2">
-                                <div className="text-xs font-semibold text-gray-800">Bulk update all months ({selectedYear})</div>
+                                <div className="text-xs font-semibold text-gray-800">
+                                    Bulk update all months ({selectedYear}) - {trackerLabel}
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                     <div>
                                         <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
@@ -7316,7 +7332,14 @@ Abcotronics`;
                                         onClick={handleApplyBulkToAllMonths}
                                         className="px-3 py-1.5 text-xs bg-violet-100 text-violet-800 rounded-lg hover:bg-violet-200"
                                     >
-                                        Apply to all months
+                                        Apply in modal
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleApplyBulkAndSave}
+                                        className="ml-2 px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg hover:bg-violet-700"
+                                    >
+                                        Apply and save
                                     </button>
                                 </div>
                             </div>
