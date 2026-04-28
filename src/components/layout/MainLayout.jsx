@@ -497,7 +497,9 @@ const MainLayout = () => {
     }, [currentPage, syncDocumentTitle]);
     
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
-    const [isMobile, setIsMobile] = useState(false);
+    const [isMobile, setIsMobile] = useState(() =>
+        typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+    );
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
     /** Desktop-style layout by default; on narrow viewports user can switch to mobile-friendly shell in theme → Layout */
     const [preferDesktopSite, setPreferDesktopSite] = useState(() => readPreferDesktopLayout());

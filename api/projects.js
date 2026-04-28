@@ -19,8 +19,9 @@ async function documentSectionsToJson(projectId, options = {}) {
     const includeComments = !options.skipComments;
     const db = options.tx || prisma
     let sections = options.preloadedSections;
-
-    if (!sections || !Array.isArray(sections)) {
+    // Empty preloaded must not short-circuit: caller may have skipped the DB query
+    // (e.g. hasDocumentCollectionProcess off) but rows still exist in DocumentSection.
+    if (!sections || !Array.isArray(sections) || sections.length === 0) {
       try {
         if (!options.tx) {
           await prisma.$queryRaw`SELECT 1 FROM "DocumentSection" LIMIT 1`
@@ -143,7 +144,7 @@ async function monthlyFMSReviewSectionsToJson(projectId, options = {}) {
     let sections = options.preloadedSections;
     let jsonFieldData = options.preloadedJsonField ?? null;
 
-    if (!sections || !Array.isArray(sections)) {
+    if (!sections || !Array.isArray(sections) || sections.length === 0) {
       try {
         await prisma.$queryRaw`SELECT 1 FROM "MonthlyFMSReviewSection" LIMIT 1`
       } catch (e) {

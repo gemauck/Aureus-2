@@ -41,12 +41,9 @@ body {
     font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     /* auto: allow pinch-zoom; manipulation disables double-tap zoom and can hinder zoom on some engines */
     touch-action: auto;
-}
-
-body.erp-app {
-    text-rendering: optimizeLegibility;
 }
 
 /* SaaS-style app canvas (light) — matches workspace mockups */

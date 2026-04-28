@@ -91,8 +91,10 @@ async function loadProjectWithRelations(projectId) {
         monthlyDataReviewChecklist: true,
         monthlyDataReviewSections: true,
         complianceReviewChecklist: true,
-        complianceReviewSections: true
-        // Exclude: tasksList, documentSections, weeklyFMSReviewSections, monthlyFMSReviewSections,
+        complianceReviewSections: true,
+        // JSON blob: GET handler merges with table; needed when table is empty or not loaded
+        documentSections: true
+        // Exclude: tasksList, weeklyFMSReviewSections, monthlyFMSReviewSections,
         // monthlyProgress (loaded from tables or above)
       }
     });
@@ -820,7 +822,11 @@ async function handler(req, res) {
         
         try {
           // Use pre-loaded table data to avoid duplicate DB queries (perf)
-          documentSectionsJson = await documentSectionsToJson(id, { preloadedSections: project.documentSectionsTable });
+          const preDoc =
+            project.documentSectionsTable && project.documentSectionsTable.length > 0
+              ? project.documentSectionsTable
+              : undefined
+          documentSectionsJson = await documentSectionsToJson(id, { preloadedSections: preDoc });
           if (process.env.NODE_ENV === 'development') {
             console.log('📊 GET /api/projects/[id]: documentSectionsToJson result:', {
               projectId: id,
