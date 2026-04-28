@@ -1119,6 +1119,30 @@ const ServiceAndMaintenance = () => {
     try {
       setDownloadingPdf(true);
       const token = window.storage?.getToken?.();
+      let jobCardForPdf = selectedJobCard;
+
+      // Ensure export uses full attachment payload even when detail screen was loaded with omitPhotos.
+      if (jobCardForPdf?.id && token && (jobCardForPdf.attachmentsPending === true || !Array.isArray(jobCardForPdf.photos))) {
+        try {
+          const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardForPdf.id)}/photos`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (pr.ok) {
+            const pd = await pr.json();
+            const photos = pd?.data?.photos ?? pd?.photos;
+            if (Array.isArray(photos)) {
+              jobCardForPdf = { ...jobCardForPdf, photos, attachmentsPending: false };
+              setSelectedJobCard((prev) =>
+                prev?.id === jobCardForPdf.id
+                  ? { ...prev, photos, attachmentsPending: false }
+                  : prev
+              );
+            }
+          }
+        } catch (error) {
+          console.warn('Could not refresh job card photos before PDF export', error);
+        }
+      }
 
       let companyName = 'Abcotronics';
       let letterhead = {};
@@ -1137,23 +1161,38 @@ const ServiceAndMaintenance = () => {
         }
       }
 
-      const coords = getJobCardCoordinates(selectedJobCard);
-      const mapImageUrl = coords
-        ? `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(
-            `${coords.lat},${coords.lng}`
-          )}&zoom=15&size=900x360&markers=${encodeURIComponent(`${coords.lat},${coords.lng},red-pushpin`)}`
-        : '';
+      const coords = getJobCardCoordinates(jobCardForPdf);
+      const mapImageCandidates = coords
+        ? [
+            `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(
+              `${coords.lat},${coords.lng}`
+            )}&zoom=15&size=900x360&markers=${encodeURIComponent(`${coords.lat},${coords.lng},red-pushpin`)}`,
+            `https://staticmap.openstreetmap.fr/?center=${encodeURIComponent(
+              `${coords.lat},${coords.lng}`
+            )}&zoom=15&size=900x360&markers=${encodeURIComponent(`${coords.lat},${coords.lng},red`)}`
+          ]
+        : [];
       const mapOpenUrl = coords
         ? `https://www.openstreetmap.org/?mlat=${encodeURIComponent(
             coords.lat
           )}&mlon=${encodeURIComponent(coords.lng)}&zoom=15`
         : '';
 
-      const mapImageSrc = mapImageUrl
-        ? (await fetchProtectedImageAsDataUrl(mapImageUrl, null)) || mapImageUrl
-        : '';
+      let mapImageSrc = '';
+      for (const candidate of mapImageCandidates) {
+        mapImageSrc = await fetchProtectedImageAsDataUrl(candidate, null);
+        if (mapImageSrc) break;
+      }
 
-      const visualImageCandidates = (galleryVisualItems || [])
+      const partitionJobCardAttachments = window.JobCardAttachmentUtils?.partitionJobCardAttachments;
+      const visualItemsForPdf =
+        typeof partitionJobCardAttachments === 'function'
+          ? (partitionJobCardAttachments(jobCardForPdf?.photos, {
+              issueId: jobCardForPdf?.safetyCultureIssueId
+            })?.visualItems || [])
+          : galleryVisualItems;
+
+      const visualImageCandidates = (visualItemsForPdf || [])
         .filter((item) => {
           if (!item) return false;
           if (item.safetyCulture) {
@@ -1174,8 +1213,8 @@ const ServiceAndMaintenance = () => {
       );
       const pdfImages = resolvedImageSources.filter((src) => typeof src === 'string' && src.trim());
 
-      const stockRows = stockRowsForDisplay(selectedJobCard);
-      const materialRows = materialsRowsForDisplay(selectedJobCard);
+      const stockRows = stockRowsForDisplay(jobCardForPdf);
+      const materialRows = materialsRowsForDisplay(jobCardForPdf);
       const addressLines = Array.isArray(letterhead.addressLines) ? letterhead.addressLines : [];
       const logoMarkup = letterhead.logoDataUrl
         ? `<img src="${escapeHtml(letterhead.logoDataUrl)}" alt="Company logo" class="brand-logo" />`
@@ -1228,7 +1267,7 @@ const ServiceAndMaintenance = () => {
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Job Card ${escapeHtml(selectedJobCard.jobCardNumber || selectedJobCard.id || '')}</title>
+  <title>Job Card ${escapeHtml(jobCardForPdf.jobCardNumber || jobCardForPdf.id || '')}</title>
   <style>
     @page { size: A4; margin: 12mm; }
     body { margin: 0; font-family: Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1274,22 +1313,22 @@ const ServiceAndMaintenance = () => {
 
     <h2 class="doc-title">JOB CARD REPORT</h2>
     <div class="meta-grid">
-      <div class="meta-card"><div class="label">Job card number</div><div class="value">${escapeHtml(selectedJobCard.jobCardNumber || selectedJobCard.id || '—')}</div></div>
-      <div class="meta-card"><div class="label">Client / site</div><div class="value">${escapeHtml(selectedJobCard.clientName || '—')}${selectedJobCard.siteName ? `\n${escapeHtml(selectedJobCard.siteName)}` : ''}</div></div>
-      <div class="meta-card"><div class="label">Technician</div><div class="value">${escapeHtml(selectedJobCard.agentName || '—')}</div></div>
-      <div class="meta-card"><div class="label">Status</div><div class="value">${escapeHtml(String(selectedJobCard.status || 'draft').toUpperCase())}</div></div>
-      <div class="meta-card"><div class="label">Created</div><div class="value">${escapeHtml(formatPdfDate(selectedJobCard.createdAt))}</div></div>
+      <div class="meta-card"><div class="label">Job card number</div><div class="value">${escapeHtml(jobCardForPdf.jobCardNumber || jobCardForPdf.id || '—')}</div></div>
+      <div class="meta-card"><div class="label">Client / site</div><div class="value">${escapeHtml(jobCardForPdf.clientName || '—')}${jobCardForPdf.siteName ? `\n${escapeHtml(jobCardForPdf.siteName)}` : ''}</div></div>
+      <div class="meta-card"><div class="label">Technician</div><div class="value">${escapeHtml(jobCardForPdf.agentName || '—')}</div></div>
+      <div class="meta-card"><div class="label">Status</div><div class="value">${escapeHtml(String(jobCardForPdf.status || 'draft').toUpperCase())}</div></div>
+      <div class="meta-card"><div class="label">Created</div><div class="value">${escapeHtml(formatPdfDate(jobCardForPdf.createdAt))}</div></div>
       <div class="meta-card"><div class="label">Printed</div><div class="value">${escapeHtml(new Date().toLocaleString())}</div></div>
     </div>
 
     <section class="section">
       <h3>Visit narrative</h3>
       <p><strong>Heading:</strong> ${escapeHtml(selectedHeading || '—')}</p>
-      <p><strong>Call out category:</strong> ${escapeHtml(selectedJobCard.callOutCategory || '—')}</p>
-      <p><strong>Reason for visit:</strong> ${escapeHtml(selectedJobCard.reasonForVisit || '—')}</p>
-      <p><strong>Diagnosis:</strong> ${escapeHtml(selectedJobCard.diagnosis || '—')}</p>
-      <p><strong>Actions taken:</strong> ${escapeHtml(selectedJobCard.actionsTaken || '—')}</p>
-      <p><strong>Future actions:</strong> ${escapeHtml(selectedJobCard.futureWorkRequired || '—')}</p>
+      <p><strong>Call out category:</strong> ${escapeHtml(jobCardForPdf.callOutCategory || '—')}</p>
+      <p><strong>Reason for visit:</strong> ${escapeHtml(jobCardForPdf.reasonForVisit || '—')}</p>
+      <p><strong>Diagnosis:</strong> ${escapeHtml(jobCardForPdf.diagnosis || '—')}</p>
+      <p><strong>Actions taken:</strong> ${escapeHtml(jobCardForPdf.actionsTaken || '—')}</p>
+      <p><strong>Future actions:</strong> ${escapeHtml(jobCardForPdf.futureWorkRequired || '—')}</p>
       ${
         otherCommentsReport.technicianNotes
           ? `<p><strong>Additional notes:</strong> ${escapeHtml(otherCommentsReport.technicianNotes)}</p>`
@@ -1299,10 +1338,10 @@ const ServiceAndMaintenance = () => {
 
     <section class="section">
       <h3>Travel and costs</h3>
-      <p><strong>Vehicle:</strong> ${escapeHtml(selectedJobCard.vehicleUsed || 'Not specified')}</p>
-      <p><strong>Kilometers:</strong> ${escapeHtml(String(selectedJobCard.kmReadingBefore ?? '—'))} -> ${escapeHtml(String(selectedJobCard.kmReadingAfter ?? '—'))}</p>
-      <p><strong>Travel distance:</strong> ${Number.isFinite(Number(selectedJobCard.travelKilometers)) ? `${Number(selectedJobCard.travelKilometers).toFixed(1)} km` : '—'}</p>
-      <p><strong>Total materials cost:</strong> ${escapeHtml(formatPdfMoney(selectedJobCard.totalMaterialsCost || 0))}</p>
+      <p><strong>Vehicle:</strong> ${escapeHtml(jobCardForPdf.vehicleUsed || 'Not specified')}</p>
+      <p><strong>Kilometers:</strong> ${escapeHtml(String(jobCardForPdf.kmReadingBefore ?? '—'))} -> ${escapeHtml(String(jobCardForPdf.kmReadingAfter ?? '—'))}</p>
+      <p><strong>Travel distance:</strong> ${Number.isFinite(Number(jobCardForPdf.travelKilometers)) ? `${Number(jobCardForPdf.travelKilometers).toFixed(1)} km` : '—'}</p>
+      <p><strong>Total materials cost:</strong> ${escapeHtml(formatPdfMoney(jobCardForPdf.totalMaterialsCost || 0))}</p>
     </section>
 
     <section class="section">
@@ -1323,10 +1362,14 @@ const ServiceAndMaintenance = () => {
 
     <section class="section">
       <h3>Map</h3>
-      <p><strong>Location:</strong> ${escapeHtml(selectedJobCard.location || selectedJobCard.siteName || selectedJobCard.clientName || 'Not specified')}</p>
+      <p><strong>Location:</strong> ${escapeHtml(jobCardForPdf.location || jobCardForPdf.siteName || jobCardForPdf.clientName || 'Not specified')}</p>
       ${coords ? `<p><strong>Coordinates:</strong> ${escapeHtml(coords.lat.toFixed(6))}, ${escapeHtml(coords.lng.toFixed(6))}</p>` : '<p class="muted">No GPS coordinates recorded.</p>'}
       ${mapImageSrc ? `<div class="map-image"><img src="${escapeHtml(mapImageSrc)}" alt="Job location map" /></div>` : ''}
-      ${mapOpenUrl ? `<p><strong>Map link:</strong> ${escapeHtml(mapOpenUrl)}</p>` : ''}
+      ${
+        mapOpenUrl
+          ? `<p><strong>Map link:</strong> <a href="${escapeHtml(mapOpenUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(mapOpenUrl)}</a></p>`
+          : ''
+      }
     </section>
 
     <section class="section">
@@ -1335,7 +1378,7 @@ const ServiceAndMaintenance = () => {
     </section>
 
     <div class="footer">
-      ${escapeHtml(companyName)} • Job Card ${escapeHtml(selectedJobCard.jobCardNumber || selectedJobCard.id || '')}
+      ${escapeHtml(companyName)} • Job Card ${escapeHtml(jobCardForPdf.jobCardNumber || jobCardForPdf.id || '')}
     </div>
   </div>
 </body>
