@@ -1080,9 +1080,40 @@ const ServiceAndMaintenance = () => {
       if (!url || typeof url !== 'string') return '';
       if (/^data:image\//i.test(url)) return url;
       if (/^blob:/i.test(url)) return fetchProtectedImageAsDataUrl(url, token);
-      if (/^https?:\/\//i.test(url)) return url;
+      if (/^https?:\/\//i.test(url)) {
+        const inlineData = await fetchProtectedImageAsDataUrl(url, token);
+        return inlineData || url;
+      }
       if (url.startsWith('/api/')) return fetchProtectedImageAsDataUrl(url, token);
       return url;
+    };
+
+    const waitForWindowImages = async (win, timeoutMs = 10000) => {
+      if (!win || !win.document) return;
+      const imageNodes = Array.from(win.document.images || []);
+      if (imageNodes.length === 0) return;
+
+      await Promise.race([
+        Promise.all(
+          imageNodes.map(
+            (img) =>
+              new Promise((resolve) => {
+                if (img.complete) {
+                  resolve();
+                  return;
+                }
+                const done = () => {
+                  img.removeEventListener('load', done);
+                  img.removeEventListener('error', done);
+                  resolve();
+                };
+                img.addEventListener('load', done, { once: true });
+                img.addEventListener('error', done, { once: true });
+              })
+          )
+        ),
+        new Promise((resolve) => setTimeout(resolve, timeoutMs))
+      ]);
     };
 
     try {
@@ -1116,6 +1147,10 @@ const ServiceAndMaintenance = () => {
         ? `https://www.openstreetmap.org/?mlat=${encodeURIComponent(
             coords.lat
           )}&mlon=${encodeURIComponent(coords.lng)}&zoom=15`
+        : '';
+
+      const mapImageSrc = mapImageUrl
+        ? (await fetchProtectedImageAsDataUrl(mapImageUrl, null)) || mapImageUrl
         : '';
 
       const visualImageCandidates = (galleryVisualItems || [])
@@ -1290,7 +1325,7 @@ const ServiceAndMaintenance = () => {
       <h3>Map</h3>
       <p><strong>Location:</strong> ${escapeHtml(selectedJobCard.location || selectedJobCard.siteName || selectedJobCard.clientName || 'Not specified')}</p>
       ${coords ? `<p><strong>Coordinates:</strong> ${escapeHtml(coords.lat.toFixed(6))}, ${escapeHtml(coords.lng.toFixed(6))}</p>` : '<p class="muted">No GPS coordinates recorded.</p>'}
-      ${mapImageUrl ? `<div class="map-image"><img src="${escapeHtml(mapImageUrl)}" alt="Job location map" /></div>` : ''}
+      ${mapImageSrc ? `<div class="map-image"><img src="${escapeHtml(mapImageSrc)}" alt="Job location map" /></div>` : ''}
       ${mapOpenUrl ? `<p><strong>Map link:</strong> ${escapeHtml(mapOpenUrl)}</p>` : ''}
     </section>
 
@@ -1309,10 +1344,10 @@ const ServiceAndMaintenance = () => {
       printWin.document.write(html);
       printWin.document.close();
       printWin.focus();
-      setTimeout(() => {
-        printWin.print();
-        printWin.close();
-      }, 350);
+      await waitForWindowImages(printWin, 12000);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      printWin.print();
+      printWin.close();
     } catch (error) {
       printWin.close();
       console.error('Failed to generate job card PDF:', error);
