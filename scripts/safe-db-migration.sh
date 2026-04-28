@@ -9,6 +9,7 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
+BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-14}"
 
 echo "🔒 Safe Database Migration Tool"
 echo "================================"
@@ -67,6 +68,33 @@ mkdir -p "$BACKUP_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/backup_${TIMESTAMP}"
 
+prune_old_backups() {
+    local retention="$1"
+    if ! [[ "$retention" =~ ^[0-9]+$ ]] || [ "$retention" -lt 1 ]; then
+        echo -e "${YELLOW}⚠️  Invalid BACKUP_RETENTION_COUNT='${retention}', skipping backup prune${NC}"
+        return 0
+    fi
+
+    # Keep newest N backups across sql/sql.gz/db; remove older files to cap growth.
+    local pattern
+    pattern=$(ls -1t "$BACKUP_DIR"/backup_* 2>/dev/null || true)
+    if [ -z "$pattern" ]; then
+        return 0
+    fi
+
+    local delete_list
+    delete_list=$(printf "%s\n" "$pattern" | tail -n +"$((retention + 1))" || true)
+    if [ -z "$delete_list" ]; then
+        return 0
+    fi
+
+    echo "🧹 Pruning old backups (keeping latest ${retention})..."
+    printf "%s\n" "$delete_list" | while IFS= read -r old_file; do
+        [ -n "$old_file" ] || continue
+        rm -f "$old_file" || true
+    done
+}
+
 echo "📦 Creating backup before migration..."
 
 if [ "$DB_TYPE" = "postgresql" ]; then
@@ -116,6 +144,8 @@ elif [ "$DB_TYPE" = "sqlite" ]; then
         echo -e "${YELLOW}⚠️  Database file not found: $DB_FILE${NC}"
     fi
 fi
+
+prune_old_backups "$BACKUP_RETENTION_COUNT"
 
 echo ""
 echo "🔍 Checking for dangerous flags..."

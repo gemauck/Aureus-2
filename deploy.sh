@@ -27,6 +27,7 @@ GIT_BRANCH="${GIT_BRANCH:-main}"
 PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-abcotronics-erp}"
 MIN_FREE_MB="${MIN_FREE_MB:-4096}"
 MIN_FREE_INODES="${MIN_FREE_INODES:-10000}"
+PRE_DEPLOY_CLEANUP="${PRE_DEPLOY_CLEANUP:-0}"
 
 echo "=== ABCOTRONICS ERP DEPLOY START ==="
 echo "App directory     : ${APP_DIR}"
@@ -62,6 +63,19 @@ check_disk_capacity() {
   fi
 }
 
+run_pre_deploy_cleanup() {
+  if [ "$PRE_DEPLOY_CLEANUP" != "1" ]; then
+    return 0
+  fi
+
+  echo "-> Running pre-deploy maintenance cleanup..."
+  if [ -f "${APP_DIR}/scripts/server-maintenance.sh" ]; then
+    BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-14}" APP_DIR="${APP_DIR}" bash "${APP_DIR}/scripts/server-maintenance.sh" || true
+  else
+    echo "   (maintenance script not found; skipping)"
+  fi
+}
+
 if ! command -v git >/dev/null 2>&1; then
   echo "ERROR: git is not installed or not in PATH."
   exit 1
@@ -71,6 +85,9 @@ if ! command -v npm >/dev/null 2>&1; then
   echo "ERROR: npm is not installed or not in PATH."
   exit 1
 fi
+
+echo
+run_pre_deploy_cleanup
 
 echo
 check_disk_capacity
