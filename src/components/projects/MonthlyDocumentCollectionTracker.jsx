@@ -7162,17 +7162,79 @@ Abcotronics`;
         const [formData, setFormData] = useState({
             name: editingDocument?.name || '',
             description: editingDocument?.description || '',
-            attachments: editingDocument?.attachments || []
+            attachments: editingDocument?.attachments || [],
+            collectionStatus: editingDocument?.collectionStatus || {},
+            comments: editingDocument?.comments || {}
         });
+        const [bulkStatus, setBulkStatus] = useState('');
+        const [bulkComment, setBulkComment] = useState('');
         
         useEffect(() => {
             setFormData({
                 name: editingDocument?.name || '',
                 description: editingDocument?.description || '',
-                attachments: editingDocument?.attachments || []
+                attachments: editingDocument?.attachments || [],
+                collectionStatus: editingDocument?.collectionStatus || {},
+                comments: editingDocument?.comments || {}
             });
+            setBulkStatus('');
+            setBulkComment('');
         }, [editingDocument]);
         
+        const handleApplyBulkToAllMonths = () => {
+            const note = bulkComment.trim();
+            if (!bulkStatus && !note) {
+                alert('Select a status or add a comment to apply.');
+                return;
+            }
+
+            const nowIso = new Date().toISOString();
+            const currentUser = getCurrentUser();
+            const authorName =
+                currentUser?.name ||
+                currentUser?.fullName ||
+                currentUser?.username ||
+                currentUser?.email ||
+                'System';
+
+            setFormData(prev => {
+                let nextCollectionStatus = { ...(prev.collectionStatus || {}) };
+                let nextComments = { ...(prev.comments || {}) };
+
+                months.forEach((monthLabel, idx) => {
+                    if (bulkStatus) {
+                        nextCollectionStatus = setStatusForYear(nextCollectionStatus, monthLabel, bulkStatus, selectedYear);
+                    }
+                    if (note) {
+                        const existingComments = getCommentsForYear(nextComments, monthLabel, selectedYear);
+                        const normalizedExisting = Array.isArray(existingComments) ? existingComments : [];
+                        nextComments = setCommentsForYear(
+                            nextComments,
+                            monthLabel,
+                            [
+                                ...normalizedExisting,
+                                {
+                                    id: `bulk-${Date.now()}-${idx}`,
+                                    text: note,
+                                    author: authorName,
+                                    createdAt: nowIso
+                                }
+                            ],
+                            selectedYear
+                        );
+                    }
+                });
+
+                return {
+                    ...prev,
+                    collectionStatus: nextCollectionStatus,
+                    comments: nextComments
+                };
+            });
+
+            setBulkComment('');
+        };
+
         const handleSubmit = (e) => {
             e.preventDefault();
             if (!formData.name.trim()) {
@@ -7184,7 +7246,7 @@ Abcotronics`;
         
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-md">
+                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-xl">
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             {editingDocument ? 'Edit Document' : 'Add Document'}
@@ -7217,6 +7279,48 @@ Abcotronics`;
                                 placeholder="Additional details..."
                             ></textarea>
                         </div>
+
+                        {editingDocument && (
+                            <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+                                <div className="text-xs font-semibold text-gray-800">Bulk update all months ({selectedYear})</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                                        <select
+                                            value={bulkStatus}
+                                            onChange={(e) => setBulkStatus(e.target.value)}
+                                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
+                                        >
+                                            <option value="">Leave status unchanged</option>
+                                            {statusOptions.map((opt) => (
+                                                <option key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Comment</label>
+                                        <input
+                                            type="text"
+                                            value={bulkComment}
+                                            onChange={(e) => setBulkComment(e.target.value)}
+                                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
+                                            placeholder="Optional note to add to Jan-Dec"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={handleApplyBulkToAllMonths}
+                                        className="px-3 py-1.5 text-xs bg-violet-100 text-violet-800 rounded-lg hover:bg-violet-200"
+                                    >
+                                        Apply to all months
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
                             <button
