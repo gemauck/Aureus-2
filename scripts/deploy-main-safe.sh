@@ -8,6 +8,8 @@ REMOTE_NAME="origin"
 BRANCH_NAME="main"
 DEPLOY_HOST="root@165.22.127.196"
 DEPLOY_PATH="/var/www/abcotronics-erp"
+REMOTE_MIN_FREE_MB="${REMOTE_MIN_FREE_MB:-4096}"
+REMOTE_MIN_FREE_INODES="${REMOTE_MIN_FREE_INODES:-10000}"
 
 echo "== Safe deploy guard =="
 echo "Repo: $ROOT_DIR"
@@ -39,5 +41,23 @@ else
 fi
 
 echo "-> Triggering server deploy..."
-ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && (git update-ref -d refs/remotes/origin/main 2>/dev/null; git fetch origin --prune main && git reset --hard origin/main) && ./deploy.sh"
+ssh "$DEPLOY_HOST" "
+  set -euo pipefail
+  cd '$DEPLOY_PATH'
+  free_mb=\$(df -Pm . | awk 'NR==2 {print \$4}')
+  free_inodes=\$(df -Pi . | awk 'NR==2 {print \$4}')
+  echo \"-> Remote capacity check: \${free_mb}MB free, \${free_inodes} inodes free\"
+  if [ \"\${free_mb}\" -lt '$REMOTE_MIN_FREE_MB' ]; then
+    echo \"ERROR: Remote free disk below threshold (${REMOTE_MIN_FREE_MB}MB). Aborting before fetch.\"
+    exit 1
+  fi
+  if [ \"\${free_inodes}\" -lt '$REMOTE_MIN_FREE_INODES' ]; then
+    echo \"ERROR: Remote free inodes below threshold (${REMOTE_MIN_FREE_INODES}). Aborting before fetch.\"
+    exit 1
+  fi
+  git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+  git fetch origin --prune main
+  git reset --hard origin/main
+  MIN_FREE_MB='$REMOTE_MIN_FREE_MB' MIN_FREE_INODES='$REMOTE_MIN_FREE_INODES' ./deploy.sh
+"
 

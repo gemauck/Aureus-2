@@ -25,6 +25,8 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-$(pwd)}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-abcotronics-erp}"
+MIN_FREE_MB="${MIN_FREE_MB:-4096}"
+MIN_FREE_INODES="${MIN_FREE_INODES:-10000}"
 
 echo "=== ABCOTRONICS ERP DEPLOY START ==="
 echo "App directory     : ${APP_DIR}"
@@ -35,6 +37,31 @@ echo "===================================="
 
 cd "${APP_DIR}"
 
+check_disk_capacity() {
+  local free_mb free_inodes
+  free_mb="$(df -Pm "${APP_DIR}" | awk 'NR==2 {print $4}')"
+  free_inodes="$(df -Pi "${APP_DIR}" | awk 'NR==2 {print $4}')"
+
+  if [[ -z "${free_mb}" || -z "${free_inodes}" ]]; then
+    echo "ERROR: Unable to determine free disk/inode capacity for ${APP_DIR}."
+    exit 1
+  fi
+
+  echo "-> Capacity check:"
+  echo "   Free disk  : ${free_mb} MB (min required: ${MIN_FREE_MB} MB)"
+  echo "   Free inodes: ${free_inodes} (min required: ${MIN_FREE_INODES})"
+
+  if (( free_mb < MIN_FREE_MB )); then
+    echo "ERROR: Low disk space. Need at least ${MIN_FREE_MB} MB free before deploy."
+    exit 1
+  fi
+
+  if (( free_inodes < MIN_FREE_INODES )); then
+    echo "ERROR: Low free inodes. Need at least ${MIN_FREE_INODES} free before deploy."
+    exit 1
+  fi
+}
+
 if ! command -v git >/dev/null 2>&1; then
   echo "ERROR: git is not installed or not in PATH."
   exit 1
@@ -44,6 +71,9 @@ if ! command -v npm >/dev/null 2>&1; then
   echo "ERROR: npm is not installed or not in PATH."
   exit 1
 fi
+
+echo
+check_disk_capacity
 
 echo
 echo "-> Syncing to origin/${GIT_BRANCH} (fetch + reset --hard)..."
@@ -134,7 +164,12 @@ echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then
   if pm2 describe "${PM2_PROCESS_NAME}" >/dev/null 2>&1; then
-    pm2 restart "${PM2_PROCESS_NAME}" --update-env
+    if pm2 reload "${PM2_PROCESS_NAME}" --update-env; then
+      echo "  ✓ PM2 reload completed"
+    else
+      echo "  (reload failed, falling back to restart)"
+      pm2 restart "${PM2_PROCESS_NAME}" --update-env
+    fi
   else
     echo "  (no existing PM2 process named '${PM2_PROCESS_NAME}'; starting fresh)"
     if [ -f "${APP_DIR}/ecosystem.config.js" ]; then
