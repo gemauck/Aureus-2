@@ -1336,12 +1336,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // and could race with saves. Year is only for normalizeSectionsByYear when provided via URL.
     }, [project?.id, project?.documentSections, project?.monthlyDataReviewSections, project?.complianceReviewSections, isJsonOnlyTracker, dataSource]);
     
-    // Load data on mount and when project/year changes
+    // Load data on mount and when the project/data source changes.
+    // Do not reload on selectedYear changes: reloading can race with debounced autosave
+    // and replace in-memory edits with stale server data before they are persisted.
     useEffect(() => {
         if (project?.id) {
             loadData();
         }
-    }, [project?.id, selectedYear, loadData]);
+    }, [project?.id, loadData]);
 
     // Restore from last browser backup (e.g. after a failed save that cleared the server)
     const handleRestoreFromBackup = useCallback(() => {
@@ -1513,6 +1515,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         void saveToDatabase({ skipLoadingGuard: queuedSkipLoadingGuard });
     }, [isLoading, project?.id]);
     
+    const scrollSyncBindingKey = useMemo(() => {
+        if (!project?.id) return '';
+        const sectionIds = (sections || []).map((s) => String(s?.id ?? '')).join('|');
+        return `${project.id}:${selectedYear}:${trackerLayoutMode}:${sectionIds}`;
+    }, [project?.id, selectedYear, trackerLayoutMode, sections]);
+
     // Synchronize horizontal scrolling across all table containers.
     // Use root ref + querySelectorAll. Listen to both 'scroll' and 'wheel' (deltaX); trackpad
     // horizontal scroll often fires wheel but not scroll on the overflow div.
@@ -1535,8 +1543,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const containers = Array.from(root.querySelectorAll('[data-scroll-sync]'));
             const connected = containers.filter(el => el.isConnected);
             if (connected.length === 0) return false;
+            const baselineScrollLeft = connected[0].scrollLeft;
             connected.forEach(el => {
                 if (scrollHandlers.has(el)) return;
+                if (el.scrollLeft !== baselineScrollLeft) {
+                    el.scrollLeft = baselineScrollLeft;
+                }
                 const onScroll = () => handleScroll(el);
                 scrollHandlers.set(el, onScroll);
                 el.addEventListener('scroll', onScroll, { passive: true });
@@ -1572,7 +1584,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             if (rafId != null) cancelAnimationFrame(rafId);
             cleanup();
         };
-    }, [sections.length]);
+    }, [sections.length, scrollSyncBindingKey]);
 
     // Monthly Data Review: auto-navigate horizontally to the highlighted working month column.
     useEffect(() => {
