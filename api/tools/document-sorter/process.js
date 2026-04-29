@@ -18,6 +18,8 @@ import { buildMergedRules, classifyPath, folderNameForFileNum } from './classify
 import { extractTextForSorter } from './extractText.js'
 import { classifyWithLLM } from './aiClassify.js'
 import { CANCEL_FLAG_NAME } from './cancel.js'
+import { resolveChecklistSubfolder, sanitizeSubfolderName } from './checklistTemplate.js'
+import { getUserIdFromReq, suggestFromLearning } from './learningStore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -30,6 +32,8 @@ const MAX_AI_BYTES = 18 * 1024 * 1024
 const AI_SCOPE_ALL_CAP = 80
 const EXTRA_KW_MAX_TOTAL = 80
 const LOW_CONFIDENCE_THRESHOLD = 0.58
+const CONFIDENCE_LOW = 0.6
+const CONFIDENCE_MED = 0.8
 
 /** User JSON: { "3": ["fuel slip"], "6": ["contractor xyz"] } — max ~80 phrases total */
 function sanitizeExtraKeywords(raw) {
@@ -62,6 +66,14 @@ function sanitizeEntryPath(entryPath) {
   const parts = normalized.split('/').filter(Boolean)
   const safe = parts.map((p) => p.replace(/[<>:"|?*]/g, '_')).join(path.sep)
   return safe || 'unnamed'
+}
+
+function bucketConfidence(v) {
+  const n = Number(v || 0)
+  if (n <= 0) return 'none'
+  if (n < CONFIDENCE_LOW) return 'low'
+  if (n < CONFIDENCE_MED) return 'medium'
+  return 'high'
 }
 
 function destKey(folderName, safeRelPath) {
@@ -151,11 +163,19 @@ function writeManifestCsv(manifest, outputDir) {
     'outputRelativePath',
     'folderName',
     'fileNum',
+    'subFolderName',
+    'subFolderReason',
+    'subFolderConfidence',
     'matchedKeyword',
     'matchedBy',
     'classifyConfidence',
     'classifyReason',
     'method',
+    'manualAdjusted',
+    'manualAdjustedAt',
+    'manualAdjustedBy',
+    'learnedFromManual',
+    'learnedHit',
     'uncompressedSize',
     'collisionDisambiguated',
     'llmConfidence',
@@ -214,6 +234,7 @@ async function handler(req, res) {
 
     const extraKwSanitized = sanitizeExtraKeywords(payload.extraKeywords)
     const classifyRules = buildMergedRules(extraKwSanitized)
+    const userId = getUserIdFromReq(req)
 
     if (!uploadId) {
       return badRequest(res, 'uploadId required')
@@ -266,6 +287,9 @@ async function handler(req, res) {
       totalFiles: 0,
       totalBytes: 0,
       byFile: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 },
+      bySubfolder: {},
+      confidenceBreakdown: { none: 0, low: 0, medium: 0, high: 0 },
+      learnedHits: 0,
     }
 
     const manifest = {
@@ -330,18 +354,47 @@ async function handler(req, res) {
         }
 
         const origPath = entry.fileName
-        const { fileNum, folderName, matchedKeyword, matchedBy, confidence, classifyReason } = classifyPath(origPath, {
-          rules: classifyRules,
-        })
+        const learned = suggestFromLearning({ userId, originalPath: origPath })
+        let fileNum
+        let folderName
+        let matchedKeyword
+        let matchedBy
+        let confidence
+        let classifyReason
+        let learnedHit = false
+
+        if (learned && learned.fileNum >= 1 && learned.fileNum <= 7) {
+          fileNum = learned.fileNum
+          folderName = folderNameForFileNum(fileNum)
+          matchedKeyword = null
+          matchedBy = 'learned'
+          confidence = learned.confidence
+          classifyReason = learned.reason
+          learnedHit = true
+          stats.learnedHits++
+        } else {
+          const classified = classifyPath(origPath, { rules: classifyRules })
+          fileNum = classified.fileNum
+          folderName = classified.folderName
+          matchedKeyword = classified.matchedKeyword
+          matchedBy = classified.matchedBy
+          confidence = classified.confidence
+          classifyReason = classified.classifyReason
+        }
+
+        const sub = resolveChecklistSubfolder(fileNum, origPath)
+        const subFolderName = sanitizeSubfolderName(sub.subFolderName || 'Unsorted')
+        const folderWithSub = path.join(folderName, subFolderName)
         let safePath = sanitizeEntryPath(origPath)
-        const alloc = allocateSafeRelativePath(folderName, safePath, destSeen)
+        const alloc = allocateSafeRelativePath(folderWithSub, safePath, destSeen)
         safePath = alloc.safePath
         if (alloc.disambiguated) collisionsResolved++
 
-        const dir = path.join(outputDir, folderName)
+        const dir = path.join(outputDir, folderName, subFolderName)
         const outPath = path.join(dir, safePath)
         const outputRelativePath = path.posix.join(
           folderName.replace(/\\/g, '/'),
+          subFolderName.replace(/\\/g, '/'),
           safePath.split(path.sep).join('/'),
         )
 
@@ -350,17 +403,24 @@ async function handler(req, res) {
         stats.totalFiles++
         stats.totalBytes += entry.uncompressedSize || 0
         stats.byFile[fileNum] = (stats.byFile[fileNum] || 0) + 1
+        const subKey = `${fileNum}:${subFolderName}`
+        stats.bySubfolder[subKey] = (stats.bySubfolder[subKey] || 0) + 1
+        stats.confidenceBreakdown[bucketConfidence(confidence)] += 1
 
         manifest.files.push({
           originalPath: origPath,
           outputRelativePath,
           folderName,
           fileNum,
+          subFolderName,
+          subFolderReason: sub.subFolderReason,
+          subFolderConfidence: sub.subFolderConfidence,
           matchedKeyword,
           matchedBy,
           classifyConfidence: confidence,
           classifyReason,
           method: 'rules',
+          learnedHit,
           uncompressedSize: entry.uncompressedSize || 0,
           collisionDisambiguated: alloc.disambiguated,
         })
@@ -450,6 +510,7 @@ async function handler(req, res) {
         : manifest.files.some(
             (f) =>
               f.fileNum === 0 ||
+              f.subFolderReason === 'fallback-unsorted' ||
               (typeof f.classifyConfidence === 'number' && f.classifyConfidence > 0 && f.classifyConfidence < LOW_CONFIDENCE_THRESHOLD),
           ))
 
@@ -461,6 +522,7 @@ async function handler(req, res) {
               .filter(
                 (f) =>
                   f.fileNum === 0 ||
+                  f.subFolderReason === 'fallback-unsorted' ||
                   (typeof f.classifyConfidence === 'number' &&
                     f.classifyConfidence > 0 &&
                     f.classifyConfidence < LOW_CONFIDENCE_THRESHOLD),
@@ -525,22 +587,32 @@ async function handler(req, res) {
               row.classifyReason = `${row.classifyReason || 'rule'}; llm_confirm`
             } else {
               const newFolder = folderNameForFileNum(targetNum)
+              const nextSub = resolveChecklistSubfolder(targetNum, row.originalPath)
+              const newSub = sanitizeSubfolderName(nextSub.subFolderName || 'Unsorted')
               let relSafe = sanitizeEntryPath(row.originalPath)
-              const alloc2 = allocateSafeRelativePath(newFolder, relSafe, destSeen)
+              const alloc2 = allocateSafeRelativePath(path.join(newFolder, newSub), relSafe, destSeen)
               relSafe = alloc2.safePath
               if (alloc2.disambiguated) collisionsResolved++
 
-              const absTo = path.join(outputDir, newFolder, relSafe)
+              const absTo = path.join(outputDir, newFolder, newSub, relSafe)
               fs.mkdirSync(path.dirname(absTo), { recursive: true })
               fs.renameSync(absFrom, absTo)
 
               stats.byFile[prevNum] = Math.max(0, (stats.byFile[prevNum] || 0) - 1)
               stats.byFile[targetNum] = (stats.byFile[targetNum] || 0) + 1
+              const oldSubKey = `${prevNum}:${row.subFolderName || 'Unsorted'}`
+              stats.bySubfolder[oldSubKey] = Math.max(0, (stats.bySubfolder[oldSubKey] || 0) - 1)
+              const newSubKey = `${targetNum}:${newSub}`
+              stats.bySubfolder[newSubKey] = (stats.bySubfolder[newSubKey] || 0) + 1
 
               row.fileNum = targetNum
               row.folderName = newFolder
+              row.subFolderName = newSub
+              row.subFolderReason = nextSub.subFolderReason
+              row.subFolderConfidence = nextSub.subFolderConfidence
               row.outputRelativePath = path.posix.join(
                 newFolder.replace(/\\/g, '/'),
+                newSub.replace(/\\/g, '/'),
                 relSafe.split(path.sep).join('/'),
               )
               row.method = 'llm'
@@ -625,6 +697,9 @@ async function handler(req, res) {
       manifestRows: manifest.files.length,
       outputFiles: outputDocCount,
       statsSumByCategory: sumByFile,
+      statsBySubfolder: stats.bySubfolder,
+      confidenceBreakdown: stats.confidenceBreakdown,
+      learnedHits: stats.learnedHits,
       match:
         inputFileCount === manifest.files.length &&
         manifest.files.length === outputDocCount &&

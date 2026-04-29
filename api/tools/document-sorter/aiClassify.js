@@ -4,6 +4,7 @@
 
 import { loadTaxonomyMarkdown } from './extractText.js'
 import { folderNameForFileNum } from './classify.js'
+import { CHECKLIST_SUBFOLDERS } from './checklistTemplate.js'
 
 let openai = null
 let openaiInitialized = false
@@ -48,12 +49,22 @@ export async function classifyWithLLM(input, options = {}) {
   }
 
   const taxonomy = loadTaxonomyMarkdown()
+  const checklistSummary = Object.entries(CHECKLIST_SUBFOLDERS)
+    .map(([num, docs]) => `File ${num}: ${docs.slice(0, 8).join(', ')}`)
+    .join('\n')
 
   const systemPrompt = `You are an expert on South African diesel refund evidence filing.
 Classify the document into exactly one of: File 1, File 2, File 3, File 4, File 5, File 6, or File 7 using the taxonomy below.
 
 TAXONOMY:
 ${taxonomy || '(taxonomy file missing — use general diesel refund knowledge)'}
+
+CHECKLIST CONTEXT (strict expected document families):
+${checklistSummary}
+
+Disambiguation:
+- Supplier POP/remittance/invoice tends to File 3.
+- Contractor POP/remittance/invoice tends to File 6.
 
 Respond with JSON only:
 {

@@ -15,6 +15,16 @@ const FILE_CATEGORIES = [
   { num: 7, name: 'File 7 - Financial and Compliance', desc: 'Annual Financial Statements, Management Accounts, VAT 201, Deviations' },
 ];
 
+const CHECKLIST_SUBFOLDERS_FALLBACK = {
+  1: ['Mining Right', 'CIPC Documents', 'Diesel Refund Registration', 'VAT Registration', 'Title Deed / Lease Agreement', 'Environmental Authorisations', 'Summary of Operations and Activities', 'Descriptions of Specialised Data Systems', 'File 1 Explanation'],
+  2: ['Fuel Supply Contract', 'Mining Contractors Contracts', 'Sale of Product Contracts', 'File 2 Explanation'],
+  3: ['Tank and Pump Configuration', 'Diagram of Fuel System', 'Photos of meter', 'Delivery Notes', 'Invoices', 'Remittance Advices', 'Proof of payments', 'Tank Reconcilliations', 'Photos of Meter Readings', 'Meter Readings', 'Calibration Certificates', 'Document'],
+  4: ['Asset Register - Combined Assets', 'Asset Register - Mining Assets', 'Asset Register - Non Mining Assets', 'Driver List', 'File 4 Explanation'],
+  5: ['Description and Literature of FMS', 'FMS Raw Data', 'Detailed Fuel Refund Report', 'Fuel Refund Logbook Per Asset', 'Claim Comparison [if applicable]', 'File 5 Explanation'],
+  6: ['Monthly Survey Reports', 'Production Reports', 'Asset Activity Reports', 'Asset Tagging Reports', 'Diesel Cost Component', 'Sales of Coal', 'Weighbridge Data', 'Contractor Invoices', 'Contractor Remittances', 'Contractor Proof of payment', 'File 6 Explanation'],
+  7: ['Annual Financial Statements', 'Management Accounts', 'Any deviations (theft, loss etc)', 'Fuel Caps Exceeded', 'VAT 201 - Monthly', 'File 7 Explanation'],
+};
+
 const DocumentSorter = () => {
   const { isDark } = window.useTheme?.() || { isDark: false };
   const [file, setFile] = useState(null);
@@ -34,6 +44,11 @@ const DocumentSorter = () => {
   const [previewOnlyUncategorized, setPreviewOnlyUncategorized] = useState(false);
   const [previewOnlyAIErrors, setPreviewOnlyAIErrors] = useState(false);
   const [previewOnlyCollisions, setPreviewOnlyCollisions] = useState(false);
+  const [fileSubfolders, setFileSubfolders] = useState(CHECKLIST_SUBFOLDERS_FALLBACK);
+  const [manualTargets, setManualTargets] = useState({});
+  const [customSubfolderByRow, setCustomSubfolderByRow] = useState({});
+  const [moveBusyKey, setMoveBusyKey] = useState(null);
+  const [learnFromManual, setLearnFromManual] = useState(true);
   const fileInputRef = useRef(null);
   const progressPollRef = useRef(null);
 
@@ -51,6 +66,18 @@ const DocumentSorter = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/templates`, { method: 'GET', headers: getHeaders(false) });
+        const json = await res.json().catch(() => ({}));
+        const data = json?.data ?? json;
+        if (res.ok && data?.fileSubfolders) setFileSubfolders(data.fileSubfolders);
+      } catch (_) {}
+    };
+    loadTemplates();
+  }, []);
+
   const handleFileSelect = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -62,6 +89,9 @@ const DocumentSorter = () => {
     setSortPhaseProgress(null);
     setManifestPreview([]);
     setManifestPreviewLoading(false);
+    setManualTargets({});
+    setCustomSubfolderByRow({});
+    setMoveBusyKey(null);
   };
 
   const startUpload = async () => {
@@ -252,7 +282,17 @@ const DocumentSorter = () => {
       if (!res.ok) {
         throw new Error(json?.error?.message || `Manifest fetch failed (${res.status})`);
       }
-      setManifestPreview(Array.isArray(data?.files) ? data.files : []);
+      const rows = Array.isArray(data?.files) ? data.files : [];
+      setManifestPreview(rows);
+      const seed = {};
+      rows.forEach((row, idx) => {
+        const key = (row.outputRelativePath || `${row.originalPath || 'row'}-${idx}`);
+        seed[key] = {
+          fileNum: Number(row.fileNum) || 0,
+          subFolderName: row.subFolderName || 'Unsorted',
+        };
+      });
+      setManualTargets(seed);
     } catch (e) {
       setError(e.message || 'Could not load manifest preview');
       setManifestPreview([]);
@@ -270,6 +310,56 @@ const DocumentSorter = () => {
 
   const verification = result?.verification;
   const uncategorizedSample = result?.uncategorizedSample || [];
+  const getRowKey = (row, idx) => row.outputRelativePath || `${row.originalPath || 'row'}-${idx}`;
+  const getTargetForRow = (row, idx) => {
+    const key = getRowKey(row, idx);
+    return manualTargets[key] || { fileNum: Number(row.fileNum) || 0, subFolderName: row.subFolderName || 'Unsorted' };
+  };
+
+  const updateRowTarget = (row, idx, patch) => {
+    const key = getRowKey(row, idx);
+    setManualTargets((prev) => ({ ...prev, [key]: { ...getTargetForRow(row, idx), ...patch } }));
+  };
+
+  const moveRow = async (row, idx) => {
+    const key = getRowKey(row, idx);
+    const target = getTargetForRow(row, idx);
+    const custom = (customSubfolderByRow[key] || '').trim();
+    const targetSubfolderName = custom || target.subFolderName || 'Unsorted';
+    if (!row.outputRelativePath) {
+      setError('Row has no output path to move.');
+      return;
+    }
+    if (!target.fileNum || Number(target.fileNum) < 1 || Number(target.fileNum) > 7) {
+      setError('Choose a valid target File 1-7.');
+      return;
+    }
+    setMoveBusyKey(key);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/move`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          uploadId: result?.uploadId,
+          outputRelativePath: row.outputRelativePath,
+          targetFileNum: Number(target.fileNum),
+          targetSubfolderName,
+          learn: learnFromManual,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error?.message || `Move failed (${res.status})`);
+      }
+      await loadManifestPreview();
+    } catch (e) {
+      setError(e.message || 'Move failed');
+    } finally {
+      setMoveBusyKey(null);
+    }
+  };
+
   const previewRows = manifestPreview
     .filter((row) => (previewOnlyUncategorized ? Number(row.fileNum) === 0 : true))
     .filter((row) => (previewOnlyAIErrors ? Boolean(row.aiError) : true))
@@ -614,6 +704,14 @@ const DocumentSorter = () => {
                       />
                       Collision-renamed only
                     </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={learnFromManual}
+                        onChange={(e) => setLearnFromManual(e.target.checked)}
+                      />
+                      Learn from manual moves
+                    </label>
                   </div>
                   {manifestPreviewLoading ? (
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading rows…</p>
@@ -628,6 +726,7 @@ const DocumentSorter = () => {
                             <th className="text-left px-2 py-1">Match</th>
                             <th className="text-left px-2 py-1">Confidence</th>
                             <th className="text-left px-2 py-1">AI error</th>
+                            <th className="text-left px-2 py-1">Manual move</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -639,11 +738,58 @@ const DocumentSorter = () => {
                               <td className="px-2 py-1">{row.matchedKeyword || '-'}</td>
                               <td className="px-2 py-1">{row.llmConfidence ?? '-'}</td>
                               <td className="px-2 py-1 max-w-[260px] truncate" title={row.aiError || ''}>{row.aiError || '-'}</td>
+                              <td className="px-2 py-1 min-w-[280px]">
+                                {(() => {
+                                  const target = getTargetForRow(row, idx);
+                                  const options = fileSubfolders[String(target.fileNum)] || [];
+                                  const rowKey = getRowKey(row, idx);
+                                  return (
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex gap-1">
+                                        <select
+                                          value={target.fileNum}
+                                          onChange={(e) => {
+                                            const nextFile = Number(e.target.value);
+                                            const firstSub = (fileSubfolders[String(nextFile)] || ['Unsorted'])[0] || 'Unsorted';
+                                            updateRowTarget(row, idx, { fileNum: nextFile, subFolderName: firstSub });
+                                          }}
+                                          className={`text-xs rounded border px-1 py-0.5 ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                                        >
+                                          {[1,2,3,4,5,6,7].map((n) => <option key={n} value={n}>File {n}</option>)}
+                                        </select>
+                                        <select
+                                          value={target.subFolderName}
+                                          onChange={(e) => updateRowTarget(row, idx, { subFolderName: e.target.value })}
+                                          className={`text-xs rounded border px-1 py-0.5 flex-1 ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                                        >
+                                          {(options.length ? options : ['Unsorted']).map((s) => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                      </div>
+                                      <div className="flex gap-1">
+                                        <input
+                                          value={customSubfolderByRow[rowKey] || ''}
+                                          onChange={(e) => setCustomSubfolderByRow((prev) => ({ ...prev, [rowKey]: e.target.value }))}
+                                          placeholder="Custom subfolder (optional)"
+                                          className={`text-xs rounded border px-1 py-0.5 flex-1 ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => moveRow(row, idx)}
+                                          disabled={moveBusyKey === rowKey}
+                                          className="text-xs rounded border px-2 py-0.5"
+                                        >
+                                          {moveBusyKey === rowKey ? 'Moving…' : 'Move'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
                             </tr>
                           ))}
                           {previewRows.length === 0 && (
                             <tr>
-                              <td className="px-2 py-2 opacity-70" colSpan={6}>No rows match current filters.</td>
+                              <td className="px-2 py-2 opacity-70" colSpan={7}>No rows match current filters.</td>
                             </tr>
                           )}
                         </tbody>
