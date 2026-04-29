@@ -29,6 +29,11 @@ const DocumentSorter = () => {
   const [aiScope, setAiScope] = useState('uncategorized');
   const [extraKeywordsJson, setExtraKeywordsJson] = useState('');
   const [sortPhaseProgress, setSortPhaseProgress] = useState(null);
+  const [manifestPreview, setManifestPreview] = useState([]);
+  const [manifestPreviewLoading, setManifestPreviewLoading] = useState(false);
+  const [previewOnlyUncategorized, setPreviewOnlyUncategorized] = useState(false);
+  const [previewOnlyAIErrors, setPreviewOnlyAIErrors] = useState(false);
+  const [previewOnlyCollisions, setPreviewOnlyCollisions] = useState(false);
   const fileInputRef = useRef(null);
   const progressPollRef = useRef(null);
 
@@ -55,6 +60,8 @@ const DocumentSorter = () => {
     setError(null);
     setUploadProgress(0);
     setSortPhaseProgress(null);
+    setManifestPreview([]);
+    setManifestPreviewLoading(false);
   };
 
   const startUpload = async () => {
@@ -209,6 +216,51 @@ const DocumentSorter = () => {
     }
   };
 
+  const downloadManifest = async (format = 'json') => {
+    if (!result?.uploadId) return;
+    setError(null);
+    try {
+      const url = `${API_BASE}/manifest?uploadId=${encodeURIComponent(result.uploadId)}&format=${encodeURIComponent(format)}&download=1`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getHeaders(false),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `Manifest download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = `${result.uploadId}-manifest.${format}`;
+      a.click();
+      URL.revokeObjectURL(href);
+    } catch (e) {
+      setError(e.message || 'Manifest download failed');
+    }
+  };
+
+  const loadManifestPreview = async () => {
+    if (!result?.uploadId) return;
+    setManifestPreviewLoading(true);
+    try {
+      const url = `${API_BASE}/manifest?uploadId=${encodeURIComponent(result.uploadId)}&format=json`;
+      const res = await fetch(url, { method: 'GET', headers: getHeaders(false) });
+      const json = await res.json().catch(() => ({}));
+      const data = json?.data ?? json;
+      if (!res.ok) {
+        throw new Error(json?.error?.message || `Manifest fetch failed (${res.status})`);
+      }
+      setManifestPreview(Array.isArray(data?.files) ? data.files : []);
+    } catch (e) {
+      setError(e.message || 'Could not load manifest preview');
+      setManifestPreview([]);
+    } finally {
+      setManifestPreviewLoading(false);
+    }
+  };
+
   const formatSize = (bytes) => {
     if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
     if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
@@ -218,6 +270,11 @@ const DocumentSorter = () => {
 
   const verification = result?.verification;
   const uncategorizedSample = result?.uncategorizedSample || [];
+  const previewRows = manifestPreview
+    .filter((row) => (previewOnlyUncategorized ? Number(row.fileNum) === 0 : true))
+    .filter((row) => (previewOnlyAIErrors ? Boolean(row.aiError) : true))
+    .filter((row) => (previewOnlyCollisions ? Boolean(row.collisionDisambiguated) : true))
+    .slice(0, 50);
 
   return (
     <div className={`rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-6 shadow-sm`}>
@@ -491,7 +548,111 @@ const DocumentSorter = () => {
                 {downloading ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-file-archive" />}
                 {downloading ? 'Preparing…' : 'Download as ZIP'}
               </button>
+              <button
+                type="button"
+                onClick={() => downloadManifest('json')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                  isDark
+                    ? 'border-gray-500 text-gray-200 hover:bg-gray-700/40'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Manifest JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadManifest('csv')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                  isDark
+                    ? 'border-gray-500 text-gray-200 hover:bg-gray-700/40'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Manifest CSV
+              </button>
+              <button
+                type="button"
+                onClick={loadManifestPreview}
+                disabled={manifestPreviewLoading}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                  isDark
+                    ? 'border-gray-500 text-gray-200 hover:bg-gray-700/40'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {manifestPreviewLoading ? 'Loading preview…' : 'Preview Manifest'}
+              </button>
             </div>
+            {(manifestPreviewLoading || manifestPreview.length > 0) && (
+              <details className="mt-3" open={manifestPreview.length > 0}>
+                <summary className={`text-xs cursor-pointer ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Manifest preview (top 50 rows after filters)
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={previewOnlyUncategorized}
+                        onChange={(e) => setPreviewOnlyUncategorized(e.target.checked)}
+                      />
+                      Uncategorized only
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={previewOnlyAIErrors}
+                        onChange={(e) => setPreviewOnlyAIErrors(e.target.checked)}
+                      />
+                      AI errors only
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={previewOnlyCollisions}
+                        onChange={(e) => setPreviewOnlyCollisions(e.target.checked)}
+                      />
+                      Collision-renamed only
+                    </label>
+                  </div>
+                  {manifestPreviewLoading ? (
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading rows…</p>
+                  ) : (
+                    <div className="overflow-x-auto border rounded-lg border-gray-300/40">
+                      <table className="min-w-full text-xs">
+                        <thead className={isDark ? 'bg-gray-900' : 'bg-gray-100'}>
+                          <tr>
+                            <th className="text-left px-2 py-1">Path</th>
+                            <th className="text-left px-2 py-1">Folder</th>
+                            <th className="text-left px-2 py-1">Method</th>
+                            <th className="text-left px-2 py-1">Match</th>
+                            <th className="text-left px-2 py-1">Confidence</th>
+                            <th className="text-left px-2 py-1">AI error</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewRows.map((row, idx) => (
+                            <tr key={`${row.originalPath || 'row'}-${idx}`} className="border-t border-gray-300/20">
+                              <td className="px-2 py-1 max-w-[420px] truncate" title={row.originalPath || ''}>{row.originalPath || '-'}</td>
+                              <td className="px-2 py-1">{row.folderName || '-'}</td>
+                              <td className="px-2 py-1">{row.method || '-'}</td>
+                              <td className="px-2 py-1">{row.matchedKeyword || '-'}</td>
+                              <td className="px-2 py-1">{row.llmConfidence ?? '-'}</td>
+                              <td className="px-2 py-1 max-w-[260px] truncate" title={row.aiError || ''}>{row.aiError || '-'}</td>
+                            </tr>
+                          ))}
+                          {previewRows.length === 0 && (
+                            <tr>
+                              <td className="px-2 py-2 opacity-70" colSpan={6}>No rows match current filters.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
             {result.manifestPath && (
               <p className={`mt-2 text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
                 Manifest JSON and CSV are written alongside the sorted folders (
