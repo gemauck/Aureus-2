@@ -15,7 +15,6 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                 assignedTo: project.assignedTo || '',
                 description: project.description || '',
                 status: project.status || 'Active',
-                manager: project.manager || '',
                 includeInProgressTracker: project.includeInProgressTracker === true
             };
         }
@@ -28,7 +27,6 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
             assignedTo: '',
             description: '',
             status: 'Active',
-            manager: '',
             includeInProgressTracker: false
         };
     });
@@ -260,19 +258,7 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Project Manager</label>
-                            <select 
-                                value={formData.manager}
-                                onChange={(e) => setFormData({...formData, manager: e.target.value})}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            >
-                                <option value="">Select Manager</option>
-                                <option>Gareth Mauck</option>
-                                <option>David Buttemer</option>
-                            </select>
-                        </div>
+                    <div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1.5">Assign To</label>
                             <select 
