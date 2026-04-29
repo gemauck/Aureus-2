@@ -167,6 +167,7 @@ function containsAllTokens(text, tokens) {
  */
 function heuristicMatch(normalized, tokenText) {
   const has = (t) => tokenText.includes(` ${t} `)
+  const hasAny = (tokens) => tokens.some((t) => has(t))
 
   // Contractor financial docs should not fall into generic File 3 "invoice"
   if (has('contractor') && (has('invoice') || has('remittance') || (has('proof') && has('payment')))) {
@@ -179,16 +180,15 @@ function heuristicMatch(normalized, tokenText) {
 
   // POP/PoP/Proof of payment in normal supplier/fuel context -> File 3
   // (contractor POP still handled by the contractor heuristic above)
-  if (
-    has('pop') ||
-    has('proof') && (has('payment') || has('paument') || has('payement'))
-  ) {
-    if (has('fuel') || has('supplier') || has('delivery') || has('invoice') || has('remittance') || has('eft')) {
-      return {
-        fileNum: 3,
-        folderName: 'File 3 - Fuel System and Transactions',
-        matchedKeyword: 'heuristic: pop/proof-of-payment supplier context',
-      }
+  const popAlias =
+    hasAny(['pop']) ||
+    tokenText.includes(' p o p ') ||
+    (has('proof') && hasAny(['payment', 'payments', 'paument', 'payement']))
+  if (popAlias) {
+    return {
+      fileNum: 3,
+      folderName: 'File 3 - Fuel System and Transactions',
+      matchedKeyword: 'heuristic: pop/proof-of-payment alias',
     }
   }
 

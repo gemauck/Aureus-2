@@ -41,6 +41,8 @@ function writeManifestCsv(manifest, outputDir) {
     'manualAdjusted',
     'manualAdjustedAt',
     'manualAdjustedBy',
+    'learnedFromManual',
+    'learnedHit',
     'uncompressedSize',
     'collisionDisambiguated',
     'llmConfidence',

@@ -106,6 +106,21 @@ function scoreSubfolderMatch(pathTokenText, subfolder) {
 export function resolveChecklistSubfolder(fileNum, originalPath, fallback = 'Unsorted') {
   const list = CHECKLIST_SUBFOLDERS[fileNum] || []
   const tokenText = ` ${normalizeTokenText(originalPath)} `
+  const has = (t) => tokenText.includes(` ${t} `)
+  const isContractorContext = has('contractor')
+
+  if (
+    Number(fileNum) === 3 &&
+    !isContractorContext &&
+    (has('pop') || tokenText.includes(' p o p ') || (has('proof') && (has('payment') || has('payments') || has('paument') || has('payement'))))
+  ) {
+    return {
+      subFolderName: 'Proof of payments',
+      subFolderReason: 'alias-map:proof-of-payments',
+      subFolderConfidence: 0.98,
+    }
+  }
+
   let best = null
   let bestScore = 0
   for (const s of list) {

@@ -49,6 +49,17 @@ const DocumentSorter = () => {
   const [customSubfolderByRow, setCustomSubfolderByRow] = useState({});
   const [moveBusyKey, setMoveBusyKey] = useState(null);
   const [learnFromManual, setLearnFromManual] = useState(true);
+  const [learnByRow, setLearnByRow] = useState({});
+  const [pageSize, setPageSize] = useState(100);
+  const [page, setPage] = useState(1);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState(null);
+  const [bulkTargetFileNum, setBulkTargetFileNum] = useState(3);
+  const [bulkTargetSubfolder, setBulkTargetSubfolder] = useState('Proof of payments');
+  const [bulkCustomSubfolder, setBulkCustomSubfolder] = useState('');
+  const [bulkToken, setBulkToken] = useState('pop');
+  const [learningPreview, setLearningPreview] = useState(null);
+  const [learningPreviewLoading, setLearningPreviewLoading] = useState(false);
   const fileInputRef = useRef(null);
   const progressPollRef = useRef(null);
 
@@ -91,7 +102,11 @@ const DocumentSorter = () => {
     setManifestPreviewLoading(false);
     setManualTargets({});
     setCustomSubfolderByRow({});
+    setLearnByRow({});
     setMoveBusyKey(null);
+    setPage(1);
+    setBulkStatus(null);
+    setLearningPreview(null);
   };
 
   const startUpload = async () => {
@@ -293,6 +308,12 @@ const DocumentSorter = () => {
         };
       });
       setManualTargets(seed);
+      const learnSeed = {};
+      rows.forEach((row, idx) => {
+        const key = (row.outputRelativePath || `${row.originalPath || 'row'}-${idx}`);
+        learnSeed[key] = true;
+      });
+      setLearnByRow(learnSeed);
     } catch (e) {
       setError(e.message || 'Could not load manifest preview');
       setManifestPreview([]);
@@ -321,6 +342,21 @@ const DocumentSorter = () => {
     setManualTargets((prev) => ({ ...prev, [key]: { ...getTargetForRow(row, idx), ...patch } }));
   };
 
+  const loadLearningPreview = async () => {
+    setLearningPreviewLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/learning`, { method: 'GET', headers: getHeaders(false) });
+      const json = await res.json().catch(() => ({}));
+      const data = json?.data ?? json;
+      if (!res.ok) throw new Error(json?.error?.message || `Learning fetch failed (${res.status})`);
+      setLearningPreview(data);
+    } catch (e) {
+      setError(e.message || 'Could not load learning preview');
+    } finally {
+      setLearningPreviewLoading(false);
+    }
+  };
+
   const moveRow = async (row, idx) => {
     const key = getRowKey(row, idx);
     const target = getTargetForRow(row, idx);
@@ -345,7 +381,7 @@ const DocumentSorter = () => {
           outputRelativePath: row.outputRelativePath,
           targetFileNum: Number(target.fileNum),
           targetSubfolderName,
-          learn: learnFromManual,
+          learn: (learnByRow[key] ?? learnFromManual) === true,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -360,11 +396,67 @@ const DocumentSorter = () => {
     }
   };
 
-  const previewRows = manifestPreview
+  const filteredRows = manifestPreview
     .filter((row) => (previewOnlyUncategorized ? Number(row.fileNum) === 0 : true))
     .filter((row) => (previewOnlyAIErrors ? Boolean(row.aiError) : true))
-    .filter((row) => (previewOnlyCollisions ? Boolean(row.collisionDisambiguated) : true))
-    .slice(0, 50);
+    .filter((row) => (previewOnlyCollisions ? Boolean(row.collisionDisambiguated) : true));
+  const totalFilteredRows = filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredRows / pageSize));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageRows = filteredRows.slice(pageStart, pageStart + pageSize);
+
+  const moveMany = async (rows) => {
+    if (!result?.uploadId || !rows.length) return;
+    const targetSubfolderName = (bulkCustomSubfolder || bulkTargetSubfolder || 'Unsorted').trim() || 'Unsorted';
+    setBulkBusy(true);
+    setBulkStatus(`Moving 0 / ${rows.length}…`);
+    setError(null);
+    try {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const key = getRowKey(row, i);
+        if (!row.outputRelativePath) continue;
+        const res = await fetch(`${API_BASE}/move`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            uploadId: result?.uploadId,
+            outputRelativePath: row.outputRelativePath,
+            targetFileNum: Number(bulkTargetFileNum),
+            targetSubfolderName,
+            learn: (learnByRow[key] ?? learnFromManual) === true,
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error?.message || `Bulk move failed (${res.status})`);
+        setBulkStatus(`Moving ${i + 1} / ${rows.length}…`);
+      }
+      await loadManifestPreview();
+      await loadLearningPreview();
+      setBulkStatus(`Done. Moved ${rows.length} row(s).`);
+    } catch (e) {
+      setError(e.message || 'Bulk move failed');
+      setBulkStatus(null);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const applyToFilteredRows = async () => moveMany(filteredRows);
+  const applyToTokenRows = async () => {
+    const norm = (bulkToken || '').trim().toLowerCase();
+    if (!norm) {
+      setError('Enter a token for matching rows.');
+      return;
+    }
+    const rows = filteredRows.filter((r) => String(r.originalPath || '').toLowerCase().includes(norm));
+    if (!rows.length) {
+      setError(`No filtered rows matched token "${norm}".`);
+      return;
+    }
+    await moveMany(rows);
+  };
 
   return (
     <div className={`rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-6 shadow-sm`}>
@@ -676,7 +768,7 @@ const DocumentSorter = () => {
             {(manifestPreviewLoading || manifestPreview.length > 0) && (
               <details className="mt-3" open={manifestPreview.length > 0}>
                 <summary className={`text-xs cursor-pointer ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Manifest preview (top 50 rows after filters)
+                  Manifest preview (all rows editable)
                 </summary>
                 <div className="mt-2 space-y-2">
                   <div className="flex flex-wrap gap-4 text-xs">
@@ -713,6 +805,49 @@ const DocumentSorter = () => {
                       Learn from manual moves
                     </label>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                      Showing {totalFilteredRows === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + pageRows.length, totalFilteredRows)} of {totalFilteredRows} filtered rows ({manifestPreview.length} total)
+                    </span>
+                    <label className="inline-flex items-center gap-1">
+                      Page size
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setPage(1);
+                        }}
+                        className={`text-xs rounded border px-1 py-0.5 ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}
+                      >
+                        {[50, 100, 250, 500].map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage <= 1} className="text-xs rounded border px-2 py-0.5">Prev</button>
+                    <span>Page {safePage} / {totalPages}</span>
+                    <button type="button" onClick={() => setPage(Math.min(totalPages, safePage + 1))} disabled={safePage >= totalPages} className="text-xs rounded border px-2 py-0.5">Next</button>
+                  </div>
+                  <div className="rounded border border-gray-300/40 p-2 space-y-2">
+                    <p className="text-xs font-medium">Bulk manual actions</p>
+                    <div className="flex flex-wrap gap-1">
+                      <select value={bulkTargetFileNum} onChange={(e) => setBulkTargetFileNum(Number(e.target.value))} className={`text-xs rounded border px-1 py-0.5 ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}>
+                        {[1,2,3,4,5,6,7].map((n) => <option key={n} value={n}>File {n}</option>)}
+                      </select>
+                      <select value={bulkTargetSubfolder} onChange={(e) => setBulkTargetSubfolder(e.target.value)} className={`text-xs rounded border px-1 py-0.5 min-w-[180px] ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`}>
+                        {(fileSubfolders[String(bulkTargetFileNum)] || ['Unsorted']).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <input value={bulkCustomSubfolder} onChange={(e) => setBulkCustomSubfolder(e.target.value)} placeholder="Custom subfolder (optional)" className={`text-xs rounded border px-1 py-0.5 min-w-[180px] ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
+                      <button type="button" onClick={applyToFilteredRows} disabled={bulkBusy || totalFilteredRows === 0} className="text-xs rounded border px-2 py-0.5">
+                        {bulkBusy ? 'Applying…' : 'Apply to filtered rows'}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <input value={bulkToken} onChange={(e) => setBulkToken(e.target.value)} placeholder='Token match (e.g. "pop")' className={`text-xs rounded border px-1 py-0.5 min-w-[180px] ${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'}`} />
+                      <button type="button" onClick={applyToTokenRows} disabled={bulkBusy} className="text-xs rounded border px-2 py-0.5">
+                        {bulkBusy ? 'Applying…' : 'Apply to matching token'}
+                      </button>
+                      {bulkStatus && <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>{bulkStatus}</span>}
+                    </div>
+                  </div>
                   {manifestPreviewLoading ? (
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading rows…</p>
                   ) : (
@@ -725,18 +860,24 @@ const DocumentSorter = () => {
                             <th className="text-left px-2 py-1">Method</th>
                             <th className="text-left px-2 py-1">Match</th>
                             <th className="text-left px-2 py-1">Confidence</th>
+                            <th className="text-left px-2 py-1">Learning</th>
                             <th className="text-left px-2 py-1">AI error</th>
                             <th className="text-left px-2 py-1">Manual move</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {previewRows.map((row, idx) => (
+                          {pageRows.map((row, idx) => (
                             <tr key={`${row.originalPath || 'row'}-${idx}`} className="border-t border-gray-300/20">
                               <td className="px-2 py-1 max-w-[420px] truncate" title={row.originalPath || ''}>{row.originalPath || '-'}</td>
                               <td className="px-2 py-1">{row.folderName || '-'}</td>
                               <td className="px-2 py-1">{row.method || '-'}</td>
                               <td className="px-2 py-1">{row.matchedKeyword || '-'}</td>
                               <td className="px-2 py-1">{row.llmConfidence ?? '-'}</td>
+                              <td className="px-2 py-1">
+                                {row.matchedBy === 'learned' || row.learnedHit ? (
+                                  <span className="inline-flex rounded px-1 py-0.5 bg-emerald-700/20 text-emerald-200">learned</span>
+                                ) : '-'}
+                              </td>
                               <td className="px-2 py-1 max-w-[260px] truncate" title={row.aiError || ''}>{row.aiError || '-'}</td>
                               <td className="px-2 py-1 min-w-[280px]">
                                 {(() => {
@@ -766,6 +907,14 @@ const DocumentSorter = () => {
                                         </select>
                                       </div>
                                       <div className="flex gap-1">
+                                        <label className="inline-flex items-center gap-1 text-[11px] px-1">
+                                          <input
+                                            type="checkbox"
+                                            checked={learnByRow[rowKey] ?? learnFromManual}
+                                            onChange={(e) => setLearnByRow((prev) => ({ ...prev, [rowKey]: e.target.checked }))}
+                                          />
+                                          learn
+                                        </label>
                                         <input
                                           value={customSubfolderByRow[rowKey] || ''}
                                           onChange={(e) => setCustomSubfolderByRow((prev) => ({ ...prev, [rowKey]: e.target.value }))}
@@ -787,15 +936,37 @@ const DocumentSorter = () => {
                               </td>
                             </tr>
                           ))}
-                          {previewRows.length === 0 && (
+                          {pageRows.length === 0 && (
                             <tr>
-                              <td className="px-2 py-2 opacity-70" colSpan={7}>No rows match current filters.</td>
+                              <td className="px-2 py-2 opacity-70" colSpan={8}>No rows match current filters.</td>
                             </tr>
                           )}
                         </tbody>
                       </table>
                     </div>
                   )}
+                  <details className="mt-2">
+                    <summary className={`text-xs cursor-pointer ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Learning rules preview</summary>
+                    <div className="mt-1 text-xs space-y-1">
+                      <button type="button" onClick={loadLearningPreview} disabled={learningPreviewLoading} className="rounded border px-2 py-0.5">
+                        {learningPreviewLoading ? 'Loading…' : 'Refresh learning preview'}
+                      </button>
+                      {learningPreview && (
+                        <>
+                          <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                            Rules for user `{learningPreview.userId}`: {learningPreview.total}
+                          </p>
+                          <div className="max-h-40 overflow-y-auto border rounded border-gray-300/30 p-1">
+                            {(learningPreview.samples || []).slice().reverse().map((s, i) => (
+                              <div key={`learn-${i}`} className="py-0.5">
+                                {(s.aliases || s.tokens || []).slice(0, 5).join(', ')} -> File {s.fileNum} / {s.subFolderName}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </details>
                 </div>
               </details>
             )}

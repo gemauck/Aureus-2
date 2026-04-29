@@ -10,7 +10,8 @@ async function handler(req, res) {
 
   if (req.method === 'GET') {
     const store = readLearningStore()
-    const list = store.users?.[userId] || []
+    const raw = store.users?.[userId] || []
+    const list = Array.isArray(raw) ? raw : (raw.rules || [])
     return ok(res, { userId, total: list.length, samples: list.slice(-50) })
   }
 
@@ -20,7 +21,7 @@ async function handler(req, res) {
     if (action === 'clear') {
       const store = readLearningStore()
       store.users = store.users || {}
-      store.users[userId] = []
+      store.users[userId] = { rules: [] }
       writeLearningStore(store)
       return ok(res, { userId, cleared: true })
     }
