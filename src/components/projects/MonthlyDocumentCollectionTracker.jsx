@@ -9012,6 +9012,26 @@ Abcotronics`;
                                         )}
                                     </div>
                                 </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCopyStatusesForm({
+                                                sourceYear: selectedYear,
+                                                rangeStart: 2009,
+                                                rangeEnd: 2024
+                                            });
+                                            setCopySectionStatusesModal({
+                                                sectionId: section.id,
+                                                sectionName: section.name || ''
+                                            });
+                                        }}
+                                        className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 flex items-center gap-1.5"
+                                        title="Copy this section's monthly statuses from one year into a range (example: 2008 to 2009-2024)"
+                                    >
+                                        <i className="fas fa-copy"></i>
+                                        <span>Copy Statuses</span>
+                                    </button>
                                 <div className="relative" data-section-actions-dropdown>
                                     <button
                                         type="button"
@@ -9072,6 +9092,7 @@ Abcotronics`;
                                             </button>
                                         </div>
                                     )}
+                                </div>
                                 </div>
                             </div>
 
