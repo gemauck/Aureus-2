@@ -1,5 +1,5 @@
 // Document Sorter – upload large zip (10+ GB) in chunks and sort into File 1–7 categories
-const { useState, useRef, useEffect } = React;
+const { useState, useRef, useEffect, useMemo } = React;
 
 const API_BASE = window.location.origin + '/api/tools/document-sorter';
 
@@ -62,7 +62,10 @@ const DocumentSorter = () => {
   const [learningPreviewLoading, setLearningPreviewLoading] = useState(false);
   const [showFullPaths, setShowFullPaths] = useState(true);
   const [hoverPreviewRow, setHoverPreviewRow] = useState(null);
+  const [selectedPreviewRow, setSelectedPreviewRow] = useState(null);
   const [autoApplySimilarOnMove, setAutoApplySimilarOnMove] = useState(true);
+  const [showDriveTree, setShowDriveTree] = useState(false);
+  const [expandedTreeFolders, setExpandedTreeFolders] = useState({});
   const fileInputRef = useRef(null);
   const progressPollRef = useRef(null);
 
@@ -110,6 +113,8 @@ const DocumentSorter = () => {
     setPage(1);
     setBulkStatus(null);
     setLearningPreview(null);
+    setSelectedPreviewRow(null);
+    setHoverPreviewRow(null);
   };
 
   const startUpload = async () => {
@@ -335,10 +340,9 @@ const DocumentSorter = () => {
   const verification = result?.verification;
   const uncategorizedSample = result?.uncategorizedSample || [];
   const getRowKey = (row, idx) => row.outputRelativePath || `${row.originalPath || 'row'}-${idx}`;
-  const encodePathSegments = (p) => String(p || '').split('/').map((s) => encodeURIComponent(s)).join('/');
   const getDocumentUrl = (row) => {
-    if (!result?.baseUrl || !row?.outputRelativePath) return null;
-    return `${result.baseUrl}/${encodePathSegments(row.outputRelativePath)}`;
+    if (!result?.uploadId || !row?.outputRelativePath) return null;
+    return `${API_BASE}/file?uploadId=${encodeURIComponent(result.uploadId)}&outputRelativePath=${encodeURIComponent(row.outputRelativePath)}`;
   };
   const getDocExt = (p) => {
     const s = String(p || '').toLowerCase();
@@ -458,6 +462,49 @@ const DocumentSorter = () => {
     }
   };
 
+  const applySimilarFromRow = async (row, idx) => {
+    const key = getRowKey(row, idx);
+    const target = getTargetForRow(row, idx);
+    const custom = (customSubfolderByRow[key] || '').trim();
+    const targetSubfolderName = custom || target.subFolderName || 'Unsorted';
+    if (!row.outputRelativePath) {
+      setError('Row has no output path to move.');
+      return;
+    }
+    if (!target.fileNum || Number(target.fileNum) < 1 || Number(target.fileNum) > 7) {
+      setError('Choose a valid target File 1-7.');
+      return;
+    }
+    const similarRows = filteredRows.filter(
+      (r) => r.outputRelativePath !== row.outputRelativePath && areSimilarNames(row.originalPath, r.originalPath),
+    );
+    if (!similarRows.length) {
+      setError('No similarly named rows found in current filtered list.');
+      return;
+    }
+    setMoveBusyKey(key);
+    setBulkBusy(true);
+    setBulkStatus(`Applying to ${similarRows.length} similar row(s)…`);
+    setError(null);
+    try {
+      await moveRowsToTarget({
+        rows: similarRows,
+        targetFileNum: Number(target.fileNum),
+        targetSubfolderName,
+        statusPrefix: 'Applying to similar',
+      });
+      await loadManifestPreview();
+      await loadLearningPreview();
+      setBulkStatus(`Applied to ${similarRows.length} similar row(s).`);
+    } catch (e) {
+      setError(e.message || 'Apply similar failed');
+      setBulkStatus(null);
+    } finally {
+      setMoveBusyKey(null);
+      setBulkBusy(false);
+    }
+  };
+
   const filteredRows = manifestPreview
     .filter((row) => (previewOnlyUncategorized ? Number(row.fileNum) === 0 : true))
     .filter((row) => (previewOnlyAIErrors ? Boolean(row.aiError) : true))
@@ -505,6 +552,73 @@ const DocumentSorter = () => {
       return;
     }
     await moveMany(rows);
+  };
+
+  const treeData = useMemo(() => {
+    const root = { name: 'root', path: '', folders: {}, files: [] };
+    (manifestPreview || []).forEach((row, idx) => {
+      const rel = String(row.outputRelativePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+      if (!rel) return;
+      const parts = rel.split('/').filter(Boolean);
+      if (!parts.length) return;
+      let node = root;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const seg = parts[i];
+        const nextPath = node.path ? `${node.path}/${seg}` : seg;
+        if (!node.folders[seg]) {
+          node.folders[seg] = { name: seg, path: nextPath, folders: {}, files: [] };
+        }
+        node = node.folders[seg];
+      }
+      const fileName = parts[parts.length - 1];
+      node.files.push({ row, fileName, idx, key: getRowKey(row, idx) });
+    });
+    return root;
+  }, [manifestPreview]);
+
+  const toggleTreeFolder = (folderPath) => {
+    setExpandedTreeFolders((prev) => ({ ...prev, [folderPath]: !prev[folderPath] }));
+  };
+
+  const renderTreeNode = (node, depth = 0) => {
+    const folderNames = Object.keys(node.folders).sort((a, b) => a.localeCompare(b));
+    return (
+      <div key={node.path || 'root'}>
+        {node.path && (
+          <button
+            type="button"
+            onClick={() => toggleTreeFolder(node.path)}
+            className="w-full text-left text-xs px-1 py-0.5 rounded hover:bg-gray-700/20"
+            style={{ paddingLeft: `${depth * 14 + 4}px` }}
+            title={node.path}
+          >
+            {expandedTreeFolders[node.path] ? '▼' : '▶'} 📁 {node.name}
+          </button>
+        )}
+        {(node.path === '' || expandedTreeFolders[node.path]) && (
+          <>
+            {folderNames.map((fname) => renderTreeNode(node.folders[fname], depth + (node.path ? 1 : 0)))}
+            {node.files
+              .slice()
+              .sort((a, b) => a.fileName.localeCompare(b.fileName))
+              .map((f) => (
+                <button
+                  key={`f-${f.key}`}
+                  type="button"
+                  onClick={() => setSelectedPreviewRow(f.row)}
+                  className={`w-full text-left text-xs px-1 py-0.5 rounded hover:bg-blue-600/20 ${
+                    selectedPreviewRow?.outputRelativePath === f.row.outputRelativePath ? 'bg-blue-600/25' : ''
+                  }`}
+                  style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }}
+                  title={f.row.outputRelativePath || f.fileName}
+                >
+                  📄 {f.fileName}
+                </button>
+              ))}
+          </>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -890,7 +1004,42 @@ const DocumentSorter = () => {
                     <button type="button" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage <= 1} className="text-xs rounded border px-2 py-0.5">Prev</button>
                     <span>Page {safePage} / {totalPages}</span>
                     <button type="button" onClick={() => setPage(Math.min(totalPages, safePage + 1))} disabled={safePage >= totalPages} className="text-xs rounded border px-2 py-0.5">Next</button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDriveTree((v) => !v)}
+                      className="text-xs rounded border px-2 py-0.5"
+                    >
+                      {showDriveTree ? 'Hide file tree' : 'Show file tree'}
+                    </button>
                   </div>
+                  {showDriveTree && (
+                    <div className="rounded border border-gray-300/40 p-2">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="text-xs font-medium">Project file structure (Drive-style draft)</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const openMap = {};
+                            const walk = (node) => {
+                              if (node.path) openMap[node.path] = true;
+                              Object.values(node.folders || {}).forEach((child) => walk(child));
+                            };
+                            walk(treeData);
+                            setExpandedTreeFolders(openMap);
+                          }}
+                          className="text-xs rounded border px-2 py-0.5"
+                        >
+                          Expand all
+                        </button>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto border rounded border-gray-300/30 p-1">
+                        {renderTreeNode(treeData, 0)}
+                      </div>
+                      <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Click folders to expand/collapse. Click a file to preview/open it below.
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded border border-gray-300/40 p-2 space-y-2">
                     <p className="text-xs font-medium">Bulk manual actions</p>
                     <div className="flex flex-wrap gap-1">
@@ -942,12 +1091,20 @@ const DocumentSorter = () => {
                               >
                                 {row.originalPath || '-'}
                               </td>
-                              <td className="px-2 py-1 min-w-[160px]">
+                              <td className="px-2 py-1 min-w-[220px]">
                                 {(() => {
                                   const docUrl = getDocumentUrl(row);
                                   const ext = getDocExt(row.originalPath || row.outputRelativePath || '');
                                   return docUrl ? (
                                     <div className="flex flex-wrap items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedPreviewRow(row)}
+                                        disabled={!isPreviewableExt(ext)}
+                                        className="text-xs rounded border px-2 py-0.5 disabled:opacity-50"
+                                      >
+                                        Preview
+                                      </button>
                                       <a
                                         href={docUrl}
                                         target="_blank"
@@ -1018,10 +1175,19 @@ const DocumentSorter = () => {
                                         <button
                                           type="button"
                                           onClick={() => moveRow(row, idx)}
-                                          disabled={moveBusyKey === rowKey}
+                                          disabled={moveBusyKey === rowKey || bulkBusy}
                                           className="text-xs rounded border px-2 py-0.5"
                                         >
                                           {moveBusyKey === rowKey ? 'Moving…' : 'Move'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => applySimilarFromRow(row, idx)}
+                                          disabled={moveBusyKey === rowKey || bulkBusy}
+                                          className="text-xs rounded border px-2 py-0.5"
+                                          title="Apply current row target to similarly named rows"
+                                        >
+                                          Change all similar
                                         </button>
                                       </div>
                                     </div>
@@ -1039,15 +1205,27 @@ const DocumentSorter = () => {
                       </table>
                     </div>
                   )}
-                  {hoverPreviewRow && (() => {
-                    const docUrl = getDocumentUrl(hoverPreviewRow);
-                    const ext = getDocExt(hoverPreviewRow.originalPath || hoverPreviewRow.outputRelativePath || '');
+                  {(selectedPreviewRow || hoverPreviewRow) && (() => {
+                    const previewRow = selectedPreviewRow || hoverPreviewRow;
+                    const docUrl = getDocumentUrl(previewRow);
+                    const ext = getDocExt(previewRow.originalPath || previewRow.outputRelativePath || '');
                     if (!docUrl || !isPreviewableExt(ext)) return null;
                     return (
                       <div className={`rounded border p-2 ${isDark ? 'border-gray-600 bg-gray-900/80' : 'border-gray-300 bg-white'}`}>
-                        <p className={`text-[11px] mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                          Hover preview: {hoverPreviewRow.originalPath || hoverPreviewRow.outputRelativePath}
-                        </p>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <p className={`text-[11px] ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Preview: {previewRow.originalPath || previewRow.outputRelativePath}
+                          </p>
+                          {selectedPreviewRow && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPreviewRow(null)}
+                              className="text-xs rounded border px-2 py-0.5"
+                            >
+                              Close preview
+                            </button>
+                          )}
+                        </div>
                         <div className="w-full max-w-[760px] h-[320px] overflow-hidden rounded border border-gray-300/30">
                           {isImageExt(ext) ? (
                             <img src={docUrl} alt="Document preview" className="w-full h-full object-contain bg-black/5" />

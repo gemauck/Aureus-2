@@ -168,13 +168,35 @@ function containsAllTokens(text, tokens) {
 function heuristicMatch(normalized, tokenText) {
   const has = (t) => tokenText.includes(` ${t} `)
   const hasAny = (tokens) => tokens.some((t) => has(t))
+  const hasPhrase = (phrase) => tokenText.includes(` ${normalizeForTokens(phrase)} `)
 
   // Contractor financial docs should not fall into generic File 3 "invoice"
-  if (has('contractor') && (has('invoice') || has('remittance') || (has('proof') && has('payment')))) {
+  if (
+    hasPhrase('contractor invoice') ||
+    hasPhrase('contractor remittance') ||
+    hasPhrase('contractor proof of payment') ||
+    (
+      has('contractor') &&
+      (hasPhrase('proof of payment') || hasPhrase('proof of paument') || hasPhrase('proof of payement') || hasPhrase('remittance advice'))
+    )
+  ) {
     return {
       fileNum: 6,
       folderName: 'File 6 - Operational and Contractor',
       matchedKeyword: 'heuristic: contractor + payment/invoice',
+    }
+  }
+
+  // Explicit supplier/fuel invoice routing should win in non-contractor context
+  if (
+    (has('invoice') || has('invoices')) &&
+    !has('contractor') &&
+    (has('supplier') || has('fuel') || has('diesel') || has('delivery') || has('remittance'))
+  ) {
+    return {
+      fileNum: 3,
+      folderName: 'File 3 - Fuel System and Transactions',
+      matchedKeyword: 'heuristic: supplier/fuel invoice',
     }
   }
 

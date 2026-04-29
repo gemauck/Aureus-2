@@ -121,6 +121,19 @@ export function resolveChecklistSubfolder(fileNum, originalPath, fallback = 'Uns
     }
   }
 
+  if (
+    Number(fileNum) === 3 &&
+    !isContractorContext &&
+    (has('invoice') || has('invoices')) &&
+    (has('supplier') || has('fuel') || has('diesel') || has('delivery note') || has('remittance'))
+  ) {
+    return {
+      subFolderName: 'Invoices',
+      subFolderReason: 'alias-map:invoice',
+      subFolderConfidence: 0.97,
+    }
+  }
+
   let best = null
   let bestScore = 0
   for (const s of list) {
