@@ -859,11 +859,55 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     );
   };
 
+  const parseJobCardDateValue = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === 'number') {
+      const dt = new Date(value);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+    if (typeof value !== 'string') return null;
+
+    let raw = value.trim();
+    if (!raw) return null;
+
+    // Legacy rows occasionally persisted an extra leading "-" before date strings.
+    if (/^-\d{4}[/-]\d{2}[/-]\d{2}/.test(raw)) raw = raw.slice(1);
+
+    const normalized = raw.replace(',', ' ').replace(/\//g, '-');
+    const localMatch = normalized.match(
+      /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/
+    );
+    if (localMatch) {
+      const year = Number(localMatch[1]);
+      const month = Number(localMatch[2]);
+      const day = Number(localMatch[3]);
+      const hour = Number(localMatch[4] || 0);
+      const minute = Number(localMatch[5] || 0);
+      const second = Number(localMatch[6] || 0);
+      const localDate = new Date(year, month - 1, day, hour, minute, second);
+      if (!Number.isNaN(localDate.getTime())) return localDate;
+    }
+
+    const fallback = new Date(raw);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  };
+
   const formatDate = (value) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleString();
+    const date = parseJobCardDateValue(value);
+    if (!date) return '';
+    return date.toLocaleString('en-ZA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'Africa/Johannesburg'
+    });
   };
 
   const closePhotoLightbox = useCallback(() => {
