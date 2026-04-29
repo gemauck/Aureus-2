@@ -14,6 +14,7 @@ import { parseJsonBody } from '../../_lib/body.js'
 import { folderNameForFileNum } from './classify.js'
 import { appendLearningExample, getUserIdFromReq } from './learningStore.js'
 import { sanitizeSubfolderName } from './checklistTemplate.js'
+import { incrementRunMoveCount, updateRunStatusByUploadId } from './projectStore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -91,6 +92,12 @@ async function handler(req, res) {
     if (!(targetFileNum >= 1 && targetFileNum <= 7)) return badRequest(res, 'targetFileNum must be 1..7')
 
     const outputDir = path.join(outputBase, uploadId)
+    const metaPath = path.join(path.resolve(__dirname, '../..', '..'), 'uploads', 'document-sorter-uploads', uploadId, 'meta.json')
+    let meta = {}
+    try {
+      meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'))
+    } catch (_) {}
+    const sorterProjectId = String(body.sorterProjectId || meta.sorterProjectId || '').trim()
     const manifestPath = path.join(outputDir, 'manifest.json')
     if (!fs.existsSync(manifestPath)) return badRequest(res, 'manifest.json not found')
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
@@ -132,6 +139,15 @@ async function handler(req, res) {
     manifest.generatedAt = new Date().toISOString()
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
     writeManifestCsv(manifest, outputDir)
+    if (sorterProjectId) {
+      incrementRunMoveCount({ projectId: sorterProjectId, userId, uploadId })
+      updateRunStatusByUploadId({
+        projectId: sorterProjectId,
+        userId,
+        uploadId,
+        patch: { resultSnapshot: { uploadId, sorterProjectId, runId: meta.runId || undefined, manifestPath: `/uploads/document-sorter-output/${uploadId}/manifest.json`, manifestCsvPath: `/uploads/document-sorter-output/${uploadId}/manifest.csv` } },
+      })
+    }
 
     return ok(res, {
       success: true,

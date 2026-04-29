@@ -20,6 +20,7 @@ import { classifyWithLLM } from './aiClassify.js'
 import { CANCEL_FLAG_NAME } from './cancel.js'
 import { resolveChecklistSubfolder, sanitizeSubfolderName } from './checklistTemplate.js'
 import { getUserIdFromReq, suggestFromLearning } from './learningStore.js'
+import { updateRunStatusByUploadId } from './projectStore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -249,6 +250,7 @@ async function handler(req, res) {
     try {
       meta = JSON.parse(fs.readFileSync(path.join(uploadDir, 'meta.json'), 'utf8'))
     } catch (_) {}
+    const sorterProjectId = String(payload.sorterProjectId || meta.sorterProjectId || '').trim()
 
     let totalChunks =
       meta.totalChunks ?? (meta.lastChunkIndex != null ? meta.lastChunkIndex + 1 : null)
@@ -266,6 +268,15 @@ async function handler(req, res) {
     }
 
     const outputDir = path.join(outputBase, uploadId)
+    if (sorterProjectId) {
+      updateRunStatusByUploadId({
+        projectId: sorterProjectId,
+        userId,
+        uploadId,
+        patch: { status: 'processing', startedAt: new Date().toISOString() },
+      })
+    }
+
     fs.mkdirSync(outputDir, { recursive: true })
 
     const cancelFlagPath = path.join(outputDir, CANCEL_FLAG_NAME)
@@ -474,10 +485,12 @@ async function handler(req, res) {
       const outputDocCount = countOutputDocuments(outputDir)
       const sumByFile = Object.entries(stats.byFile).reduce((s, [, v]) => s + v, 0)
       const baseUrl = `/uploads/document-sorter-output/${uploadId}`
-      return ok(res, {
+      const cancelledResponse = {
         outputPath: outputDir,
         baseUrl,
         uploadId,
+        sorterProjectId: sorterProjectId || undefined,
+        runId: meta.runId || undefined,
         stats,
         cancelled: true,
         verification: {
@@ -496,6 +509,17 @@ async function handler(req, res) {
         manifestCsvPath: `${baseUrl}/manifest.csv`,
         extraKeywordsApplied: Object.keys(extraKwSanitized).length > 0,
         message: 'Sorting cancelled after the current file. Partial output is available.',
+      }
+      if (sorterProjectId) {
+        updateRunStatusByUploadId({
+          projectId: sorterProjectId,
+          userId,
+          uploadId,
+          patch: { status: 'cancelled', resultSnapshot: cancelledResponse },
+        })
+      }
+      return ok(res, {
+        ...cancelledResponse,
       })
     }
 
@@ -655,10 +679,12 @@ async function handler(req, res) {
         const outputDocCount = countOutputDocuments(outputDir)
         const sumByFile = Object.entries(stats.byFile).reduce((s, [, v]) => s + v, 0)
         const baseUrl = `/uploads/document-sorter-output/${uploadId}`
-        return ok(res, {
+        const aiCancelledResponse = {
           outputPath: outputDir,
           baseUrl,
           uploadId,
+          sorterProjectId: sorterProjectId || undefined,
+          runId: meta.runId || undefined,
           stats,
           cancelled: true,
           verification: {
@@ -681,6 +707,17 @@ async function handler(req, res) {
           manifestPath: `${baseUrl}/manifest.json`,
           manifestCsvPath: `${baseUrl}/manifest.csv`,
           message: 'Processing cancelled during AI classification.',
+        }
+        if (sorterProjectId) {
+          updateRunStatusByUploadId({
+            projectId: sorterProjectId,
+            userId,
+            uploadId,
+            patch: { status: 'cancelled', resultSnapshot: aiCancelledResponse },
+          })
+        }
+        return ok(res, {
+          ...aiCancelledResponse,
         })
       }
     }
@@ -722,10 +759,12 @@ async function handler(req, res) {
     })
 
     const baseUrl = `/uploads/document-sorter-output/${uploadId}`
-    return ok(res, {
+    const successResponse = {
       outputPath: outputDir,
       baseUrl,
       uploadId,
+      sorterProjectId: sorterProjectId || undefined,
+      runId: meta.runId || undefined,
       stats,
       verification,
       uncategorizedSample: uncategorizedPaths,
@@ -745,7 +784,21 @@ async function handler(req, res) {
       message: verification.match
         ? `Sorted ${stats.totalFiles} files. All counts reconciled.`
         : `Processed ${stats.totalFiles} files — verification mismatch; check manifest.`,
-    })
+    }
+    if (sorterProjectId) {
+      updateRunStatusByUploadId({
+        projectId: sorterProjectId,
+        userId,
+        uploadId,
+        patch: {
+          status: verification.match ? 'complete' : 'complete_with_warnings',
+          verification,
+          stats,
+          resultSnapshot: successResponse,
+        },
+      })
+    }
+    return ok(res, successResponse)
   } catch (e) {
     console.error('document-sorter process error:', e)
     return serverError(res, 'Process failed', e.message)

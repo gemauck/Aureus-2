@@ -12,6 +12,8 @@ import { withLogging } from '../../_lib/logger.js'
 import { authRequired } from '../../_lib/authRequired.js'
 import { created, badRequest, serverError } from '../../_lib/response.js'
 import { parseJsonBody } from '../../_lib/body.js'
+import { attachUploadRunToProject, getSorterProject } from './projectStore.js'
+import { getUserIdFromReq } from './learningStore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -28,6 +30,8 @@ async function handler(req, res) {
 
     const payload = await parseJsonBody(req).catch(() => ({}))
     const fileName = (payload.fileName || 'archive.zip').toString().replace(/[^a-z0-9_.-]/gi, '_')
+    const sorterProjectId = String(payload.sorterProjectId || '').trim()
+    const userId = getUserIdFromReq(req)
 
     const uploadId = `ds-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     const uploadDir = path.join(uploadsBase, uploadId)
@@ -35,10 +39,23 @@ async function handler(req, res) {
 
     // Store metadata for process step
     const metaPath = path.join(uploadDir, 'meta.json')
-    fs.writeFileSync(metaPath, JSON.stringify({ fileName, createdAt: new Date().toISOString() }), 'utf8')
+    const meta = { fileName, createdAt: new Date().toISOString() }
+    let runInfo = null
+    if (sorterProjectId) {
+      const p = getSorterProject({ projectId: sorterProjectId })
+      if (!p || p.createdBy !== userId) {
+        return badRequest(res, 'Invalid sorterProjectId')
+      }
+      runInfo = attachUploadRunToProject({ projectId: sorterProjectId, userId, uploadId, fileName })
+      if (!runInfo) return badRequest(res, 'Could not create project run')
+      meta.sorterProjectId = sorterProjectId
+      meta.runId = runInfo.runId
+    }
+    fs.writeFileSync(metaPath, JSON.stringify(meta), 'utf8')
 
     return created(res, {
       uploadId,
+      ...(runInfo ? { sorterProjectId: runInfo.sorterProjectId, runId: runInfo.runId } : {}),
       chunkSize: CHUNK_SIZE,
       message: 'Send chunks to /api/tools/document-sorter/upload-chunk',
     })

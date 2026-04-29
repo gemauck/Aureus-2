@@ -66,6 +66,13 @@ const DocumentSorter = () => {
   const [autoApplySimilarOnMove, setAutoApplySimilarOnMove] = useState(true);
   const [showDriveTree, setShowDriveTree] = useState(false);
   const [expandedTreeFolders, setExpandedTreeFolders] = useState({});
+  const [sorterProjects, setSorterProjects] = useState([]);
+  const [currentProjectId, setCurrentProjectId] = useState('');
+  const [projectRuns, setProjectRuns] = useState([]);
+  const [activeRunId, setActiveRunId] = useState('');
+  const [newProjectName, setNewProjectName] = useState('');
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsBusy, setProjectsBusy] = useState(false);
   const fileInputRef = useRef(null);
   const progressPollRef = useRef(null);
 
@@ -94,6 +101,92 @@ const DocumentSorter = () => {
     };
     loadTemplates();
   }, []);
+
+  const loadProjects = async () => {
+    setProjectsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/projects`, { method: 'GET', headers: getHeaders(false) });
+      const json = await res.json().catch(() => ({}));
+      const data = json?.data ?? json;
+      if (!res.ok) throw new Error(json?.error?.message || `Failed to load projects (${res.status})`);
+      const list = Array.isArray(data?.projects) ? data.projects : [];
+      setSorterProjects(list);
+      if (!currentProjectId && list.length) {
+        setCurrentProjectId(String(list[0].id || ''));
+      }
+    } catch (e) {
+      setError(e.message || 'Failed to load sorter projects');
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  const loadProjectContext = async (projectId) => {
+    if (!projectId) {
+      setProjectRuns([]);
+      setActiveRunId('');
+      return;
+    }
+    try {
+      const [runsRes, stateRes] = await Promise.all([
+        fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/runs`, { method: 'GET', headers: getHeaders(false) }),
+        fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/state`, { method: 'GET', headers: getHeaders(false) }),
+      ]);
+      const runsJson = await runsRes.json().catch(() => ({}));
+      const stateJson = await stateRes.json().catch(() => ({}));
+      const runsData = runsJson?.data ?? runsJson;
+      const stateData = stateJson?.data ?? stateJson;
+      if (runsRes.ok) {
+        const runs = Array.isArray(runsData?.runs) ? runsData.runs : [];
+        setProjectRuns(runs);
+        setActiveRunId(String(runs[0]?.runId || ''));
+      }
+      if (stateRes.ok && stateData?.uiState) {
+        const s = stateData.uiState;
+        if (typeof s.previewOnlyUncategorized === 'boolean') setPreviewOnlyUncategorized(s.previewOnlyUncategorized);
+        if (typeof s.previewOnlyAIErrors === 'boolean') setPreviewOnlyAIErrors(s.previewOnlyAIErrors);
+        if (typeof s.previewOnlyCollisions === 'boolean') setPreviewOnlyCollisions(s.previewOnlyCollisions);
+        if (typeof s.page === 'number') setPage(Math.max(1, s.page));
+        if (typeof s.pageSize === 'number') setPageSize(s.pageSize);
+        if (s.expandedTreeFolders && typeof s.expandedTreeFolders === 'object') setExpandedTreeFolders(s.expandedTreeFolders);
+        if (typeof s.showDriveTree === 'boolean') setShowDriveTree(s.showDriveTree);
+      }
+    } catch (e) {
+      setError(e.message || 'Failed to load project context');
+    }
+  };
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    loadProjectContext(currentProjectId);
+  }, [currentProjectId]);
+
+  useEffect(() => {
+    if (!currentProjectId) return;
+    const timer = setTimeout(async () => {
+      try {
+        await fetch(`${API_BASE}/projects/${encodeURIComponent(currentProjectId)}/state`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({
+            uiState: {
+              previewOnlyUncategorized,
+              previewOnlyAIErrors,
+              previewOnlyCollisions,
+              page,
+              pageSize,
+              showDriveTree,
+              expandedTreeFolders,
+            },
+          }),
+        });
+      } catch (_) {}
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [currentProjectId, previewOnlyUncategorized, previewOnlyAIErrors, previewOnlyCollisions, page, pageSize, showDriveTree, expandedTreeFolders]);
 
   const handleFileSelect = (e) => {
     const f = e.target.files?.[0];
@@ -126,7 +219,10 @@ const DocumentSorter = () => {
       const initRes = await fetch(`${API_BASE}/upload-init`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ fileName: file.name }),
+        body: JSON.stringify({
+          fileName: file.name,
+          ...(currentProjectId ? { sorterProjectId: currentProjectId } : {}),
+        }),
       });
       const initJson = await initRes.json().catch(() => ({}));
       const initData = initJson?.data ?? initJson;
@@ -136,6 +232,7 @@ const DocumentSorter = () => {
       const id = initData.uploadId;
       const chunkSize = initData.chunkSize || CHUNK_SIZE;
       setUploadId(id);
+      setActiveRunId(String(initData.runId || ''));
 
       const totalChunks = Math.ceil(file.size / chunkSize);
       for (let i = 0; i < totalChunks; i++) {
@@ -158,6 +255,10 @@ const DocumentSorter = () => {
           throw new Error(chunkJson?.error?.message || 'Chunk upload failed');
         }
         setUploadProgress(Math.round(((i + 1) / totalChunks) * 100));
+      }
+      if (currentProjectId) {
+        await loadProjectContext(currentProjectId);
+        await loadProjects();
       }
     } catch (e) {
       setError(e.message || 'Upload failed');
@@ -219,6 +320,7 @@ const DocumentSorter = () => {
         headers: getHeaders(),
         body: JSON.stringify({
           uploadId,
+          ...(currentProjectId ? { sorterProjectId: currentProjectId } : {}),
           useAI,
           ...(useAI ? { aiScope } : {}),
           ...(extraKeywords && Object.keys(extraKeywords).length > 0 ? { extraKeywords } : {}),
@@ -230,7 +332,12 @@ const DocumentSorter = () => {
         throw new Error(json?.error?.message || data?.message || 'Process failed');
       }
       setResult(data);
+      if (data?.runId) setActiveRunId(String(data.runId));
       await pollProgressOnce(uploadId);
+      if (currentProjectId) {
+        await loadProjectContext(currentProjectId);
+        await loadProjects();
+      }
     } catch (e) {
       setError(e.message || 'Process failed');
     } finally {
@@ -294,11 +401,12 @@ const DocumentSorter = () => {
     }
   };
 
-  const loadManifestPreview = async () => {
-    if (!result?.uploadId) return;
+  const loadManifestPreview = async (overrideUploadId) => {
+    const targetUploadId = overrideUploadId || result?.uploadId;
+    if (!targetUploadId) return;
     setManifestPreviewLoading(true);
     try {
-      const url = `${API_BASE}/manifest?uploadId=${encodeURIComponent(result.uploadId)}&format=json`;
+      const url = `${API_BASE}/manifest?uploadId=${encodeURIComponent(targetUploadId)}&format=json`;
       const res = await fetch(url, { method: 'GET', headers: getHeaders(false) });
       const json = await res.json().catch(() => ({}));
       const data = json?.data ?? json;
@@ -404,6 +512,7 @@ const DocumentSorter = () => {
         headers: getHeaders(),
         body: JSON.stringify({
           uploadId: result?.uploadId,
+          ...(currentProjectId ? { sorterProjectId: currentProjectId } : {}),
           outputRelativePath: row.outputRelativePath,
           targetFileNum: Number(targetFileNum),
           targetSubfolderName,
@@ -448,6 +557,7 @@ const DocumentSorter = () => {
       });
       await loadManifestPreview();
       await loadLearningPreview();
+      if (currentProjectId) await loadProjectContext(currentProjectId);
       setBulkStatus(
         autoApplySimilarOnMove
           ? `Moved ${rowsToMove.length} row(s): 1 direct + ${similarRows.length} similar`
@@ -495,6 +605,7 @@ const DocumentSorter = () => {
       });
       await loadManifestPreview();
       await loadLearningPreview();
+      if (currentProjectId) await loadProjectContext(currentProjectId);
       setBulkStatus(`Applied to ${similarRows.length} similar row(s).`);
     } catch (e) {
       setError(e.message || 'Apply similar failed');
@@ -530,6 +641,7 @@ const DocumentSorter = () => {
       });
       await loadManifestPreview();
       await loadLearningPreview();
+      if (currentProjectId) await loadProjectContext(currentProjectId);
       setBulkStatus(`Done. Moved ${rows.length} row(s).`);
     } catch (e) {
       setError(e.message || 'Bulk move failed');
@@ -552,6 +664,56 @@ const DocumentSorter = () => {
       return;
     }
     await moveMany(rows);
+  };
+
+  const createProject = async () => {
+    const name = newProjectName.trim();
+    if (!name) {
+      setError('Enter a project name first.');
+      return;
+    }
+    setProjectsBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/projects`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ name }),
+      });
+      const json = await res.json().catch(() => ({}));
+      const data = json?.data ?? json;
+      if (!res.ok) throw new Error(json?.error?.message || `Create project failed (${res.status})`);
+      const id = data?.project?.id;
+      setNewProjectName('');
+      await loadProjects();
+      if (id) setCurrentProjectId(String(id));
+    } catch (e) {
+      setError(e.message || 'Create project failed');
+    } finally {
+      setProjectsBusy(false);
+    }
+  };
+
+  const resumeRun = async (run) => {
+    if (!run?.uploadId) {
+      setError('Selected run has no upload context.');
+      return;
+    }
+    const snapshot = run.resultSnapshot || {};
+    const resumedResult = {
+      ...(snapshot && typeof snapshot === 'object' ? snapshot : {}),
+      uploadId: run.uploadId,
+      sorterProjectId: currentProjectId || snapshot.sorterProjectId,
+      runId: run.runId || snapshot.runId,
+      baseUrl: snapshot.baseUrl || `/uploads/document-sorter-output/${run.uploadId}`,
+      manifestPath: snapshot.manifestPath || `/uploads/document-sorter-output/${run.uploadId}/manifest.json`,
+      manifestCsvPath: snapshot.manifestCsvPath || `/uploads/document-sorter-output/${run.uploadId}/manifest.csv`,
+    };
+    setUploadId(String(run.uploadId));
+    setResult(resumedResult);
+    setActiveRunId(String(run.runId || ''));
+    await loadManifestPreview(String(run.uploadId));
+    await pollProgressOnce(String(run.uploadId));
   };
 
   const treeData = useMemo(() => {
@@ -644,6 +806,84 @@ const DocumentSorter = () => {
           ))}
         </ul>
       </details>
+
+      <div className={`mb-6 rounded-lg border p-3 ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <strong className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Sorter Project Workspace</strong>
+          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            Save progress and resume runs later
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            value={newProjectName}
+            onChange={(e) => setNewProjectName(e.target.value)}
+            placeholder="New sorter project name"
+            className={`text-sm rounded border px-2 py-1 min-w-[260px] ${isDark ? 'bg-gray-900 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-800'}`}
+          />
+          <button
+            type="button"
+            onClick={createProject}
+            disabled={projectsBusy}
+            className="px-3 py-1.5 rounded border text-sm"
+          >
+            {projectsBusy ? 'Creating…' : 'Create project'}
+          </button>
+          <button
+            type="button"
+            onClick={loadProjects}
+            disabled={projectsLoading}
+            className="px-3 py-1.5 rounded border text-sm"
+          >
+            {projectsLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Current project</label>
+          <select
+            value={currentProjectId}
+            onChange={(e) => setCurrentProjectId(e.target.value)}
+            className={`text-sm rounded border px-2 py-1 min-w-[320px] ${isDark ? 'bg-gray-900 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-800'}`}
+          >
+            <option value="">No project selected</option>
+            {sorterProjects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.runsCount || 0} run{(p.runsCount || 0) === 1 ? '' : 's'})
+              </option>
+            ))}
+          </select>
+          {activeRunId && (
+            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              Active run: {activeRunId}
+            </span>
+          )}
+        </div>
+        {currentProjectId && (
+          <div className="mt-2 max-h-40 overflow-y-auto border rounded border-gray-300/30 p-2">
+            <p className={`text-xs mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Run history</p>
+            {(projectRuns || []).length === 0 ? (
+              <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>No runs yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {projectRuns.map((run) => (
+                  <div key={run.runId} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                      {run.status || 'unknown'} - {run.uploadId} - {run.updatedAt || run.createdAt || ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => resumeRun(run)}
+                      className="rounded border px-2 py-0.5"
+                    >
+                      Resume
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Upload */}
       <div className="space-y-4">
