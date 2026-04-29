@@ -1599,22 +1599,6 @@ const gridColumns = React.useMemo(() => (
         return v;
     };
 
-    const setNotesReviewForYear = (notesReviewByWeek, week, record, year = selectedYear) => {
-        const weekKey = getWeekKey(week, year);
-        if (!weekKey || !weekKey.includes('-W')) return notesReviewByWeek || {};
-        const next = { ...(notesReviewByWeek && typeof notesReviewByWeek === 'object' ? notesReviewByWeek : {}) };
-        if (!record) {
-            delete next[weekKey];
-        } else {
-            next[weekKey] = {
-                reviewedAt: record.reviewedAt,
-                reviewedByName: record.reviewedByName,
-                reviewedByUserId: record.reviewedByUserId != null ? String(record.reviewedByUserId) : ''
-            };
-        }
-        return next;
-    };
-    
     // ============================================================
     // STATUS OPTIONS
     // ============================================================
@@ -2344,30 +2328,6 @@ const getAssigneeColor = (identifier, users) => {
         setSectionsByYear(updatedSectionsByYear);
     }, [selectedYear, getLatestSectionsByYear]);
 
-    const handleToggleNotesReview = useCallback((sectionId, documentId, week, checked) => {
-        const latestSectionsByYear = getLatestSectionsByYear();
-        const currentYearSections = latestSectionsByYear[selectedYear] || [];
-        const user = getCurrentUser();
-        const updated = currentYearSections.map(section => {
-            if (String(section.id) !== String(sectionId)) return section;
-            return {
-                ...section,
-                documents: section.documents.map(doc => {
-                    if (String(doc.id) !== String(documentId)) return doc;
-                    const nextReview = setNotesReviewForYear(doc.notesReviewByWeek || {}, week, checked ? {
-                        reviewedAt: new Date().toISOString(),
-                        reviewedByName: user.name || user.email || 'Unknown',
-                        reviewedByUserId: user.id != null ? String(user.id) : ''
-                    } : null, selectedYear);
-                    return { ...doc, notesReviewByWeek: nextReview };
-                })
-            };
-        });
-        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
-        sectionsRef.current = updatedSectionsByYear;
-        setSectionsByYear(updatedSectionsByYear);
-    }, [selectedYear, getLatestSectionsByYear]);
-    
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
         const folder = 'weekly-fms-comments';
@@ -3651,51 +3611,6 @@ const baseTextColorClass = statusConfig && statusConfig.color
         const isEditing = editingNotesCell === cellKey;
         const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
         const cellBg = statusConfig?.cellColor || (isWorkingWeek ? 'bg-primary-50' : '');
-        const reviewRec = getNotesReviewForYear(doc.notesReviewByWeek, week, selectedYear);
-        const isReviewed = !!(reviewRec && reviewRec.reviewedAt);
-        let reviewDisplay = null;
-        if (reviewRec && reviewRec.reviewedAt) {
-            const d = new Date(reviewRec.reviewedAt);
-            if (!Number.isNaN(d.getTime())) {
-                reviewDisplay = {
-                    dateStr: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
-                    timeStr: d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-                    by: reviewRec.reviewedByName || 'Unknown',
-                    title: `${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${reviewRec.reviewedByName || '?'}`
-                };
-            }
-        }
-        const reviewAside = (
-            <div
-                className="flex flex-col items-center gap-0.5 shrink-0 w-[4.75rem] border-l border-slate-200/90 pl-1.5 ml-0.5 pt-0.5"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <label className="flex flex-col items-center gap-0.5 cursor-pointer select-none group/rv">
-                    <input
-                        type="checkbox"
-                        checked={isReviewed}
-                        onChange={(e) => {
-                            e.stopPropagation();
-                            handleToggleNotesReview(section.id, doc.id, week, e.target.checked);
-                        }}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-0"
-                    />
-                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 group-hover/rv:text-slate-700">
-                        Reviewed
-                    </span>
-                </label>
-                {reviewDisplay && (
-                    <div
-                        className="text-[8px] text-slate-600 text-center leading-tight mt-0.5 w-full"
-                        title={reviewDisplay.title}
-                    >
-                        <div className="tabular-nums">{reviewDisplay.dateStr}</div>
-                        <div className="tabular-nums text-slate-500">{reviewDisplay.timeStr}</div>
-                        <div className="font-medium text-slate-700 truncate max-w-full">{reviewDisplay.by}</div>
-                    </div>
-                )}
-            </div>
-        );
         return (
             <td
                 className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
@@ -3703,7 +3618,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 style={{ minWidth: '200px', width: '200px' }}
             >
                 <div className="flex flex-row gap-1 items-stretch w-full">
-                    <div className="flex-1 min-w-0 max-w-[calc(100%-4.875rem)]">
+                    <div className="flex-1 min-w-0">
                         {isEditing ? (
                             <textarea
                                 ref={notesInputRef}
@@ -3738,7 +3653,6 @@ const baseTextColorClass = statusConfig && statusConfig.color
                             </div>
                         )}
                     </div>
-                    {reviewAside}
                 </div>
             </td>
         );
