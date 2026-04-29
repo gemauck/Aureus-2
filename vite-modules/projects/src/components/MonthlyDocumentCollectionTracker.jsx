@@ -336,6 +336,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [draggedDocument, setDraggedDocument] = useState(null);
     const [dragOverDocumentIndex, setDragOverDocumentIndex] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [copySectionStatusesModal, setCopySectionStatusesModal] = useState(null);
+    const [copyStatusesForm, setCopyStatusesForm] = useState({
+        sourceYear: 2008,
+        rangeStart: 2009,
+        rangeEnd: 2024
+    });
     const [hoverCommentCell, setHoverCommentCell] = useState(null);
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
@@ -1286,6 +1292,85 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             ...collectionStatus,
             [monthKey]: status
         };
+    };
+
+    const applySectionStatusesFromYearToYears = (sectionId, sourceYear, rangeStart, rangeEnd) => {
+        if (!project?.id) return;
+        if (!Number.isFinite(sourceYear)) {
+            alert('Invalid source year.');
+            return;
+        }
+        const low = Math.min(rangeStart, rangeEnd);
+        const high = Math.max(rangeStart, rangeEnd);
+        const targets = [];
+        for (let y = low; y <= high; y++) {
+            if (y >= MIN_YEAR && y <= currentYear + FUTURE_YEAR_BUFFER && y !== sourceYear) {
+                targets.push(y);
+            }
+        }
+        if (targets.length === 0) {
+            alert('No valid target years in that range.');
+            return;
+        }
+
+        const latestSectionsByYear = sectionsRef.current || {};
+        const sourceSections = latestSectionsByYear[sourceYear] || latestSectionsByYear[String(sourceYear)] || [];
+        const sourceSection = Array.isArray(sourceSections)
+            ? sourceSections.find((s) => String(s.id) === String(sectionId))
+            : null;
+        if (!sourceSection) {
+            alert(`Section not found in ${sourceYear}. Switch to that year first and confirm data exists.`);
+            return;
+        }
+
+        const updatedSectionsByYear = { ...latestSectionsByYear };
+        const skippedYears = [];
+        const appliedYears = [];
+
+        targets.forEach((targetYear) => {
+            const targetSectionsRaw = updatedSectionsByYear[targetYear] || updatedSectionsByYear[String(targetYear)];
+            if (!Array.isArray(targetSectionsRaw) || targetSectionsRaw.length === 0) {
+                skippedYears.push(targetYear);
+                return;
+            }
+            const targetSections = cloneSectionsArray(targetSectionsRaw);
+            const sectionIndex = targetSections.findIndex((s) => String(s.id) === String(sectionId));
+            if (sectionIndex === -1) {
+                skippedYears.push(targetYear);
+                return;
+            }
+
+            const updatedSection = {
+                ...targetSections[sectionIndex],
+                documents: (targetSections[sectionIndex].documents || []).map((doc) => {
+                    const sourceDoc = (sourceSection.documents || []).find((sdoc) => String(sdoc.id) === String(doc.id));
+                    if (!sourceDoc) return doc;
+
+                    let nextStatusMap = { ...(doc.collectionStatus || {}) };
+                    months.forEach((month) => {
+                        const statusFromSource = getStatusForYear(sourceDoc.collectionStatus || {}, month, sourceYear);
+                        nextStatusMap = setStatusForYear(nextStatusMap, month, statusFromSource || '', targetYear);
+                    });
+
+                    return { ...doc, collectionStatus: nextStatusMap };
+                })
+            };
+
+            targetSections[sectionIndex] = updatedSection;
+            updatedSectionsByYear[String(targetYear)] = targetSections;
+            appliedYears.push(targetYear);
+        });
+
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+        saveToDatabase();
+        setCopySectionStatusesModal(null);
+
+        let msg = `Copied statuses from ${sourceYear} into ${appliedYears.length} year(s): ${appliedYears.join(', ') || '-'}.`;
+        if (skippedYears.length > 0) {
+            msg += `\nSkipped (no matching section/year data): ${skippedYears.join(', ')}.`;
+        }
+        alert(msg);
     };
     
     // Set comments for a specific month in the selected year only
@@ -3670,6 +3755,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <i className="fas fa-plus mr-1"></i>Add Document
                                     </button>
                                     <button
+                                        onClick={() => {
+                                            setCopyStatusesForm({
+                                                sourceYear: selectedYear,
+                                                rangeStart: 2009,
+                                                rangeEnd: 2024
+                                            });
+                                            setCopySectionStatusesModal({
+                                                sectionId: section.id,
+                                                sectionName: section.name || ''
+                                            });
+                                        }}
+                                        className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-medium hover:bg-emerald-700"
+                                        title="Copy this section's statuses from one year into a range (e.g. 2008 to 2009-2024)"
+                                    >
+                                        <i className="fas fa-copy mr-1"></i>Copy Statuses
+                                    </button>
+                                    <button
                                         onClick={() => handleEditSection(section)}
                                         className="text-gray-600 hover:text-primary-600 p-1"
                                     >
@@ -3775,6 +3877,75 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             </div>
             
             {/* Modals */}
+            {copySectionStatusesModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setCopySectionStatusesModal(null)}>
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                            <h2 className="text-base font-semibold text-gray-900">Copy statuses to years</h2>
+                            <button type="button" className="text-gray-500 hover:text-gray-700" onClick={() => setCopySectionStatusesModal(null)}>
+                                <i className="fas fa-times" />
+                            </button>
+                        </div>
+                        <div className="px-4 py-3 space-y-3 text-sm">
+                            <p className="text-xs text-gray-600">
+                                <strong>{copySectionStatusesModal.sectionName || 'Section'}</strong> - copy month statuses from one year into a range.
+                            </p>
+                            <label className="block">
+                                <span className="text-xs font-semibold text-gray-600 uppercase">Source year</span>
+                                <input
+                                    type="number"
+                                    min={MIN_YEAR}
+                                    max={currentYear + FUTURE_YEAR_BUFFER}
+                                    value={copyStatusesForm.sourceYear}
+                                    onChange={(e) => setCopyStatusesForm((f) => ({ ...f, sourceYear: parseInt(e.target.value, 10) || MIN_YEAR }))}
+                                    className="mt-1 w-full px-3 py-2 rounded border border-gray-300"
+                                />
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="block">
+                                    <span className="text-xs font-semibold text-gray-600 uppercase">From</span>
+                                    <input
+                                        type="number"
+                                        min={MIN_YEAR}
+                                        max={currentYear + FUTURE_YEAR_BUFFER}
+                                        value={copyStatusesForm.rangeStart}
+                                        onChange={(e) => setCopyStatusesForm((f) => ({ ...f, rangeStart: parseInt(e.target.value, 10) || MIN_YEAR }))}
+                                        className="mt-1 w-full px-3 py-2 rounded border border-gray-300"
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className="text-xs font-semibold text-gray-600 uppercase">To</span>
+                                    <input
+                                        type="number"
+                                        min={MIN_YEAR}
+                                        max={currentYear + FUTURE_YEAR_BUFFER}
+                                        value={copyStatusesForm.rangeEnd}
+                                        onChange={(e) => setCopyStatusesForm((f) => ({ ...f, rangeEnd: parseInt(e.target.value, 10) || MIN_YEAR }))}
+                                        className="mt-1 w-full px-3 py-2 rounded border border-gray-300"
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                        <div className="px-4 py-3 border-t border-gray-200 flex justify-end gap-2">
+                            <button type="button" onClick={() => setCopySectionStatusesModal(null)} className="px-3 py-1.5 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm">
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => applySectionStatusesFromYearToYears(
+                                    copySectionStatusesModal.sectionId,
+                                    copyStatusesForm.sourceYear,
+                                    copyStatusesForm.rangeStart,
+                                    copyStatusesForm.rangeEnd
+                                )}
+                                className="px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-medium"
+                            >
+                                Copy statuses
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {showSectionModal && <SectionModal />}
             {showDocumentModal && <DocumentModal />}
             {showTemplateModal && <TemplateModal />}
