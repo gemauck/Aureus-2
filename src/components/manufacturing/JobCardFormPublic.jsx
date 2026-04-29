@@ -4004,6 +4004,7 @@ const JobCardFormPublic = () => {
         : null) ||
       null;
     const createdAt = full.createdAt || new Date().toISOString();
+    const startedAt = full.startedAt || full.createdAt || new Date().toISOString();
     const synced =
       full.source === 'local' || full.synced === false
         ? false
@@ -4013,6 +4014,7 @@ const JobCardFormPublic = () => {
     setEditingMeta({
       localId,
       serverJobCardId,
+      startedAt,
       createdAt,
       synced,
       jobCardNumber
@@ -4490,6 +4492,7 @@ const JobCardFormPublic = () => {
         customerSignature: signatureForSave,
         customerPosition: formData.customerTitle || '',
         id: editingMeta?.localId ?? Date.now().toString(),
+        startedAt: editingMeta?.startedAt ?? editingMeta?.createdAt ?? nowIso,
         createdAt: editingMeta?.createdAt ?? nowIso,
         updatedAt: nowIso,
         synced: editingMeta?.synced ?? false,
@@ -4845,6 +4848,7 @@ const JobCardFormPublic = () => {
       const autoDraft = {
         ...formData,
         id: draftLocalId,
+        startedAt: editingMeta?.startedAt ?? editingMeta?.createdAt ?? nowIso,
         createdAt: editingMeta?.createdAt ?? nowIso,
         updatedAt: nowIso,
         synced: false,
@@ -4864,6 +4868,7 @@ const JobCardFormPublic = () => {
       setEditingMeta(prev => ({
         localId: prev?.localId ?? draftLocalId,
         serverJobCardId: prev?.serverJobCardId || null,
+        startedAt: prev?.startedAt ?? prev?.createdAt ?? nowIso,
         createdAt: prev?.createdAt ?? nowIso,
         synced: false,
         jobCardNumber: prev?.jobCardNumber || ''
@@ -6542,7 +6547,7 @@ const JobCardFormPublic = () => {
           ) : (
             <ul className="max-w-2xl mx-auto space-y-2">
               {mergedPriorJobCards.map(jc => {
-                const when = jc.updatedAt || jc.createdAt;
+                const when = jc.updatedAt || jc.startedAt || jc.createdAt;
                 const whenLabel = when
                   ? new Date(when).toLocaleString(undefined, {
                       dateStyle: 'medium',

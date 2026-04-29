@@ -688,6 +688,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 : [];
 
             const { serviceForms: _sf, ...formWithoutForms } = formData;
+            const nowIso = new Date().toISOString();
+            const startedAtSeed = jobCard?.startedAt || jobCard?.createdAt || nowIso;
             const jobCardData = {
                 ...formWithoutForms,
                 status: targetStatus,
@@ -699,11 +701,12 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 photos: [...visualUrls, ...voicePhotoEntries, ...signatureObjects],
                 customerSignature: sigDataUrl || '',
                 id: jobCard?.id || Date.now().toString(),
-                createdAt: jobCard?.createdAt || new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                startedAt: startedAtSeed,
+                createdAt: jobCard?.createdAt || startedAtSeed,
+                updatedAt: nowIso,
                 submittedAt:
                     targetStatus === 'submitted' || targetStatus === 'completed'
-                        ? (jobCard?.submittedAt || new Date().toISOString())
+                        ? (jobCard?.submittedAt || nowIso)
                         : null
             };
 

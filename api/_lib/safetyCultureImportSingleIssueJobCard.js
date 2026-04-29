@@ -113,6 +113,13 @@ export async function createJobCardFromSafetyCultureIssueImport(opts) {
   const agentNameForCard = technicianUser
     ? String(technicianUser.user.name || '').trim() || scAgentDisplay
     : scAgentDisplay
+  const sourceCreatedAtRaw =
+    enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
+  const sourceCreatedCandidate = sourceCreatedAtRaw ? new Date(sourceCreatedAtRaw) : null
+  const sourceCreatedAt =
+    sourceCreatedCandidate && !Number.isNaN(sourceCreatedCandidate.getTime())
+      ? sourceCreatedCandidate
+      : new Date()
 
   const jobCard = await prisma.jobCard.create({
     data: {
@@ -148,24 +155,12 @@ export async function createJobCardFromSafetyCultureIssueImport(opts) {
       timeOfArrival:
         enriched.occurred_at || issue.occurred_at
           ? new Date(enriched.occurred_at || issue.occurred_at)
-          : enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
-            ? new Date(
-                enriched.created_at ||
-                  enriched.createdAt ||
-                  issue.created_at ||
-                  issue.createdAt
-              )
+          : sourceCreatedAtRaw
+            ? sourceCreatedAt
             : null,
       completedAt,
-      submittedAt:
-        enriched.created_at || enriched.createdAt || issue.created_at || issue.createdAt
-          ? new Date(
-              enriched.created_at ||
-                enriched.createdAt ||
-                issue.created_at ||
-                issue.createdAt
-            )
-          : new Date(),
+      startedAt: sourceCreatedAt,
+      submittedAt: sourceCreatedAt,
       reasonForVisit: 'Safety Culture Issue',
       diagnosis: title,
       otherComments: `${otherCommentsBase}${fullNotesAppendix}`.trim(),

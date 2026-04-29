@@ -6818,8 +6818,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             {jobCard.agentName && (
                                                                 <div><i className="fas fa-user mr-1.5 w-4"></i>{jobCard.agentName}</div>
                                                             )}
-                                                            {jobCard.createdAt && (
-                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(jobCard.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}</div>
+                                                            {(jobCard.startedAt || jobCard.createdAt) && (
+                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(jobCard.startedAt || jobCard.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}</div>
                                                             )}
                                                             {jobCard.diagnosis && (
                                                                 <div className="mt-1 text-xs text-gray-500 italic">{jobCard.diagnosis.substring(0, 100)}{jobCard.diagnosis.length > 100 ? '...' : ''}</div>

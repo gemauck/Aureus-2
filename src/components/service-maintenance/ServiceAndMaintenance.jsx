@@ -1369,7 +1369,7 @@ const ServiceAndMaintenance = () => {
       <div class="meta-card"><div class="label">Client / site</div><div class="value">${escapeHtml(jobCardForPdf.clientName || '—')}${jobCardForPdf.siteName ? `\n${escapeHtml(jobCardForPdf.siteName)}` : ''}</div></div>
       <div class="meta-card"><div class="label">Technician</div><div class="value">${escapeHtml(jobCardForPdf.agentName || '—')}</div></div>
       <div class="meta-card"><div class="label">Status</div><div class="value">${escapeHtml(String(jobCardForPdf.status || 'draft').toUpperCase())}</div></div>
-      <div class="meta-card"><div class="label">Created</div><div class="value">${escapeHtml(formatPdfDate(jobCardForPdf.createdAt))}</div></div>
+      <div class="meta-card"><div class="label">Created</div><div class="value">${escapeHtml(formatPdfDate(jobCardForPdf.startedAt || jobCardForPdf.createdAt))}</div></div>
       <div class="meta-card"><div class="label">Printed</div><div class="value">${escapeHtml(new Date().toLocaleString())}</div></div>
     </div>
 
@@ -2472,7 +2472,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Created
                       </div>
-                      <div className="mt-1">{formatDate(selectedJobCard.createdAt)}</div>
+                      <div className="mt-1">{formatDate(selectedJobCard.startedAt || selectedJobCard.createdAt)}</div>
                     </div>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>

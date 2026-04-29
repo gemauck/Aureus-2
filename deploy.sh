@@ -178,6 +178,16 @@ if [ -f set-progress-tracker-allowlist.sql ]; then
   fi
 fi
 
+if [ -f backfill-jobcards-started-at.sql ]; then
+  echo
+  echo "-> Applying migration (backfill JobCard.startedAt from createdAt)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f backfill-jobcards-started-at.sql 2>/dev/null && echo "  Done." || echo "  (skipped or failed; check DB)"
+  else
+    echo "  (psql or DATABASE_URL not available; run backfill-jobcards-started-at.sql manually)"
+  fi
+fi
+
 echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then

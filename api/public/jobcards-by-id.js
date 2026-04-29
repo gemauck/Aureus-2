@@ -57,6 +57,7 @@ async function handler(req, res) {
           timeOfArrival: formatDate(jobCard.timeOfArrival),
           submittedAt: formatDate(jobCard.submittedAt),
           completedAt: formatDate(jobCard.completedAt),
+          startedAt: formatDate(jobCard.startedAt),
           createdAt: formatDate(jobCard.createdAt),
           updatedAt: formatDate(jobCard.updatedAt)
         }
@@ -222,6 +223,9 @@ async function handler(req, res) {
     if (body.completedAt !== undefined) {
       data.completedAt = body.completedAt ? new Date(body.completedAt) : null
     }
+    if (body.startedAt !== undefined) {
+      data.startedAt = body.startedAt ? new Date(body.startedAt) : null
+    }
 
     const finalizedStatus =
       body.status !== undefined && ['draft', 'submitted', 'completed'].includes(body.status)
@@ -288,6 +292,7 @@ async function handler(req, res) {
         status: updated.status,
         futureWorkRequired: updated.futureWorkRequired || '',
         futureWorkScheduledAt: formatDate(updated.futureWorkScheduledAt),
+        startedAt: formatDate(updated.startedAt),
         createdAt: formatDate(updated.createdAt),
         updatedAt: formatDate(updated.updatedAt)
       }

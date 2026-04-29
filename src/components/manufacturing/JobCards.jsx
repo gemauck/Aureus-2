@@ -1463,7 +1463,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 </div>
                 <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   <span>{technicianName || '–'}</span>
-                  <span>{formatDate(jc.createdAt)}</span>
+                  <span>{formatDate(jc.startedAt || jc.createdAt)}</span>
                 </div>
                 <div className={`mt-1 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
                   Created by: {createdByName || '–'}
@@ -1640,7 +1640,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       <div className="text-[11px]">
-                        {formatDate(jc.createdAt)}
+                        {formatDate(jc.startedAt || jc.createdAt)}
                       </div>
                     </td>
                     {canDeleteJobCards ? (
@@ -1826,7 +1826,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       <div className="text-[11px] font-semibold uppercase text-slate-400">
                         Created
                       </div>
-                      <div className="mt-1">{formatDate(selectedJobCard.createdAt)}</div>
+                      <div className="mt-1">{formatDate(selectedJobCard.startedAt || selectedJobCard.createdAt)}</div>
                     </div>
                   </div>
 

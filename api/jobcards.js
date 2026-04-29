@@ -59,6 +59,12 @@ function parseFiniteNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback
 }
 
+function parseOptionalDate(value) {
+  if (!value) return null
+  const dt = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(dt.getTime()) ? null : dt
+}
+
 function parseNonNegativeFiniteNumber(value, fieldName) {
   const n = Number(value)
   if (!Number.isFinite(n) || n < 0) {
@@ -212,6 +218,7 @@ const JOB_CARD_GET_ONE_SELECT = {
   status: true,
   submittedAt: true,
   completedAt: true,
+  startedAt: true,
   ownerId: true,
   createdAt: true,
   updatedAt: true,
@@ -473,6 +480,7 @@ async function handler(req, res) {
           arrivalBackAtOffice: true,
           submittedAt: true,
           completedAt: true,
+          startedAt: true,
           safetyCultureIssueId: true,
           safetyCultureAuditId: true
         }
@@ -528,6 +536,7 @@ async function handler(req, res) {
             updatedAt: formatDate(rest.updatedAt),
             submittedAt: formatDate(rest.submittedAt),
             completedAt: formatDate(rest.completedAt),
+            startedAt: formatDate(rest.startedAt),
             timeOfDeparture: formatDate(rest.timeOfDeparture),
             timeOfArrival: formatDate(rest.timeOfArrival),
             departureFromSite: formatDate(rest.departureFromSite),
@@ -606,6 +615,7 @@ async function handler(req, res) {
           timeOfArrival: formatDate(jobCard.timeOfArrival),
           submittedAt: formatDate(jobCard.submittedAt),
           completedAt: formatDate(jobCard.completedAt),
+          startedAt: formatDate(jobCard.startedAt),
           createdAt: formatDate(jobCard.createdAt),
           updatedAt: formatDate(jobCard.updatedAt)
         }
@@ -717,8 +727,12 @@ async function handler(req, res) {
           completedByName = await resolveActorDisplayName(prisma, req)
         }
 
-        const buildCreateArgs = jobCardNumber => ({
-          data: {
+        const clientCreatedAt = parseOptionalDate(body.createdAt)
+        const clientStartedAt =
+          parseOptionalDate(body.startedAt) || clientCreatedAt
+
+        const buildCreateArgs = jobCardNumber => {
+          const data = {
             jobCardNumber,
             agentName: body.agentName || '',
             otherTechnicians,
@@ -747,13 +761,17 @@ async function handler(req, res) {
             otherComments: otherCommentsForCreate,
             photos,
             status: statusForCreate,
+            startedAt: clientStartedAt,
             submittedAt: body.submittedAt ? new Date(body.submittedAt) : null,
             completedAt: body.completedAt ? new Date(body.completedAt) : null,
             ownerId: req.user?.sub || null,
             completedByUserId,
             completedByName
           }
-        })
+          // Preserve original offline creation timestamp when supplied.
+          if (clientCreatedAt) data.createdAt = clientCreatedAt
+          return { data }
+        }
 
         let jobCard = null
         const maxAttempts = 12
@@ -941,6 +959,7 @@ async function handler(req, res) {
         }
         if (body.submittedAt !== undefined) updateData.submittedAt = body.submittedAt ? new Date(body.submittedAt) : null
         if (body.completedAt !== undefined) updateData.completedAt = body.completedAt ? new Date(body.completedAt) : null
+        if (body.startedAt !== undefined) updateData.startedAt = body.startedAt ? new Date(body.startedAt) : null
         
         // Recalculate travel kilometers if readings changed
         if (body.kmReadingBefore !== undefined || body.kmReadingAfter !== undefined) {
@@ -978,6 +997,7 @@ async function handler(req, res) {
               timeOfArrival: formatDate(jobCard.timeOfArrival),
               submittedAt: formatDate(jobCard.submittedAt),
               completedAt: formatDate(jobCard.completedAt),
+              startedAt: formatDate(jobCard.startedAt),
               createdAt: formatDate(jobCard.createdAt),
               updatedAt: formatDate(jobCard.updatedAt)
             }
@@ -1039,6 +1059,7 @@ async function handler(req, res) {
             timeOfArrival: formatDate(jobCard.timeOfArrival),
             submittedAt: formatDate(jobCard.submittedAt),
             completedAt: formatDate(jobCard.completedAt),
+            startedAt: formatDate(jobCard.startedAt),
             createdAt: formatDate(jobCard.createdAt),
             updatedAt: formatDate(jobCard.updatedAt)
           }

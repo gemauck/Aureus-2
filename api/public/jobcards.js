@@ -10,6 +10,12 @@ function formatDate(date) {
   return new Date(date).toISOString()
 }
 
+function parseOptionalDate(value) {
+  if (!value) return null
+  const dt = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(dt.getTime()) ? null : dt
+}
+
 function allowPublicJobCardWrites() {
   return String(process.env.ALLOW_PUBLIC_JOBCARDS || '').toLowerCase() === 'true'
 }
@@ -46,6 +52,7 @@ async function handleGetList(req, res) {
         reasonForVisit: true,
         diagnosis: true,
         ownerId: true,
+        startedAt: true,
         createdAt: true,
         updatedAt: true
       },
@@ -54,6 +61,7 @@ async function handleGetList(req, res) {
 
     const formatted = jobCards.map(jc => ({
       ...jc,
+      startedAt: formatDate(jc.startedAt),
       createdAt: formatDate(jc.createdAt),
       updatedAt: formatDate(jc.updatedAt)
     }))
@@ -155,8 +163,12 @@ async function handler(req, res) {
 
     const positionLine = body.customerPosition || body.customerTitle || ''
 
-    const buildCreateArgs = jobCardNumber => ({
-      data: {
+    const clientCreatedAt = parseOptionalDate(body.createdAt)
+    const clientStartedAt =
+      parseOptionalDate(body.startedAt) || clientCreatedAt
+
+    const buildCreateArgs = jobCardNumber => {
+      const data = {
         jobCardNumber,
         agentName: body.agentName || '',
         otherTechnicians: JSON.stringify(otherTechnicians),
@@ -195,11 +207,15 @@ async function handler(req, res) {
           .filter(Boolean)
           .join('\n'),
         status,
+        startedAt: clientStartedAt,
         submittedAt,
         completedAt,
         ownerId: null // Public form - no owner
       }
-    })
+      // Preserve original offline creation timestamp when supplied.
+      if (clientCreatedAt) data.createdAt = clientCreatedAt
+      return { data }
+    }
 
     let jobCard = null
     const maxAttempts = 12
@@ -282,7 +298,8 @@ async function handler(req, res) {
         agentName: jobCard.agentName,
         clientName: jobCard.clientName,
         status: jobCard.status,
-        createdAt: jobCard.createdAt
+        startedAt: formatDate(jobCard.startedAt),
+        createdAt: formatDate(jobCard.createdAt)
       }
     })
   } catch (error) {

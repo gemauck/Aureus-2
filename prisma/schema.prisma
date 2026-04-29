@@ -2053,6 +2053,7 @@ model JobCard {
   status              String                @default("draft")
   submittedAt         DateTime?
   completedAt         DateTime?
+  startedAt           DateTime?
   ownerId             String?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
