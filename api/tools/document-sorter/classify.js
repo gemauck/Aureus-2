@@ -1,11 +1,9 @@
 /**
  * Maps file path (and name) to category: { fileNum: 1-7, folderName: string }.
- * Based on the 7-file structure: File 1 (regulatory), File 2 (contracts), File 3 (fuel system),
- * File 4 (assets/drivers), File 5 (FMS), File 6 (operational/contractor), File 7 (financial).
+ * Keywords are matched longest-first so specific phrases win over generic ones (e.g. contractor invoice before invoice).
  */
 
 const CATEGORIES = [
-  // File 1: Mining Right, CIPC, Diesel Refund Registration, VAT Registration, Environmental, Summary, Explanation
   {
     fileNum: 1,
     keywords: [
@@ -15,7 +13,6 @@ const CATEGORIES = [
     ],
     folderName: 'File 1 - Regulatory and Operations Summary',
   },
-  // File 2: Fuel Supply Contract, Mining Contractors Contracts, Sale of Product Contracts
   {
     fileNum: 2,
     keywords: [
@@ -24,19 +21,17 @@ const CATEGORIES = [
     ],
     folderName: 'File 2 - Contracts',
   },
-  // File 3: Tank/Pump, Diagram, Delivery Notes, Invoices, Remittance, Proof of payment, Tank Reconciliations, Photos, Calibration
   {
     fileNum: 3,
     keywords: [
       'tank and pump', 'pump configuration', 'diagram of fuel', 'fuel system',
       'delivery note', 'delivery notes', 'remittance advice', 'remittance advices',
-      'proof of payment', 'proof of payments', 'tank reconcil', 'reconcilation',
+      'proof of payment', 'proof of payments', 'tank reconcil', 'reconciliation', 'reconcilation',
       'photos of tanks', 'tank photo', 'calibration certificate', 'file 3 explanation',
       'invoice', 'invoices',
     ],
     folderName: 'File 3 - Fuel System and Transactions',
   },
-  // File 4: Asset registers, Driver list
   {
     fileNum: 4,
     keywords: [
@@ -45,7 +40,6 @@ const CATEGORIES = [
     ],
     folderName: 'File 4 - Assets and Drivers',
   },
-  // File 5: FMS description, FMS Raw Data, Fuel Refund Report, Fuel Refund Logbook
   {
     fileNum: 5,
     keywords: [
@@ -55,7 +49,6 @@ const CATEGORIES = [
     ],
     folderName: 'File 5 - FMS Data and Reports',
   },
-  // File 6: Monthly Survey, Production, Asset Activity, Contractor Invoices/Remittances/Proof
   {
     fileNum: 6,
     keywords: [
@@ -65,7 +58,6 @@ const CATEGORIES = [
     ],
     folderName: 'File 6 - Operational and Contractor',
   },
-  // File 7: Annual Financial, Management Accounts, Deviations, Fuel Caps, VAT 201
   {
     fileNum: 7,
     keywords: [
@@ -77,22 +69,101 @@ const CATEGORIES = [
   },
 ]
 
-/**
- * @param {string} entryPath - path inside zip (and/or filename)
- * @returns {{ fileNum: number, folderName: string, subFolder: string }}
- */
-export function classifyPath(entryPath) {
-  const normalized = (entryPath || '').toLowerCase().replace(/\\/g, '/')
-  const baseName = normalized.split('/').pop() || ''
-
+/** Flatten keywords sorted longest-first for specificity wins */
+function buildSortedRules() {
+  const rules = []
   for (const cat of CATEGORIES) {
     for (const kw of cat.keywords) {
-      if (normalized.includes(kw) || baseName.includes(kw)) {
-        return {
-          fileNum: cat.fileNum,
-          folderName: cat.folderName,
-          subFolder: cat.folderName,
-        }
+      rules.push({
+        kw,
+        len: kw.length,
+        fileNum: cat.fileNum,
+        folderName: cat.folderName,
+      })
+    }
+  }
+  rules.sort((a, b) => b.len - a.len || a.kw.localeCompare(b.kw))
+  return rules
+}
+
+const SORTED_RULES = buildSortedRules()
+
+/**
+ * Merge user-supplied keywords (per File 1–7) with built-in rules. Sorts longest-first globally
+ * so specific phrases win; extras compete equally with defaults.
+ * @param {Record<string, unknown>} extraKeywordsByFile - e.g. { "3": ["fuel slip"], "6": ["site contractor"] }
+ * @returns {typeof SORTED_RULES}
+ */
+export function buildMergedRules(extraKeywordsByFile) {
+  if (!extraKeywordsByFile || typeof extraKeywordsByFile !== 'object') {
+    return SORTED_RULES
+  }
+  const keys = Object.keys(extraKeywordsByFile)
+  if (keys.length === 0) return SORTED_RULES
+
+  const extra = []
+  const seen = new Set()
+  for (const key of keys) {
+    const num = parseInt(String(key), 10)
+    if (num < 1 || num > 7) continue
+    const kws = extraKeywordsByFile[key]
+    if (!Array.isArray(kws)) continue
+    const folderName = folderNameForFileNum(num)
+    for (const raw of kws) {
+      const kw = String(raw || '')
+        .trim()
+        .toLowerCase()
+      if (!kw || kw.length > 200) continue
+      const dedupe = `${num}:${kw}`
+      if (seen.has(dedupe)) continue
+      seen.add(dedupe)
+      extra.push({
+        kw,
+        len: kw.length,
+        fileNum: num,
+        folderName,
+      })
+    }
+  }
+  if (extra.length === 0) return SORTED_RULES
+
+  const merged = [...extra, ...SORTED_RULES.map((r) => ({ ...r }))]
+  merged.sort((a, b) => b.len - a.len || a.kw.localeCompare(b.kw))
+  return merged
+}
+
+/** Short tokens (e.g. afs, cipc) should not match inside longer words like "gloss" / "cafs" */
+const BOUNDARY_MAX_LEN = 4
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function keywordMatches(norm, base, kw) {
+  if (kw.length <= BOUNDARY_MAX_LEN) {
+    const re = new RegExp(`\\b${escapeRegExp(kw)}\\b`, 'i')
+    return re.test(norm) || re.test(base)
+  }
+  return norm.includes(kw) || base.includes(kw)
+}
+
+/**
+ * @param {string} entryPath - path inside zip (and/or filename)
+ * @param {{ rules?: typeof SORTED_RULES }} [options]
+ * @returns {{ fileNum: number, folderName: string, matchedKeyword: string | null }}
+ */
+export function classifyPath(entryPath, options = {}) {
+  const normalized = (entryPath || '').toLowerCase().replace(/\\/g, '/')
+  const baseName = normalized.split('/').pop() || ''
+  const ruleList = options.rules && Array.isArray(options.rules) ? options.rules : SORTED_RULES
+
+  for (const rule of ruleList) {
+    const kw = rule.kw
+    if (keywordMatches(normalized, baseName, kw)) {
+      return {
+        fileNum: rule.fileNum,
+        folderName: rule.folderName,
+        matchedKeyword: kw,
       }
     }
   }
@@ -100,6 +171,14 @@ export function classifyPath(entryPath) {
   return {
     fileNum: 0,
     folderName: 'Uncategorized',
-    subFolder: 'Uncategorized',
+    matchedKeyword: null,
   }
 }
+
+/** Folder titles for manifest / AI mapping */
+export function folderNameForFileNum(fileNum) {
+  const cat = CATEGORIES.find((c) => c.fileNum === fileNum)
+  return cat ? cat.folderName : 'Uncategorized'
+}
+
+export { CATEGORIES, SORTED_RULES }

@@ -2802,7 +2802,8 @@ app.use('/api', async (req, res) => {
     // POA Review processing can take up to 5 minutes, so give it more time
     const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel');
     const isReceiptExtract = req.url.includes('/receipt-extract');
-    const timeoutDuration = isPOAReview ? 360000 : isReceiptExtract ? 120000 : 30000; // POA: 6m; receipt vision: 2m; else 30s
+    const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
+    const timeoutDuration = isPOAReview ? 360000 : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA: 6m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
     
     timeout = setTimeout(() => {
       if (!res.headersSent) {
