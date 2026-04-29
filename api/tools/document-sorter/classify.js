@@ -74,8 +74,11 @@ function buildSortedRules() {
   const rules = []
   for (const cat of CATEGORIES) {
     for (const kw of cat.keywords) {
+      const kwNorm = normalizeForTokens(kw)
       rules.push({
         kw,
+        kwNorm,
+        kwTokens: kwNorm.split(' ').filter(Boolean),
         len: kw.length,
         fileNum: cat.fileNum,
         folderName: cat.folderName,
@@ -85,8 +88,6 @@ function buildSortedRules() {
   rules.sort((a, b) => b.len - a.len || a.kw.localeCompare(b.kw))
   return rules
 }
-
-const SORTED_RULES = buildSortedRules()
 
 /**
  * Merge user-supplied keywords (per File 1–7) with built-in rules. Sorts longest-first globally
@@ -119,6 +120,8 @@ export function buildMergedRules(extraKeywordsByFile) {
       seen.add(dedupe)
       extra.push({
         kw,
+        kwNorm: normalizeForTokens(kw),
+        kwTokens: normalizeForTokens(kw).split(' ').filter(Boolean),
         len: kw.length,
         fileNum: num,
         folderName,
@@ -132,6 +135,16 @@ export function buildMergedRules(extraKeywordsByFile) {
   return merged
 }
 
+function normalizeForTokens(s) {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const SORTED_RULES = buildSortedRules()
+
 /** Short tokens (e.g. afs, cipc) should not match inside longer words like "gloss" / "cafs" */
 const BOUNDARY_MAX_LEN = 4
 
@@ -139,32 +152,148 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function keywordMatches(norm, base, kw) {
+function containsAllTokens(text, tokens) {
+  if (!tokens.length) return false
+  return tokens.every((t) => text.includes(` ${t} `))
+}
+
+/**
+ * High-confidence disambiguation rules before generic keywords.
+ * These are tuned for common false positives in diesel refund bundles.
+ */
+function heuristicMatch(normalized, tokenText) {
+  const has = (t) => tokenText.includes(` ${t} `)
+
+  // Contractor financial docs should not fall into generic File 3 "invoice"
+  if (has('contractor') && (has('invoice') || has('remittance') || (has('proof') && has('payment')))) {
+    return {
+      fileNum: 6,
+      folderName: 'File 6 - Operational and Contractor',
+      matchedKeyword: 'heuristic: contractor + payment/invoice',
+    }
+  }
+
+  // Contract-like terms with fuel/mining context -> File 2
+  if ((has('contract') || has('agreement')) && (has('fuel') || has('supply') || has('mining') || has('product'))) {
+    return {
+      fileNum: 2,
+      folderName: 'File 2 - Contracts',
+      matchedKeyword: 'heuristic: contract/agreement context',
+    }
+  }
+
+  // VAT201 and management/financial statements -> File 7
+  if (normalized.includes('vat201') || has('vat') && has('201') || has('management') && has('accounts')) {
+    return {
+      fileNum: 7,
+      folderName: 'File 7 - Financial and Compliance',
+      matchedKeyword: 'heuristic: vat201/management accounts',
+    }
+  }
+
+  return null
+}
+
+function keywordMatches(norm, base, tokenText, kw) {
+  const kwNorm = normalizeForTokens(kw)
+  const kwTokens = kwNorm.split(' ').filter(Boolean)
+
   if (kw.length <= BOUNDARY_MAX_LEN) {
     const re = new RegExp(`\\b${escapeRegExp(kw)}\\b`, 'i')
     return re.test(norm) || re.test(base)
   }
-  return norm.includes(kw) || base.includes(kw)
+
+  if (norm.includes(kw) || base.includes(kw)) return true
+
+  // For phrases like "contractor invoice", also match tokens in any separator/order context.
+  if (kwTokens.length >= 2) {
+    return containsAllTokens(tokenText, kwTokens)
+  }
+
+  return false
+}
+
+function scoreRuleMatch({ normalized, baseName, tokenText, rule }) {
+  const kw = rule.kw
+  const kwTokens = rule.kwTokens || []
+  let score = 0
+
+  if (kw.length <= BOUNDARY_MAX_LEN) {
+    const re = new RegExp(`\\b${escapeRegExp(kw)}\\b`, 'i')
+    if (re.test(normalized)) score += 100
+    if (re.test(baseName)) score += 45
+    return score
+  }
+
+  if (normalized.includes(kw)) score += 110 + Math.min(rule.len, 40)
+  if (baseName.includes(kw)) score += 50 + Math.min(rule.len, 20)
+  if (kwTokens.length >= 2 && containsAllTokens(tokenText, kwTokens)) {
+    score += 55 + Math.min(rule.len, 25)
+  }
+  return score
+}
+
+function toConfidence(top, second) {
+  if (top <= 0) return 0
+  const margin = top - second
+  if (margin >= 120) return 0.95
+  if (margin >= 70) return 0.88
+  if (margin >= 40) return 0.78
+  if (margin >= 20) return 0.66
+  return 0.52
 }
 
 /**
  * @param {string} entryPath - path inside zip (and/or filename)
  * @param {{ rules?: typeof SORTED_RULES }} [options]
- * @returns {{ fileNum: number, folderName: string, matchedKeyword: string | null }}
+ * @returns {{ fileNum: number, folderName: string, matchedKeyword: string | null, matchedBy: string, confidence: number, classifyReason: string }}
  */
 export function classifyPath(entryPath, options = {}) {
   const normalized = (entryPath || '').toLowerCase().replace(/\\/g, '/')
   const baseName = normalized.split('/').pop() || ''
+  const tokenText = ` ${normalizeForTokens(normalized)} `
   const ruleList = options.rules && Array.isArray(options.rules) ? options.rules : SORTED_RULES
+
+  const heuristic = heuristicMatch(normalized, tokenText)
+  if (heuristic) {
+    return {
+      ...heuristic,
+      matchedBy: 'heuristic',
+      confidence: 0.97,
+      classifyReason: heuristic.matchedKeyword,
+    }
+  }
+
+  const categoryScores = new Map()
+  let bestRule = null
+  let bestRuleScore = 0
 
   for (const rule of ruleList) {
     const kw = rule.kw
-    if (keywordMatches(normalized, baseName, kw)) {
-      return {
-        fileNum: rule.fileNum,
-        folderName: rule.folderName,
-        matchedKeyword: kw,
-      }
+    if (!keywordMatches(normalized, baseName, tokenText, kw)) continue
+
+    const score = scoreRuleMatch({ normalized, baseName, tokenText, rule })
+    if (score <= 0) continue
+
+    const prev = categoryScores.get(rule.fileNum) || 0
+    categoryScores.set(rule.fileNum, prev + score)
+    if (score > bestRuleScore) {
+      bestRuleScore = score
+      bestRule = rule
+    }
+  }
+
+  const ranked = [...categoryScores.entries()].sort((a, b) => b[1] - a[1])
+  if (ranked.length > 0 && bestRule) {
+    const [topFileNum, topScore] = ranked[0]
+    const secondScore = ranked[1]?.[1] || 0
+    return {
+      fileNum: topFileNum,
+      folderName: folderNameForFileNum(topFileNum),
+      matchedKeyword: bestRule.kw,
+      matchedBy: 'rule-score',
+      confidence: toConfidence(topScore, secondScore),
+      classifyReason: `top=${topScore};second=${secondScore};best=${bestRule.kw}`,
     }
   }
 
@@ -172,6 +301,9 @@ export function classifyPath(entryPath, options = {}) {
     fileNum: 0,
     folderName: 'Uncategorized',
     matchedKeyword: null,
+    matchedBy: 'none',
+    confidence: 0,
+    classifyReason: 'no-rule-match',
   }
 }
 

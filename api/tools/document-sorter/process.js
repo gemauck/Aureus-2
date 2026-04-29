@@ -29,6 +29,7 @@ const DEFAULT_AI_MAX = 150
 const MAX_AI_BYTES = 18 * 1024 * 1024
 const AI_SCOPE_ALL_CAP = 80
 const EXTRA_KW_MAX_TOTAL = 80
+const LOW_CONFIDENCE_THRESHOLD = 0.58
 
 /** User JSON: { "3": ["fuel slip"], "6": ["contractor xyz"] } — max ~80 phrases total */
 function sanitizeExtraKeywords(raw) {
@@ -151,6 +152,9 @@ function writeManifestCsv(manifest, outputDir) {
     'folderName',
     'fileNum',
     'matchedKeyword',
+    'matchedBy',
+    'classifyConfidence',
+    'classifyReason',
     'method',
     'uncompressedSize',
     'collisionDisambiguated',
@@ -326,7 +330,9 @@ async function handler(req, res) {
         }
 
         const origPath = entry.fileName
-        const { fileNum, folderName, matchedKeyword } = classifyPath(origPath, { rules: classifyRules })
+        const { fileNum, folderName, matchedKeyword, matchedBy, confidence, classifyReason } = classifyPath(origPath, {
+          rules: classifyRules,
+        })
         let safePath = sanitizeEntryPath(origPath)
         const alloc = allocateSafeRelativePath(folderName, safePath, destSeen)
         safePath = alloc.safePath
@@ -351,6 +357,9 @@ async function handler(req, res) {
           folderName,
           fileNum,
           matchedKeyword,
+          matchedBy,
+          classifyConfidence: confidence,
+          classifyReason,
           method: 'rules',
           uncompressedSize: entry.uncompressedSize || 0,
           collisionDisambiguated: alloc.disambiguated,
@@ -438,13 +447,25 @@ async function handler(req, res) {
       useAI &&
       (aiScope === 'all'
         ? manifest.files.length > 0
-        : manifest.files.some((f) => f.fileNum === 0))
+        : manifest.files.some(
+            (f) =>
+              f.fileNum === 0 ||
+              (typeof f.classifyConfidence === 'number' && f.classifyConfidence > 0 && f.classifyConfidence < LOW_CONFIDENCE_THRESHOLD),
+          ))
 
     if (runAiPass) {
       const aiTargets =
         aiScope === 'all'
           ? manifest.files.slice(0, aiRowsCap)
-          : manifest.files.filter((f) => f.fileNum === 0).slice(0, aiRowsCap)
+          : manifest.files
+              .filter(
+                (f) =>
+                  f.fileNum === 0 ||
+                  (typeof f.classifyConfidence === 'number' &&
+                    f.classifyConfidence > 0 &&
+                    f.classifyConfidence < LOW_CONFIDENCE_THRESHOLD),
+              )
+              .slice(0, aiRowsCap)
 
       writeProgress(outputDir, {
         status: 'running',
@@ -501,6 +522,7 @@ async function handler(req, res) {
               row.evidenceType = ai.evidenceType
               row.extractError = extracted.error || undefined
               row.method = 'rules_llm_confirm'
+              row.classifyReason = `${row.classifyReason || 'rule'}; llm_confirm`
             } else {
               const newFolder = folderNameForFileNum(targetNum)
               let relSafe = sanitizeEntryPath(row.originalPath)
@@ -523,6 +545,7 @@ async function handler(req, res) {
               )
               row.method = 'llm'
               row.matchedKeyword = null
+              row.matchedBy = 'llm'
               row.llmConfidence = ai.confidence
               row.llmSummary = ai.summary
               row.evidenceType = ai.evidenceType
