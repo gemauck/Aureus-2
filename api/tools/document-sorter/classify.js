@@ -26,9 +26,12 @@ const CATEGORIES = [
     keywords: [
       'tank and pump', 'pump configuration', 'diagram of fuel', 'fuel system',
       'delivery note', 'delivery notes', 'remittance advice', 'remittance advices',
-      'proof of payment', 'proof of payments', 'tank reconcil', 'reconciliation', 'reconcilation',
+      'proof of payment', 'proof of payments', 'proof of paument', 'proof of payement',
+      'proof of bank payment', 'proof of eft payment', 'pop', 'p.o.p', 'p o p',
+      'proof of delivery', 'pod',
+      'tank reconcil', 'reconciliation', 'reconcilation',
       'photos of tanks', 'tank photo', 'calibration certificate', 'file 3 explanation',
-      'invoice', 'invoices',
+      'invoice', 'invoices', 'supplier invoice', 'fuel invoice',
     ],
     folderName: 'File 3 - Fuel System and Transactions',
   },
@@ -54,6 +57,7 @@ const CATEGORIES = [
     keywords: [
       'monthly survey', 'survey report', 'production report', 'asset activity report',
       'contractor invoice', 'contractor remittance', 'contractor proof of payment',
+      'contractor pop', 'contractor pod',
       'file 6 explanation', 'contractor payment',
     ],
     folderName: 'File 6 - Operational and Contractor',
@@ -170,6 +174,21 @@ function heuristicMatch(normalized, tokenText) {
       fileNum: 6,
       folderName: 'File 6 - Operational and Contractor',
       matchedKeyword: 'heuristic: contractor + payment/invoice',
+    }
+  }
+
+  // POP/PoP/Proof of payment in normal supplier/fuel context -> File 3
+  // (contractor POP still handled by the contractor heuristic above)
+  if (
+    has('pop') ||
+    has('proof') && (has('payment') || has('paument') || has('payement'))
+  ) {
+    if (has('fuel') || has('supplier') || has('delivery') || has('invoice') || has('remittance') || has('eft')) {
+      return {
+        fileNum: 3,
+        folderName: 'File 3 - Fuel System and Transactions',
+        matchedKeyword: 'heuristic: pop/proof-of-payment supplier context',
+      }
     }
   }
 

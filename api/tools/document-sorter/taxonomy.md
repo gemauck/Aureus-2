@@ -26,7 +26,7 @@ Use this structure when classifying documents for diesel refund evidence bundles
 
 **Purpose:** Physical fuel infrastructure and transactional proof (supplier side).
 
-**Include:** Tank and pump layouts/diagrams; delivery notes; supplier invoices; remittance advice; proof of payment to suppliers; tank reconciliations; calibration certificates; photos of tanks.
+**Include:** Tank and pump layouts/diagrams; delivery notes; supplier invoices; remittance advice; proof of payment to suppliers; **POP / PoP / EFT proof / proof of payment** (including common misspellings from OCR/file names); tank reconciliations; calibration certificates; photos of tanks.
 
 **Exclude:** Contractor-only payment documents (prefer File 6 if clearly contractor invoices).
 
@@ -54,7 +54,7 @@ Use this structure when classifying documents for diesel refund evidence bundles
 
 **Include:** Monthly survey reports; production reports; asset activity reports; contractor invoices, remittances, and proof of payment to contractors.
 
-**Disambiguation:** If a document is clearly a **contractor** invoice, prefer File 6 over File 3.
+**Disambiguation:** If a document is clearly a **contractor** invoice or contractor POP/proof-of-payment, prefer File 6 over File 3.
 
 ---
 
