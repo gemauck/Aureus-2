@@ -1296,6 +1296,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const applySectionStatusesFromYearToYears = (sectionId, sourceYear, rangeStart, rangeEnd) => {
+        const normalizeText = (v) => String(v || '').trim().toLowerCase();
         if (!project?.id) return;
         if (!Number.isFinite(sourceYear)) {
             alert('Invalid source year.');
@@ -1316,8 +1317,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
         const latestSectionsByYear = sectionsRef.current || {};
         const sourceSections = latestSectionsByYear[sourceYear] || latestSectionsByYear[String(sourceYear)] || [];
+        const sourceSectionNameNorm = normalizeText(
+            (sections || []).find((s) => String(s.id) === String(sectionId))?.name
+        );
         const sourceSection = Array.isArray(sourceSections)
-            ? sourceSections.find((s) => String(s.id) === String(sectionId))
+            ? (
+                sourceSections.find((s) => String(s.id) === String(sectionId)) ||
+                sourceSections.find((s) => normalizeText(s?.name) === sourceSectionNameNorm)
+            )
             : null;
         if (!sourceSection) {
             alert(`Section not found in ${sourceYear}. Switch to that year first and confirm data exists.`);
@@ -1335,28 +1342,43 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 return;
             }
             const targetSections = cloneSectionsArray(targetSectionsRaw);
-            const sectionIndex = targetSections.findIndex((s) => String(s.id) === String(sectionId));
+            const sectionIndexById = targetSections.findIndex((s) => String(s.id) === String(sectionId));
+            const sectionIndexByName = targetSections.findIndex((s) => normalizeText(s?.name) === normalizeText(sourceSection?.name));
+            const sectionIndex = sectionIndexById !== -1 ? sectionIndexById : sectionIndexByName;
             if (sectionIndex === -1) {
                 skippedYears.push(targetYear);
                 return;
             }
 
+            let matchedAnyDocument = false;
             const updatedSection = {
                 ...targetSections[sectionIndex],
                 documents: (targetSections[sectionIndex].documents || []).map((doc) => {
-                    const sourceDoc = (sourceSection.documents || []).find((sdoc) => String(sdoc.id) === String(doc.id));
+                    const sourceDoc = (sourceSection.documents || []).find((sdoc) => String(sdoc.id) === String(doc.id))
+                        || (sourceSection.documents || []).find((sdoc) => normalizeText(sdoc?.name) === normalizeText(doc?.name));
                     if (!sourceDoc) return doc;
+                    matchedAnyDocument = true;
 
-                    let nextStatusMap = { ...(doc.collectionStatus || {}) };
+                    const nextStatusMap = { ...(doc.collectionStatus || {}) };
                     months.forEach((month) => {
                         const statusFromSource = getStatusForYear(sourceDoc.collectionStatus || {}, month, sourceYear);
-                        nextStatusMap = setStatusForYear(nextStatusMap, month, statusFromSource || '', targetYear);
+                        const monthKey = getMonthKey(month, targetYear);
+                        if (!monthKey) return;
+                        if (!statusFromSource || statusFromSource === '' || statusFromSource === 'Select Status') {
+                            delete nextStatusMap[monthKey];
+                        } else {
+                            nextStatusMap[monthKey] = statusFromSource;
+                        }
                     });
 
                     return { ...doc, collectionStatus: nextStatusMap };
                 })
             };
 
+            if (!matchedAnyDocument) {
+                skippedYears.push(targetYear);
+                return;
+            }
             targetSections[sectionIndex] = updatedSection;
             updatedSectionsByYear[String(targetYear)] = targetSections;
             appliedYears.push(targetYear);
@@ -3755,25 +3777,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     >
                                         <i className="fas fa-plus mr-1"></i>Add Document
                                     </button>
-                                    {canUseCopyStatusesButton && (
-                                        <button
-                                            onClick={() => {
-                                                setCopyStatusesForm({
-                                                    sourceYear: selectedYear,
-                                                    rangeStart: 2009,
-                                                    rangeEnd: 2024
-                                                });
-                                                setCopySectionStatusesModal({
-                                                    sectionId: section.id,
-                                                    sectionName: section.name || ''
-                                                });
-                                            }}
-                                            className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-medium hover:bg-emerald-700"
-                                            title="Copy this section's statuses from one year into a range (e.g. 2008 to 2009-2024)"
-                                        >
-                                            <i className="fas fa-copy mr-1"></i>Copy Statuses
-                                        </button>
-                                    )}
                                     <button
                                         onClick={() => handleEditSection(section)}
                                         className="text-gray-600 hover:text-primary-600 p-1"
