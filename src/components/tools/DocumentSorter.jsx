@@ -60,6 +60,9 @@ const DocumentSorter = () => {
   const [bulkToken, setBulkToken] = useState('pop');
   const [learningPreview, setLearningPreview] = useState(null);
   const [learningPreviewLoading, setLearningPreviewLoading] = useState(false);
+  const [showFullPaths, setShowFullPaths] = useState(true);
+  const [hoverPreviewRow, setHoverPreviewRow] = useState(null);
+  const [autoApplySimilarOnMove, setAutoApplySimilarOnMove] = useState(true);
   const fileInputRef = useRef(null);
   const progressPollRef = useRef(null);
 
@@ -332,6 +335,35 @@ const DocumentSorter = () => {
   const verification = result?.verification;
   const uncategorizedSample = result?.uncategorizedSample || [];
   const getRowKey = (row, idx) => row.outputRelativePath || `${row.originalPath || 'row'}-${idx}`;
+  const encodePathSegments = (p) => String(p || '').split('/').map((s) => encodeURIComponent(s)).join('/');
+  const getDocumentUrl = (row) => {
+    if (!result?.baseUrl || !row?.outputRelativePath) return null;
+    return `${result.baseUrl}/${encodePathSegments(row.outputRelativePath)}`;
+  };
+  const getDocExt = (p) => {
+    const s = String(p || '').toLowerCase();
+    const i = s.lastIndexOf('.');
+    return i >= 0 ? s.slice(i + 1) : '';
+  };
+  const isImageExt = (ext) => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+  const isPreviewableExt = (ext) => ['pdf', 'txt', 'csv', 'json', 'md', 'html', 'htm'].includes(ext) || isImageExt(ext);
+  const normalizeBaseStem = (p) => {
+    const name = String(p || '').split('/').pop() || '';
+    const noExt = name.replace(/\.[^.]+$/, '');
+    return noExt.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  };
+  const areSimilarNames = (a, b) => {
+    const aStem = normalizeBaseStem(a);
+    const bStem = normalizeBaseStem(b);
+    if (!aStem || !bStem) return false;
+    if (aStem === bStem) return true;
+    if ((aStem.includes(bStem) || bStem.includes(aStem)) && Math.min(aStem.length, bStem.length) >= 6) return true;
+    const aTokens = new Set(aStem.split(' ').filter((t) => t.length >= 3));
+    const bTokens = bStem.split(' ').filter((t) => t.length >= 3);
+    let overlap = 0;
+    bTokens.forEach((t) => { if (aTokens.has(t)) overlap += 1; });
+    return overlap >= 2;
+  };
   const getTargetForRow = (row, idx) => {
     const key = getRowKey(row, idx);
     return manualTargets[key] || { fileNum: Number(row.fileNum) || 0, subFolderName: row.subFolderName || 'Unsorted' };
@@ -357,6 +389,31 @@ const DocumentSorter = () => {
     }
   };
 
+  const moveRowsToTarget = async ({ rows, targetFileNum, targetSubfolderName, statusPrefix = 'Moving' }) => {
+    if (!result?.uploadId || !rows.length) return;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const key = getRowKey(row, i);
+      if (!row.outputRelativePath) continue;
+      const res = await fetch(`${API_BASE}/move`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          uploadId: result?.uploadId,
+          outputRelativePath: row.outputRelativePath,
+          targetFileNum: Number(targetFileNum),
+          targetSubfolderName,
+          learn: (learnByRow[key] ?? learnFromManual) === true,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error?.message || `${statusPrefix} failed (${res.status})`);
+      }
+      setBulkStatus(`${statusPrefix} ${i + 1} / ${rows.length}…`);
+    }
+  };
+
   const moveRow = async (row, idx) => {
     const key = getRowKey(row, idx);
     const target = getTargetForRow(row, idx);
@@ -371,28 +428,33 @@ const DocumentSorter = () => {
       return;
     }
     setMoveBusyKey(key);
+    setBulkBusy(true);
+    setBulkStatus(null);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/move`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          uploadId: result?.uploadId,
-          outputRelativePath: row.outputRelativePath,
-          targetFileNum: Number(target.fileNum),
-          targetSubfolderName,
-          learn: (learnByRow[key] ?? learnFromManual) === true,
-        }),
+      const similarRows = autoApplySimilarOnMove
+        ? filteredRows.filter((r) => r.outputRelativePath !== row.outputRelativePath && areSimilarNames(row.originalPath, r.originalPath))
+        : [];
+      const rowsToMove = [row, ...similarRows];
+      await moveRowsToTarget({
+        rows: rowsToMove,
+        targetFileNum: Number(target.fileNum),
+        targetSubfolderName,
+        statusPrefix: autoApplySimilarOnMove ? 'Applying to similar' : 'Moving',
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json?.error?.message || `Move failed (${res.status})`);
-      }
       await loadManifestPreview();
+      await loadLearningPreview();
+      setBulkStatus(
+        autoApplySimilarOnMove
+          ? `Moved ${rowsToMove.length} row(s): 1 direct + ${similarRows.length} similar`
+          : 'Moved 1 row.',
+      );
     } catch (e) {
       setError(e.message || 'Move failed');
+      setBulkStatus(null);
     } finally {
       setMoveBusyKey(null);
+      setBulkBusy(false);
     }
   };
 
@@ -413,25 +475,12 @@ const DocumentSorter = () => {
     setBulkStatus(`Moving 0 / ${rows.length}…`);
     setError(null);
     try {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const key = getRowKey(row, i);
-        if (!row.outputRelativePath) continue;
-        const res = await fetch(`${API_BASE}/move`, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify({
-            uploadId: result?.uploadId,
-            outputRelativePath: row.outputRelativePath,
-            targetFileNum: Number(bulkTargetFileNum),
-            targetSubfolderName,
-            learn: (learnByRow[key] ?? learnFromManual) === true,
-          }),
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json?.error?.message || `Bulk move failed (${res.status})`);
-        setBulkStatus(`Moving ${i + 1} / ${rows.length}…`);
-      }
+      await moveRowsToTarget({
+        rows,
+        targetFileNum: Number(bulkTargetFileNum),
+        targetSubfolderName,
+        statusPrefix: 'Bulk moving',
+      });
       await loadManifestPreview();
       await loadLearningPreview();
       setBulkStatus(`Done. Moved ${rows.length} row(s).`);
@@ -804,6 +853,22 @@ const DocumentSorter = () => {
                       />
                       Learn from manual moves
                     </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoApplySimilarOnMove}
+                        onChange={(e) => setAutoApplySimilarOnMove(e.target.checked)}
+                      />
+                      Auto-apply row move to similar names
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showFullPaths}
+                        onChange={(e) => setShowFullPaths(e.target.checked)}
+                      />
+                      Show full path text
+                    </label>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
@@ -856,6 +921,7 @@ const DocumentSorter = () => {
                         <thead className={isDark ? 'bg-gray-900' : 'bg-gray-100'}>
                           <tr>
                             <th className="text-left px-2 py-1">Path</th>
+                            <th className="text-left px-2 py-1">Document</th>
                             <th className="text-left px-2 py-1">Folder</th>
                             <th className="text-left px-2 py-1">Method</th>
                             <th className="text-left px-2 py-1">Match</th>
@@ -868,7 +934,35 @@ const DocumentSorter = () => {
                         <tbody>
                           {pageRows.map((row, idx) => (
                             <tr key={`${row.originalPath || 'row'}-${idx}`} className="border-t border-gray-300/20">
-                              <td className="px-2 py-1 max-w-[420px] truncate" title={row.originalPath || ''}>{row.originalPath || '-'}</td>
+                              <td
+                                className={`px-2 py-1 ${showFullPaths ? 'max-w-[620px] whitespace-normal break-all' : 'max-w-[420px] truncate'}`}
+                                title={row.originalPath || ''}
+                                onMouseEnter={() => setHoverPreviewRow(row)}
+                                onMouseLeave={() => setHoverPreviewRow((cur) => (cur?.outputRelativePath === row.outputRelativePath ? null : cur))}
+                              >
+                                {row.originalPath || '-'}
+                              </td>
+                              <td className="px-2 py-1 min-w-[160px]">
+                                {(() => {
+                                  const docUrl = getDocumentUrl(row);
+                                  const ext = getDocExt(row.originalPath || row.outputRelativePath || '');
+                                  return docUrl ? (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <a
+                                        href={docUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-xs rounded border px-2 py-0.5"
+                                      >
+                                        Open
+                                      </a>
+                                      <span className={`text-[11px] px-1 py-0.5 rounded ${isPreviewableExt(ext) ? 'bg-emerald-700/20 text-emerald-200' : 'bg-gray-700/20 text-gray-300'}`}>
+                                        {isPreviewableExt(ext) ? `preview ${ext || 'file'}` : `no preview ${ext || 'file'}`}
+                                      </span>
+                                    </div>
+                                  ) : '-';
+                                })()}
+                              </td>
                               <td className="px-2 py-1">{row.folderName || '-'}</td>
                               <td className="px-2 py-1">{row.method || '-'}</td>
                               <td className="px-2 py-1">{row.matchedKeyword || '-'}</td>
@@ -938,13 +1032,32 @@ const DocumentSorter = () => {
                           ))}
                           {pageRows.length === 0 && (
                             <tr>
-                              <td className="px-2 py-2 opacity-70" colSpan={8}>No rows match current filters.</td>
+                              <td className="px-2 py-2 opacity-70" colSpan={9}>No rows match current filters.</td>
                             </tr>
                           )}
                         </tbody>
                       </table>
                     </div>
                   )}
+                  {hoverPreviewRow && (() => {
+                    const docUrl = getDocumentUrl(hoverPreviewRow);
+                    const ext = getDocExt(hoverPreviewRow.originalPath || hoverPreviewRow.outputRelativePath || '');
+                    if (!docUrl || !isPreviewableExt(ext)) return null;
+                    return (
+                      <div className={`rounded border p-2 ${isDark ? 'border-gray-600 bg-gray-900/80' : 'border-gray-300 bg-white'}`}>
+                        <p className={`text-[11px] mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                          Hover preview: {hoverPreviewRow.originalPath || hoverPreviewRow.outputRelativePath}
+                        </p>
+                        <div className="w-full max-w-[760px] h-[320px] overflow-hidden rounded border border-gray-300/30">
+                          {isImageExt(ext) ? (
+                            <img src={docUrl} alt="Document preview" className="w-full h-full object-contain bg-black/5" />
+                          ) : (
+                            <iframe src={docUrl} title="Document preview" className="w-full h-full" />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <details className="mt-2">
                     <summary className={`text-xs cursor-pointer ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Learning rules preview</summary>
                     <div className="mt-1 text-xs space-y-1">
@@ -959,7 +1072,7 @@ const DocumentSorter = () => {
                           <div className="max-h-40 overflow-y-auto border rounded border-gray-300/30 p-1">
                             {(learningPreview.samples || []).slice().reverse().map((s, i) => (
                               <div key={`learn-${i}`} className="py-0.5">
-                                {(s.aliases || s.tokens || []).slice(0, 5).join(', ')} -> File {s.fileNum} / {s.subFolderName}
+                                {(s.aliases || s.tokens || []).slice(0, 5).join(', ')} -{'>'} File {s.fileNum} / {s.subFolderName}
                               </div>
                             ))}
                           </div>
