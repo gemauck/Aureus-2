@@ -1238,6 +1238,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         return defaultUser;
     };
+    const canUseCopyStatusesButton = String(getCurrentUser()?.email || '').toLowerCase() === 'garethm@abcotronics.co.za';
     
     // ============================================================
     // YEAR SELECTION
@@ -3754,23 +3755,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     >
                                         <i className="fas fa-plus mr-1"></i>Add Document
                                     </button>
-                                    <button
-                                        onClick={() => {
-                                            setCopyStatusesForm({
-                                                sourceYear: selectedYear,
-                                                rangeStart: 2009,
-                                                rangeEnd: 2024
-                                            });
-                                            setCopySectionStatusesModal({
-                                                sectionId: section.id,
-                                                sectionName: section.name || ''
-                                            });
-                                        }}
-                                        className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-medium hover:bg-emerald-700"
-                                        title="Copy this section's statuses from one year into a range (e.g. 2008 to 2009-2024)"
-                                    >
-                                        <i className="fas fa-copy mr-1"></i>Copy Statuses
-                                    </button>
+                                    {canUseCopyStatusesButton && (
+                                        <button
+                                            onClick={() => {
+                                                setCopyStatusesForm({
+                                                    sourceYear: selectedYear,
+                                                    rangeStart: 2009,
+                                                    rangeEnd: 2024
+                                                });
+                                                setCopySectionStatusesModal({
+                                                    sectionId: section.id,
+                                                    sectionName: section.name || ''
+                                                });
+                                            }}
+                                            className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-medium hover:bg-emerald-700"
+                                            title="Copy this section's statuses from one year into a range (e.g. 2008 to 2009-2024)"
+                                        >
+                                            <i className="fas fa-copy mr-1"></i>Copy Statuses
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => handleEditSection(section)}
                                         className="text-gray-600 hover:text-primary-600 p-1"
