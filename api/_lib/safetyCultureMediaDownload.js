@@ -2,7 +2,7 @@
  * Shared helpers for SafetyCulture GET /media/v1/download/{id} (signed URL + retries).
  * @see https://developer.safetyculture.com/reference/mediaservice_getdownloadsignedurl
  */
-import { safetyCultureRequest, fetchIssueDetails } from './safetyCultureClient.js'
+import { safetyCultureRequest, fetchIssueDetails, isSafetyCultureFailurePayload } from './safetyCultureClient.js'
 import { collectIssueMediaForJobCard } from './safetyCultureIssueJobCard.js'
 
 function sleep(ms) {
@@ -67,7 +67,17 @@ export async function fetchSignedUrlWithRetries(id, token, attempts) {
       const q = new URLSearchParams({ token })
       if (mt) q.set('media_type', mt)
       const path = `/media/v1/download/${encodeURIComponent(id)}?${q.toString()}`
-      const result = await safetyCultureRequest(path)
+      const raw = await safetyCultureRequest(path)
+      const result = isSafetyCultureFailurePayload(raw)
+        ? {
+            ...raw,
+            status: Number(raw?.status) || 400,
+            error:
+              (typeof raw?.message === 'string' && raw.message) ||
+              (typeof raw?.error === 'string' && raw.error) ||
+              'SafetyCulture failure payload'
+          }
+        : raw
       last = result
       const signed = extractSignedUrl(result)
       if (signed) return { signedUrl: signed, last: result }
