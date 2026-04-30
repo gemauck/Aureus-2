@@ -1,5 +1,5 @@
 // Safety Culture Inspections - View iAuditor inspections in ERP
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 const API_BASE = window.location.origin + '/api';
 const PAGE_SIZE = 20;
@@ -147,9 +147,11 @@ function renderScInspectionsList(arr) {
     );
 }
 
-const ScMediaTile = ({ item, isDark }) => {
+const ScMediaTile = ({ item, isDark, issueId }) => {
     const [retryTick, setRetryTick] = useState(0);
     const [err, setErr] = useState(null);
+    const [resolvedSrc, setResolvedSrc] = useState(null);
+    const blobUrlRef = useRef(null);
     const id = item?.id || item?.media_id || item?.document_id;
     const token = item?.token || item?.download_token || item?.media_token || item?.access_token;
     const mediaType = item?.media_type || item?.mediaType || '';
@@ -167,10 +169,84 @@ const ScMediaTile = ({ item, isDark }) => {
     const params = new URLSearchParams({ id: String(id || ''), token: String(token || '') });
     if (mediaType) params.set('media_type', String(mediaType));
     if (fileName) params.set('filename', String(fileName));
+    if (issueId) params.set('issue_id', String(issueId));
     if (retryTick > 0) params.set('retry', String(retryTick));
     const src = `${API_BASE}/safety-culture/media/proxy?${params.toString()}`;
+    const canFetch = Boolean(canRender && isImage);
 
     const cardClass = isDark ? 'border-gray-600 bg-gray-900/50' : 'border-gray-200 bg-gray-50';
+
+    useEffect(() => {
+        let cancelled = false;
+        const ac = new AbortController();
+
+        const revokeBlob = () => {
+            if (blobUrlRef.current) {
+                URL.revokeObjectURL(blobUrlRef.current);
+                blobUrlRef.current = null;
+            }
+        };
+
+        if (!canFetch) {
+            setResolvedSrc(null);
+            revokeBlob();
+            return () => {
+                ac.abort();
+            };
+        }
+
+        setResolvedSrc(null);
+        revokeBlob();
+
+        (async () => {
+            const authTok = typeof window !== 'undefined' && window.storage?.getToken?.();
+            if (!authTok) {
+                if (!cancelled) setErr('Sign in required to load media');
+                return;
+            }
+            try {
+                const res = await fetch(src, {
+                    headers: { Authorization: `Bearer ${authTok}` },
+                    signal: ac.signal
+                });
+                if (!res.ok) {
+                    if (!cancelled && retryTick < 2) {
+                        setRetryTick((n) => n + 1);
+                        return;
+                    }
+                    if (!cancelled) setErr('Could not load media');
+                    return;
+                }
+                const blob = await res.blob();
+                if (!blob || blob.size === 0) {
+                    if (!cancelled) setErr('Could not load media');
+                    return;
+                }
+                const objectUrl = URL.createObjectURL(blob);
+                blobUrlRef.current = objectUrl;
+                if (!cancelled) {
+                    setErr(null);
+                    setResolvedSrc(objectUrl);
+                } else {
+                    URL.revokeObjectURL(objectUrl);
+                    blobUrlRef.current = null;
+                }
+            } catch (e) {
+                if (cancelled || e?.name === 'AbortError') return;
+                if (retryTick < 2) {
+                    setRetryTick((n) => n + 1);
+                    return;
+                }
+                setErr('Could not load media');
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+            ac.abort();
+            revokeBlob();
+        };
+    }, [canFetch, retryTick, src]);
 
     return (
         <div className={`rounded-lg border p-2 max-w-xs ${cardClass}`}>
@@ -187,16 +263,9 @@ const ScMediaTile = ({ item, isDark }) => {
             {canRender && isImage ? (
                 <a href={src} target="_blank" rel="noopener noreferrer" className="block">
                     <img
-                        src={src}
+                        src={resolvedSrc || undefined}
                         alt=""
                         className="max-w-full max-h-56 rounded object-contain mx-auto"
-                        onError={() => {
-                            if (retryTick < 2) {
-                                setRetryTick((n) => n + 1);
-                                return;
-                            }
-                            setErr('Could not load media');
-                        }}
                     />
                 </a>
             ) : null}
@@ -209,20 +278,20 @@ const ScMediaTile = ({ item, isDark }) => {
     );
 };
 
-function renderScMediaList(items, isDark) {
+function renderScMediaList(items, isDark, issueId) {
     if (!Array.isArray(items) || items.length === 0) {
         return <span className="opacity-70">None</span>;
     }
     return (
         <div className="flex flex-wrap gap-3">
             {items.map((item, idx) => (
-                <ScMediaTile key={item?.id || item?.media_id || idx} item={item} isDark={isDark} />
+                <ScMediaTile key={item?.id || item?.media_id || idx} item={item} isDark={isDark} issueId={issueId} />
             ))}
         </div>
     );
 }
 
-function renderIssueDetailField(key, val, isDark, getHeaders) {
+function renderIssueDetailField(key, val, isDark, getHeaders, issueId) {
     if (val == null) return '-';
     if (typeof val === 'boolean') return val ? 'Yes' : 'No';
     if (typeof val !== 'object') return String(val);
@@ -273,16 +342,16 @@ function renderIssueDetailField(key, val, isDark, getHeaders) {
             (x) => x && typeof x === 'object' && (x.token || x.download_token || x.media_token) && (x.id || x.media_id || x.document_id)
         );
         if (looksLikeSignedMedia || k === 'media' || k === 'medias' || k === 'images') {
-            return renderScMediaList(val, isDark);
+            return renderScMediaList(val, isDark, issueId);
         }
     }
 
     if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.items)) {
-        return renderScMediaList(val.items, isDark);
+        return renderScMediaList(val.items, isDark, issueId);
     }
 
     if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.media)) {
-        return renderScMediaList(val.media, isDark);
+        return renderScMediaList(val.media, isDark, issueId);
     }
 
     if (k === 'items' && Array.isArray(val)) {
@@ -1602,7 +1671,7 @@ const SafetyCultureInspections = () => {
                                         {key.replace(/_/g, ' ')}
                                     </span>
                                     <span className={`flex-1 break-words min-w-0 ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                        {renderIssueDetailField(key, val, isDark, getHeaders)}
+                                        {renderIssueDetailField(key, val, isDark, getHeaders, (issueDisplayRecord || selectedIssue)?.id || (issueDisplayRecord || selectedIssue)?.issue_id || (issueDisplayRecord || selectedIssue)?.unique_id)}
                                     </span>
                                 </div>
                             ))}
