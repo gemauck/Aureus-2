@@ -3751,9 +3751,9 @@ const getAssigneeColor = (identifier, users) => {
         
         const section = currentYearSections.find(s => String(s.id) === String(sectionId));
         const doc = section?.documents.find(d => String(d.id) === String(documentId));
-        const existingComments = getCommentsForYear(doc?.comments, month, selectedYear);
+        const { resolvedMonth, existingComments } = resolveCommentMonthScope(doc?.comments, month, commentId);
         const commentToDelete = Array.isArray(existingComments)
-            ? existingComments.find((c) => String(c.id) === String(commentId))
+            ? existingComments.find((c) => getCommentKey(c) === String(commentId))
             : null;
         
         if (!confirm('Delete this comment?')) return;
@@ -3810,10 +3810,10 @@ const getAssigneeColor = (identifier, users) => {
                     ...section,
                     documents: section.documents.map(doc => {
                         if (String(doc.id) === String(documentId)) {
-                            const updatedComments = existingComments.filter((c) => String(c.id) !== String(commentId));
+                            const updatedComments = existingComments.filter((c) => getCommentKey(c) !== String(commentId));
                             return {
                                 ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
+                                comments: setCommentsForYear(doc.comments || {}, resolvedMonth, updatedComments, selectedYear)
                             };
                         }
                         return doc;
@@ -3858,6 +3858,29 @@ const getAssigneeColor = (identifier, users) => {
         return false;
     };
 
+    const getCommentKey = (comment) => String(comment?.id ?? comment?.commentId ?? '');
+    const resolveCommentMonthScope = (docComments, month, commentId) => {
+        const targetId = String(commentId);
+        let resolvedMonth = month;
+        let existingComments = getCommentsForYear(docComments, month, selectedYear);
+        if (Array.isArray(existingComments) && existingComments.some((c) => getCommentKey(c) === targetId)) {
+            return { resolvedMonth, existingComments };
+        }
+        const prefix = `${selectedYear}-`;
+        const buckets = docComments && typeof docComments === 'object' ? Object.entries(docComments) : [];
+        for (const [key, arr] of buckets) {
+            if (!key.startsWith(prefix) || !Array.isArray(arr)) continue;
+            if (!arr.some((c) => getCommentKey(c) === targetId)) continue;
+            const monthNum = parseInt(key.slice(prefix.length), 10);
+            if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+                resolvedMonth = months[monthNum - 1] || resolvedMonth;
+            }
+            existingComments = arr;
+            break;
+        }
+        return { resolvedMonth, existingComments };
+    };
+
     const handleStartEditComment = (comment) => {
         if (!canCurrentUserEditComment(comment)) {
             alert('Only the original commenter can edit this comment.');
@@ -3888,7 +3911,7 @@ const getAssigneeColor = (identifier, users) => {
                     if (String(doc.id) !== String(documentId)) return doc;
                     const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
                     const updatedComments = existingComments.map((comment) => {
-                        if (String(comment.id) !== String(commentId)) return comment;
+                        if (getCommentKey(comment) !== String(commentId)) return comment;
                         if (!canCurrentUserEditComment(comment)) return comment;
                         commentFound = true;
                         const previousText = String(comment.text || '');
@@ -8376,17 +8399,20 @@ Abcotronics`;
                             const author = (c?.author || '').trim();
                             return author !== 'Sent request (platform)' && author !== 'Sent reply (platform)';
                         })
-                        .map((c) => ({
-                        id: `comment-${c.id}`,
+                        .map((c) => {
+                        const commentKey = getCommentKey(c);
+                        return ({
+                        id: `comment-${commentKey || 'unknown'}`,
                         kind: 'comment',
-                        commentId: c.id,
+                        commentId: commentKey,
                         text: c.text,
                         author: c.author,
                         authorId: c.authorId,
                         attachments: Array.isArray(c.attachments) ? c.attachments : [],
                         createdAt: c.createdAt || c.date,
                         updatedAt: c.updatedAt
-                    }));
+                    });
+                    });
                     activityRows = [...apiActivity, ...commentRows].sort((x, y) => {
                         const tx = new Date(x.createdAt).getTime();
                         const ty = new Date(y.createdAt).getTime();

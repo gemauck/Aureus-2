@@ -2186,7 +2186,7 @@ const getAssigneeColor = (identifier, users) => {
                     ...section,
                     documents: section.documents.map(doc => {
                         if (String(doc.id) === String(documentId)) {
-                            const updatedComments = existingComments.filter((c) => String(c.id) !== String(commentId));
+                            const updatedComments = existingComments.filter((c) => getCommentKey(c) !== String(commentId));
                             return {
                                 ...doc,
                                 comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
@@ -2225,12 +2225,14 @@ const getAssigneeColor = (identifier, users) => {
         return false;
     };
 
+    const getCommentKey = (comment) => String(comment?.id ?? comment?.commentId ?? '');
+
     const handleStartEditComment = (comment) => {
         if (!canCurrentUserEditComment(comment)) {
             alert('Only the original commenter can edit this comment.');
             return;
         }
-        setEditingCommentId(comment?.id || null);
+        setEditingCommentId(comment?.id ?? comment?.commentId ?? null);
         setEditingCommentText(comment?.text || '');
     };
 
@@ -2257,7 +2259,7 @@ const getAssigneeColor = (identifier, users) => {
                     if (String(doc.id) !== String(documentId)) return doc;
                     const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
                     const updatedComments = existingComments.map((comment) => {
-                        if (String(comment.id) !== String(commentId)) return comment;
+                        if (getCommentKey(comment) !== String(commentId)) return comment;
                         if (!canCurrentUserEditComment(comment)) return comment;
                         commentFound = true;
                         const previousText = String(comment.text || '');
@@ -3955,12 +3957,16 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
                     (r) => r && r.kind === 'activity' && !/_notes_change$/.test(String(r.activityType || ''))
                 );
-                const commentRows = comments.map((c) => ({
-                    id: `comment-${c.id}`,
-                    kind: 'comment',
-                    comment: c,
-                    createdAt: c.date || c.createdAt
-                }));
+                const commentRows = comments.map((c) => {
+                    const commentKey = getCommentKey(c);
+                    return {
+                        id: `comment-${commentKey || 'unknown'}`,
+                        kind: 'comment',
+                        comment: c,
+                        commentId: commentKey,
+                        createdAt: c.date || c.createdAt
+                    };
+                });
                 const activityRows = [...apiActivity, ...commentRows].sort((x, y) => {
                     const tx = new Date(x.createdAt).getTime();
                     const ty = new Date(y.createdAt).getTime();
@@ -4026,11 +4032,12 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                 );
                                             }
                                             const comment = row.comment;
+                                            const commentId = row.commentId || getCommentKey(comment);
                                             return (
                                         <div 
-                                            key={comment.id || idx} 
-                                            data-comment-id={comment.id}
-                                            id={comment.id ? `comment-${comment.id}` : undefined}
+                                            key={commentId || idx} 
+                                            data-comment-id={commentId}
+                                            id={commentId ? `comment-${commentId}` : undefined}
                                             className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group cursor-pointer"
                                             onClick={(e) => {
                                                 const ce = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
@@ -4039,8 +4046,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                     return;
                                                 }
                                                 // Update URL when clicking on a comment to enable sharing
-                                                if (section && doc && comment.id) {
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(comment.id)}`;
+                                                if (section && doc && commentId) {
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(commentId)}`;
                                                     
                                                     // Update URL using RouteState if available, otherwise use hash
                                                     if (window.RouteState && window.RouteState.navigate) {
@@ -4063,7 +4070,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                     if (navigator.clipboard && navigator.clipboard.writeText) {
                                                         navigator.clipboard.writeText(fullUrl).then(() => {
                                                             // Show brief feedback
-                                                            const button = window.document.querySelector(`[data-copy-link="${comment.id}"]`);
+                                                            const button = window.document.querySelector(`[data-copy-link="${commentId}"]`);
                                                             if (button) {
                                                                 const originalHTML = button.innerHTML;
                                                                 button.innerHTML = '<i class="fas fa-check text-[9px]"></i>';
@@ -4081,7 +4088,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             }}
                                             title="Click to copy link to this comment"
                                         >
-                                            {String(editingCommentId) === String(comment.id) ? (
+                                            {String(editingCommentId) === String(commentId) ? (
                                                 <div className="pr-12" onClick={(e) => e.stopPropagation()}>
                                                     <textarea
                                                         value={editingCommentText}
@@ -4102,7 +4109,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleSaveEditedComment(actionSectionId, actionDocumentId, month, comment.id)}
+                                                            onClick={() => handleSaveEditedComment(actionSectionId, actionDocumentId, month, commentId)}
                                                             className="px-2 py-0.5 text-[10px] bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded hover:bg-sky-300 dark:hover:bg-sky-600"
                                                         >
                                                             Save
@@ -4179,7 +4186,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                     </summary>
                                                     <div className="mt-1 space-y-1.5">
                                                         {[...comment.editHistory].reverse().map((entry, historyIdx) => (
-                                                            <div key={`${comment.id}-history-${historyIdx}`} className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1">
+                                                            <div key={`${commentId}-history-${historyIdx}`} className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1">
                                                                 <div className="text-[9px] text-gray-500 dark:text-gray-400">
                                                                     {formatMFMSActivityDateTime(entry.editedAt)} by {entry.editedByName || 'Unknown'}
                                                                 </div>
@@ -4196,7 +4203,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                 onClick={(e) => {
                                                     e.stopPropagation(); // Prevent triggering comment click
                                                     if (!actionSectionId || !actionDocumentId) return;
-                                                    handleDeleteComment(actionSectionId, actionDocumentId, month, comment.id);
+                                                    handleDeleteComment(actionSectionId, actionDocumentId, month, commentId);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 type="button"
@@ -4207,7 +4214,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             {canCurrentUserEditComment(comment) && <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!actionSectionId || !actionDocumentId || !comment.id) return;
+                                                    if (!actionSectionId || !actionDocumentId || !commentId) return;
                                                     handleStartEditComment(comment);
                                                 }}
                                                 className="absolute top-1 right-11 text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -4217,12 +4224,12 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                 <i className="fas fa-pen text-[9px]"></i>
                                             </button>}
                                             <button
-                                                data-copy-link={comment.id}
+                                                data-copy-link={commentId}
                                                 onClick={(e) => {
                                                     e.stopPropagation(); // Prevent triggering comment click
-                                                    if (!actionSectionId || !actionDocumentId || !comment.id) return;
+                                                    if (!actionSectionId || !actionDocumentId || !commentId) return;
                                                     
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(actionSectionId)}&docDocumentId=${encodeURIComponent(actionDocumentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(actionSectionId)}&docDocumentId=${encodeURIComponent(actionDocumentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(commentId)}`;
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     
                                                     // Copy to clipboard
