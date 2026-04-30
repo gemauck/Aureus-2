@@ -3948,6 +3948,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseMonthlyFMSCellKey(hoverCommentCell);
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+                const actionSectionId = section?.id ?? rawSectionId;
+                const actionDocumentId = doc?.id ?? rawDocumentId;
                 const comments = doc ? getDocumentComments(doc, month) : [];
                 const activityTypeLabel = (t) => (t === 'monthly_fms_status_change' ? 'Status' : 'Activity');
                 const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
@@ -4100,7 +4102,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleSaveEditedComment(section.id, doc.id, month, comment.id)}
+                                                            onClick={() => handleSaveEditedComment(actionSectionId, actionDocumentId, month, comment.id)}
                                                             className="px-2 py-0.5 text-[10px] bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded hover:bg-sky-300 dark:hover:bg-sky-600"
                                                         >
                                                             Save
@@ -4193,8 +4195,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation(); // Prevent triggering comment click
-                                                    if (!section || !doc) return;
-                                                    handleDeleteComment(section.id, doc.id, month, comment.id);
+                                                    if (!actionSectionId || !actionDocumentId) return;
+                                                    handleDeleteComment(actionSectionId, actionDocumentId, month, comment.id);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 type="button"
@@ -4205,7 +4207,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             {canCurrentUserEditComment(comment) && <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!section || !doc || !comment.id) return;
+                                                    if (!actionSectionId || !actionDocumentId || !comment.id) return;
                                                     handleStartEditComment(comment);
                                                 }}
                                                 className="absolute top-1 right-11 text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -4218,9 +4220,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                 data-copy-link={comment.id}
                                                 onClick={(e) => {
                                                     e.stopPropagation(); // Prevent triggering comment click
-                                                    if (!section || !doc || !comment.id) return;
+                                                    if (!actionSectionId || !actionDocumentId || !comment.id) return;
                                                     
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(comment.id)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(actionSectionId)}&docDocumentId=${encodeURIComponent(actionDocumentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=monthlyFMSReview&commentId=${encodeURIComponent(comment.id)}`;
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     
                                                     // Copy to clipboard

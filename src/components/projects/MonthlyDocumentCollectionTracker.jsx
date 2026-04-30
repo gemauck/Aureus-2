@@ -8298,6 +8298,8 @@ Abcotronics`;
                 const { sectionId: rawSectionId, documentId: rawDocumentId, month } = parseCellKey(hoverCommentCell);
                 const section = sections.find(s => String(s.id) === String(rawSectionId));
                 const doc = section?.documents.find(d => String(d.id) === String(rawDocumentId));
+                const actionSectionId = section?.id ?? rawSectionId;
+                const actionDocumentId = doc?.id ?? rawDocumentId;
                 const isNotesActivityRow = (row) => (
                     row &&
                     row.kind === 'activity' &&
@@ -8567,7 +8569,7 @@ Abcotronics`;
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleSaveEditedComment(section.id, doc.id, month, cid)}
+                                                            onClick={() => handleSaveEditedComment(actionSectionId, actionDocumentId, month, cid)}
                                                             className="px-2 py-0.5 text-[10px] bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded hover:bg-sky-300 dark:hover:bg-sky-600"
                                                         >
                                                             Save
@@ -8657,8 +8659,8 @@ Abcotronics`;
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!section || !doc || !cid) return;
-                                                    handleDeleteComment(section.id, doc.id, month, cid);
+                                                    if (!actionSectionId || !actionDocumentId || !cid) return;
+                                                    handleDeleteComment(actionSectionId, actionDocumentId, month, cid);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 type="button"
@@ -8669,7 +8671,7 @@ Abcotronics`;
                                             {canCurrentUserEditComment(comment) && <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!section || !doc || !cid) return;
+                                                    if (!actionSectionId || !actionDocumentId || !cid) return;
                                                     handleStartEditComment(comment);
                                                 }}
                                                 className="absolute top-1 right-11 text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -8682,9 +8684,9 @@ Abcotronics`;
                                                 data-copy-link={cid}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!section || !doc || !cid) return;
+                                                    if (!actionSectionId || !actionDocumentId || !cid) return;
                                                     
-                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=${encodeURIComponent(trackerTabForDeepLink)}&commentId=${encodeURIComponent(cid)}`;
+                                                    const deepLinkUrl = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(actionSectionId)}&docDocumentId=${encodeURIComponent(actionDocumentId)}&docMonth=${encodeURIComponent(month)}&docYear=${encodeURIComponent(selectedYear)}&tab=${encodeURIComponent(trackerTabForDeepLink)}&commentId=${encodeURIComponent(cid)}`;
                                                     const fullUrl = window.location.origin + window.location.pathname + deepLinkUrl;
                                                     
                                                     // Copy to clipboard
