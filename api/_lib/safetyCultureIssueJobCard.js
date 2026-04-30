@@ -139,39 +139,47 @@ export function buildSafetyCultureIssueNotesAppendix(issueId, feed, detailData) 
     push(title)
     push('────────────────────────────────────────')
   }
-  const pair = (label, val) => {
+  const toPair = (label, val) => {
     if (val == null || val === '') return
     if (typeof val === 'object') return
     const s = String(val).trim()
     if (!s) return
-    push(`${label}: ${s}`)
+    return `${label}: ${s}`
+  }
+  const sectionPairs = (title, pairs) => {
+    const filled = pairs.filter(Boolean)
+    if (filled.length === 0) return
+    section(title)
+    for (const line of filled) push(line)
   }
 
   const f = feed && typeof feed === 'object' && !Array.isArray(feed) ? feed : {}
   const d = detailData && typeof detailData === 'object' && !Array.isArray(detailData) ? detailData : {}
 
-  section('SafetyCulture issue — full record')
-  pair('Issue ID', issueId)
-  pair('Copied into ERP at', new Date().toISOString())
+  sectionPairs('SafetyCulture issue — full record', [
+    toPair('Issue ID', issueId),
+    toPair('Copied into ERP at', new Date().toISOString())
+  ])
 
-  section('Summary (from feed / list)')
-  pair('Title', f.title || f.name)
-  pair('Description', f.description)
-  pair('Status', f.status)
-  pair('Priority', f.priority)
-  pair('Category', f.category_label)
-  pair('Site name', f.site_name)
-  pair('Site ID', f.site_id != null ? String(f.site_id) : '')
-  pair('Location', f.location_name || f.location)
-  pair('Client / organisation', f.client_name || f.customer_name)
-  pair('Unique ID', f.unique_id)
-  pair('Due', f.due_at)
-  pair('Inspection', f.inspection_name)
-  pair('Assignee (feed)', f.assignee_name || f.assigneeName)
-  pair('Occurred at', f.occurred_at)
-  pair('Created (feed)', f.created_at || f.createdAt)
-  pair('Modified (feed)', f.modified_at || f.updated_at)
-  pair('Report link', f.url || f.web_url || f.link)
+  sectionPairs('Summary (from feed / list)', [
+    toPair('Title', f.title || f.name),
+    toPair('Description', f.description),
+    toPair('Status', f.status),
+    toPair('Priority', f.priority),
+    toPair('Category', f.category_label),
+    toPair('Site name', f.site_name),
+    toPair('Site ID', f.site_id != null ? String(f.site_id) : ''),
+    toPair('Location', f.location_name || f.location),
+    toPair('Client / organisation', f.client_name || f.customer_name),
+    toPair('Unique ID', f.unique_id),
+    toPair('Due', f.due_at),
+    toPair('Inspection', f.inspection_name),
+    toPair('Assignee (feed)', f.assignee_name || f.assigneeName),
+    toPair('Occurred at', f.occurred_at),
+    toPair('Created (feed)', f.created_at || f.createdAt),
+    toPair('Modified (feed)', f.modified_at || f.updated_at),
+    toPair('Report link', f.url || f.web_url || f.link)
+  ])
 
   const task = d.task && typeof d.task === 'object' ? d.task : {}
   const site = d.site && typeof d.site === 'object' ? d.site : {}
@@ -179,34 +187,38 @@ export function buildSafetyCultureIssueNotesAppendix(issueId, feed, detailData) 
   const cat = d.category && typeof d.category === 'object' ? d.category : {}
   const people = extractIssuePeopleFromDetail(detailData)
 
-  section('Task (from API detail)')
-  pair('Title', task.title)
-  pair('Description', task.description != null ? task.description : task.DESCRIPTION)
-  pair('Task ID', task.task_id || task.id)
-  pair('Created', task.created_at || task.createdAt)
-  pair('Updated', task.updated_at || task.modified_at)
+  sectionPairs('Task (from API detail)', [
+    toPair('Title', task.title),
+    toPair('Description', task.description != null ? task.description : task.DESCRIPTION),
+    toPair('Task ID', task.task_id || task.id),
+    toPair('Created', task.created_at || task.createdAt),
+    toPair('Updated', task.updated_at || task.modified_at)
+  ])
 
-  section('People')
-  pair('Creator name', people.creatorName || null)
-  pair('Creator user ID', people.creatorUserId || null)
-  pair('Assignee', people.assigneeName || null)
+  sectionPairs('People', [
+    toPair('Creator name', people.creatorName || null),
+    toPair('Creator user ID', people.creatorUserId || null),
+    toPair('Assignee', people.assigneeName || null)
+  ])
 
-  section('Site and location (from API detail)')
-  pair('Site name', site.name)
-  pair('Site ID', site.id != null ? String(site.id) : '')
-  pair('Location name', loc.name)
-  pair('Address line', loc.address || loc.formatted_address)
-  pair('City / region / country', [loc.city, loc.region, loc.country].filter(Boolean).join(', ') || '')
-  pair('Coordinates', loc.latitude != null && loc.longitude != null ? `${loc.latitude}, ${loc.longitude}` : '')
+  sectionPairs('Site and location (from API detail)', [
+    toPair('Site name', site.name),
+    toPair('Site ID', site.id != null ? String(site.id) : ''),
+    toPair('Location name', loc.name),
+    toPair('Address line', loc.address || loc.formatted_address),
+    toPair('City / region / country', [loc.city, loc.region, loc.country].filter(Boolean).join(', ') || ''),
+    toPair('Coordinates', loc.latitude != null && loc.longitude != null ? `${loc.latitude}, ${loc.longitude}` : '')
+  ])
 
-  section('Issue fields (from API detail)')
-  pair('Title', d.title && d.title !== task.title ? d.title : null)
-  pair('Description', d.description && d.description !== task.description ? d.description : null)
-  pair('Status', d.status)
-  pair('Priority', d.priority)
-  pair('Category', d.category_label || cat.label || cat.name)
-  pair('Category ID', cat.id)
-  pair('Unique ID', d.unique_id)
+  sectionPairs('Issue fields (from API detail)', [
+    toPair('Title', d.title && d.title !== task.title ? d.title : null),
+    toPair('Description', d.description && d.description !== task.description ? d.description : null),
+    toPair('Status', d.status),
+    toPair('Priority', d.priority),
+    toPair('Category', d.category_label || cat.label || cat.name),
+    toPair('Category ID', cat.id),
+    toPair('Unique ID', d.unique_id)
+  ])
 
   const skipKeys = new Set([
     'task',
@@ -232,10 +244,10 @@ export function buildSafetyCultureIssueNotesAppendix(issueId, feed, detailData) 
     extra.push([humanizeLabel(k), String(v).trim()])
   }
   if (extra.length) {
-    section('Other details from API')
-    for (const [lbl, val] of extra) {
-      if (val) pair(lbl, val)
-    }
+    sectionPairs(
+      'Other details from API',
+      extra.map(([lbl, val]) => toPair(lbl, val))
+    )
   }
 
   blank()
