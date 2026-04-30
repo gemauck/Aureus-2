@@ -171,6 +171,8 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     const sectionsRef = useRef({}); // Keep ref for immediate access during rapid updates
     const apiRef = useRef(window.DocumentCollectionAPI || null);
     const lastSavedDataRef = useRef(null); // Track last saved data to prevent unnecessary saves
+    const pendingSaveRef = useRef(false);
+    const pendingSaveSkipLoadingGuardRef = useRef(false);
     const isDeletingRef = useRef(false); // Track deletion in progress to prevent race conditions
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionTimestampRef = useRef(null); // Track when deletion started
@@ -807,11 +809,18 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
     
     // Simplified save function - clear and reliable
     async function saveToDatabase(options = {}) {
-        if (isSavingRef.current || !project?.id || isLoading) {
+        const skipLoadingGuard = Boolean(options.skipLoadingGuard);
+        if (isSavingRef.current || !project?.id || (!skipLoadingGuard && isLoading)) {
+            if (project?.id && (isSavingRef.current || isLoading)) {
+                pendingSaveRef.current = true;
+                pendingSaveSkipLoadingGuardRef.current =
+                    pendingSaveSkipLoadingGuardRef.current || skipLoadingGuard;
+            }
             console.log('⏸️ Save skipped:', { 
                 isSaving: isSavingRef.current, 
                 hasProjectId: !!project?.id, 
-                isLoading 
+                isLoading,
+                skipLoadingGuard
             });
             return;
         }
@@ -877,6 +886,12 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             lastSavedDataRef.current = null;
         } finally {
             isSavingRef.current = false;
+            if (pendingSaveRef.current && project?.id && (!isLoading || pendingSaveSkipLoadingGuardRef.current)) {
+                const queuedSkipLoadingGuard = pendingSaveSkipLoadingGuardRef.current;
+                pendingSaveRef.current = false;
+                pendingSaveSkipLoadingGuardRef.current = false;
+                void saveToDatabase({ skipLoadingGuard: queuedSkipLoadingGuard });
+            }
         }
     };
     
@@ -888,7 +903,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
                 // Fire-and-forget save; we can't await during beforeunload
-                saveToDatabase({ skipParentUpdate: true });
+                saveToDatabase({ skipParentUpdate: true, skipLoadingGuard: true });
                 event.preventDefault();
                 event.returnValue = '';
             }
@@ -908,7 +923,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
                 // Fire-and-forget save on unmount
-                saveToDatabase({ skipParentUpdate: true });
+                saveToDatabase({ skipParentUpdate: true, skipLoadingGuard: true });
             }
         };
     }, [project?.id]);
@@ -1967,7 +1982,7 @@ const getAssigneeColor = (identifier, users) => {
             saveTimeoutRef.current = null;
         }
         try {
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
             const open = hoverCommentCellRef.current;
             if (open) {
                 const cellKeyMatches = (cell) => {
@@ -2083,9 +2098,9 @@ const getAssigneeColor = (identifier, users) => {
         // CRITICAL: Clear so save is not skipped as "unchanged"; then await save so comment is persisted before @mention emails
         lastSavedDataRef.current = null;
         try {
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
         } catch (saveErr) {
             console.error('❌ Failed to save comment (monthly FMS):', saveErr);
         }
@@ -2213,9 +2228,9 @@ const getAssigneeColor = (identifier, users) => {
         }
         lastSavedDataRef.current = null;
         try {
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
         } catch (saveErr) {
             console.error('❌ Failed to save deleted comment (monthly FMS):', saveErr);
         }
@@ -2339,9 +2354,9 @@ const getAssigneeColor = (identifier, users) => {
         }
         lastSavedDataRef.current = null;
         try {
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
         } catch (saveErr) {
             console.error('❌ Failed to save edited comment (monthly FMS):', saveErr);
         }
