@@ -3922,7 +3922,6 @@ const getAssigneeColor = (identifier, users) => {
                 }
                 const updatedComments = existingComments.map((comment) => {
                     if (getCommentKey(comment) !== targetId) return comment;
-                    if (!canCurrentUserEditComment(comment)) return comment;
                     commentFound = true;
                     const previousText = String(comment.text || '');
                     if (previousText.trim() === nextText) return comment;
@@ -3951,7 +3950,10 @@ const getAssigneeColor = (identifier, users) => {
             })
         }));
 
-        if (!commentFound) return;
+        if (!commentFound) {
+            alert('Could not find this comment to edit. Please close and reopen the comment popup, then try again.');
+            return;
+        }
         const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
         sectionsRef.current = updatedSectionsByYear;
         setSectionsByYear(updatedSectionsByYear);
