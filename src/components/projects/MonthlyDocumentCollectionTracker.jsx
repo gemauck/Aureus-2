@@ -1805,6 +1805,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
         }
     };
+
+    // Wait until in-flight/queued saves finish so mutation handlers don't continue before persistence completes.
+    async function waitForSaveToSettle(maxWaitMs = 8000) {
+        const startedAt = Date.now();
+        while (isSavingRef.current || pendingSaveRef.current) {
+            if (Date.now() - startedAt >= maxWaitMs) break;
+            await new Promise((resolve) => setTimeout(resolve, 120));
+        }
+    }
     
     // Save pending changes on hard refresh / tab close
     useEffect(() => {
@@ -3632,6 +3641,7 @@ const getAssigneeColor = (identifier, users) => {
             // Retry after short delay if first save was skipped (e.g. another save in progress); await so notifications run only after save
             await new Promise((r) => setTimeout(r, 600));
             await saveToDatabase({ skipLoadingGuard: true });
+            await waitForSaveToSettle();
         } catch (saveErr) {
             console.error('❌ Failed to save comment:', saveErr);
             // Still allow @mentions below; user may retry save via debounce
@@ -3850,6 +3860,7 @@ const getAssigneeColor = (identifier, users) => {
             await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
             await saveToDatabase({ skipLoadingGuard: true });
+            await waitForSaveToSettle();
         } catch (saveErr) {
             console.error('❌ Failed to save deleted comment:', saveErr);
         }
@@ -3979,6 +3990,7 @@ const getAssigneeColor = (identifier, users) => {
             await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
             await saveToDatabase({ skipLoadingGuard: true });
+            await waitForSaveToSettle();
         } catch (saveErr) {
             console.error('❌ Failed to save edited comment:', saveErr);
         }

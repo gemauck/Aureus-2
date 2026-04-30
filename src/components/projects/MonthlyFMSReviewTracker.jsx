@@ -894,6 +894,14 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
             }
         }
     };
+
+    async function waitForSaveToSettle(maxWaitMs = 8000) {
+        const startedAt = Date.now();
+        while (isSavingRef.current || pendingSaveRef.current) {
+            if (Date.now() - startedAt >= maxWaitMs) break;
+            await new Promise((resolve) => setTimeout(resolve, 120));
+        }
+    }
     
     // Save pending changes on hard refresh / tab close
     useEffect(() => {
@@ -1983,6 +1991,7 @@ const getAssigneeColor = (identifier, users) => {
         }
         try {
             await saveToDatabase({ skipLoadingGuard: true });
+            await waitForSaveToSettle();
             const open = hoverCommentCellRef.current;
             if (open) {
                 const cellKeyMatches = (cell) => {
@@ -2101,6 +2110,7 @@ const getAssigneeColor = (identifier, users) => {
             await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
             await saveToDatabase({ skipLoadingGuard: true });
+            await waitForSaveToSettle();
         } catch (saveErr) {
             console.error('❌ Failed to save comment (monthly FMS):', saveErr);
         }
@@ -2231,6 +2241,7 @@ const getAssigneeColor = (identifier, users) => {
             await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
             await saveToDatabase({ skipLoadingGuard: true });
+            await waitForSaveToSettle();
         } catch (saveErr) {
             console.error('❌ Failed to save deleted comment (monthly FMS):', saveErr);
         }
@@ -2357,6 +2368,7 @@ const getAssigneeColor = (identifier, users) => {
             await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
             await saveToDatabase({ skipLoadingGuard: true });
+            await waitForSaveToSettle();
         } catch (saveErr) {
             console.error('❌ Failed to save edited comment (monthly FMS):', saveErr);
         }
