@@ -58,6 +58,101 @@ function formatScLocationLines(o) {
     return lines;
 }
 
+const SC_MEDIA_ARRAY_KEYS = new Set(['media', 'medias', 'images', 'attachments', 'photos', 'files', 'media_items', 'evidence']);
+const SC_DIRECT_URL_KEYS = new Set([
+    'url',
+    'href',
+    'signed_url',
+    'download_url',
+    'media_url',
+    'file_url',
+    'preview_url',
+    'thumbnail_url'
+]);
+const SC_RICH_TEXT_KEYS = new Set([
+    'description',
+    'notes',
+    'note',
+    'comment',
+    'comments',
+    'text',
+    'summary',
+    'details',
+    'observations'
+]);
+
+function isLikelyUrl(value) {
+    return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+}
+
+function renderLinkifiedText(value) {
+    const text = String(value || '');
+    if (!text) return null;
+    const parts = text.split(/(https?:\/\/[^\s]+)/gi).filter(Boolean);
+    return (
+        <span className="whitespace-pre-wrap">
+            {parts.map((part, idx) =>
+                isLikelyUrl(part) ? (
+                    <a key={idx} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-all">
+                        {part}
+                    </a>
+                ) : (
+                    <span key={idx}>{part}</span>
+                )
+            )}
+        </span>
+    );
+}
+
+function looksLikeMediaObject(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+    const hasToken =
+        obj.token ||
+        obj.download_token ||
+        obj.media_token ||
+        obj.access_token ||
+        obj?.download?.token ||
+        obj?.access?.token;
+    const hasId = obj.id || obj.media_id || obj.document_id || obj.file_id || obj.attachment_id || obj.image_id;
+    const hasDirectUrl = Array.from(SC_DIRECT_URL_KEYS).some((k) => isLikelyUrl(obj?.[k]));
+    return Boolean((hasToken && hasId) || hasDirectUrl);
+}
+
+function extractMediaItemsDeep(input, depth = 0, out = [], seen = new Set()) {
+    if (depth > 8 || input == null) return out;
+    if (Array.isArray(input)) {
+        input.forEach((x) => extractMediaItemsDeep(x, depth + 1, out, seen));
+        return out;
+    }
+    if (typeof input !== 'object') return out;
+
+    if (looksLikeMediaObject(input)) {
+        const id = String(
+            input.media_id ||
+            input.document_id ||
+            input.file_id ||
+            input.attachment_id ||
+            input.image_id ||
+            input.id ||
+            input.url ||
+            input.signed_url ||
+            input.download_url ||
+            ''
+        );
+        if (id && !seen.has(id)) {
+            seen.add(id);
+            out.push(input);
+        }
+    }
+
+    Object.entries(input).forEach(([key, val]) => {
+        if (SC_MEDIA_ARRAY_KEYS.has(String(key).toLowerCase()) || Array.isArray(val) || (val && typeof val === 'object')) {
+            extractMediaItemsDeep(val, depth + 1, out, seen);
+        }
+    });
+    return out;
+}
+
 function renderScTaskBlock(o) {
     if (!o || typeof o !== 'object') return null;
     const name = [o.firstname || o.first_name, o.lastname || o.last_name].filter(Boolean).join(' ');
@@ -156,15 +251,41 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
     const candidateIds = [
         item?.media_id,
         item?.document_id,
+        item?.file_id,
+        item?.attachment_id,
+        item?.image_id,
         item?.id
     ]
         .map((v) => (v == null ? '' : String(v).trim()))
         .filter(Boolean)
         .filter((v, i, arr) => arr.indexOf(v) === i);
     const id = candidateIds[0] || '';
-    const token = item?.token || item?.download_token || item?.media_token || item?.access_token;
+    const token =
+        item?.token ||
+        item?.download_token ||
+        item?.media_token ||
+        item?.access_token ||
+        item?.download?.token ||
+        item?.access?.token ||
+        item?.authorization?.token;
     const mediaType = item?.media_type || item?.mediaType || '';
+    const mimeType = item?.mime_type || item?.content_type || item?.mimeType || '';
     const fileName = item?.file_name || item?.filename || item?.name || 'Attachment';
+    const directUrl = [
+        item?.url,
+        item?.signed_url,
+        item?.download_url,
+        item?.media_url,
+        item?.file_url,
+        item?.href,
+        item?.preview_url,
+        item?.thumbnail_url,
+        item?.download?.url,
+        item?.links?.download,
+        item?.links?.self
+    ]
+        .map((v) => (v == null ? '' : String(v).trim()))
+        .find(Boolean) || '';
 
     useEffect(() => {
         setErr(null);
@@ -173,8 +294,9 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
 
     const isImage =
         String(mediaType).includes('IMAGE') ||
-        /\.(jpe?g|png|gif|webp)$/i.test(fileName);
-    const canRender = Boolean(candidateIds.length && token);
+        String(mimeType).toLowerCase().startsWith('image/') ||
+        /\.(jpe?g|png|gif|webp|heic|bmp|tiff?|avif)$/i.test(fileName);
+    const canRender = Boolean((candidateIds.length && token) || directUrl);
     const buildProxySrc = (mediaId) => {
         const params = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
         if (mediaType) params.set('media_type', String(mediaType));
@@ -184,7 +306,8 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
         return `${API_BASE}/safety-culture/media/proxy?${params.toString()}`;
     };
     const src = id ? buildProxySrc(id) : '';
-    const canFetch = Boolean(canRender && isImage);
+    const primaryLink = directUrl || src;
+    const canFetch = Boolean(candidateIds.length && token && isImage);
 
     const cardClass = isDark ? 'border-gray-600 bg-gray-900/50' : 'border-gray-200 bg-gray-50';
     const summarizeErrorResponse = async (res) => {
@@ -232,8 +355,8 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
         };
 
         if (!canFetch) {
-            setResolvedSrc(null);
-            setResolvedProxySrc(null);
+            setResolvedSrc(isImage && directUrl ? directUrl : null);
+            setResolvedProxySrc(directUrl || null);
             revokeBlob();
             return () => {
                 ac.abort();
@@ -320,11 +443,11 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
             {!err && !canRender ? (
                 <div className="text-xs opacity-60 py-4 flex items-center gap-2">
                     <i className="fa-regular fa-circle-xmark" />
-                    Missing media id or token
+                    Missing media reference
                 </div>
             ) : null}
             {canRender && isImage ? (
-                <a href={resolvedProxySrc || src} target="_blank" rel="noopener noreferrer" className="block">
+                <a href={resolvedProxySrc || primaryLink} target="_blank" rel="noopener noreferrer" className="block">
                     <img
                         src={resolvedSrc || undefined}
                         alt=""
@@ -333,7 +456,7 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
                 </a>
             ) : null}
             {canRender && !isImage ? (
-                <a href={src} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline break-all">
+                <a href={primaryLink} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline break-all">
                     Open / download file
                 </a>
             ) : null}
@@ -363,8 +486,24 @@ function renderScMediaList(items, isDark, issueId) {
 function renderIssueDetailField(key, val, isDark, getHeaders, issueId) {
     if (val == null) return '-';
     if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-    if (typeof val !== 'object') return String(val);
     const k = key.toLowerCase();
+    if (typeof val !== 'object') {
+        if (typeof val === 'string') {
+            const trimmed = val.trim();
+            if (!trimmed) return '-';
+            if (isLikelyUrl(trimmed)) {
+                return (
+                    <a href={trimmed} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-all">
+                        {trimmed}
+                    </a>
+                );
+            }
+            if (SC_RICH_TEXT_KEYS.has(k) || trimmed.includes('\n') || /https?:\/\//i.test(trimmed)) {
+                return renderLinkifiedText(trimmed);
+            }
+        }
+        return String(val);
+    }
 
     if (k === 'location' && !Array.isArray(val)) {
         const lines = formatScLocationLines(val);
@@ -405,8 +544,7 @@ function renderIssueDetailField(key, val, isDark, getHeaders, issueId) {
         if (block) return block;
     }
 
-    const mediaArrayKeys = new Set(['media', 'medias', 'images', 'attachments', 'photos', 'files', 'media_items', 'evidence']);
-    if (mediaArrayKeys.has(k) && Array.isArray(val)) {
+    if (SC_MEDIA_ARRAY_KEYS.has(k) && Array.isArray(val)) {
         const looksLikeSignedMedia = val.some(
             (x) => x && typeof x === 'object' && (x.token || x.download_token || x.media_token) && (x.id || x.media_id || x.document_id)
         );
@@ -415,11 +553,11 @@ function renderIssueDetailField(key, val, isDark, getHeaders, issueId) {
         }
     }
 
-    if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.items)) {
+    if (SC_MEDIA_ARRAY_KEYS.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.items)) {
         return renderScMediaList(val.items, isDark, issueId);
     }
 
-    if (mediaArrayKeys.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.media)) {
+    if (SC_MEDIA_ARRAY_KEYS.has(k) && val && typeof val === 'object' && !Array.isArray(val) && Array.isArray(val.media)) {
         return renderScMediaList(val.media, isDark, issueId);
     }
 
@@ -432,7 +570,42 @@ function renderIssueDetailField(key, val, isDark, getHeaders, issueId) {
     }
 
     if (Array.isArray(val) && val.length > 0 && val.every((x) => x != null && typeof x !== 'object')) {
-        return val.join(', ');
+        const values = val.map((x) => String(x));
+        if (values.every((x) => isLikelyUrl(x))) {
+            return (
+                <div className="space-y-1">
+                    {values.map((url, idx) => (
+                        <div key={`${url}-${idx}`}>
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-all">
+                                {url}
+                            </a>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+        return values.join(', ');
+    }
+
+    if (Array.isArray(val) && val.some((x) => looksLikeMediaObject(x))) {
+        return renderScMediaList(val, isDark, issueId);
+    }
+
+    if (val && typeof val === 'object') {
+        const directUrl = Array.from(SC_DIRECT_URL_KEYS)
+            .map((prop) => val?.[prop])
+            .find((candidate) => isLikelyUrl(candidate));
+        if (directUrl) {
+            return (
+                <a href={String(directUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-all">
+                    {String(directUrl)}
+                </a>
+            );
+        }
+        const nestedMedia = extractMediaItemsDeep(val);
+        if (nestedMedia.length > 0) {
+            return renderScMediaList(nestedMedia, isDark, issueId);
+        }
     }
 
     return (
@@ -1033,8 +1206,8 @@ const SafetyCultureInspections = () => {
         }
     };
 
-    const runImportSingleIssue = async () => {
-        const id = singleIssueIdForImport.trim();
+    const runImportSingleIssue = async (issueIdOverride) => {
+        const id = String(issueIdOverride ?? singleIssueIdForImport).trim();
         if (!id) return;
         setImportingSingleIssue(true);
         setImportResult(null);
@@ -1136,6 +1309,13 @@ const SafetyCultureInspections = () => {
         if (!raw) return selectedIssue;
         return { ...selectedIssue, ...raw };
     }, [selectedIssue, issueExtra]);
+
+    const selectedIssueImportId = String(
+        (issueDisplayRecord || selectedIssue)?.id ||
+            (issueDisplayRecord || selectedIssue)?.issue_id ||
+            (issueDisplayRecord || selectedIssue)?.unique_id ||
+            ''
+    ).trim();
 
     useEffect(() => {
         if (!selectedIssue) {
@@ -1651,6 +1831,15 @@ const SafetyCultureInspections = () => {
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
+                                    onClick={() => void runImportSingleIssue(selectedIssueImportId)}
+                                    disabled={importing || importingIssues || importingSingleIssue || !selectedIssueImportId}
+                                    className="text-sm px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                                    title={selectedIssueImportId ? `Import issue ${selectedIssueImportId} as job card` : 'Issue has no importable ID'}
+                                >
+                                    {importingSingleIssue ? 'Importing…' : 'Import as Job Card'}
+                                </button>
+                                <button
+                                    type="button"
                                     onClick={() => void loadIssueFromApi(selectedIssue.id || selectedIssue.unique_id)}
                                     disabled={issueExtraLoading}
                                     className="text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
@@ -1984,7 +2173,13 @@ const SafetyCultureInspections = () => {
                                         {key.replace(/_/g, ' ')}
                                     </span>
                                     <span className={`flex-1 break-words min-w-0 ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                        {renderIssueDetailField(key, val, isDark, getHeaders)}
+                                        {renderIssueDetailField(
+                                            key,
+                                            val,
+                                            isDark,
+                                            getHeaders,
+                                            (inspectionDisplayRecord || selectedInspection)?.id
+                                        )}
                                     </span>
                                 </div>
                             ))}
