@@ -3628,10 +3628,10 @@ const getAssigneeColor = (identifier, users) => {
         // CRITICAL: Await save so comment is persisted before @mention email is sent.
         // Otherwise the email can be delivered but the comment never saved (e.g. save skipped when another save in progress).
         try {
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
             // Retry after short delay if first save was skipped (e.g. another save in progress); await so notifications run only after save
             await new Promise((r) => setTimeout(r, 600));
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
         } catch (saveErr) {
             console.error('❌ Failed to save comment:', saveErr);
             // Still allow @mentions below; user may retry save via debounce
@@ -3847,9 +3847,9 @@ const getAssigneeColor = (identifier, users) => {
         }
         lastSavedDataRef.current = null;
         try {
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
         } catch (saveErr) {
             console.error('❌ Failed to save deleted comment:', saveErr);
         }
@@ -3976,9 +3976,9 @@ const getAssigneeColor = (identifier, users) => {
         }
         lastSavedDataRef.current = null;
         try {
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
             await new Promise((r) => setTimeout(r, 600));
-            await saveToDatabase();
+            await saveToDatabase({ skipLoadingGuard: true });
         } catch (saveErr) {
             console.error('❌ Failed to save edited comment:', saveErr);
         }
