@@ -187,6 +187,38 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
     const canFetch = Boolean(canRender && isImage);
 
     const cardClass = isDark ? 'border-gray-600 bg-gray-900/50' : 'border-gray-200 bg-gray-50';
+    const summarizeErrorResponse = async (res) => {
+        const status = Number(res?.status) || 0;
+        let bodyText = '';
+        try {
+            bodyText = await res.text();
+        } catch {
+            bodyText = '';
+        }
+        let message = '';
+        if (bodyText) {
+            try {
+                const parsed = JSON.parse(bodyText);
+                if (typeof parsed?.error === 'string') {
+                    message = parsed.error;
+                } else if (parsed?.error && typeof parsed.error === 'object') {
+                    message = parsed.error.message || parsed.error.details || '';
+                } else if (typeof parsed?.message === 'string') {
+                    message = parsed.message;
+                }
+            } catch {
+                message = bodyText.replace(/\s+/g, ' ').trim();
+            }
+        }
+        if (!message) {
+            if (status === 403) message = 'Permission denied by SafetyCulture';
+            else if (status === 404) message = 'Media/token not found';
+            else if (status === 429) message = 'Rate limited by SafetyCulture';
+            else if (status >= 500) message = 'Upstream media service error';
+            else message = 'Could not load media';
+        }
+        return `HTTP ${status || 'ERR'}: ${message}`;
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -225,15 +257,23 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
             }
             try {
                 let loaded = false;
+                let lastFailure = '';
                 for (const mediaId of candidateIds) {
                     const candidateSrc = buildProxySrc(mediaId);
                     const res = await fetch(candidateSrc, {
                         headers: { Authorization: `Bearer ${authTok}` },
                         signal: ac.signal
                     });
-                    if (!res.ok) continue;
+                    if (!res.ok) {
+                        const summary = await summarizeErrorResponse(res);
+                        lastFailure = `${summary} (id ${mediaId})`;
+                        continue;
+                    }
                     const blob = await res.blob();
-                    if (!blob || blob.size === 0) continue;
+                    if (!blob || blob.size === 0) {
+                        lastFailure = `HTTP 200: Empty media body (id ${mediaId})`;
+                        continue;
+                    }
                     const objectUrl = URL.createObjectURL(blob);
                     blobUrlRef.current = objectUrl;
                     if (!cancelled) {
@@ -252,7 +292,7 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
                         setRetryTick((n) => n + 1);
                         return;
                     }
-                    if (!cancelled) setErr('Could not load media');
+                    if (!cancelled) setErr(lastFailure || 'Could not load media');
                 }
             } catch (e) {
                 if (cancelled || e?.name === 'AbortError') return;
@@ -260,7 +300,7 @@ const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
                     setRetryTick((n) => n + 1);
                     return;
                 }
-                setErr('Could not load media');
+                setErr(`Fetch error: ${e?.message || 'Could not load media'}`);
             }
         })();
 
