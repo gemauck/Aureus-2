@@ -2174,30 +2174,28 @@ const getAssigneeColor = (identifier, users) => {
             : (sectionsRef.current || {});
         const currentYearSections = latestSectionsByYear[selectedYear] || [];
         
-        const section = currentYearSections.find(s => String(s.id) === String(sectionId));
-        const doc = section?.documents.find(d => String(d.id) === String(documentId));
-        const { resolvedMonth, existingComments } = resolveCommentMonthScope(doc?.comments, month, commentId);
+        const targetId = String(commentId);
         
         if (!confirm('Delete this comment?')) return;
         
-        const updated = currentYearSections.map(section => {
-            if (String(section.id) === String(sectionId)) {
+        let commentDeleted = false;
+        const updated = currentYearSections.map((section) => ({
+            ...section,
+            documents: (section.documents || []).map((doc) => {
+                if (commentDeleted) return doc;
+                const { resolvedMonth, existingComments } = resolveCommentMonthScope(doc?.comments, month, targetId);
+                if (!Array.isArray(existingComments) || !existingComments.some((c) => getCommentKey(c) === targetId)) {
+                    return doc;
+                }
+                const updatedComments = existingComments.filter((c) => getCommentKey(c) !== targetId);
+                commentDeleted = true;
                 return {
-                    ...section,
-                    documents: section.documents.map(doc => {
-                        if (String(doc.id) === String(documentId)) {
-                            const updatedComments = existingComments.filter((c) => getCommentKey(c) !== String(commentId));
-                            return {
-                                ...doc,
-                                comments: setCommentsForYear(doc.comments || {}, resolvedMonth, updatedComments, selectedYear)
-                            };
-                        }
-                        return doc;
-                    })
+                    ...doc,
+                    comments: setCommentsForYear(doc.comments || {}, resolvedMonth, updatedComments, selectedYear)
                 };
-            }
-            return section;
-        });
+            })
+        }));
+        if (!commentDeleted) return;
         
         const updatedSectionsByYear = {
             ...latestSectionsByYear,
@@ -2272,44 +2270,45 @@ const getAssigneeColor = (identifier, users) => {
         const nowIso = new Date().toISOString();
 
         let commentFound = false;
-        const updated = currentYearSections.map((section) => {
-            if (String(section.id) !== String(sectionId)) return section;
-            return {
-                ...section,
-                documents: section.documents.map((doc) => {
-                    if (String(doc.id) !== String(documentId)) return doc;
-                    const { resolvedMonth, existingComments } = resolveCommentMonthScope(doc.comments, month, commentId);
-                    const updatedComments = existingComments.map((comment) => {
-                        if (getCommentKey(comment) !== String(commentId)) return comment;
-                        if (!canCurrentUserEditComment(comment)) return comment;
-                        commentFound = true;
-                        const previousText = String(comment.text || '');
-                        if (previousText.trim() === nextText) return comment;
-                        const nextHistory = Array.isArray(comment.editHistory) ? comment.editHistory.slice() : [];
-                        nextHistory.push({
-                            previousText,
-                            editedAt: nowIso,
-                            editedByName: currentUser.name || currentUser.email || 'Unknown',
-                            editedByEmail: currentUser.email || '',
-                            editedById: currentUser.id || null
-                        });
-                        return {
-                            ...comment,
-                            text: nextText,
-                            editedAt: nowIso,
-                            editedByName: currentUser.name || currentUser.email || 'Unknown',
-                            editedByEmail: currentUser.email || '',
-                            editedById: currentUser.id || null,
-                            editHistory: nextHistory
-                        };
+        const targetId = String(commentId);
+        const updated = currentYearSections.map((section) => ({
+            ...section,
+            documents: (section.documents || []).map((doc) => {
+                if (commentFound) return doc;
+                const { resolvedMonth, existingComments } = resolveCommentMonthScope(doc.comments, month, targetId);
+                if (!Array.isArray(existingComments) || !existingComments.some((c) => getCommentKey(c) === targetId)) {
+                    return doc;
+                }
+                const updatedComments = existingComments.map((comment) => {
+                    if (getCommentKey(comment) !== targetId) return comment;
+                    if (!canCurrentUserEditComment(comment)) return comment;
+                    commentFound = true;
+                    const previousText = String(comment.text || '');
+                    if (previousText.trim() === nextText) return comment;
+                    const nextHistory = Array.isArray(comment.editHistory) ? comment.editHistory.slice() : [];
+                    nextHistory.push({
+                        previousText,
+                        editedAt: nowIso,
+                        editedByName: currentUser.name || currentUser.email || 'Unknown',
+                        editedByEmail: currentUser.email || '',
+                        editedById: currentUser.id || null
                     });
                     return {
-                        ...doc,
-                        comments: setCommentsForYear(doc.comments || {}, resolvedMonth, updatedComments, selectedYear)
+                        ...comment,
+                        text: nextText,
+                        editedAt: nowIso,
+                        editedByName: currentUser.name || currentUser.email || 'Unknown',
+                        editedByEmail: currentUser.email || '',
+                        editedById: currentUser.id || null,
+                        editHistory: nextHistory
                     };
-                })
-            };
-        });
+                });
+                return {
+                    ...doc,
+                    comments: setCommentsForYear(doc.comments || {}, resolvedMonth, updatedComments, selectedYear)
+                };
+            })
+        }));
 
         if (!commentFound) return;
 
