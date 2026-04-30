@@ -10,6 +10,7 @@ import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
 import { authRequired } from '../../_lib/authRequired.js'
 import { badRequest, notFound } from '../../_lib/response.js'
+import { normalizeUploadId } from './uploadId.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -39,9 +40,9 @@ async function handler(req, res) {
   try {
     if (req.method !== 'GET') return badRequest(res, 'Method not allowed')
 
-    const uploadId = String(req.query?.uploadId || '').trim()
+    const uploadId = normalizeUploadId(req.query?.uploadId)
     const outputRelativePath = String(req.query?.outputRelativePath || '').replace(/\\/g, '/').replace(/^\/+/, '')
-    if (!uploadId || !uploadId.startsWith('ds-')) return badRequest(res, 'Valid uploadId required')
+    if (!uploadId) return badRequest(res, 'Valid uploadId required')
     if (!outputRelativePath) return badRequest(res, 'outputRelativePath required')
 
     const outputDir = path.join(outputBase, uploadId)

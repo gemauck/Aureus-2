@@ -12,6 +12,7 @@ import { withLogging } from '../../_lib/logger.js'
 import { authRequired } from '../../_lib/authRequired.js'
 import { badRequest, ok, serverError } from '../../_lib/response.js'
 import { parseJsonBody } from '../../_lib/body.js'
+import { normalizeUploadId } from './uploadId.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -26,8 +27,8 @@ async function handler(req, res) {
     }
 
     const payload = await parseJsonBody(req).catch(() => ({}))
-    const uploadId = (payload.uploadId || '').toString().trim()
-    if (!uploadId || !uploadId.startsWith('ds-')) {
+    const uploadId = normalizeUploadId(payload.uploadId)
+    if (!uploadId) {
       return badRequest(res, 'Valid uploadId required')
     }
 

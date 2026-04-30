@@ -21,6 +21,7 @@ import { CANCEL_FLAG_NAME } from './cancel.js'
 import { resolveChecklistSubfolder, sanitizeSubfolderName } from './checklistTemplate.js'
 import { getUserIdFromReq, suggestFromLearning } from './learningStore.js'
 import { updateRunStatusByUploadId } from './projectStore.js'
+import { normalizeUploadId } from './uploadId.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -224,7 +225,7 @@ async function handler(req, res) {
     }
 
     const payload = await parseJsonBody(req).catch(() => ({}))
-    const uploadId = (payload.uploadId || '').toString()
+    const uploadId = normalizeUploadId(payload.uploadId)
     const useAI = Boolean(payload.useAI)
     const aiScope = payload.aiScope === 'all' ? 'all' : 'uncategorized'
     let aiMaxFiles = Math.min(

@@ -472,23 +472,30 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
 
     return ReactElement(
         'div',
-        { className: 'space-y-4' },
+        { className: 'space-y-4 p-4 md:p-6' },
         ReactElement(
             'div',
-            { className: 'flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between' },
+            {
+                className: 'bg-white rounded-xl shadow-sm border border-slate-200/80 p-4 md:p-6',
+                style: { backgroundImage: 'linear-gradient(135deg, #ffffff 0%, #f1f5f9 55%, #eef2ff 100%)' }
+            },
+            ReactElement('div', { className: 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between' },
             ReactElement('div', { className: 'space-y-1' },
-                ReactElement('h1', { className: 'text-lg font-semibold text-gray-900' }, 'Weekly FMS review progress'),
-                ReactElement('p', { className: 'text-sm text-gray-600' },
+                ReactElement('h1', { className: 'text-xl md:text-2xl font-bold text-gray-900' }, 'Weekly FMS review progress'),
+                ReactElement('p', { className: 'text-sm text-gray-600 max-w-3xl' },
                     'Per-project weekly FMS checklist completion for the selected year. The grid auto-focuses the working week and shows the prior 4 months.')),
             ReactElement('div', { className: 'flex flex-wrap items-center gap-2' },
                 ReactElement(
                     'label',
-                    { className: 'text-xs font-medium text-gray-600' },
+                    {
+                        className:
+                            'text-xs font-medium text-gray-600 inline-flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5'
+                    },
                     'Year ',
                     ReactElement(
                         'select',
                         {
-                            className: 'ml-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm',
+                            className: 'ml-1 border border-gray-300 rounded-lg px-2 py-1 text-sm',
                             value: selectedYear,
                             onChange: (e) => setSelectedYear(Number(e.target.value) || currentYear)
                         },
@@ -500,7 +507,8 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                     'button',
                     {
                         type: 'button',
-                        className: 'px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-lg text-slate-700 bg-white hover:bg-slate-50',
+                        className:
+                            'px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-lg text-slate-700 bg-white hover:bg-slate-50',
                         onClick: () => {}
                     },
                     ReactElement('span', { className: 'hidden md:inline' }, 'Export'),
@@ -511,14 +519,18 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                     {
                         type: 'button',
                         onClick: onBack,
-                        className: 'px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50'
+                        className:
+                            'px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg bg-white hover:bg-gray-50'
                     },
                     'Back to list'
                 ))
+            )
         ),
         ReactElement(
             'div',
-            { className: 'flex flex-wrap items-center gap-2 text-xs text-slate-600' },
+            {
+                className: 'flex flex-wrap items-center gap-2 text-xs text-slate-600 bg-white rounded-xl border border-slate-200 p-3.5'
+            },
             ReactElement('span', { className: 'font-semibold' }, 'Legend:'),
             ReactElement('span', { className: 'inline-flex items-center gap-1' },
                 ReactElement('span', { className: 'w-2.5 h-2.5 rounded-sm bg-indigo-500' }),
@@ -534,7 +546,10 @@ const WeeklyFMSProgressTracker = function WeeklyFMSProgressTrackerCmp(props) {
                 className: 'overflow-auto min-h-0 bg-white rounded-xl border border-slate-200/90',
                 role: 'region',
                 'aria-label': 'Weekly FMS review grid',
-                style: { maxHeight: 'min(72vh, 900px)' }
+                style: {
+                    maxHeight: 'min(72vh, 900px)',
+                    boxShadow: '0 10px 40px -12px rgba(30, 41, 59, 0.12), 0 4px 14px -6px rgba(15, 23, 42, 0.06)'
+                }
             },
             ReactElement(
                 'table',

@@ -15,6 +15,7 @@ import { folderNameForFileNum } from './classify.js'
 import { appendLearningExample, getUserIdFromReq } from './learningStore.js'
 import { sanitizeSubfolderName } from './checklistTemplate.js'
 import { incrementRunMoveCount, updateRunStatusByUploadId } from './projectStore.js'
+import { normalizeUploadId } from './uploadId.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../..', '..')
@@ -82,7 +83,7 @@ async function handler(req, res) {
   try {
     if (req.method !== 'POST') return badRequest(res, 'Method not allowed')
     const body = await parseJsonBody(req).catch(() => ({}))
-    const uploadId = String(body.uploadId || '').trim()
+    const uploadId = normalizeUploadId(body.uploadId)
     const rel = sanitizeRelPath(body.outputRelativePath)
     const targetFileNum = Number(body.targetFileNum)
     const targetFolder = folderNameForFileNum(targetFileNum)
