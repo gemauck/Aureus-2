@@ -36,6 +36,15 @@ async function resolveSignedUrl(id, token, mediaType, filename, issueId) {
   return { signedUrl, last }
 }
 
+async function fetchUpstreamBytes(signedUrl) {
+  try {
+    const upstream = await fetch(signedUrl)
+    return { upstream }
+  } catch (e) {
+    return { upstream: null, fetchError: e }
+  }
+}
+
 async function handler(req, res) {
   if (req.method !== 'GET') {
     return badRequest(res, 'Method not allowed', { allowed: ['GET'] })
@@ -64,14 +73,34 @@ async function handler(req, res) {
     return serverError(res, last?.error || 'No download URL in SafetyCulture response', last?.details || last)
   }
 
-  let upstream
-  try {
-    upstream = await fetch(signedUrl)
-  } catch (e) {
-    return serverError(res, 'Failed to fetch signed media URL', e?.message || e)
+  let { upstream, fetchError } = await fetchUpstreamBytes(signedUrl)
+  if (!upstream && fetchError) {
+    return serverError(res, 'Failed to fetch signed media URL', fetchError?.message || fetchError)
   }
-  if (!upstream.ok) {
-    return serverError(res, `Failed to download media (${upstream.status})`)
+
+  // Signed URLs can expire quickly. On 400/403/404, refresh credentials once and retry download.
+  if (
+    (!upstream || !upstream.ok) &&
+    issueId &&
+    (upstream?.status === 400 || upstream?.status === 403 || upstream?.status === 404)
+  ) {
+    const fresh = await refreshIssueMediaCredentials(issueId, id, filename)
+    if (fresh) {
+      const attempts = buildMediaTypeAttempts(fresh.mediaType || mediaType, fresh.filename || filename)
+      const refreshed = await fetchSignedUrlWithRetries(fresh.mediaId, fresh.token, attempts)
+      if (refreshed?.signedUrl) {
+        const retry = await fetchUpstreamBytes(refreshed.signedUrl)
+        upstream = retry.upstream
+        fetchError = retry.fetchError
+      }
+    }
+  }
+
+  if (!upstream && fetchError) {
+    return serverError(res, 'Failed to fetch signed media URL', fetchError?.message || fetchError)
+  }
+  if (!upstream || !upstream.ok) {
+    return serverError(res, `Failed to download media (${upstream?.status || 'unknown'})`)
   }
 
   const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
