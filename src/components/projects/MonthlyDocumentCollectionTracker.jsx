@@ -8552,7 +8552,7 @@ Abcotronics`;
                                                 );
                                             }
                                             const comment = row;
-                                            const cid = comment.commentId;
+                                            const cid = getCommentKey(comment);
                                             return (
                                         <div 
                                             key={comment.id || cid || idx} 
