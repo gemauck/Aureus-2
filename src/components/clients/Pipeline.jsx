@@ -129,7 +129,14 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             return 'list';
         }
     });
-    const [kanbanGroupBy, setKanbanGroupBy] = useState('aidaStatus'); // 'aidaStatus' (AIDA) or 'engagementStage'
+    const [kanbanGroupBy, setKanbanGroupBy] = useState(() => {
+        try {
+            const saved = localStorage.getItem('pipelineKanbanGroupBy');
+            return saved === 'aidaStatus' || saved === 'engagementStage' ? saved : 'aidaStatus';
+        } catch (e) {
+            return 'aidaStatus';
+        }
+    }); // 'aidaStatus' (AIDA) or 'engagementStage'
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -181,6 +188,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             console.warn('⚠️ Pipeline: Failed to save view mode preference:', error);
         }
     }, [viewMode]);
+
+    // Persist kanban grouping preference
+    useEffect(() => {
+        try {
+            localStorage.setItem('pipelineKanbanGroupBy', kanbanGroupBy);
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Failed to save kanban grouping preference:', error);
+        }
+    }, [kanbanGroupBy]);
 
     // Persist list page size to localStorage
     useEffect(() => {
