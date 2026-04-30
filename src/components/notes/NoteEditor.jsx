@@ -133,12 +133,18 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
             try {
                 const token = window.storage?.getToken?.();
                 if (!token) return;
+                let users = [];
                 const response = await fetch('/api/users', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                if (!response.ok) return;
-                const data = await response.json().catch(() => ({}));
-                const users = data?.data?.users || data?.users || [];
+                if (response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    users = data?.data?.users || data?.users || [];
+                }
+                if ((!Array.isArray(users) || users.length === 0) && window.DatabaseAPI?.getUsers) {
+                    const fallback = await window.DatabaseAPI.getUsers();
+                    users = fallback?.data?.users || fallback?.data?.data?.users || [];
+                }
                 setAllUsers(Array.isArray(users) ? users : []);
             } catch (_) {
                 /* no-op: mentions still work via manual @Name typing */
@@ -259,6 +265,15 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         setMentionState({ show: false, query: '' });
         handleEditorInput();
     }, [mentionState.query]);
+
+    const insertMentionTrigger = useCallback(() => {
+        const ed = editorRef.current;
+        if (!ed) return;
+        ed.focus();
+        document.execCommand('insertText', false, '@');
+        handleEditorInput();
+        setTimeout(() => updateMentionSuggestions(), 0);
+    }, [updateMentionSuggestions]);
 
     const insertAtCursor = useCallback((html) => {
         const ed = editorRef.current;
@@ -598,6 +613,16 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                 <div className={`flex items-center border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
                     <RichTextToolbar editorRef={editorRef} isDark={isDark} />
                     <div className={`flex items-center gap-1 px-2 py-1 ml-auto border-l ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                        <button
+                            type="button"
+                            onClick={insertMentionTrigger}
+                            title="Mention someone"
+                            className={`p-2 rounded text-sm font-medium ${isDark ? 'hover:bg-gray-600 text-gray-200' : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'}`}
+                            aria-label="Mention someone"
+                        >
+                            <i className="fas fa-at" aria-hidden="true"></i>
+                            <span className="ml-1">@</span>
+                        </button>
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -642,6 +667,11 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                             updateMentionSuggestions();
                         }}
                         onKeyUp={updateMentionSuggestions}
+                        onKeyDown={(e) => {
+                            if (e.key === '@') {
+                                setTimeout(() => updateMentionSuggestions(), 0);
+                            }
+                        }}
                         onBlur={() => {
                             setTimeout(() => setMentionState({ show: false, query: '' }), 180);
                         }}
