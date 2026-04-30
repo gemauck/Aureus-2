@@ -132,18 +132,26 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         const loadUsers = async () => {
             try {
                 const token = window.storage?.getToken?.();
-                if (!token) return;
                 let users = [];
-                const response = await fetch('/api/users', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (response.ok) {
-                    const data = await response.json().catch(() => ({}));
-                    users = data?.data?.users || data?.users || [];
+                if (token) {
+                    const response = await fetch('/api/users', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (response.ok) {
+                        const data = await response.json().catch(() => ({}));
+                        users = data?.data?.users || data?.users || [];
+                    }
                 }
                 if ((!Array.isArray(users) || users.length === 0) && window.DatabaseAPI?.getUsers) {
                     const fallback = await window.DatabaseAPI.getUsers();
                     users = fallback?.data?.users || fallback?.data?.data?.users || [];
+                }
+                if (!Array.isArray(users) || users.length === 0) {
+                    const publicResp = await fetch('/api/public/users');
+                    if (publicResp.ok) {
+                        const publicData = await publicResp.json().catch(() => ({}));
+                        users = publicData?.data?.users || publicData?.users || [];
+                    }
                 }
                 setAllUsers(Array.isArray(users) ? users : []);
             } catch (_) {
@@ -217,7 +225,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         prefixRange.selectNodeContents(ed);
         prefixRange.setEnd(range.endContainer, range.endOffset);
         const textBeforeCursor = prefixRange.toString();
-        const mentionMatch = textBeforeCursor.match(/(?:^|\s)@([A-Za-z0-9._'-]*)$/);
+        const mentionMatch = textBeforeCursor.match(/(?:^|[\s\u00A0])@([^\s@]*)$/);
         if (!mentionMatch) {
             setMentionState({ show: false, query: '' });
             return;
@@ -669,6 +677,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                         onKeyUp={updateMentionSuggestions}
                         onKeyDown={(e) => {
                             if (e.key === '@') {
+                                setMentionState({ show: true, query: '' });
                                 setTimeout(() => updateMentionSuggestions(), 0);
                             }
                         }}
