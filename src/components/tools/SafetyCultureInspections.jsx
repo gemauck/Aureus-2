@@ -152,7 +152,8 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
     const [err, setErr] = useState(null);
     const [resolvedSrc, setResolvedSrc] = useState(null);
     const blobUrlRef = useRef(null);
-    const id = item?.id || item?.media_id || item?.document_id;
+    // Prefer explicit media identifiers from SafetyCulture payloads.
+    const id = item?.media_id || item?.document_id || item?.id;
     const token = item?.token || item?.download_token || item?.media_token || item?.access_token;
     const mediaType = item?.media_type || item?.mediaType || '';
     const fileName = item?.file_name || item?.filename || item?.name || 'Attachment';
