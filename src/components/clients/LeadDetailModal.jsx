@@ -3645,7 +3645,7 @@ const LeadDetailModal = ({
                                         }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                         rows="3"
-                                        placeholder="General information about this lead..."
+                                        placeholder="General information about this lead... Use @Name to mention a user."
                                     ></textarea>
                                 </div>
 
@@ -6491,7 +6491,7 @@ const LeadDetailModal = ({
                                             },
                                             rows: 4,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
-                                            placeholder: 'Add notes about this lead...'
+                                            placeholder: 'Add notes about this lead... Use @Name to mention a user.'
                                         })
                                     ),
                                     React.createElement('div', { className: 'md:col-span-2' },

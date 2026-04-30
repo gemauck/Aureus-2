@@ -191,3 +191,39 @@ export async function syncMentionsFromEntityNote({
     plainText
   })
 }
+
+export async function notifyMentionsOnClientOrLeadNotes({
+  entityId,
+  entityType,
+  notes,
+  authorId,
+  authorName = null
+}) {
+  const safeType = entityType === 'lead' ? 'lead' : 'client'
+  const plainText = stripHtml(notes || '')
+  const mentionedIds = await resolveMentionedUserIds(plainText)
+  const authorIdStr = authorId != null ? String(authorId) : null
+  const recipients = [...new Set((mentionedIds || []).map((id) => String(id)).filter(Boolean))]
+    .filter((id) => id !== authorIdStr)
+
+  if (!entityId || recipients.length === 0) return
+
+  const contextTitle = `${safeType === 'lead' ? 'Lead' : 'Client'} notes`
+  const link = `#/${safeType === 'lead' ? 'leads' : 'clients'}/${encodeURIComponent(entityId)}?tab=notes`
+  const metadata = {
+    source: safeType === 'lead' ? 'lead_note' : 'client_note',
+    notesField: true,
+    clientId: safeType === 'client' ? entityId : null,
+    leadId: safeType === 'lead' ? entityId : null
+  }
+
+  await notifyMentionedUsers({
+    mentionedUserIds: recipients,
+    authorId: authorIdStr,
+    authorName,
+    contextTitle,
+    link,
+    metadata,
+    plainText
+  })
+}

@@ -9,6 +9,7 @@ import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/clientJsonFields.js'
 import { isAdminRole } from '../_lib/authRoles.js'
 import { notifyClientCreationStakeholders } from '../_lib/notifyClientCreationStakeholders.js'
+import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 
 async function handler(req, res) {
   try {
@@ -564,6 +565,7 @@ async function handler(req, res) {
         // Store old name and website for RSS feed update
         const oldName = existing.name
         const oldWebsite = existing.website
+        const previousNotes = existing.notes != null ? String(existing.notes) : ''
         
         // Phase 5: Handle contacts separately to sync to normalized table
         if (body.contacts !== undefined) {
@@ -1293,6 +1295,23 @@ async function handler(req, res) {
         
         // Parse JSON fields before returning using shared utility
         const parsedLead = parseClientJsonFields(lead)
+
+        if (body.notes !== undefined) {
+          const currentNotes = lead?.notes != null ? String(lead.notes) : ''
+          if (currentNotes !== previousNotes) {
+            try {
+              await notifyMentionsOnClientOrLeadNotes({
+                entityId: id,
+                entityType: 'lead',
+                notes: currentNotes,
+                authorId: req.user?.sub || req.user?.id || null,
+                authorName: req.user?.name || req.user?.email || 'Someone'
+              })
+            } catch (mentionError) {
+              console.error('Failed to process lead notes mentions:', mentionError)
+            }
+          }
+        }
         
         // Log contacts to verify they're being returned
         console.log(`📋 [LEADS ID] Returning lead ${id} with ${parsedLead.contacts?.length || 0} contacts`)

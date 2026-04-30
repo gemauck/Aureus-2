@@ -158,6 +158,22 @@ const downloadCommentAttachment = (url, filename) => {
     .catch(() => {});
 };
 
+const escapeCommentHtml = (value) =>
+    String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+const renderCommentTextWithMentions = (text) => {
+    const safeText = escapeCommentHtml(text);
+    const highlighted = safeText.replace(/(^|[\s(])(@[A-Za-z0-9._-]+)/g, (match, prefix, mention) => (
+        `${prefix}<span class="text-blue-600 dark:text-blue-400 font-medium">${mention}</span>`
+    ));
+    return highlighted.replace(/\n/g, '<br>');
+};
+
 const SA_TIMEZONE_OFFSET = '+02:00';
 
 const parseDateValue = (dateValue) => {
@@ -772,6 +788,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     /** Bumps when the cell-activity effect instance changes so stale fetches never clear loading. */
     const cellActivityEffectGenRef = useRef(0);
     const [quickComment, setQuickComment] = useState('');
+    const [editingCommentId, setEditingCommentId] = useState(null);
+    const [editingCommentText, setEditingCommentText] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const [pendingCommentAttachments, setPendingCommentAttachments] = useState([]);
     const [uploadingCommentAttachments, setUploadingCommentAttachments] = useState(false);
@@ -827,6 +845,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Clear pending attachments when switching to another comment cell
     useEffect(() => {
         setPendingCommentAttachments([]);
+        setEditingCommentId(null);
+        setEditingCommentText('');
     }, [hoverCommentCell]);
 
     // Unified activity timeline for the open comment popup (document collection + MDR/compliance JSON trackers)
@@ -3822,6 +3842,84 @@ const getAssigneeColor = (identifier, users) => {
                 }
             }
         } catch (_) {}
+    };
+
+    const handleStartEditComment = (comment) => {
+        setEditingCommentId(comment?.id || null);
+        setEditingCommentText(comment?.text || '');
+    };
+
+    const handleSaveEditedComment = async (sectionId, documentId, month, commentId) => {
+        const nextText = String(editingCommentText || '').trim();
+        if (!nextText) {
+            alert('Comment cannot be empty.');
+            return;
+        }
+
+        const latestSectionsByYear = getLatestSectionsByYear();
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        const currentUser = getCurrentUser();
+        const nowIso = new Date().toISOString();
+
+        let commentFound = false;
+        const updated = currentYearSections.map((section) => {
+            if (String(section.id) !== String(sectionId)) return section;
+            return {
+                ...section,
+                documents: section.documents.map((doc) => {
+                    if (String(doc.id) !== String(documentId)) return doc;
+                    const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                    const updatedComments = existingComments.map((comment) => {
+                        if (String(comment.id) !== String(commentId)) return comment;
+                        commentFound = true;
+                        const previousText = String(comment.text || '');
+                        if (previousText.trim() === nextText) return comment;
+                        const nextHistory = Array.isArray(comment.editHistory) ? comment.editHistory.slice() : [];
+                        nextHistory.push({
+                            previousText,
+                            editedAt: nowIso,
+                            editedByName: currentUser.name || currentUser.email || 'Unknown',
+                            editedByEmail: currentUser.email || '',
+                            editedById: currentUser.id || null
+                        });
+                        return {
+                            ...comment,
+                            text: nextText,
+                            editedAt: nowIso,
+                            editedByName: currentUser.name || currentUser.email || 'Unknown',
+                            editedByEmail: currentUser.email || '',
+                            editedById: currentUser.id || null,
+                            editHistory: nextHistory
+                        };
+                    });
+                    return {
+                        ...doc,
+                        comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
+                    };
+                })
+            };
+        });
+
+        if (!commentFound) return;
+        const updatedSectionsByYear = { ...latestSectionsByYear, [selectedYear]: updated };
+        sectionsRef.current = updatedSectionsByYear;
+        setSectionsByYear(updatedSectionsByYear);
+
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        lastSavedDataRef.current = null;
+        try {
+            await saveToDatabase();
+            await new Promise((r) => setTimeout(r, 600));
+            await saveToDatabase();
+        } catch (saveErr) {
+            console.error('❌ Failed to save edited comment:', saveErr);
+        }
+
+        setEditingCommentId(null);
+        setEditingCommentText('');
     };
     
     const getDocumentStatus = (doc, month) => {
@@ -8429,15 +8527,40 @@ Abcotronics`;
                                             }}
                                             title="Click to copy link to this comment"
                                         >
-                                            <p
-                                                className="text-xs text-gray-700 dark:text-gray-200 whitespace-pre-wrap pr-12"
-                                                dangerouslySetInnerHTML={{
-                                                    __html:
-                                                        window.MentionHelper && comment.text
-                                                            ? window.MentionHelper.highlightMentions(comment.text)
-                                                            : (comment.text || '')
-                                                }}
-                                            />
+                                            {String(editingCommentId) === String(cid) ? (
+                                                <div className="pr-12" onClick={(e) => e.stopPropagation()}>
+                                                    <textarea
+                                                        value={editingCommentText}
+                                                        onChange={(e) => setEditingCommentText(e.target.value)}
+                                                        rows={3}
+                                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-sky-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                                    />
+                                                    <div className="mt-1 flex items-center justify-end gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setEditingCommentId(null);
+                                                                setEditingCommentText('');
+                                                            }}
+                                                            className="px-2 py-0.5 text-[10px] border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSaveEditedComment(section.id, doc.id, month, cid)}
+                                                            className="px-2 py-0.5 text-[10px] bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded hover:bg-sky-300 dark:hover:bg-sky-600"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p
+                                                    className="text-xs text-gray-700 dark:text-gray-200 whitespace-pre-wrap pr-16"
+                                                    dangerouslySetInnerHTML={{ __html: renderCommentTextWithMentions(comment.text || '') }}
+                                                />
+                                            )}
                                             {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
                                                 <div
                                                     className="mt-1 flex flex-wrap gap-1"
@@ -8487,6 +8610,31 @@ Abcotronics`;
                                                     }
                                                 })() : 'No date'}</span>
                                             </div>
+                                            {comment.editedAt ? (
+                                                <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400">
+                                                    Edited {formatDateTime(comment.editedAt)} by {comment.editedByName || 'Unknown'}
+                                                </div>
+                                            ) : null}
+                                            {Array.isArray(comment.editHistory) && comment.editHistory.length > 0 ? (
+                                                <details className="mt-1 text-[10px] text-gray-600 dark:text-gray-300" onClick={(e) => e.stopPropagation()}>
+                                                    <summary className="cursor-pointer select-none hover:text-gray-800 dark:hover:text-gray-100">
+                                                        View edit history ({comment.editHistory.length})
+                                                    </summary>
+                                                    <div className="mt-1 space-y-1.5">
+                                                        {[...comment.editHistory].reverse().map((entry, historyIdx) => (
+                                                            <div key={`${cid}-history-${historyIdx}`} className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1">
+                                                                <div className="text-[9px] text-gray-500 dark:text-gray-400">
+                                                                    {formatDateTime(entry.editedAt)} by {entry.editedByName || 'Unknown'}
+                                                                </div>
+                                                                <div
+                                                                    className="mt-0.5 text-[10px] text-gray-700 dark:text-gray-200 whitespace-pre-wrap"
+                                                                    dangerouslySetInnerHTML={{ __html: renderCommentTextWithMentions(entry.previousText || '') }}
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            ) : null}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -8498,6 +8646,18 @@ Abcotronics`;
                                                 title="Delete comment"
                                             >
                                                 <i className="fas fa-trash text-[10px]"></i>
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!section || !doc || !cid) return;
+                                                    handleStartEditComment(comment);
+                                                }}
+                                                className="absolute top-1 right-11 text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                type="button"
+                                                title="Edit comment"
+                                            >
+                                                <i className="fas fa-pen text-[9px]"></i>
                                             </button>
                                             <button
                                                 data-copy-link={cid}

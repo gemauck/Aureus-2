@@ -8,6 +8,7 @@ import { searchAndSaveNewsForClient } from '../client-news/search.js'
 import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_KYC } from '../_lib/clientJsonFields.js'
 import { notifyCommentParticipants } from '../_lib/notifyCommentParticipants.js'
+import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 import { isAdminRole } from '../_lib/authRoles.js'
 
 async function handler(req, res) {
@@ -464,6 +465,7 @@ async function handler(req, res) {
         
         oldName = existing.name
         oldWebsite = existing.website
+        const previousNotes = existing.notes != null ? String(existing.notes) : ''
         
         // Persist KYC immediately when present so it is never lost (e.g. if later steps fail or timeout)
         if (body.kyc !== undefined && body.kyc !== null) {
@@ -1279,6 +1281,23 @@ async function handler(req, res) {
         
         // Parse JSON fields before returning using shared utility
         const parsedClient = parseClientJsonFields(client)
+
+        if (body.notes !== undefined) {
+          const currentNotes = client?.notes != null ? String(client.notes) : ''
+          if (currentNotes !== previousNotes) {
+            try {
+              await notifyMentionsOnClientOrLeadNotes({
+                entityId: id,
+                entityType: 'client',
+                notes: currentNotes,
+                authorId: req.user?.sub || req.user?.id || null,
+                authorName: req.user?.name || req.user?.email || 'Someone'
+              })
+            } catch (mentionError) {
+              console.error('Failed to process client notes mentions:', mentionError)
+            }
+          }
+        }
         
         return ok(res, { client: parsedClient })
       } catch (dbError) {

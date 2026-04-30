@@ -363,12 +363,14 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                           : 'Reports, Feedback';
                 pushWhere(whereLabel);
             }
-            if (!appendedWhereBlock && (metadataObj.source === 'user_note' || metadataObj.source === 'project_note' || metadataObj.source === 'client_note')) {
+            if (!appendedWhereBlock && (metadataObj.source === 'user_note' || metadataObj.source === 'project_note' || metadataObj.source === 'client_note' || metadataObj.source === 'lead_note')) {
                 const kind =
                     metadataObj.source === 'project_note'
                         ? 'Project notes'
                         : metadataObj.source === 'client_note'
                           ? 'Client notes'
+                          : metadataObj.source === 'lead_note'
+                            ? 'Lead notes'
                           : 'My notes';
                 pushWhere(['Notes', kind].join(', '));
             }
