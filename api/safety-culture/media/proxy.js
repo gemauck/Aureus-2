@@ -19,7 +19,7 @@ async function resolveSignedUrl(id, token, mediaType, filename, issueId) {
   const shouldRefresh =
     !signedUrl &&
     issueId &&
-    (last?.status === 403 || last?.status === 404)
+    (last?.status === 400 || last?.status === 403 || last?.status === 404)
 
   if (shouldRefresh) {
     const fresh = await refreshIssueMediaCredentials(issueId, id, filename)

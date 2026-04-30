@@ -2,7 +2,7 @@
  * GET /api/safety-culture/media/sign-url?id=&token=&media_type= (optional)&filename= (optional hint)&issue_id= (optional)
  * Proxies SafetyCulture signed download URL (short-lived) for authenticated ERP users only.
  * Retries with alternate media_type values when SC returns 403/400 (wrong type is a common cause).
- * When download fails with 403/404 and issue_id is provided, re-fetches fresh credentials from Get an issue.
+ * When download fails with 400/403/404 and issue_id is provided, re-fetches fresh credentials from Get an issue.
  * @see https://developer.safetyculture.com/reference/mediaservice_getdownloadsignedurl
  */
 import { authRequired } from '../../_lib/authRequired.js'
@@ -22,7 +22,7 @@ async function resolveSignedUrl(id, token, mediaType, filename, issueId) {
   const shouldRefresh =
     !signedUrl &&
     issueId &&
-    (last?.status === 403 || last?.status === 404)
+    (last?.status === 400 || last?.status === 403 || last?.status === 404)
 
   if (shouldRefresh) {
     const fresh = await refreshIssueMediaCredentials(issueId, id, filename)
