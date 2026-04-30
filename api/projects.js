@@ -414,7 +414,9 @@ function mergeDocFieldsWithServer(existingDoc, incomingDoc) {
   const mergedComments = { ...existingComments }
   for (const [key, arr] of Object.entries(incomingComments)) {
     const list = Array.isArray(arr) ? arr : arr != null ? [arr] : []
-    if (list.length > 0) mergedComments[key] = list
+    // Respect explicit per-month clears from client (empty array means delete all comments for that month).
+    // Previous behavior kept server comments when list was empty, causing deleted comments to reappear.
+    mergedComments[key] = list
   }
   const existingStatus =
     existing.collectionStatus && typeof existing.collectionStatus === 'object' ? existing.collectionStatus : {}
