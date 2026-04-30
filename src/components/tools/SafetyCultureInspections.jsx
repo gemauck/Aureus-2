@@ -147,13 +147,21 @@ function renderScInspectionsList(arr) {
     );
 }
 
-const ScMediaTile = ({ item, isDark, issueId }) => {
+const ScMediaTile = ({ item, isDark, issueId, tileIndex = 0 }) => {
     const [retryTick, setRetryTick] = useState(0);
     const [err, setErr] = useState(null);
     const [resolvedSrc, setResolvedSrc] = useState(null);
+    const [resolvedProxySrc, setResolvedProxySrc] = useState(null);
     const blobUrlRef = useRef(null);
-    // Match backend extractor precedence: media_id, then id, then document_id.
-    const id = item?.media_id || item?.id || item?.document_id;
+    const candidateIds = [
+        item?.media_id,
+        item?.document_id,
+        item?.id
+    ]
+        .map((v) => (v == null ? '' : String(v).trim()))
+        .filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i);
+    const id = candidateIds[0] || '';
     const token = item?.token || item?.download_token || item?.media_token || item?.access_token;
     const mediaType = item?.media_type || item?.mediaType || '';
     const fileName = item?.file_name || item?.filename || item?.name || 'Attachment';
@@ -166,13 +174,16 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
     const isImage =
         String(mediaType).includes('IMAGE') ||
         /\.(jpe?g|png|gif|webp)$/i.test(fileName);
-    const canRender = Boolean(id && token);
-    const params = new URLSearchParams({ id: String(id || ''), token: String(token || '') });
-    if (mediaType) params.set('media_type', String(mediaType));
-    if (fileName) params.set('filename', String(fileName));
-    if (issueId) params.set('issue_id', String(issueId));
-    if (retryTick > 0) params.set('retry', String(retryTick));
-    const src = `${API_BASE}/safety-culture/media/proxy?${params.toString()}`;
+    const canRender = Boolean(candidateIds.length && token);
+    const buildProxySrc = (mediaId) => {
+        const params = new URLSearchParams({ id: String(mediaId || ''), token: String(token || '') });
+        if (mediaType) params.set('media_type', String(mediaType));
+        if (fileName) params.set('filename', String(fileName));
+        if (issueId) params.set('issue_id', String(issueId));
+        if (retryTick > 0) params.set('retry', String(retryTick));
+        return `${API_BASE}/safety-culture/media/proxy?${params.toString()}`;
+    };
+    const src = id ? buildProxySrc(id) : '';
     const canFetch = Boolean(canRender && isImage);
 
     const cardClass = isDark ? 'border-gray-600 bg-gray-900/50' : 'border-gray-200 bg-gray-50';
@@ -190,6 +201,7 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
 
         if (!canFetch) {
             setResolvedSrc(null);
+            setResolvedProxySrc(null);
             revokeBlob();
             return () => {
                 ac.abort();
@@ -197,6 +209,7 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
         }
 
         setResolvedSrc(null);
+        setResolvedProxySrc(null);
         revokeBlob();
 
         (async () => {
@@ -205,37 +218,41 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
                 if (!cancelled) setErr('Sign in required to load media');
                 return;
             }
-            const staggerMs = Math.min(1200, Math.max(0, Number(idx) || 0) * 120);
+            const staggerMs = Math.min(1200, Math.max(0, Number(tileIndex) || 0) * 120);
             if (staggerMs > 0) {
                 await new Promise((resolve) => setTimeout(resolve, staggerMs));
                 if (cancelled) return;
             }
             try {
-                const res = await fetch(src, {
-                    headers: { Authorization: `Bearer ${authTok}` },
-                    signal: ac.signal
-                });
-                if (!res.ok) {
+                let loaded = false;
+                for (const mediaId of candidateIds) {
+                    const candidateSrc = buildProxySrc(mediaId);
+                    const res = await fetch(candidateSrc, {
+                        headers: { Authorization: `Bearer ${authTok}` },
+                        signal: ac.signal
+                    });
+                    if (!res.ok) continue;
+                    const blob = await res.blob();
+                    if (!blob || blob.size === 0) continue;
+                    const objectUrl = URL.createObjectURL(blob);
+                    blobUrlRef.current = objectUrl;
+                    if (!cancelled) {
+                        setErr(null);
+                        setResolvedSrc(objectUrl);
+                        setResolvedProxySrc(candidateSrc);
+                        loaded = true;
+                    } else {
+                        URL.revokeObjectURL(objectUrl);
+                        blobUrlRef.current = null;
+                    }
+                    break;
+                }
+                if (!loaded) {
                     if (!cancelled && retryTick < 2) {
                         setRetryTick((n) => n + 1);
                         return;
                     }
                     if (!cancelled) setErr('Could not load media');
-                    return;
-                }
-                const blob = await res.blob();
-                if (!blob || blob.size === 0) {
-                    if (!cancelled) setErr('Could not load media');
-                    return;
-                }
-                const objectUrl = URL.createObjectURL(blob);
-                blobUrlRef.current = objectUrl;
-                if (!cancelled) {
-                    setErr(null);
-                    setResolvedSrc(objectUrl);
-                } else {
-                    URL.revokeObjectURL(objectUrl);
-                    blobUrlRef.current = null;
                 }
             } catch (e) {
                 if (cancelled || e?.name === 'AbortError') return;
@@ -252,7 +269,7 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
             ac.abort();
             revokeBlob();
         };
-    }, [canFetch, retryTick, src]);
+    }, [canFetch, retryTick, src, token, mediaType, fileName, issueId]);
 
     return (
         <div className={`rounded-lg border p-2 max-w-xs ${cardClass}`}>
@@ -267,7 +284,7 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
                 </div>
             ) : null}
             {canRender && isImage ? (
-                <a href={src} target="_blank" rel="noopener noreferrer" className="block">
+                <a href={resolvedProxySrc || src} target="_blank" rel="noopener noreferrer" className="block">
                     <img
                         src={resolvedSrc || undefined}
                         alt=""
@@ -291,7 +308,13 @@ function renderScMediaList(items, isDark, issueId) {
     return (
         <div className="flex flex-wrap gap-3">
             {items.map((item, idx) => (
-                <ScMediaTile key={item?.id || item?.media_id || idx} item={item} isDark={isDark} issueId={issueId} />
+                <ScMediaTile
+                    key={item?.id || item?.media_id || idx}
+                    item={item}
+                    isDark={isDark}
+                    issueId={issueId}
+                    tileIndex={idx}
+                />
             ))}
         </div>
     );
