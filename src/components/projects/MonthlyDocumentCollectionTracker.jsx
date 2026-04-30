@@ -3810,7 +3810,7 @@ const getAssigneeColor = (identifier, users) => {
                     ...section,
                     documents: section.documents.map(doc => {
                         if (String(doc.id) === String(documentId)) {
-                            const updatedComments = existingComments.filter(c => c.id !== commentId);
+                            const updatedComments = existingComments.filter((c) => String(c.id) !== String(commentId));
                             return {
                                 ...doc,
                                 comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
@@ -3852,6 +3852,9 @@ const getAssigneeColor = (identifier, users) => {
         const currentEmail = String(currentUser.email || '').trim().toLowerCase();
         const commentEmail = String(comment?.authorEmail || '').trim().toLowerCase();
         if (currentEmail && commentEmail) return currentEmail === commentEmail;
+        const currentName = String(currentUser.name || '').trim().toLowerCase();
+        const commentAuthor = String(comment?.author || '').trim().toLowerCase();
+        if (currentName && commentAuthor) return currentName === commentAuthor;
         return false;
     };
 
