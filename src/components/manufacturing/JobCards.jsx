@@ -818,25 +818,35 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     );
   }, [clients, jobCards]);
 
-  const filteredClientOptions = useMemo(() => {
-    const query = clientOptionSearch.trim().toLowerCase();
-    if (!query) return clientOptions;
-    return clientOptions.filter((c) => String(c.name || '').toLowerCase().includes(query));
-  }, [clientOptions, clientOptionSearch]);
-
-  const filteredTechnicianOptions = useMemo(() => {
-    const query = creatorOptionSearch.trim().toLowerCase();
-    if (!query) return technicianOptions;
-    return technicianOptions.filter((u) =>
-      String(u.name || u.email || u.id || '').toLowerCase().includes(query)
+  useEffect(() => {
+    if (!clientFilter) {
+      setClientOptionSearch('');
+      return;
+    }
+    const matchedClient = clientOptions.find(
+      (c) => String(c.id || c.name) === String(clientFilter)
     );
-  }, [technicianOptions, creatorOptionSearch]);
+    setClientOptionSearch(matchedClient ? matchedClient.name : String(clientFilter));
+  }, [clientFilter, clientOptions]);
 
-  const filteredTechnicianNameOptions = useMemo(() => {
-    const query = technicianOptionSearch.trim().toLowerCase();
-    if (!query) return technicianNameOptions;
-    return technicianNameOptions.filter((name) => String(name || '').toLowerCase().includes(query));
-  }, [technicianNameOptions, technicianOptionSearch]);
+  useEffect(() => {
+    if (!technicianOwnerId) {
+      setCreatorOptionSearch('');
+      return;
+    }
+    const matchedUser = technicianOptions.find(
+      (u) => String(u.id || '') === String(technicianOwnerId)
+    );
+    setCreatorOptionSearch(matchedUser ? (matchedUser.name || matchedUser.email || matchedUser.id) : '');
+  }, [technicianOwnerId, technicianOptions]);
+
+  useEffect(() => {
+    if (!technicianFilter) {
+      setTechnicianOptionSearch('');
+      return;
+    }
+    setTechnicianOptionSearch(String(technicianFilter));
+  }, [technicianFilter]);
 
   const categoryOptions = useMemo(() => {
     return Array.from(
@@ -853,7 +863,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     if (!technicianFilter) return jobCards;
     const selected = technicianFilter.trim().toLowerCase();
     return jobCards.filter((jc) =>
-      String(jc.agentName || '').trim().toLowerCase() === selected
+      String(jc.agentName || '').trim().toLowerCase().includes(selected)
     );
   }, [jobCards, technicianFilter]);
 
@@ -1293,81 +1303,81 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <div className="flex flex-col gap-1">
-            <input
-              type="search"
-              aria-label="Search clients in filter options"
-              value={clientOptionSearch}
-              onChange={(e) => setClientOptionSearch(e.target.value)}
-              placeholder="Search clients..."
-              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
-            />
-            <select
-              aria-label="Filter by client"
-              className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
-              value={clientFilter}
-              onChange={(e) => setClientFilter(e.target.value)}
-            >
-              <option value="">All clients</option>
-              {filteredClientOptions.map((c) => (
-                <option key={c.id || c.name} value={c.id || c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <input
-              type="search"
-              aria-label="Search creators in filter options"
-              disabled={mineOnly}
-              value={creatorOptionSearch}
-              onChange={(e) => setCreatorOptionSearch(e.target.value)}
-              placeholder="Search creators..."
-              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
-            />
-            <select
-              aria-label="Filter by creator"
-              disabled={mineOnly}
-              className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
-              value={technicianOwnerId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setTechnicianOwnerId(v);
-                if (v) setMineOnly(false);
-              }}
-            >
-              <option value="">All created by</option>
-              {filteredTechnicianOptions.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name || u.email || u.id}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <input
-              type="search"
-              aria-label="Search technicians in filter options"
-              value={technicianOptionSearch}
-              onChange={(e) => setTechnicianOptionSearch(e.target.value)}
-              placeholder="Search technicians..."
-              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
-            />
-            <select
-              aria-label="Filter by technician"
-              className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
-              value={technicianFilter}
-              onChange={(e) => setTechnicianFilter(e.target.value)}
-            >
-              <option value="">All technicians</option>
-              {filteredTechnicianNameOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <input
+            type="search"
+            list="jobcards-client-filter-options"
+            aria-label="Filter by client"
+            value={clientOptionSearch}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setClientOptionSearch(raw);
+              const normalized = raw.trim().toLowerCase();
+              if (!normalized) {
+                setClientFilter('');
+                return;
+              }
+              const match = clientOptions.find(
+                (c) => String(c.name || '').trim().toLowerCase() === normalized
+              );
+              setClientFilter(match ? (match.id || match.name) : raw);
+            }}
+            placeholder="All clients"
+            className={`rounded-lg border px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+          />
+          <datalist id="jobcards-client-filter-options">
+            {clientOptions.map((c) => (
+              <option key={c.id || c.name} value={c.name} />
+            ))}
+          </datalist>
+          <input
+            type="search"
+            list="jobcards-creator-filter-options"
+            aria-label="Filter by creator"
+            disabled={mineOnly}
+            value={creatorOptionSearch}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setCreatorOptionSearch(raw);
+              const normalized = raw.trim().toLowerCase();
+              if (!normalized) {
+                setTechnicianOwnerId('');
+                return;
+              }
+              const match = technicianOptions.find(
+                (u) =>
+                  String(u.name || u.email || u.id || '')
+                    .trim()
+                    .toLowerCase() === normalized
+              );
+              setTechnicianOwnerId(match ? match.id : '');
+              if (match?.id) setMineOnly(false);
+            }}
+            placeholder="All created by"
+            className={`rounded-lg border px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+          />
+          <datalist id="jobcards-creator-filter-options">
+            {technicianOptions.map((u) => (
+              <option key={u.id} value={u.name || u.email || u.id} />
+            ))}
+          </datalist>
+          <input
+            type="search"
+            list="jobcards-technician-filter-options"
+            aria-label="Filter by technician"
+            value={technicianOptionSearch}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setTechnicianOptionSearch(raw);
+              setTechnicianFilter(raw);
+            }}
+            placeholder="All technicians"
+            className={`rounded-lg border px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+          />
+          <datalist id="jobcards-technician-filter-options">
+            {technicianNameOptions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
           <select
             aria-label="Filter by category"
             className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
