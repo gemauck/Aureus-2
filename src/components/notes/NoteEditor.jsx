@@ -225,14 +225,23 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         prefixRange.selectNodeContents(ed);
         prefixRange.setEnd(range.endContainer, range.endOffset);
         const textBeforeCursor = prefixRange.toString();
-        const mentionMatch = textBeforeCursor.match(/(?:^|[\s\u00A0])@([^\s@]*)$/);
-        if (!mentionMatch) {
+        const atIndex = textBeforeCursor.lastIndexOf('@');
+        if (atIndex === -1) {
+            setMentionState({ show: false, query: '' });
+            return;
+        }
+        const beforeAt = textBeforeCursor.slice(0, atIndex);
+        const afterAt = textBeforeCursor.slice(atIndex + 1);
+        const prevChar = beforeAt.slice(-1);
+        const hasValidPrefix = !prevChar || /[\s\u00A0([{'"`]/.test(prevChar);
+        const hasWhitespaceAfterAt = /[\s\u00A0]/.test(afterAt);
+        if (!hasValidPrefix || hasWhitespaceAfterAt) {
             setMentionState({ show: false, query: '' });
             return;
         }
         setMentionState({
             show: true,
-            query: (mentionMatch[1] || '').toLowerCase()
+            query: (afterAt || '').toLowerCase()
         });
     }, []);
 
