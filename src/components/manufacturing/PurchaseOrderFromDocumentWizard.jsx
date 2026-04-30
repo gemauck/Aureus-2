@@ -14,6 +14,8 @@ function purchaseOrderVatFromSubtotal(subtotal) {
 function inventoryItemLinkedToSupplierName(item, supplierName) {
   const needle = String(supplierName || '').trim().toLowerCase();
   if (!needle) return false;
+  const relational = Array.isArray(item?.alternativeSuppliers) ? item.alternativeSuppliers : [];
+  if (relational.some((row) => String(row?.supplierName || '').trim().toLowerCase() === needle)) return true;
   const primary = String(item?.supplier || '').trim().toLowerCase();
   if (primary === needle) return true;
   try {
@@ -58,6 +60,11 @@ function parseSupplierPartNumbersJson(raw) {
 function partNeedleMatchesSupplierPartNumbers(item, needleRaw) {
   const needle = normalizeSearchText(needleRaw);
   if (!needle || needle.length < 2) return false;
+  const relational = Array.isArray(item?.alternativeSuppliers) ? item.alternativeSuppliers : [];
+  for (const row of relational) {
+    const pnRel = normalizeSearchText(row?.supplierPartNumber || '');
+    if (pnRel && (pnRel === needle || pnRel.includes(needle) || needle.includes(pnRel))) return true;
+  }
   const parts = parseSupplierPartNumbersJson(item.supplierPartNumbers);
   for (const sp of parts) {
     if (typeof sp === 'string') {

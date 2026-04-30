@@ -1589,6 +1589,7 @@ model InventoryItem {
   needsCatalogReview      Boolean        @default(false)
   boms                    BOM[]          @relation("BOMFinishedProduct")
   stockLocation           StockLocation? @relation(fields: [locationId], references: [id])
+  alternativeSuppliers    InventoryItemSupplier[]
 
   @@index([sku])
   @@index([category])
@@ -1867,10 +1868,31 @@ model Supplier {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   purchaseOrders PurchaseOrder[]
+  inventoryItems InventoryItemSupplier[]
 
   @@index([name])
   @@index([status])
   @@index([ownerId])
+}
+
+model InventoryItemSupplier {
+  id                 String        @id @default(cuid())
+  inventoryItemId    String
+  supplierId         String
+  supplierPartNumber String        @default("")
+  isPreferred        Boolean       @default(false)
+  notes              String        @default("")
+  ownerId            String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  inventoryItem      InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  supplier           Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([inventoryItemId, supplierId])
+  @@index([inventoryItemId])
+  @@index([supplierId])
+  @@index([ownerId])
+  @@index([isPreferred])
 }
 
 model PurchaseOrder {

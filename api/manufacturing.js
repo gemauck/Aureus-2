@@ -205,6 +205,158 @@ function firstSupplierPartFromJson(jsonStr) {
   return { supplier: '', partNumber: '' }
 }
 
+function legacyAlternativeSuppliersFromItem(item) {
+  const out = []
+  const seen = new Set()
+  const pushOne = (supplierName, partNumber = '') => {
+    const supplier = String(supplierName || '').trim()
+    if (!supplier) return
+    const key = supplier.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({
+      supplierId: '',
+      supplierName: supplier,
+      supplierCode: '',
+      supplierPartNumber: String(partNumber || '').trim(),
+      isPreferred: out.length === 0,
+      notes: ''
+    })
+  }
+
+  const primary = String(item?.supplier || '').trim()
+  if (primary) pushOne(primary, '')
+
+  try {
+    const raw = item?.supplierPartNumbers
+    const parts = typeof raw === 'string' ? JSON.parse(raw || '[]') : (raw || [])
+    if (Array.isArray(parts)) {
+      for (const sp of parts) pushOne(sp?.supplier, sp?.partNumber || sp?.part || '')
+    }
+  } catch {
+    /* ignore invalid legacy JSON */
+  }
+  return out
+}
+
+function normalizeAlternativeSupplierInput(rows) {
+  if (!Array.isArray(rows)) return []
+  const out = []
+  const seen = new Set()
+  for (const row of rows) {
+    const supplierId = String(row?.supplierId || '').trim()
+    if (!supplierId) continue
+    if (seen.has(supplierId)) continue
+    seen.add(supplierId)
+    out.push({
+      supplierId,
+      supplierPartNumber: String(row?.supplierPartNumber || '').trim(),
+      isPreferred: Boolean(row?.isPreferred),
+      notes: String(row?.notes || '').trim()
+    })
+  }
+  if (out.length > 0 && !out.some((row) => row.isPreferred)) out[0].isPreferred = true
+  return out
+}
+
+function prismaHasAlternativeSuppliersModel(client = prisma) {
+  return Boolean(client?.inventoryItemSupplier?.findMany && client?.inventoryItemSupplier?.deleteMany)
+}
+
+async function loadAlternativeSuppliersByItemIds(itemIds) {
+  const ids = Array.from(new Set((itemIds || []).filter(Boolean)))
+  const map = new Map()
+  if (!ids.length || !prismaHasAlternativeSuppliersModel(prisma)) return map
+  try {
+    const rows = await prisma.inventoryItemSupplier.findMany({
+      where: { inventoryItemId: { in: ids } },
+      include: { supplier: { select: { id: true, name: true, code: true } } },
+      orderBy: [{ inventoryItemId: 'asc' }, { isPreferred: 'desc' }, { createdAt: 'asc' }]
+    })
+    for (const row of rows) {
+      const list = map.get(row.inventoryItemId) || []
+      list.push({
+        supplierId: row.supplierId,
+        supplierName: row.supplier?.name || '',
+        supplierCode: row.supplier?.code || '',
+        supplierPartNumber: row.supplierPartNumber || '',
+        isPreferred: Boolean(row.isPreferred),
+        notes: row.notes || ''
+      })
+      map.set(row.inventoryItemId, list)
+    }
+  } catch (error) {
+    console.warn('⚠️ Alternative supplier lookup failed, falling back to legacy fields:', error?.message || error)
+  }
+  return map
+}
+
+function normalizeInventoryAlternativeSuppliers(item, relationalRows = null) {
+  const rows = Array.isArray(relationalRows) && relationalRows.length
+    ? relationalRows
+    : legacyAlternativeSuppliersFromItem(item)
+  return {
+    ...item,
+    alternativeSuppliers: rows
+  }
+}
+
+async function hydrateInventoryAlternativeSuppliers(items = []) {
+  if (!Array.isArray(items) || !items.length) return items
+  const itemIds = items.map((item) => item?.inventoryItemId || item?.id).filter(Boolean)
+  const byItemId = await loadAlternativeSuppliersByItemIds(itemIds)
+  return items.map((item) => {
+    const key = item?.inventoryItemId || item?.id
+    return normalizeInventoryAlternativeSuppliers(item, byItemId.get(key) || null)
+  })
+}
+
+async function persistAlternativeSuppliersForItem(client, inventoryItemId, rows) {
+  if (!prismaHasAlternativeSuppliersModel(client)) return null
+  const normalized = normalizeAlternativeSupplierInput(rows)
+  const supplierIds = normalized.map((row) => row.supplierId)
+  const suppliers = supplierIds.length
+    ? await client.supplier.findMany({
+        where: { id: { in: supplierIds } },
+        select: { id: true, name: true, code: true }
+      })
+    : []
+  const supplierById = new Map(suppliers.map((s) => [s.id, s]))
+  const missingId = supplierIds.find((id) => !supplierById.has(id))
+  if (missingId) throw httpError(400, `Invalid supplierId in alternativeSuppliers: ${missingId}`)
+
+  await client.inventoryItemSupplier.deleteMany({ where: { inventoryItemId } })
+  if (normalized.length) {
+    await client.inventoryItemSupplier.createMany({
+      data: normalized.map((row) => ({
+        inventoryItemId,
+        supplierId: row.supplierId,
+        supplierPartNumber: row.supplierPartNumber || '',
+        isPreferred: Boolean(row.isPreferred),
+        notes: row.notes || ''
+      }))
+    })
+  }
+
+  const resolved = normalized.map((row) => {
+    const supplier = supplierById.get(row.supplierId)
+    return {
+      supplierId: row.supplierId,
+      supplierName: supplier?.name || '',
+      supplierCode: supplier?.code || '',
+      supplierPartNumber: row.supplierPartNumber || '',
+      isPreferred: Boolean(row.isPreferred),
+      notes: row.notes || ''
+    }
+  })
+  const preferred = resolved.find((row) => row.isPreferred) || resolved[0] || null
+  const legacySupplier = preferred?.supplierName || ''
+  const legacySupplierPartNumbers = JSON.stringify(
+    resolved.map((row) => ({ supplier: row.supplierName, partNumber: row.supplierPartNumber }))
+  )
+  return { resolved, legacySupplier, legacySupplierPartNumbers }
+}
+
 function stockTakeSubmissionRef() {
   const stamp = Date.now().toString(36).toUpperCase()
   const rand = Math.random().toString(36).slice(2, 7).toUpperCase()
@@ -2338,8 +2490,10 @@ async function handler(req, res) {
         const rawPageSize = parseInt(req.query?.pageSize || req.query?.limit, 10)
         const pageSize = rawPageSize > 0 ? Math.min(200, Math.max(1, rawPageSize)) : null
 
+        const hydratedItems = await hydrateInventoryAlternativeSuppliers(items)
+
         // Format dates for response
-        let formatted = items.map(item => ({
+        let formatted = hydratedItems.map(item => ({
           ...item,
           totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
           lastRestocked: formatDate(item.lastRestocked),
@@ -2379,13 +2533,14 @@ async function handler(req, res) {
           return notFound(res, 'Inventory item not found')
         }
         
+        const hydrated = (await hydrateInventoryAlternativeSuppliers([item]))[0] || item
         return ok(res, { 
           item: {
-            ...item,
-            totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
-            lastRestocked: formatDate(item.lastRestocked),
-            createdAt: formatDate(item.createdAt),
-            updatedAt: formatDate(item.updatedAt)
+            ...hydrated,
+            totalValue: computedInventoryTotalValue(hydrated.quantity, hydrated.unitCost),
+            lastRestocked: formatDate(hydrated.lastRestocked),
+            createdAt: formatDate(hydrated.createdAt),
+            updatedAt: formatDate(hydrated.updatedAt)
           }
         })
       } catch (error) {
@@ -2707,7 +2862,7 @@ async function handler(req, res) {
           }
         }
         
-        const item = await prisma.inventoryItem.create({
+        let item = await prisma.inventoryItem.create({
           data: {
             sku: sku,
             name: body.name,
@@ -2751,6 +2906,19 @@ async function handler(req, res) {
           } catch (e) {
             // Columns may not exist yet - this is safe, migration will add them
             console.warn('⚠️ New inventory fields not available yet (run migration):', e.message);
+          }
+        }
+
+        if (body.alternativeSuppliers !== undefined) {
+          const persisted = await persistAlternativeSuppliersForItem(prisma, item.id, body.alternativeSuppliers)
+          if (persisted) {
+            item = await prisma.inventoryItem.update({
+              where: { id: item.id },
+              data: {
+                supplier: persisted.legacySupplier,
+                supplierPartNumbers: persisted.legacySupplierPartNumbers
+              }
+            })
           }
         }
         
@@ -2799,13 +2967,14 @@ async function handler(req, res) {
           summary: `Inventory ${item.sku} ${item.name}`,
           sku: item.sku
         })
+        const hydrated = (await hydrateInventoryAlternativeSuppliers([item]))[0] || item
         return created(res, { 
           item: {
-            ...item,
-            totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
-            lastRestocked: formatDate(item.lastRestocked),
-            createdAt: formatDate(item.createdAt),
-            updatedAt: formatDate(item.updatedAt)
+            ...hydrated,
+            totalValue: computedInventoryTotalValue(hydrated.quantity, hydrated.unitCost),
+            lastRestocked: formatDate(hydrated.lastRestocked),
+            createdAt: formatDate(hydrated.createdAt),
+            updatedAt: formatDate(hydrated.updatedAt)
           }
         })
       } catch (error) {
@@ -2947,6 +3116,19 @@ async function handler(req, res) {
           }
         }
 
+        if (body.alternativeSuppliers !== undefined) {
+          const persisted = await persistAlternativeSuppliersForItem(prisma, id, body.alternativeSuppliers)
+          if (persisted) {
+            item = await prisma.inventoryItem.update({
+              where: { id },
+              data: {
+                supplier: persisted.legacySupplier,
+                supplierPartNumbers: persisted.legacySupplierPartNumbers
+              }
+            })
+          }
+        }
+
         // After successful master update: align per-location unit cost with catalog (list vs detail).
         if (body.unitCost !== undefined && existing.sku) {
           try {
@@ -2964,13 +3146,14 @@ async function handler(req, res) {
           sku: item.sku,
           fieldsUpdated: Object.keys(updateData)
         })
+        const hydrated = (await hydrateInventoryAlternativeSuppliers([item]))[0] || item
         return ok(res, { 
           item: {
-            ...item,
-            totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
-            lastRestocked: formatDate(item.lastRestocked),
-            createdAt: formatDate(item.createdAt),
-            updatedAt: formatDate(item.updatedAt)
+            ...hydrated,
+            totalValue: computedInventoryTotalValue(hydrated.quantity, hydrated.unitCost),
+            lastRestocked: formatDate(hydrated.lastRestocked),
+            createdAt: formatDate(hydrated.createdAt),
+            updatedAt: formatDate(hydrated.updatedAt)
           }
         })
       } catch (error) {
@@ -5794,20 +5977,32 @@ async function handler(req, res) {
     // DELETE (DELETE /api/manufacturing/suppliers/:id)
     if (req.method === 'DELETE' && id) {
       try {
-        // Check if supplier is used in any inventory items
-        const inventoryItems = await prisma.inventoryItem.findMany({
-          where: {
-            supplier: {
-              contains: id
-            }
-          },
-          take: 1
-        })
-        
-        if (inventoryItems.length > 0) {
-          // Get supplier name for better error message
-          const supplier = await prisma.supplier.findUnique({ where: { id } })
+        // Check if supplier is linked to inventory items (relational first, then legacy fallback).
+        const relationalLink = prismaHasAlternativeSuppliersModel(prisma)
+          ? await prisma.inventoryItemSupplier.findFirst({
+              where: { supplierId: id },
+              select: { id: true }
+            })
+          : null
+        if (relationalLink) {
           return badRequest(res, `Cannot delete supplier: This supplier is assigned to one or more inventory items. Please update those items first.`)
+        }
+
+        const supplierRecord = await prisma.supplier.findUnique({ where: { id }, select: { name: true } })
+        const legacyName = supplierRecord?.name || ''
+        if (legacyName) {
+          const inventoryItems = await prisma.inventoryItem.findMany({
+            where: {
+              OR: [
+                { supplier: { equals: legacyName, mode: 'insensitive' } },
+                { supplierPartNumbers: { contains: legacyName } }
+              ]
+            },
+            take: 1
+          })
+          if (inventoryItems.length > 0) {
+            return badRequest(res, `Cannot delete supplier: This supplier is assigned to one or more inventory items. Please update those items first.`)
+          }
         }
         
         await prisma.supplier.delete({ where: { id } })

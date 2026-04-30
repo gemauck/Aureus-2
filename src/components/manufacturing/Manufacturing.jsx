@@ -30,6 +30,8 @@ const normalizeManufacturingTab = (value = 'dashboard') => {
 function inventoryItemLinkedToSupplierName(item, supplierName) {
   const needle = String(supplierName || '').trim().toLowerCase();
   if (!needle) return false;
+  const relational = Array.isArray(item?.alternativeSuppliers) ? item.alternativeSuppliers : [];
+  if (relational.some((row) => String(row?.supplierName || '').trim().toLowerCase() === needle)) return true;
   const primary = String(item?.supplier || '').trim().toLowerCase();
   if (primary === needle) return true;
   try {
@@ -40,6 +42,55 @@ function inventoryItemLinkedToSupplierName(item, supplierName) {
   } catch {
     return false;
   }
+}
+
+function parseSupplierPartNumbersSafe(raw) {
+  try {
+    const parts = typeof raw === 'string' ? JSON.parse(raw || '[]') : (raw || []);
+    return Array.isArray(parts) ? parts : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildAlternativeSuppliersPayload(source, suppliers = []) {
+  const byName = new Map(
+    (Array.isArray(suppliers) ? suppliers : [])
+      .map((s) => [String(s?.name || '').trim().toLowerCase(), s])
+      .filter(([name]) => Boolean(name))
+  );
+  const out = [];
+  const seen = new Set();
+  const pushOne = (supplierName, supplierPartNumber = '', preferred = false) => {
+    const name = String(supplierName || '').trim();
+    if (!name) return;
+    const supplier = byName.get(name.toLowerCase());
+    const supplierId = String(supplier?.id || '').trim();
+    if (!supplierId || seen.has(supplierId)) return;
+    seen.add(supplierId);
+    out.push({
+      supplierId,
+      supplierPartNumber: String(supplierPartNumber || '').trim(),
+      isPreferred: Boolean(preferred),
+      notes: ''
+    });
+  };
+
+  const relational = Array.isArray(source?.alternativeSuppliers) ? source.alternativeSuppliers : [];
+  for (const row of relational) {
+    pushOne(row?.supplierName, row?.supplierPartNumber, row?.isPreferred);
+  }
+
+  const primary = String(source?.supplier || '').trim();
+  if (primary) pushOne(primary, '', out.length === 0);
+
+  const supplierParts = parseSupplierPartNumbersSafe(source?.supplierPartNumbers);
+  for (const part of supplierParts) {
+    pushOne(part?.supplier, part?.partNumber || part?.part, out.length === 0);
+  }
+
+  if (out.length > 0 && !out.some((row) => row.isPreferred)) out[0].isPreferred = true;
+  return out;
 }
 
 function dedupeInventoryRowsBySku(items) {
@@ -5476,6 +5527,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         unitCost: formData.unitCost === undefined || formData.unitCost === null || formData.unitCost === '' ? undefined : parseFloat(formData.unitCost),
         supplier: formData.supplier || ''
       };
+      const alternativeSuppliersPayload = buildAlternativeSuppliersPayload(formData, suppliers);
+      if (alternativeSuppliersPayload.length > 0) {
+        itemData.alternativeSuppliers = alternativeSuppliersPayload;
+      }
       
       // Only include new fields if they exist (backwards compatibility)
       if (formData.supplierPartNumbers !== undefined) {
@@ -6166,6 +6221,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         lastRestocked: new Date().toISOString().split('T')[0],
         thumbnail: poNewItemForm.thumbnail || '',
         supplierPartNumbers: poNewItemForm.supplierPartNumbers || '[]',
+        alternativeSuppliers: buildAlternativeSuppliersPayload(poNewItemForm, suppliers),
         inProductionQuantity:
           poNewItemForm.inProductionQuantity === '' ? 0 : parseFloat(poNewItemForm.inProductionQuantity) || 0,
         completedQuantity:
@@ -12754,6 +12810,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           unitCost: editFormData.unitCost === undefined || editFormData.unitCost === null || editFormData.unitCost === '' ? undefined : parseFloat(editFormData.unitCost),
           supplier: editFormData.supplier || ''
         };
+        const alternativeSuppliersPayload = buildAlternativeSuppliersPayload(editFormData, suppliers);
+        if (alternativeSuppliersPayload.length > 0) {
+          itemData.alternativeSuppliers = alternativeSuppliersPayload;
+        }
         
         if (editFormData.supplierPartNumbers !== undefined) {
           itemData.supplierPartNumbers = editFormData.supplierPartNumbers || '[]';
