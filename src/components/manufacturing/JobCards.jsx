@@ -557,6 +557,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [mineOnly, setMineOnly] = useState(false);
   const [technicianOwnerId, setTechnicianOwnerId] = useState('');
   const [technicianFilter, setTechnicianFilter] = useState('');
+  const [clientOptionSearch, setClientOptionSearch] = useState('');
+  const [creatorOptionSearch, setCreatorOptionSearch] = useState('');
+  const [technicianOptionSearch, setTechnicianOptionSearch] = useState('');
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
 
@@ -795,21 +798,45 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       id: c.id || c._id,
       name: c.name || c.companyName || c.displayName || 'Unnamed client',
     }));
-    const extraNames = Array.from(
-      new Set(
-        jobCards
-          .map((jc) => jc.clientName)
-          .filter(Boolean)
-      )
-    ).filter(
-      (name) => !base.some((c) => c.name === name)
+    const merged = [...base];
+    jobCards.forEach((jc) => {
+      const name = String(jc.clientName || '').trim();
+      if (name) {
+        merged.push({ id: name, name });
+      }
+    });
+    const byNormalizedName = new Map();
+    merged.forEach((option) => {
+      const normalizedName = String(option.name || '').trim().toLowerCase();
+      if (!normalizedName) return;
+      if (!byNormalizedName.has(normalizedName)) {
+        byNormalizedName.set(normalizedName, option);
+      }
+    });
+    return Array.from(byNormalizedName.values()).sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
     );
-
-    return [
-      ...base,
-      ...extraNames.map((name) => ({ id: name, name })),
-    ];
   }, [clients, jobCards]);
+
+  const filteredClientOptions = useMemo(() => {
+    const query = clientOptionSearch.trim().toLowerCase();
+    if (!query) return clientOptions;
+    return clientOptions.filter((c) => String(c.name || '').toLowerCase().includes(query));
+  }, [clientOptions, clientOptionSearch]);
+
+  const filteredTechnicianOptions = useMemo(() => {
+    const query = creatorOptionSearch.trim().toLowerCase();
+    if (!query) return technicianOptions;
+    return technicianOptions.filter((u) =>
+      String(u.name || u.email || u.id || '').toLowerCase().includes(query)
+    );
+  }, [technicianOptions, creatorOptionSearch]);
+
+  const filteredTechnicianNameOptions = useMemo(() => {
+    const query = technicianOptionSearch.trim().toLowerCase();
+    if (!query) return technicianNameOptions;
+    return technicianNameOptions.filter((name) => String(name || '').toLowerCase().includes(query));
+  }, [technicianNameOptions, technicianOptionSearch]);
 
   const categoryOptions = useMemo(() => {
     return Array.from(
@@ -1266,50 +1293,81 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <select
-            aria-label="Filter by client"
-            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
-            value={clientFilter}
-            onChange={(e) => setClientFilter(e.target.value)}
-          >
-            <option value="">All clients</option>
-            {clientOptions.map((c) => (
-              <option key={c.id || c.name} value={c.id || c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter by creator"
-            disabled={mineOnly}
-            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
-            value={technicianOwnerId}
-            onChange={(e) => {
-              const v = e.target.value;
-              setTechnicianOwnerId(v);
-              if (v) setMineOnly(false);
-            }}
-          >
-            <option value="">All created by</option>
-            {technicianOptions.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name || u.email || u.id}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter by technician"
-            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
-            value={technicianFilter}
-            onChange={(e) => setTechnicianFilter(e.target.value)}
-          >
-            <option value="">All technicians</option>
-            {technicianNameOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col gap-1">
+            <input
+              type="search"
+              aria-label="Search clients in filter options"
+              value={clientOptionSearch}
+              onChange={(e) => setClientOptionSearch(e.target.value)}
+              placeholder="Search clients..."
+              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+            />
+            <select
+              aria-label="Filter by client"
+              className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+            >
+              <option value="">All clients</option>
+              {filteredClientOptions.map((c) => (
+                <option key={c.id || c.name} value={c.id || c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <input
+              type="search"
+              aria-label="Search creators in filter options"
+              disabled={mineOnly}
+              value={creatorOptionSearch}
+              onChange={(e) => setCreatorOptionSearch(e.target.value)}
+              placeholder="Search creators..."
+              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+            />
+            <select
+              aria-label="Filter by creator"
+              disabled={mineOnly}
+              className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+              value={technicianOwnerId}
+              onChange={(e) => {
+                const v = e.target.value;
+                setTechnicianOwnerId(v);
+                if (v) setMineOnly(false);
+              }}
+            >
+              <option value="">All created by</option>
+              {filteredTechnicianOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name || u.email || u.id}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <input
+              type="search"
+              aria-label="Search technicians in filter options"
+              value={technicianOptionSearch}
+              onChange={(e) => setTechnicianOptionSearch(e.target.value)}
+              placeholder="Search technicians..."
+              className={`rounded-lg border px-2 py-1.5 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+            />
+            <select
+              aria-label="Filter by technician"
+              className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+              value={technicianFilter}
+              onChange={(e) => setTechnicianFilter(e.target.value)}
+            >
+              <option value="">All technicians</option>
+              {filteredTechnicianNameOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
           <select
             aria-label="Filter by category"
             className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
@@ -1350,6 +1408,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 setMineOnly(false);
                 setTechnicianOwnerId('');
                 setTechnicianFilter('');
+                setClientOptionSearch('');
+                setCreatorOptionSearch('');
+                setTechnicianOptionSearch('');
                 setCreatedFrom('');
                 setCreatedTo('');
                 setStatusFilter('all');
