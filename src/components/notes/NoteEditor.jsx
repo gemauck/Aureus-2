@@ -103,6 +103,8 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
     const [projectId, setProjectId] = useState(note.projectId ?? note.project?.id ?? '');
     const [isPublic, setIsPublic] = useState(Boolean(note.isPublic));
     const [isUploading, setIsUploading] = useState(false);
+    const [allUsers, setAllUsers] = useState([]);
+    const [mentionState, setMentionState] = useState({ show: false, query: '' });
     const saveTimeoutRef = useRef(null);
     const noteRef = useRef(note);
     const editorRef = useRef(null);
@@ -125,6 +127,25 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
             editorRef.current.innerHTML = note.content || '';
         }
     }, [note.id]);
+
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) return;
+                const response = await fetch('/api/users', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!response.ok) return;
+                const data = await response.json().catch(() => ({}));
+                const users = data?.data?.users || data?.users || [];
+                setAllUsers(Array.isArray(users) ? users : []);
+            } catch (_) {
+                /* no-op: mentions still work via manual @Name typing */
+            }
+        };
+        loadUsers();
+    }, []);
 
     const performSave = useCallback((options = { silent: true }) => {
         const currentNote = noteRef.current;
@@ -172,6 +193,72 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
         const html = editorRef.current.innerHTML;
         setContent(html);
     };
+
+    const updateMentionSuggestions = useCallback(() => {
+        const ed = editorRef.current;
+        if (!ed) return;
+        const selection = window.getSelection();
+        if (!selection || !selection.rangeCount) {
+            setMentionState({ show: false, query: '' });
+            return;
+        }
+        const range = selection.getRangeAt(0);
+        if (!ed.contains(range.commonAncestorContainer)) {
+            setMentionState({ show: false, query: '' });
+            return;
+        }
+        const prefixRange = range.cloneRange();
+        prefixRange.selectNodeContents(ed);
+        prefixRange.setEnd(range.endContainer, range.endOffset);
+        const textBeforeCursor = prefixRange.toString();
+        const mentionMatch = textBeforeCursor.match(/(?:^|\s)@([A-Za-z0-9._'-]*)$/);
+        if (!mentionMatch) {
+            setMentionState({ show: false, query: '' });
+            return;
+        }
+        setMentionState({
+            show: true,
+            query: (mentionMatch[1] || '').toLowerCase()
+        });
+    }, []);
+
+    const insertMentionAtCursor = useCallback((user) => {
+        const mentionLabel = `@${user?.name || user?.email || ''}`;
+        if (!mentionLabel || mentionLabel === '@') return;
+        const ed = editorRef.current;
+        if (!ed) return;
+        ed.focus();
+        const selection = window.getSelection();
+        if (!selection || !selection.rangeCount) {
+            setMentionState({ show: false, query: '' });
+            return;
+        }
+        const range = selection.getRangeAt(0);
+        if (
+            range.endContainer &&
+            range.endContainer.nodeType === Node.TEXT_NODE &&
+            typeof range.endOffset === 'number'
+        ) {
+            const queryLength = (mentionState.query || '').length;
+            const replaceLength = queryLength + 1; // include "@"
+            const startOffset = Math.max(0, range.endOffset - replaceLength);
+            const textRange = range.cloneRange();
+            textRange.setStart(range.endContainer, startOffset);
+            textRange.setEnd(range.endContainer, range.endOffset);
+            const replacement = document.createTextNode(`${mentionLabel} `);
+            textRange.deleteContents();
+            textRange.insertNode(replacement);
+            const afterRange = document.createRange();
+            afterRange.setStartAfter(replacement);
+            afterRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(afterRange);
+        } else {
+            document.execCommand('insertText', false, `${mentionLabel} `);
+        }
+        setMentionState({ show: false, query: '' });
+        handleEditorInput();
+    }, [mentionState.query]);
 
     const insertAtCursor = useCallback((html) => {
         const ed = editorRef.current;
@@ -545,12 +632,19 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                         {isUploading ? 'Uploading…' : 'Click to attach files or drag and drop images into the note'}
                     </span>
                 </div>
-                <div className="flex-1 p-4 overflow-y-auto min-h-0">
+                <div className="relative flex-1 p-4 overflow-y-auto min-h-0">
                     <div
                         ref={editorRef}
                         contentEditable
                         suppressContentEditableWarning
-                        onInput={handleEditorInput}
+                        onInput={() => {
+                            handleEditorInput();
+                            updateMentionSuggestions();
+                        }}
+                        onKeyUp={updateMentionSuggestions}
+                        onBlur={() => {
+                            setTimeout(() => setMentionState({ show: false, query: '' }), 180);
+                        }}
                         onPaste={handlePaste}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
@@ -560,6 +654,45 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                         style={{ minHeight: '400px' }}
                         aria-label="Note content"
                     />
+                    {mentionState.show && (
+                        <div className={`absolute z-20 left-4 right-4 mt-1 rounded-lg border shadow-lg max-h-44 overflow-y-auto ${
+                            isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                        }`}>
+                            {allUsers
+                                .filter((u) => {
+                                    const q = (mentionState.query || '').trim().toLowerCase();
+                                    if (!q) return true;
+                                    return String(u?.name || '').toLowerCase().includes(q) ||
+                                        String(u?.email || '').toLowerCase().includes(q);
+                                })
+                                .slice(0, 6)
+                                .map((user) => (
+                                    <button
+                                        key={user.id}
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            insertMentionAtCursor(user);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-sm ${
+                                            isDark ? 'hover:bg-gray-700 text-gray-100' : 'hover:bg-gray-50 text-gray-900'
+                                        }`}
+                                    >
+                                        {user.name || user.email}
+                                    </button>
+                                ))}
+                            {allUsers.filter((u) => {
+                                const q = (mentionState.query || '').trim().toLowerCase();
+                                if (!q) return true;
+                                return String(u?.name || '').toLowerCase().includes(q) ||
+                                    String(u?.email || '').toLowerCase().includes(q);
+                            }).length === 0 && (
+                                <div className={`px-3 py-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    No users found
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                         {wordCount} word{wordCount !== 1 ? 's' : ''}
                     </p>
