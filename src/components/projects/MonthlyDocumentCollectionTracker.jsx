@@ -8699,7 +8699,6 @@ Abcotronics`;
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!actionSectionId || !actionDocumentId || !cid) return;
                                                     handleDeleteComment(actionSectionId, actionDocumentId, month, cid);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -8711,7 +8710,6 @@ Abcotronics`;
                                             {canCurrentUserEditComment(comment) && <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!actionSectionId || !actionDocumentId || !cid) return;
                                                     handleStartEditComment(comment);
                                                 }}
                                                 className="absolute top-1 right-11 text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"

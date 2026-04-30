@@ -4236,7 +4236,6 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation(); // Prevent triggering comment click
-                                                    if (!actionSectionId || !actionDocumentId) return;
                                                     handleDeleteComment(actionSectionId, actionDocumentId, month, commentId);
                                                 }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -4248,7 +4247,6 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             {canCurrentUserEditComment(comment) && <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!actionSectionId || !actionDocumentId || !commentId) return;
                                                     handleStartEditComment(comment);
                                                 }}
                                                 className="absolute top-1 right-11 text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
