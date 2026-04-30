@@ -3909,7 +3909,7 @@ const getAssigneeColor = (identifier, users) => {
                 ...section,
                 documents: section.documents.map((doc) => {
                     if (String(doc.id) !== String(documentId)) return doc;
-                    const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
+                    const { resolvedMonth, existingComments } = resolveCommentMonthScope(doc.comments, month, commentId);
                     const updatedComments = existingComments.map((comment) => {
                         if (getCommentKey(comment) !== String(commentId)) return comment;
                         if (!canCurrentUserEditComment(comment)) return comment;
@@ -3936,7 +3936,7 @@ const getAssigneeColor = (identifier, users) => {
                     });
                     return {
                         ...doc,
-                        comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
+                        comments: setCommentsForYear(doc.comments || {}, resolvedMonth, updatedComments, selectedYear)
                     };
                 })
             };
