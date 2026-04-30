@@ -3889,7 +3889,7 @@ const getAssigneeColor = (identifier, users) => {
         return false;
     };
 
-    const getCommentKey = (comment) => String(comment?.id ?? comment?.commentId ?? '');
+    const getCommentKey = (comment) => String(comment?.commentId ?? comment?.id ?? '');
     const resolveCommentMonthScope = (docComments, month, commentId) => {
         const targetId = String(commentId);
         let resolvedMonth = month;
@@ -3917,7 +3917,8 @@ const getAssigneeColor = (identifier, users) => {
             alert('Only the original commenter can edit this comment.');
             return;
         }
-        setEditingCommentId(comment?.id ?? comment?.commentId ?? null);
+        const commentKey = getCommentKey(comment);
+        setEditingCommentId(commentKey || null);
         setEditingCommentText(comment?.text || '');
     };
 
