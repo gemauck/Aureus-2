@@ -5312,43 +5312,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                         }
                                     }
                                     
-                                    // Trigger position update after state is set
+                                    // Trigger one aligned re-measure after state settles.
                                     setTimeout(() => {
-                                        const commentButton = window.document.querySelector(`[data-comment-cell="${cellKey}"]`);
-                                        if (commentButton) {
-                                            const buttonRect = commentButton.getBoundingClientRect();
-                                            const viewportWidth = window.innerWidth;
-                                            const viewportHeight = window.innerHeight;
-                                            const popupWidth = 320;
-                                            const popupHeight = 300;
-                                            const spacing = 8;
-                                            const tailSize = 12;
-                                            
-                                            // Determine if popup should be above or below
-                                            const spaceBelow = viewportHeight - buttonRect.bottom;
-                                            const spaceAbove = buttonRect.top;
-                                            const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
-                                            
-                                            let popupTop, popupLeft;
-                                            
-                                            if (positionAbove) {
-                                                popupTop = buttonRect.top - popupHeight - spacing - tailSize;
-                                            } else {
-                                                popupTop = buttonRect.bottom + spacing + tailSize;
-                                            }
-                                            
-                                            // Align horizontally with button center, but stay in viewport
-                                            const buttonCenterX = buttonRect.left + buttonRect.width / 2;
-                                            let preferredLeft = buttonCenterX - popupWidth / 2;
-                                            
-                                            if (preferredLeft < 10) {
-                                                preferredLeft = 10;
-                                            } else if (preferredLeft + popupWidth > viewportWidth - 10) {
-                                                preferredLeft = viewportWidth - popupWidth - 10;
-                                            }
-                                            
-                                            setCommentPopupPosition({ top: popupTop, left: preferredLeft });
-                                        }
+                                        updateCommentPopupPosition();
                                     }, 10);
                                 }
                             }}
@@ -8350,9 +8316,34 @@ Abcotronics`;
                 };
                 let activityRows = [];
                 if (!isJsonOnlyTracker) {
-                    activityRows = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
-                        (r) => !isNotesActivityRow(r)
+                    const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
+                        (r) => r && r.kind === 'activity' && !isNotesActivityRow(r)
                     );
+                    const localComments = doc ? getDocumentComments(doc, month) : [];
+                    const commentRows = localComments
+                        .filter((c) => {
+                            const author = (c?.author || '').trim();
+                            return author !== 'Sent request (platform)' && author !== 'Sent reply (platform)';
+                        })
+                        .map((c) => {
+                            const commentKey = getCommentKey(c);
+                            return {
+                                id: `comment-${commentKey || 'unknown'}`,
+                                kind: 'comment',
+                                commentId: commentKey,
+                                text: c.text,
+                                author: c.author,
+                                authorId: c.authorId,
+                                attachments: Array.isArray(c.attachments) ? c.attachments : [],
+                                createdAt: c.createdAt || c.date,
+                                updatedAt: c.updatedAt
+                            };
+                        });
+                    activityRows = [...apiActivity, ...commentRows].sort((x, y) => {
+                        const tx = new Date(x.createdAt).getTime();
+                        const ty = new Date(y.createdAt).getTime();
+                        return tx - ty;
+                    });
                 } else {
                     const apiActivity = (Array.isArray(cellActivityTimeline) ? cellActivityTimeline : []).filter(
                         (r) => r && r.kind === 'activity' && !isNotesActivityRow(r)
