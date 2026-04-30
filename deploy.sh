@@ -22,6 +22,20 @@
 
 set -euo pipefail
 
+# Keep production responsive during deploy builds.
+DEPLOY_NICE_LEVEL="${DEPLOY_NICE_LEVEL:-19}"
+DEPLOY_IONICE_CLASS="${DEPLOY_IONICE_CLASS:-2}"   # 2 = best-effort
+DEPLOY_IONICE_LEVEL="${DEPLOY_IONICE_LEVEL:-7}"   # lowest best-effort priority
+DEPLOY_LOW_PRIORITY_APPLIED="${DEPLOY_LOW_PRIORITY_APPLIED:-0}"
+
+if [ "${DISABLE_DEPLOY_NICE:-0}" != "1" ] && [ "${DEPLOY_LOW_PRIORITY_APPLIED}" != "1" ]; then
+  export DEPLOY_LOW_PRIORITY_APPLIED=1
+  if command -v ionice >/dev/null 2>&1; then
+    exec ionice -c "${DEPLOY_IONICE_CLASS}" -n "${DEPLOY_IONICE_LEVEL}" nice -n "${DEPLOY_NICE_LEVEL}" bash "$0" "$@"
+  fi
+  exec nice -n "${DEPLOY_NICE_LEVEL}" bash "$0" "$@"
+fi
+
 APP_DIR="${APP_DIR:-$(pwd)}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-abcotronics-erp}"

@@ -92,7 +92,7 @@ async function handler(req, res) {
                 OR: [
                   { type: 'client' },
                   { type: 'group' },
-                  { type: null },
+                  { type: { equals: null } },
                   { type: '' }
                 ]
               },
@@ -259,7 +259,7 @@ async function handler(req, res) {
                   OR: [
                     { type: 'client' },
                     { type: 'group' },
-                    { type: null },
+                    { type: { equals: null } },
                     { type: '' }
                   ]
                 },
@@ -350,7 +350,7 @@ async function handler(req, res) {
                     OR: [
                       { type: 'client' },
                       { type: 'group' },
-                      { type: null },
+                      { type: { equals: null } },
                       { type: '' }
                     ]
                   },
@@ -729,7 +729,7 @@ async function handler(req, res) {
               OR: [
                 { type: 'client' },
                 { type: 'group' },
-                { type: null },
+                { type: { equals: null } },
                 { type: '' }
               ]
             },
