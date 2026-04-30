@@ -68,7 +68,8 @@ export async function fetchSignedUrlWithRetries(id, token, attempts) {
     if (signed) return { signedUrl: signed, last: result }
     if (result?.error && result.status == null) break
     const st = result?.status
-    if (st !== 403 && st !== 400) break
+    // Some valid assets return 404 for a wrong media_type; keep trying alternates.
+    if (st !== 403 && st !== 400 && st !== 404) break
   }
   return { signedUrl: null, last }
 }
