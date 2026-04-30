@@ -242,18 +242,28 @@ function legacyAlternativeSuppliersFromItem(item) {
 function normalizeAlternativeSupplierInput(rows) {
   if (!Array.isArray(rows)) return []
   const out = []
-  const seen = new Set()
+  const byId = new Map()
   for (const row of rows) {
     const supplierId = String(row?.supplierId || '').trim()
     if (!supplierId) continue
-    if (seen.has(supplierId)) continue
-    seen.add(supplierId)
-    out.push({
+    const incomingPart = String(row?.supplierPartNumber || '').trim()
+    const incomingPreferred = Boolean(row?.isPreferred)
+    const existing = byId.get(supplierId)
+    if (existing) {
+      if (!existing.supplierPartNumber && incomingPart) existing.supplierPartNumber = incomingPart
+      if (incomingPreferred) existing.isPreferred = true
+      const incomingNotes = String(row?.notes || '').trim()
+      if (!existing.notes && incomingNotes) existing.notes = incomingNotes
+      continue
+    }
+    const entry = {
       supplierId,
-      supplierPartNumber: String(row?.supplierPartNumber || '').trim(),
-      isPreferred: Boolean(row?.isPreferred),
+      supplierPartNumber: incomingPart,
+      isPreferred: incomingPreferred,
       notes: String(row?.notes || '').trim()
-    })
+    }
+    byId.set(supplierId, entry)
+    out.push(entry)
   }
   if (out.length > 0 && !out.some((row) => row.isPreferred)) out[0].isPreferred = true
   return out

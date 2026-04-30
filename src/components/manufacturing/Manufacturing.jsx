@@ -60,20 +60,28 @@ function buildAlternativeSuppliersPayload(source, suppliers = []) {
       .filter(([name]) => Boolean(name))
   );
   const out = [];
-  const seen = new Set();
+  const byId = new Map();
   const pushOne = (supplierName, supplierPartNumber = '', preferred = false) => {
     const name = String(supplierName || '').trim();
     if (!name) return;
     const supplier = byName.get(name.toLowerCase());
     const supplierId = String(supplier?.id || '').trim();
-    if (!supplierId || seen.has(supplierId)) return;
-    seen.add(supplierId);
-    out.push({
+    if (!supplierId) return;
+    const incomingPart = String(supplierPartNumber || '').trim();
+    const existing = byId.get(supplierId);
+    if (existing) {
+      if (!existing.supplierPartNumber && incomingPart) existing.supplierPartNumber = incomingPart;
+      if (preferred) existing.isPreferred = true;
+      return;
+    }
+    const entry = {
       supplierId,
-      supplierPartNumber: String(supplierPartNumber || '').trim(),
+      supplierPartNumber: incomingPart,
       isPreferred: Boolean(preferred),
       notes: ''
-    });
+    };
+    byId.set(supplierId, entry);
+    out.push(entry);
   };
 
   const relational = Array.isArray(source?.alternativeSuppliers) ? source.alternativeSuppliers : [];
