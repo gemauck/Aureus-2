@@ -204,6 +204,11 @@ const ScMediaTile = ({ item, isDark, issueId }) => {
                 if (!cancelled) setErr('Sign in required to load media');
                 return;
             }
+            const staggerMs = Math.min(1200, Math.max(0, Number(idx) || 0) * 120);
+            if (staggerMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, staggerMs));
+                if (cancelled) return;
+            }
             try {
                 const res = await fetch(src, {
                     headers: { Authorization: `Bearer ${authTok}` },

@@ -5,6 +5,10 @@
 import { safetyCultureRequest, fetchIssueDetails } from './safetyCultureClient.js'
 import { collectIssueMediaForJobCard } from './safetyCultureIssueJobCard.js'
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export function extractSignedUrl(result) {
   if (!result || result.error) return null
   const u =
@@ -59,17 +63,28 @@ export function buildMediaTypeAttempts(preferred, filename) {
 export async function fetchSignedUrlWithRetries(id, token, attempts) {
   let last = null
   for (const mt of attempts) {
-    const q = new URLSearchParams({ token })
-    if (mt) q.set('media_type', mt)
-    const path = `/media/v1/download/${encodeURIComponent(id)}?${q.toString()}`
-    const result = await safetyCultureRequest(path)
-    last = result
-    const signed = extractSignedUrl(result)
-    if (signed) return { signedUrl: signed, last: result }
-    if (result?.error && result.status == null) break
-    const st = result?.status
-    // Some valid assets return 404 for a wrong media_type; keep trying alternates.
-    if (st !== 403 && st !== 400 && st !== 404) break
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const q = new URLSearchParams({ token })
+      if (mt) q.set('media_type', mt)
+      const path = `/media/v1/download/${encodeURIComponent(id)}?${q.toString()}`
+      const result = await safetyCultureRequest(path)
+      last = result
+      const signed = extractSignedUrl(result)
+      if (signed) return { signedUrl: signed, last: result }
+      if (result?.error && result.status == null) return { signedUrl: null, last }
+      const st = result?.status
+      if (st === 429 || (st >= 500 && st <= 599)) {
+        if (attempt < 2) {
+          await sleep(250 * (attempt + 1))
+          continue
+        }
+      }
+      // Some valid assets return 404 for a wrong media_type; keep trying alternates.
+      if (st !== 403 && st !== 400 && st !== 404 && st !== 429 && !(st >= 500 && st <= 599)) {
+        return { signedUrl: null, last }
+      }
+      break
+    }
   }
   return { signedUrl: null, last }
 }
