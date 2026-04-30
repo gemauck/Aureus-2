@@ -137,6 +137,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity, onOpenClient }) => {
             return 'aidaStatus';
         }
     }); // 'aidaStatus' (AIDA) or 'engagementStage'
+    const handleKanbanGroupByChange = useCallback((value) => {
+        const nextGroupBy = value === 'engagementStage' ? 'engagementStage' : 'aidaStatus';
+        setKanbanGroupBy(nextGroupBy);
+        try {
+            localStorage.setItem('pipelineKanbanGroupBy', nextGroupBy);
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Failed to save kanban grouping preference:', error);
+        }
+    }, []);
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -3304,7 +3313,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 <span className="text-sm text-gray-600 dark:text-gray-400">Group by:</span>
                                 <select
                                     value={kanbanGroupBy}
-                                    onChange={(e) => setKanbanGroupBy(e.target.value)}
+                                    onChange={(e) => handleKanbanGroupByChange(e.target.value)}
                                     className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="aidaStatus">AIDA Status</option>
