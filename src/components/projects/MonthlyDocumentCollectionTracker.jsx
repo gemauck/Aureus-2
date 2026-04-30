@@ -3844,8 +3844,23 @@ const getAssigneeColor = (identifier, users) => {
         } catch (_) {}
     };
 
+    const canCurrentUserEditComment = (comment) => {
+        const currentUser = getCurrentUser() || {};
+        const currentUserId = String(currentUser.id ?? currentUser.sub ?? '').trim();
+        const commentAuthorId = String(comment?.authorId ?? '').trim();
+        if (currentUserId && commentAuthorId) return currentUserId === commentAuthorId;
+        const currentEmail = String(currentUser.email || '').trim().toLowerCase();
+        const commentEmail = String(comment?.authorEmail || '').trim().toLowerCase();
+        if (currentEmail && commentEmail) return currentEmail === commentEmail;
+        return false;
+    };
+
     const handleStartEditComment = (comment) => {
-        setEditingCommentId(comment?.id || null);
+        if (!canCurrentUserEditComment(comment)) {
+            alert('Only the original commenter can edit this comment.');
+            return;
+        }
+        setEditingCommentId(comment?.id ?? comment?.commentId ?? null);
         setEditingCommentText(comment?.text || '');
     };
 
@@ -3871,6 +3886,7 @@ const getAssigneeColor = (identifier, users) => {
                     const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
                     const updatedComments = existingComments.map((comment) => {
                         if (String(comment.id) !== String(commentId)) return comment;
+                        if (!canCurrentUserEditComment(comment)) return comment;
                         commentFound = true;
                         const previousText = String(comment.text || '');
                         if (previousText.trim() === nextText) return comment;
@@ -8647,7 +8663,7 @@ Abcotronics`;
                                             >
                                                 <i className="fas fa-trash text-[10px]"></i>
                                             </button>
-                                            <button
+                                            {canCurrentUserEditComment(comment) && <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (!section || !doc || !cid) return;
@@ -8658,7 +8674,7 @@ Abcotronics`;
                                                 title="Edit comment"
                                             >
                                                 <i className="fas fa-pen text-[9px]"></i>
-                                            </button>
+                                            </button>}
                                             <button
                                                 data-copy-link={cid}
                                                 onClick={(e) => {
