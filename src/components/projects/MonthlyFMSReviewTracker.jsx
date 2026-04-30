@@ -2164,7 +2164,7 @@ const getAssigneeColor = (identifier, users) => {
         }
     };
     
-    const handleDeleteComment = (sectionId, documentId, month, commentId) => {
+    const handleDeleteComment = async (sectionId, documentId, month, commentId) => {
         
         const currentUser = getCurrentUser();
         
@@ -2207,6 +2207,18 @@ const getAssigneeColor = (identifier, users) => {
         
         // Now update state (this will trigger auto-save)
         setSectionsByYear(updatedSectionsByYear);
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        lastSavedDataRef.current = null;
+        try {
+            await saveToDatabase();
+            await new Promise((r) => setTimeout(r, 600));
+            await saveToDatabase();
+        } catch (saveErr) {
+            console.error('❌ Failed to save deleted comment (monthly FMS):', saveErr);
+        }
     };
 
     const canCurrentUserEditComment = (comment) => {

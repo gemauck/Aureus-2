@@ -3841,6 +3841,18 @@ const getAssigneeColor = (identifier, users) => {
         
         // Now update state (this will trigger auto-save)
         setSectionsByYear(updatedSectionsByYear);
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        lastSavedDataRef.current = null;
+        try {
+            await saveToDatabase();
+            await new Promise((r) => setTimeout(r, 600));
+            await saveToDatabase();
+        } catch (saveErr) {
+            console.error('❌ Failed to save deleted comment:', saveErr);
+        }
         try {
             const cell = hoverCommentCellRef.current;
             if (cell && !isJsonOnlyTracker) {
