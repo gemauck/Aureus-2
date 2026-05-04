@@ -560,8 +560,9 @@ async function buildLocationInventoryResponse(locationId) {
     return []
   }
 
-  // Ensure every active catalog SKU has a LocationInventory row at this site (stock take / counts need full list).
-  await ensureLocationHasAllInventory(location)
+  // Avoid ensureLocationHasAllInventory on every list read — it materializes the full catalog
+  // per location and can take minutes. Use POST /api/manufacturing/sync or add a location to
+  // backfill rows when needed.
 
   const locationInventoryRecords = await prisma.locationInventory.findMany({
     where: { locationId },
@@ -759,7 +760,8 @@ async function buildAllLocationsInventoryResponse() {
  * Valuation rules match LocationInventory rows + template unitCost fallback.
  */
 async function buildInventoryLocationValueSummary() {
-  await syncInventoryAcrossAllLocations(false)
+  // Do not run sync here — it can take minutes (every SKU × every location).
+  // On-demand full materialization: POST /api/manufacturing/sync
 
   const allTemplates = await prisma.inventoryItem.findMany({
     orderBy: [{ locationId: 'asc' }, { updatedAt: 'desc' }]
@@ -2461,10 +2463,8 @@ async function handler(req, res) {
     // LIST (GET /api/manufacturing/inventory)
     if (req.method === 'GET' && !id) {
       try {
-        const owner = req.user?.sub
-        // Keep all locations aligned with a complete SKU list (missing SKUs -> 0 qty).
-        // Throttled by syncInventoryAcrossAllLocations to avoid running on every request.
-        await syncInventoryAcrossAllLocations(false)
+        // Full cross-location materialization is POST /api/manufacturing/sync only.
+        // Running sync on every list read could take minutes (SKUs × locations).
         
         // Parse query parameters from URL - use safe parsing method
         let locationId = null
@@ -2495,29 +2495,31 @@ async function handler(req, res) {
           items = await buildAllLocationsInventoryResponse()
         }
 
-        // Optional pagination: page (1-based), pageSize (default 100, max 200). Omit for full list.
+        // Optional pagination: page (1-based), pageSize (max 200). Omit for full list.
         const page = Math.max(1, parseInt(req.query?.page || req.query?.pageNumber, 10) || 0) || 1
         const rawPageSize = parseInt(req.query?.pageSize || req.query?.limit, 10)
         const pageSize = rawPageSize > 0 ? Math.min(200, Math.max(1, rawPageSize)) : null
 
-        const hydratedItems = await hydrateInventoryAlternativeSuppliers(items)
+        const totalItems = items.length
+        let itemsPage = items
+        let pagination = null
+        if (pageSize != null) {
+          const start = (page - 1) * pageSize
+          itemsPage = items.slice(start, start + pageSize)
+          pagination = { page, pageSize, total: totalItems, totalPages: Math.ceil(totalItems / pageSize) }
+        }
+
+        // Hydrate only rows we return (alternative suppliers query scales with page size when paginated).
+        const hydratedItems = await hydrateInventoryAlternativeSuppliers(itemsPage)
 
         // Format dates for response
-        let formatted = hydratedItems.map(item => ({
+        const formatted = hydratedItems.map(item => ({
           ...item,
           totalValue: computedInventoryTotalValue(item.quantity, item.unitCost),
           lastRestocked: formatDate(item.lastRestocked),
           createdAt: formatDate(item.createdAt),
           updatedAt: formatDate(item.updatedAt)
         }))
-
-        let pagination = null
-        if (pageSize != null) {
-          const total = formatted.length
-          const start = (page - 1) * pageSize
-          formatted = formatted.slice(start, start + pageSize)
-          pagination = { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
-        }
 
         const payload = { inventory: formatted }
         if (pagination) payload.pagination = pagination
