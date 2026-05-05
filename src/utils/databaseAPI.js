@@ -2036,6 +2036,9 @@ const DatabaseAPI = {
         if (Number.isFinite(pageSize) && pageSize > 0) {
             params.set('pageSize', String(pageSize));
         }
+        if (options?.sku != null && String(options.sku).trim() !== '') {
+            params.set('sku', String(options.sku).trim());
+        }
         const endpoint = params.toString()
             ? `/manufacturing/stock-movements?${params.toString()}`
             : '/manufacturing/stock-movements';

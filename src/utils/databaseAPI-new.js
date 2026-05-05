@@ -714,10 +714,19 @@ const DatabaseAPI = {
     },
 
     // Manufacturing operations - Stock Movements
-    async getStockMovements() {
+    async getStockMovements(options = {}) {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching stock movements from database...');
-        return this.makeRequest('/manufacturing/stock-movements');
+        const params = new URLSearchParams();
+        if (options?.page) params.set('page', String(options.page));
+        if (options?.pageSize) params.set('pageSize', String(options.pageSize));
+        if (options?.sku != null && String(options.sku).trim() !== '') {
+            params.set('sku', String(options.sku).trim());
+        }
+        const qs = params.toString();
+        return this.makeRequest(
+            qs ? `/manufacturing/stock-movements?${qs}` : '/manufacturing/stock-movements'
+        );
     },
 
     async createStockMovement(movementData) {

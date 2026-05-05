@@ -12595,9 +12595,48 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       return loc?.locationCode || loc?.locationName || '';
     }, [detailLocations, selectedDetailLocationId]);
 
+    /** Loaded per SKU via GET .../stock-movements?sku= — not the global 120-row preload (see loadData). */
+    const [skuLedgerMovements, setSkuLedgerMovements] = useState(null);
+    const [skuLedgerLoading, setSkuLedgerLoading] = useState(false);
+
+    useEffect(() => {
+      if (!item?.sku) {
+        setSkuLedgerMovements([]);
+        setSkuLedgerLoading(false);
+        return;
+      }
+      let cancelled = false;
+      setSkuLedgerLoading(true);
+      setSkuLedgerMovements(null);
+      (async () => {
+        try {
+          if (window.DatabaseAPI?.getStockMovements) {
+            const movementsResponse = await window.DatabaseAPI.getStockMovements({ sku: item.sku });
+            if (cancelled) return;
+            const movementsData = movementsResponse?.data?.movements || [];
+            const processed = movementsData.map((movement) => ({ ...movement, id: movement.id }));
+            setSkuLedgerMovements(processed);
+          } else {
+            setSkuLedgerMovements([]);
+          }
+        } catch (error) {
+          if (!cancelled) {
+            console.error('Error loading stock ledger for SKU:', error);
+            setSkuLedgerMovements([]);
+          }
+        } finally {
+          if (!cancelled) setSkuLedgerLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [item?.sku]);
+
     const itemMovementsForDetail = useMemo(() => {
       if (!item?.sku) return [];
-      let list = (movements || []).filter(m => m.sku === item.sku);
+      if (!Array.isArray(skuLedgerMovements)) return [];
+      let list = skuLedgerMovements;
       if (selectedDetailLocationId) {
         list = list.filter(m => {
           const fromMatch = m.fromLocation === selectedDetailLocationId || (selectedDetailLocationCode && m.fromLocation === selectedDetailLocationCode);
@@ -12621,7 +12660,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           // Tertiary sort: by ID (for absolute ordering)
           return (a.id || '').localeCompare(b.id || '');
         });
-    }, [movements, item?.sku, selectedDetailLocationId, selectedDetailLocationCode]);
+    }, [skuLedgerMovements, item?.sku, selectedDetailLocationId, selectedDetailLocationCode]);
 
     const recentMovementTemplates = useMemo(() => {
       let eligible = itemMovementsForDetail.filter((m) => m.type !== 'production');
@@ -12636,32 +12675,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     useEffect(() => {
       setSelectedMovementTemplateId('');
     }, [item?.id]);
-
-    useEffect(() => {
-      if (!item?.sku || movementsLoadedFromAPI) return;
-      let cancelled = false;
-      (async () => {
-        try {
-          if (window.DatabaseAPI?.getStockMovements) {
-            const movementsResponse = await window.DatabaseAPI.getStockMovements();
-            if (cancelled) return;
-            const movementsData = movementsResponse?.data?.movements || [];
-            const processed = movementsData.map((movement) => ({ ...movement, id: movement.id }));
-            setMovements(processed);
-            setMovementsLoadedFromAPI(true);
-            safeSetItem('manufacturing_movements', JSON.stringify(processed));
-          }
-        } catch (error) {
-          if (!cancelled) {
-            console.error('Error loading stock movements for detail view:', error);
-            setMovementsLoadedFromAPI(true);
-          }
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [item?.sku, movementsLoadedFromAPI]);
 
     const formatMovementType = useCallback((type) => {
       const typeMap = {
@@ -13548,7 +13561,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
             return (
               <div className="overflow-x-auto">
-                {!movementsLoadedFromAPI ? (
+                {skuLedgerLoading || skuLedgerMovements === null ? (
                   <div className="text-center py-8 text-gray-500">
                     <i className="fas fa-spinner fa-spin text-2xl mb-2 text-gray-300"></i>
                     <p className="text-sm">Loading stock ledger...</p>

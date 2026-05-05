@@ -4899,25 +4899,33 @@ async function handler(req, res) {
   if (resourceType === 'stock-movements') {
     // LIST (GET /api/manufacturing/stock-movements)
     // Optional query: page (1-based), pageSize (default 100, max 200). Omit for full list (backward compatible).
+    // Optional query: sku — restrict to one SKU (used by inventory detail ledger; avoids loading full table client-side).
     if (req.method === 'GET' && !id) {
       try {
         const page = Math.max(1, parseInt(req.query?.page || req.query?.pageNumber, 10) || 1)
         const rawPageSize = parseInt(req.query?.pageSize || req.query?.limit, 10)
         const pageSize = rawPageSize > 0 ? Math.min(200, Math.max(1, rawPageSize)) : null
+        const skuFilterRaw = req.query?.sku
+        const skuFilter =
+          skuFilterRaw != null && String(skuFilterRaw).trim() !== ''
+            ? String(skuFilterRaw).trim()
+            : null
+        const where = skuFilter ? { sku: skuFilter } : {}
 
         const orderBy = { date: 'desc' }
         let movements
         let total = 0
 
         if (pageSize != null) {
-          total = await prisma.stockMovement.count()
+          total = await prisma.stockMovement.count({ where })
           movements = await prisma.stockMovement.findMany({
+            where,
             orderBy,
             skip: (page - 1) * pageSize,
             take: pageSize
           })
         } else {
-          movements = await prisma.stockMovement.findMany({ orderBy })
+          movements = await prisma.stockMovement.findMany({ where, orderBy })
           total = movements.length
         }
 
