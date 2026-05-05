@@ -2548,6 +2548,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             /post\s*processing|post\s*process|prost\s*process/i.test(docName);
     }
 
+    // Keep completion math aligned with the rendered grid rows (roots + their children).
+    function getOrderedDocumentRowsForSection(section) {
+        const docs = Array.isArray(section?.documents) ? section.documents : [];
+        const roots = docs.filter(d => !d?.parentId);
+        const result = [];
+        roots.forEach(root => {
+            result.push({ doc: root, isSubRow: false });
+            docs.filter(d => d?.parentId === root.id).forEach(child => {
+                result.push({ doc: child, isSubRow: true });
+            });
+        });
+        return result;
+    }
+
     const monthCompletionByIndex = useMemo(() => {
         if (!Array.isArray(months) || months.length === 0) return {};
 
@@ -2557,7 +2571,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             let completed = 0;
 
             (sections || []).forEach((section) => {
-                (section?.documents || []).forEach((doc) => {
+                getOrderedDocumentRowsForSection(section).forEach(({ doc }) => {
                     if (shouldExcludeFromMonthlyDataReviewPercent(section, doc)) {
                         return;
                     }
@@ -3089,16 +3103,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     
     // Ordered rows for display: each root then its children (for sub-document hierarchy)
     const getOrderedDocumentRows = (section) => {
-        const docs = section.documents || [];
-        const roots = docs.filter(d => !d.parentId);
-        const result = [];
-        roots.forEach(root => {
-            result.push({ doc: root, isSubRow: false });
-            docs.filter(d => d.parentId === root.id).forEach(child => {
-                result.push({ doc: child, isSubRow: true });
-            });
-        });
-        return result;
+        return getOrderedDocumentRowsForSection(section);
     };
 
     const hasChildDocuments = (section, doc) => {
