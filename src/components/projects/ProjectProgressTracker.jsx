@@ -1023,6 +1023,21 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return null;
     };
 
+    const getOrderedDocumentRowsForSection = (section) => {
+        const docs = Array.isArray(section?.documents)
+            ? section.documents
+            : (Array.isArray(section?.items) ? section.items : []);
+        const roots = docs.filter((d) => !d?.parentId);
+        const result = [];
+        roots.forEach((root) => {
+            result.push({ doc: root, isSubRow: false });
+            docs.filter((d) => d?.parentId === root.id).forEach((child) => {
+                result.push({ doc: child, isSubRow: true });
+            });
+        });
+        return result;
+    };
+
     const getReviewProgressForMonth = (project, monthName, reviewType) => {
         const safeYear = Number(selectedYear) || currentYear;
         const monthIdx = months.indexOf(monthName);
@@ -1040,10 +1055,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         let total = 0;
         let completed = 0;
         yearSections.forEach((section) => {
-            const docs = Array.isArray(section?.documents)
-                ? section.documents
-                : (Array.isArray(section?.items) ? section.items : []);
-            docs.forEach((doc) => {
+            getOrderedDocumentRowsForSection(section).forEach(({ doc, isSubRow }) => {
+                const isMasterGreyedOut =
+                    !isSubRow &&
+                    Array.isArray(section?.documents) &&
+                    section.documents.some((d) => d?.parentId === doc.id);
+                if (isMasterGreyedOut) {
+                    // Keep denominator aligned with tracker grid: parent rows with children are non-actionable.
+                    return;
+                }
                 if (reviewType === 'monthlyDataReview' && shouldExcludeFromMonthlyDataReviewPercent(section?.name, doc?.name)) {
                     return;
                 }
