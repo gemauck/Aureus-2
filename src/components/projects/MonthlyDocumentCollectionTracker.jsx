@@ -2572,6 +2572,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
             (sections || []).forEach((section) => {
                 getOrderedDocumentRowsForSection(section).forEach(({ doc }) => {
+                    const isMasterGreyedOut =
+                        !doc?.parentId &&
+                        Array.isArray(section?.documents) &&
+                        section.documents.some((d) => d?.parentId === doc.id);
+                    if (isMasterGreyedOut) {
+                        // Parent rows with sub-documents are non-actionable in the grid; exclude from %.
+                        return;
+                    }
                     if (shouldExcludeFromMonthlyDataReviewPercent(section, doc)) {
                         return;
                     }
