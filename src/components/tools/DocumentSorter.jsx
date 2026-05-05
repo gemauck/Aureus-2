@@ -402,7 +402,14 @@ const DocumentSorter = () => {
   };
 
   const loadManifestPreview = async (overrideUploadId) => {
-    const targetUploadId = overrideUploadId || result?.uploadId;
+    // onClick passes a DOM event if this is referenced directly — only accept string overrides
+    const rawId =
+      typeof overrideUploadId === 'string' && overrideUploadId.trim()
+        ? overrideUploadId.trim()
+        : result?.uploadId;
+    if (rawId == null || rawId === '') return;
+    if (typeof rawId === 'object') return;
+    const targetUploadId = String(rawId);
     if (!targetUploadId) return;
     setManifestPreviewLoading(true);
     try {
@@ -1157,7 +1164,7 @@ const DocumentSorter = () => {
               </button>
               <button
                 type="button"
-                onClick={loadManifestPreview}
+                onClick={() => void loadManifestPreview()}
                 disabled={manifestPreviewLoading}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
                   isDark
