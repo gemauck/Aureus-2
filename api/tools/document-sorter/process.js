@@ -70,6 +70,12 @@ function sanitizeEntryPath(entryPath) {
   return safe || 'unnamed'
 }
 
+/** Zip entries use POSIX-style paths; keep only the file name so category/subfolder is flat (no mirrored source tree). */
+function outputLeafFileName(entryPath) {
+  const base = path.posix.basename(String(entryPath || '').replace(/\\/g, '/'))
+  return sanitizeEntryPath(base)
+}
+
 function bucketConfidence(v) {
   const n = Number(v || 0)
   if (n <= 0) return 'none'
@@ -397,7 +403,7 @@ async function handler(req, res) {
         const sub = resolveChecklistSubfolder(fileNum, origPath)
         const subFolderName = sanitizeSubfolderName(sub.subFolderName || 'Unsorted')
         const folderWithSub = path.join(folderName, subFolderName)
-        let safePath = sanitizeEntryPath(origPath)
+        let safePath = outputLeafFileName(origPath)
         const alloc = allocateSafeRelativePath(folderWithSub, safePath, destSeen)
         safePath = alloc.safePath
         if (alloc.disambiguated) collisionsResolved++
@@ -614,7 +620,7 @@ async function handler(req, res) {
               const newFolder = folderNameForFileNum(targetNum)
               const nextSub = resolveChecklistSubfolder(targetNum, row.originalPath)
               const newSub = sanitizeSubfolderName(nextSub.subFolderName || 'Unsorted')
-              let relSafe = sanitizeEntryPath(row.originalPath)
+              let relSafe = outputLeafFileName(row.originalPath)
               const alloc2 = allocateSafeRelativePath(path.join(newFolder, newSub), relSafe, destSeen)
               relSafe = alloc2.safePath
               if (alloc2.disambiguated) collisionsResolved++
