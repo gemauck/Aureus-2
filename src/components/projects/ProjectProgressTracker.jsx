@@ -1038,6 +1038,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return result;
     };
 
+    const isNonActionableParentRow = (section, doc, isSubRow) => (
+        !isSubRow &&
+        Array.isArray(section?.documents) &&
+        section.documents.some((d) => d?.parentId === doc?.id)
+    );
+
     const getReviewProgressForMonth = (project, monthName, reviewType) => {
         const safeYear = Number(selectedYear) || currentYear;
         const monthIdx = months.indexOf(monthName);
@@ -1056,11 +1062,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         let completed = 0;
         yearSections.forEach((section) => {
             getOrderedDocumentRowsForSection(section).forEach(({ doc, isSubRow }) => {
-                const isMasterGreyedOut =
-                    !isSubRow &&
-                    Array.isArray(section?.documents) &&
-                    section.documents.some((d) => d?.parentId === doc.id);
-                if (isMasterGreyedOut) {
+                if (isNonActionableParentRow(section, doc, isSubRow)) {
                     // Keep denominator aligned with tracker grid: parent rows with children are non-actionable.
                     return;
                 }
@@ -1118,8 +1120,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         let total = 0;
         let completed = 0;
         yearSections.forEach((section) => {
-            const docs = Array.isArray(section?.documents) ? section.documents : [];
-            docs.forEach((doc) => {
+            getOrderedDocumentRowsForSection(section).forEach(({ doc, isSubRow }) => {
+                if (isNonActionableParentRow(section, doc, isSubRow)) {
+                    return;
+                }
                 total += 1;
                 const rawStatus =
                     (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
