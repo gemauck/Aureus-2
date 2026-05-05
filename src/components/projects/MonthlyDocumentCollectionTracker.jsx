@@ -2531,7 +2531,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }
 
         if (isComplianceReview) {
-            return normalized === 'reviewed-in-order' || normalized === 'reviewed-issue';
+            const statusKey = resolveComplianceStatusKey(rawStatus);
+            return statusKey === 'reviewed-in-order' || statusKey === 'reviewed-issue';
         }
 
         // Document Collection
@@ -2730,6 +2731,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (s === 'in-progress') return 'started-minor-info';
         return status;
     }
+    function resolveComplianceStatusKey(status) {
+        if (!status) return '';
+        const normalized = String(status).trim().toLowerCase();
+        if (
+            normalized === 'done' ||
+            normalized === 'complete' ||
+            normalized === 'completed' ||
+            normalized === 'reviewed' ||
+            normalized === 'reviewed-in-order'
+        ) return 'reviewed-in-order';
+        if (normalized === 'reviewed-issue' || normalized === 'reviewed-with-issue') return 'reviewed-issue';
+        if (normalized === 'not-done' || normalized === 'not-reviewed' || normalized === 'no-reviewed') return 'no-reviewed';
+        if (normalized === 'in progress') return 'in-progress';
+        return normalized;
+    }
     // Compliance Review statuses only
     const complianceReviewStatusOptions = [
         { value: 'no-reviewed', label: 'Not Reviewed', color: 'bg-gray-200 text-gray-800 font-semibold dark:bg-gray-700 dark:text-gray-200', cellColor: 'bg-gray-200 border-l-4 border-gray-400 shadow-sm dark:bg-gray-700 dark:border-gray-500', optionStyle: { backgroundColor: '#e5e7eb', color: '#1f2937' } },
@@ -2744,10 +2760,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Keep old compliance values visible after rollout by mapping to new values.
     const normalizeComplianceStatusValue = (status) => {
         if (!isComplianceReview || !status) return status;
-        const normalized = String(status).toLowerCase();
-        if (normalized === 'not-done') return 'no-reviewed';
-        if (normalized === 'done') return 'reviewed-in-order';
-        return status;
+        return resolveComplianceStatusKey(status);
     };
 
     const getStatusConfig = (status) => {

@@ -905,6 +905,22 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return normalized;
     };
 
+    const resolveComplianceReviewStatusKey = (status) => {
+        if (!status) return '';
+        const normalized = String(status).trim().toLowerCase();
+        if (
+            normalized === 'done' ||
+            normalized === 'complete' ||
+            normalized === 'completed' ||
+            normalized === 'reviewed' ||
+            normalized === 'reviewed-in-order'
+        ) return 'reviewed-in-order';
+        if (normalized === 'reviewed-issue' || normalized === 'reviewed-with-issue') return 'reviewed-issue';
+        if (normalized === 'not-done' || normalized === 'not-reviewed' || normalized === 'no-reviewed') return 'no-reviewed';
+        if (normalized === 'in progress') return 'in-progress';
+        return normalized;
+    };
+
     const isCompletedReviewStatus = (reviewType, rawStatus) => {
         if (!rawStatus) return false;
         const normalized = String(rawStatus).toLowerCase();
@@ -913,7 +929,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             return statusKey === 'done' || statusKey === 'complete-issues-outstanding' || statusKey === 'complete';
         }
         if (reviewType === 'complianceReview') {
-            return normalized === 'reviewed-in-order' || normalized === 'reviewed-issue';
+            const statusKey = resolveComplianceReviewStatusKey(rawStatus);
+            return statusKey === 'reviewed-in-order' || statusKey === 'reviewed-issue';
         }
         return false;
     };
