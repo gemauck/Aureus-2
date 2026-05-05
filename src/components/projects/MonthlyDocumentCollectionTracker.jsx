@@ -2732,19 +2732,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         return status;
     }
     function resolveComplianceStatusKey(status) {
-        if (!status) return '';
-        const normalized = String(status).trim().toLowerCase();
+        if (status == null) return '';
+        const raw = typeof status === 'object'
+            ? (status.value ?? status.status ?? status.label ?? '')
+            : status;
+        const normalized = String(raw).trim().toLowerCase();
+        if (!normalized) return '';
+        const compact = normalized.replace(/[\s_]+/g, '-');
+        const alpha = normalized.replace(/[^a-z]/g, '');
+
         if (
-            normalized === 'done' ||
-            normalized === 'complete' ||
-            normalized === 'completed' ||
-            normalized === 'reviewed' ||
-            normalized === 'reviewed-in-order'
+            compact === 'done' ||
+            compact === 'complete' ||
+            compact === 'completed' ||
+            compact === 'reviewed' ||
+            compact === 'reviewed-in-order' ||
+            alpha === 'reviewedinorder'
         ) return 'reviewed-in-order';
-        if (normalized === 'reviewed-issue' || normalized === 'reviewed-with-issue') return 'reviewed-issue';
-        if (normalized === 'not-done' || normalized === 'not-reviewed' || normalized === 'no-reviewed') return 'no-reviewed';
-        if (normalized === 'in progress') return 'in-progress';
-        return normalized;
+
+        if (
+            compact === 'reviewed-issue' ||
+            compact === 'reviewed-with-issue' ||
+            alpha === 'reviewedissue' ||
+            alpha === 'reviewedwithissue'
+        ) return 'reviewed-issue';
+
+        if (
+            compact === 'not-done' ||
+            compact === 'not-reviewed' ||
+            compact === 'no-reviewed' ||
+            alpha === 'notreviewed' ||
+            alpha === 'noreviewed' ||
+            alpha === 'notdone'
+        ) return 'no-reviewed';
+
+        if (compact === 'in-progress' || alpha === 'inprogress') return 'in-progress';
+        return compact;
     }
     // Compliance Review statuses only
     const complianceReviewStatusOptions = [
