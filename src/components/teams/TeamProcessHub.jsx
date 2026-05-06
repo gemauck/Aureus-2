@@ -15,9 +15,12 @@ function sniffImportKind(fileName, headText, headBytes) {
     const lower = (fileName || '').toLowerCase();
     if (lower.endsWith('.zip')) return 'zip';
     if (lower.endsWith('.pdf')) return 'pdf';
+    if (lower.endsWith('.svg')) return 'svg';
     if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'excel';
     if (lower.endsWith('.docx') || lower.endsWith('.doc')) return 'word';
     if (lower.endsWith('.drawio') || lower.endsWith('.xml')) {
+        const headSliceXml = (headText || '').trimStart().slice(0, 1024);
+        if (headSliceXml && /<svg[\s>/]/i.test(headSliceXml)) return 'svg';
         if (headText && isDrawioXml(headText)) return 'drawio';
         return lower.endsWith('.drawio') ? 'drawio' : 'xml';
     }
@@ -26,6 +29,8 @@ function sniffImportKind(fileName, headText, headBytes) {
         if (headBytes[0] === 0x50 && headBytes[1] === 0x4b) return 'zip';
     }
     if (headText && isDrawioXml(headText)) return 'drawio';
+    const headSlice = (headText || '').trimStart().slice(0, 1024);
+    if (headSlice && /<svg[\s>/]/i.test(headSlice)) return 'svg';
     return 'unknown';
 }
 
@@ -151,17 +156,30 @@ async function buildTraceCanvasDataFromPdf(file, pageNum, viewBackgroundColor) {
     };
 }
 
-function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(r.error);
-        r.readAsDataURL(file);
-    });
+/** Binary-safe base64; avoids browsers emitting non-base64 data URLs for SVG/text (breaks /api/files). */
+function uint8ArrayToBase64(bytes) {
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+}
+
+async function fileToBase64DataUrl(file) {
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let mime = file.type && file.type.length ? file.type : 'application/octet-stream';
+    const lower = (file.name || '').toLowerCase();
+    if (!file.type) {
+        if (lower.endsWith('.svg')) mime = 'image/svg+xml';
+        else if (lower.endsWith('.pdf')) mime = 'application/pdf';
+    }
+    return `data:${mime};base64,${uint8ArrayToBase64(bytes)}`;
 }
 
 async function uploadTeamFile(file, token) {
-    const dataUrl = await fileToDataUrl(file);
+    const dataUrl = await fileToBase64DataUrl(file);
     const response = await fetch('/api/files', {
         method: 'POST',
         headers: {
@@ -215,6 +233,14 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const [pdfImportChoice, setPdfImportChoice] = useState(null);
     const [leftWidth, setLeftWidth] = useState(380);
     const [resizeDrag, setResizeDrag] = useState(null);
+    const [libraryCollapsed, setLibraryCollapsed] = useState(() => {
+        try {
+            return sessionStorage.getItem('team_process_hub_library_collapsed') === '1';
+        } catch (_) {
+            return false;
+        }
+    });
+    const [workflowTitleEdit, setWorkflowTitleEdit] = useState('');
 
     const excalidrawHostRef = useRef(null);
     const excalUnmountRef = useRef(null);
@@ -281,6 +307,29 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
 
     const selectedWorkflow = selected?.kind === 'workflow' ? selected.raw : null;
     const selectedDocument = selected?.kind === 'document' ? selected.raw : null;
+
+    useEffect(() => {
+        if (selectedWorkflow) setWorkflowTitleEdit(selectedWorkflow.title || '');
+    }, [selectedWorkflow?.id, selectedWorkflow?.title]);
+
+    const setLibraryCollapsedPersist = useCallback((next) => {
+        setLibraryCollapsed(next);
+        try {
+            sessionStorage.setItem('team_process_hub_library_collapsed', next ? '1' : '0');
+        } catch (_) {}
+    }, []);
+
+    const handleDeleteWorkflow = async () => {
+        if (!selectedWorkflow?.id || !ds?.deleteTeamWorkflow) return;
+        if (!window.confirm('Delete this process flow? This cannot be undone.')) return;
+        try {
+            await ds.deleteTeamWorkflow(selectedWorkflow.id);
+            setSelected(null);
+            await loadAll(true);
+        } catch (e) {
+            window.alert(e.message || 'Delete failed');
+        }
+    };
 
     const persistWorkflowPatch = useCallback(
         async (id, patch) => {
@@ -541,7 +590,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
         const qid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         setImportQueue((q) => [...q, { id: qid, name: file.name, status: 'working', error: null }]);
         try {
-            const dataUrl = await fileToDataUrl(file);
+            const dataUrl = await fileToBase64DataUrl(file);
             const { canvasData, meta } = await ds.convertPdfToSketch(dataUrl, 1);
             const warns = Array.isArray(meta?.warnings) ? meta.warnings.filter(Boolean) : [];
             if (warns.length) window.alert(`Sketch import notes:\n\n${warns.join('\n')}`);
@@ -597,6 +646,40 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                     attachments: [{ name: up.name, url: up.url, mimeType: up.mimeType }],
                     tags: ['imported']
                 });
+                return;
+            }
+            if (kind === 'svg') {
+                const text = await file.text();
+                try {
+                    if (!ds.convertSvgToSketch) throw new Error('SVG import unavailable — refresh the page.');
+                    const { canvasData, meta } = await ds.convertSvgToSketch(text);
+                    const warns = Array.isArray(meta?.warnings) ? meta.warnings.filter(Boolean) : [];
+                    if (warns.length) window.alert(`SVG import notes:\n\n${warns.join('\n')}`);
+                    await ds.createTeamWorkflow({
+                        teamId: team.id,
+                        title: sanitizeImportTitle(file.name),
+                        description: 'Imported from SVG (heuristic conversion to Excalidraw).',
+                        status: 'Draft',
+                        steps: [],
+                        canvasKind: 'excalidraw',
+                        canvasData,
+                        tags: ['imported', 'svg']
+                    });
+                } catch (convErr) {
+                    const up = await uploadTeamFile(file, tok);
+                    await ds.createTeamDocument({
+                        teamId: team.id,
+                        title: sanitizeImportTitle(file.name),
+                        category: 'Imported',
+                        description: `Attached as file (SVG diagram conversion failed: ${convErr.message || 'error'}).`,
+                        content: '',
+                        attachments: [{ name: up.name, url: up.url, mimeType: up.mimeType }],
+                        tags: ['imported']
+                    });
+                    window.alert(
+                        `SVG could not be converted to a diagram (${convErr.message || 'error'}). The file was saved as a document attachment instead.`
+                    );
+                }
                 return;
             }
             if (kind === 'drawio' || kind === 'xml') {
@@ -797,6 +880,20 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                                 {saveStatus === 'saving' ? 'Saving…' : 'Saved'}
                             </span>
                         )}
+                        <button
+                            type="button"
+                            onClick={() => setLibraryCollapsedPersist(!libraryCollapsed)}
+                            aria-pressed={libraryCollapsed}
+                            title={libraryCollapsed ? 'Show library' : 'Hide library for more canvas space'}
+                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                isDark
+                                    ? 'border-gray-600 text-gray-200 hover:bg-gray-900'
+                                    : 'border-gray-300 text-gray-800 hover:bg-gray-50'
+                            }`}
+                        >
+                            <i className={`fas ${libraryCollapsed ? 'fa-indent' : 'fa-outdent'}`} aria-hidden />
+                            {libraryCollapsed ? 'Library' : 'Hide library'}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -829,7 +926,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                 <i className={`fas fa-cloud-upload-alt text-2xl mb-2 ${isDark ? 'text-cyan-400/90' : 'text-sky-600'}`} />
                 <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Drop files or zip to import</p>
                 <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                    Single PDF: attach, trace canvas, or experimental sketch. Also Excel, Word, .drawio / XML, zip.
+                    PDF (attach / trace / sketch), SVG → diagram, Excel, Word, .drawio / XML, zip. Uploads use server-safe encoding.
                 </p>
             </div>
 
@@ -861,6 +958,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
             )}
 
             <div className="flex min-h-[520px] relative">
+                {!libraryCollapsed && (
                 <div style={{ width: leftWidth, minWidth: 260, maxWidth: 560 }} className={`flex flex-col border-r ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                     <div className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Library
@@ -947,7 +1045,9 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                         )}
                     </div>
                 </div>
+                )}
 
+                {!libraryCollapsed && (
                 <div
                     role="separator"
                     aria-orientation="vertical"
@@ -956,22 +1056,85 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                 >
                     <span className={`w-0.5 h-10 rounded-full ${isDark ? 'bg-cyan-800 group-hover:bg-cyan-500' : 'bg-gray-300 group-hover:bg-sky-400'}`} />
                 </div>
+                )}
 
-                <div className={`flex-1 min-w-0 flex flex-col ${isDark ? 'bg-gray-950/50' : 'bg-gray-50/80'}`}>
+                {libraryCollapsed && (
+                    <button
+                        type="button"
+                        onClick={() => setLibraryCollapsedPersist(false)}
+                        title="Show library"
+                        className={`shrink-0 w-11 flex flex-col items-center justify-center gap-1 py-4 border-r text-[10px] font-semibold uppercase tracking-wide ${
+                            isDark ? 'border-gray-800 bg-gray-900/90 text-cyan-400 hover:bg-gray-900' : 'border-gray-200 bg-gray-100 text-sky-700 hover:bg-gray-50'
+                        }`}
+                    >
+                        <i className="fas fa-folder-open text-lg" aria-hidden />
+                        <span className="max-h-[120px] overflow-hidden text-center leading-tight" style={{ writingMode: 'vertical-rl' }}>
+                            Library
+                        </span>
+                    </button>
+                )}
+
+                <div className={`flex-1 min-w-0 flex flex-col min-h-0 ${isDark ? 'bg-gray-950/50' : 'bg-gray-50/80'}`}>
+                    {selectedWorkflow && (
+                        <div
+                            className={`flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b shrink-0 ${
+                                isDark ? 'border-gray-800 bg-gray-900/85' : 'border-gray-200 bg-white/95'
+                            }`}
+                        >
+                            <input
+                                value={workflowTitleEdit}
+                                onChange={(e) => setWorkflowTitleEdit(e.target.value)}
+                                onBlur={async () => {
+                                    if (!selectedWorkflow?.id || !ds?.updateTeamWorkflow) return;
+                                    const t = workflowTitleEdit.trim();
+                                    if (!t || t === (selectedWorkflow.title || '')) return;
+                                    setSaveStatus('saving');
+                                    try {
+                                        await ds.updateTeamWorkflow(selectedWorkflow.id, { title: t });
+                                        setSaveStatus('saved');
+                                        setTimeout(() => setSaveStatus('idle'), 1600);
+                                        await loadAll(true);
+                                        setSelected((s) =>
+                                            s?.kind === 'workflow' && s.id === selectedWorkflow.id
+                                                ? { ...s, title: t, raw: { ...s.raw, title: t } }
+                                                : s
+                                        );
+                                    } catch (e) {
+                                        window.alert(e.message || 'Could not save title');
+                                        setSaveStatus('idle');
+                                    }
+                                }}
+                                className={`flex-1 min-w-[160px] text-lg font-semibold bg-transparent border-b border-transparent focus:border-cyan-500 outline-none ${
+                                    isDark ? 'text-white placeholder:text-gray-600' : 'text-gray-900 placeholder:text-gray-400'
+                                }`}
+                                placeholder="Flow title"
+                                aria-label="Flow title"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleDeleteWorkflow}
+                                className={`text-sm px-3 py-1.5 rounded-lg border shrink-0 ${
+                                    isDark ? 'border-red-900 text-red-400 hover:bg-red-950/40' : 'border-red-200 text-red-700 hover:bg-red-50'
+                                }`}
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    )}
                     {!selected && (
                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                             <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>Select an item or create a new flow.</p>
                         </div>
                     )}
                     {selectedWorkflow && selectedWorkflow.canvasKind === 'excalidraw' && (
-                        <div className="flex-1 flex flex-col min-h-[480px] p-3">
-                            <div className={`rounded-2xl border overflow-hidden flex-1 min-h-[440px] shadow-inner ${isDark ? 'border-gray-800 bg-black/40' : 'border-gray-200 bg-white'}`}>
-                                <div ref={excalidrawHostRef} className="w-full h-full min-h-[420px]" />
+                        <div className="flex-1 flex flex-col min-h-0 p-3">
+                            <div className={`rounded-2xl border overflow-hidden flex-1 min-h-[min(70vh,560px)] shadow-inner ${isDark ? 'border-gray-800 bg-black/40' : 'border-gray-200 bg-white'}`}>
+                                <div ref={excalidrawHostRef} className="w-full h-full min-h-[360px]" />
                             </div>
                         </div>
                     )}
                     {selectedWorkflow && selectedWorkflow.canvasKind === 'drawio' && (
-                        <div className="flex-1 flex flex-col min-h-[520px] p-3">
+                        <div className="flex-1 flex flex-col min-h-0 p-3">
                             <iframe
                                 key={selectedWorkflow.id}
                                 title="draw.io"

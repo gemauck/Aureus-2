@@ -12,9 +12,12 @@ export function sniffImportKind(fileName, headText, headBytes) {
   const lower = (fileName || '').toLowerCase()
   if (lower.endsWith('.zip')) return 'zip'
   if (lower.endsWith('.pdf')) return 'pdf'
+  if (lower.endsWith('.svg')) return 'svg'
   if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return 'excel'
   if (lower.endsWith('.docx') || lower.endsWith('.doc')) return 'word'
   if (lower.endsWith('.drawio') || lower.endsWith('.xml')) {
+    const headSlice = (headText || '').trimStart().slice(0, 1024)
+    if (headSlice && /<svg[\s>/]/i.test(headSlice)) return 'svg'
     if (headText && isDrawioXml(headText)) return 'drawio'
     return lower.endsWith('.drawio') ? 'drawio' : 'xml'
   }
@@ -23,6 +26,8 @@ export function sniffImportKind(fileName, headText, headBytes) {
     if (headBytes[0] === 0x50 && headBytes[1] === 0x4b) return 'zip'
   }
   if (headText && isDrawioXml(headText)) return 'drawio'
+  const headSlice = (headText || '').trimStart().slice(0, 1024)
+  if (headSlice && /<svg[\s>/]/i.test(headSlice)) return 'svg'
   return 'unknown'
 }
 

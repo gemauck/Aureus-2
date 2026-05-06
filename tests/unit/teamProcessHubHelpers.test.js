@@ -11,6 +11,11 @@ describe('teamProcessHubHelpers', () => {
     expect(sniffImportKind('a.pdf', '', null)).toBe('pdf')
     expect(sniffImportKind('b.xlsx', '', null)).toBe('excel')
     expect(sniffImportKind('c.zip', '', null)).toBe('zip')
+    expect(sniffImportKind('diagram.svg', '', null)).toBe('svg')
+  })
+
+  test('sniffImportKind svg by content', () => {
+    expect(sniffImportKind('unknown.xml', '<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg">', null)).toBe('svg')
   })
 
   test('sniffImportKind drawio xml content', () => {

@@ -457,6 +457,26 @@
         };
     },
 
+    /** SVG text → Excalidraw canvasData via POST /api/teams/convert-svg-sketch */
+    async convertSvgToSketch(svgText) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch('/api/teams/convert-svg-sketch', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ svg: svgText })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const msg = data.error?.message || data.error || `SVG conversion failed: ${response.status}`;
+            throw new Error(typeof msg === 'string' ? msg : 'SVG conversion failed');
+        }
+        return {
+            canvasData: data.data?.canvasData,
+            meta: data.data?.meta || {}
+        };
+    },
+
     /** @deprecated Use create/updateTeamWorkflow API */
     async setTeamWorkflows(workflows) {
         if (typeof window.storage?.setTeamWorkflows === 'function') {
