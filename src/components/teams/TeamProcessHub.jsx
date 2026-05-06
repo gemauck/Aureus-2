@@ -241,6 +241,8 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
         }
     });
     const [workflowTitleEdit, setWorkflowTitleEdit] = useState('');
+    /** Non-blocking notes after SVG/PDF sketch import (avoids modal spam when Poppler is missing). */
+    const [hubBanner, setHubBanner] = useState(null);
 
     const excalidrawHostRef = useRef(null);
     const excalUnmountRef = useRef(null);
@@ -593,7 +595,6 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
             const dataUrl = await fileToBase64DataUrl(file);
             const { canvasData, meta } = await ds.convertPdfToSketch(dataUrl, 1);
             const warns = Array.isArray(meta?.warnings) ? meta.warnings.filter(Boolean) : [];
-            if (warns.length) window.alert(`Sketch import notes:\n\n${warns.join('\n')}`);
             const w = await ds.createTeamWorkflow({
                 teamId: team.id,
                 title: `${sanitizeImportTitle(file.name)} (sketch)`,
@@ -610,6 +611,19 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
             await loadAll(true);
             setSelected({ kind: 'workflow', id: w.id, title: w.title, updatedAt: w.updatedAt, sub: '', raw: w });
             setImportQueue((q) => q.map((x) => (x.id === qid ? { ...x, status: 'done' } : x)));
+            if (warns.length) {
+                const popplerMissing =
+                    meta?.converter === 'none' && warns.some((x) => /pdftocairo|Poppler|poppler/i.test(x));
+                setHubBanner(
+                    popplerMissing
+                        ? {
+                              variant: 'info',
+                              message:
+                                  'Sketch mode needs Poppler (pdftocairo) on the server for vector shapes. An empty or partial diagram may have been created. Use Trace mode for a dim PDF background that works without server tools, or ask your admin to install: sudo apt-get install -y poppler-utils'
+                          }
+                        : { variant: 'warn', message: warns.join('\n') }
+                );
+            }
         } catch (e) {
             setImportQueue((q) =>
                 q.map((x) => (x.id === qid ? { ...x, status: 'error', error: e.message || 'Failed' } : x))
@@ -629,10 +643,13 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
         if (files.length === 1) {
             const onlyKind = await sniffFileKind(files[0]);
             if (onlyKind === 'pdf') {
+                setHubBanner(null);
                 setPdfImportChoice({ file: files[0] });
                 return;
             }
         }
+
+        setHubBanner(null);
 
         const processOneFile = async (file, kind, tok) => {
             if (kind === 'pdf' || kind === 'excel' || kind === 'word') {
@@ -654,7 +671,6 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                     if (!ds.convertSvgToSketch) throw new Error('SVG import unavailable — refresh the page.');
                     const { canvasData, meta } = await ds.convertSvgToSketch(text);
                     const warns = Array.isArray(meta?.warnings) ? meta.warnings.filter(Boolean) : [];
-                    if (warns.length) window.alert(`SVG import notes:\n\n${warns.join('\n')}`);
                     await ds.createTeamWorkflow({
                         teamId: team.id,
                         title: sanitizeImportTitle(file.name),
@@ -665,6 +681,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                         canvasData,
                         tags: ['imported', 'svg']
                     });
+                    if (warns.length) setHubBanner({ variant: 'warn', message: warns.join('\n') });
                 } catch (convErr) {
                     const up = await uploadTeamFile(file, tok);
                     await ds.createTeamDocument({
@@ -954,6 +971,39 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                             </span>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {hubBanner && (
+                <div
+                    className={`mx-4 mb-2 rounded-xl border px-3 py-2.5 flex gap-3 items-start ${
+                        hubBanner.variant === 'info'
+                            ? isDark
+                                ? 'border-cyan-800/80 bg-cyan-950/35 text-cyan-100'
+                                : 'border-sky-200 bg-sky-50 text-sky-950'
+                            : isDark
+                              ? 'border-amber-800/80 bg-amber-950/30 text-amber-100'
+                              : 'border-amber-200 bg-amber-50 text-amber-950'
+                    }`}
+                    role="status"
+                >
+                    <p className="text-sm whitespace-pre-wrap flex-1 leading-snug">{hubBanner.message}</p>
+                    <button
+                        type="button"
+                        onClick={() => setHubBanner(null)}
+                        className={`shrink-0 text-lg leading-none px-1 rounded hover:opacity-80 ${
+                            hubBanner.variant === 'info'
+                                ? isDark
+                                    ? 'text-cyan-300'
+                                    : 'text-sky-800'
+                                : isDark
+                                  ? 'text-amber-300'
+                                  : 'text-amber-900'
+                        }`}
+                        aria-label="Dismiss"
+                    >
+                        ×
+                    </button>
                 </div>
             )}
 

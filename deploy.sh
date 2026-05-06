@@ -107,6 +107,11 @@ run_pre_deploy_cleanup
 echo
 check_disk_capacity
 
+if ! command -v pdftocairo >/dev/null 2>&1; then
+  echo "⚠️  Teams PDF sketch: pdftocairo not found (Poppler). Install once with:"
+  echo "    sudo apt-get update && sudo apt-get install -y poppler-utils"
+fi
+
 echo
 echo "-> Syncing to origin/${GIT_BRANCH} (fetch + reset --hard)..."
 # Prune stale refs to avoid "cannot lock ref" / inconsistent ref errors
