@@ -235,12 +235,19 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const [resizeDrag, setResizeDrag] = useState(null);
     const [libraryCollapsed, setLibraryCollapsed] = useState(() => {
         try {
+            if (typeof localStorage !== 'undefined' && localStorage.getItem('team_process_hub_library_collapsed') === '1') {
+                return true;
+            }
             return sessionStorage.getItem('team_process_hub_library_collapsed') === '1';
         } catch (_) {
             return false;
         }
     });
     const [workflowTitleEdit, setWorkflowTitleEdit] = useState('');
+    /** Inline rename in library list (workflows + documents). */
+    const [renameTarget, setRenameTarget] = useState(null);
+    const [renameDraft, setRenameDraft] = useState('');
+    const skipListRenameBlurRef = useRef(false);
     /** Non-blocking notes after SVG/PDF sketch import (avoids modal spam when Poppler is missing). */
     const [hubBanner, setHubBanner] = useState(null);
 
@@ -317,8 +324,45 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const setLibraryCollapsedPersist = useCallback((next) => {
         setLibraryCollapsed(next);
         try {
+            localStorage.setItem('team_process_hub_library_collapsed', next ? '1' : '0');
             sessionStorage.setItem('team_process_hub_library_collapsed', next ? '1' : '0');
         } catch (_) {}
+    }, []);
+
+    const commitListRename = useCallback(async () => {
+        if (skipListRenameBlurRef.current) {
+            skipListRenameBlurRef.current = false;
+            return;
+        }
+        if (!renameTarget) return;
+        const t = renameDraft.trim();
+        if (!t) {
+            setRenameTarget(null);
+            return;
+        }
+        const { kind, id } = renameTarget;
+        try {
+            if (kind === 'workflow' && ds?.updateTeamWorkflow) {
+                await ds.updateTeamWorkflow(id, { title: t });
+            } else if (kind === 'document' && ds?.updateTeamDocument) {
+                await ds.updateTeamDocument(id, { title: t });
+            }
+            await loadAll(true);
+            setSelected((s) =>
+                s && s.kind === kind && s.id === id ? { ...s, title: t, raw: { ...s.raw, title: t } } : s
+            );
+            if (selectedWorkflow?.id === id) setWorkflowTitleEdit(t);
+        } catch (e) {
+            window.alert(e.message || 'Could not rename');
+        } finally {
+            setRenameTarget(null);
+        }
+    }, [renameTarget, renameDraft, ds, loadAll, selectedWorkflow?.id]);
+
+    const startListRename = useCallback((e, a) => {
+        e.stopPropagation();
+        setRenameTarget({ kind: a.kind, id: a.id });
+        setRenameDraft(a.title || '');
     }, []);
 
     const handleDeleteWorkflow = async () => {
@@ -1010,8 +1054,23 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
             <div className="flex min-h-[520px] relative">
                 {!libraryCollapsed && (
                 <div style={{ width: leftWidth, minWidth: 260, maxWidth: 560 }} className={`flex flex-col border-r ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
-                    <div className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                        Library
+                    <div className={`flex items-center justify-between gap-2 px-3 py-2 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+                        <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Library
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setLibraryCollapsedPersist(true)}
+                            title="Hide library"
+                            aria-label="Hide library"
+                            className={`shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                                isDark
+                                    ? 'border-gray-700 text-gray-300 hover:bg-gray-900 hover:border-cyan-800'
+                                    : 'border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-sky-400'
+                            }`}
+                        >
+                            <i className="fas fa-chevron-left text-sm" aria-hidden />
+                        </button>
                     </div>
                     <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-2">
                         {loading && (
@@ -1024,13 +1083,21 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                             artifacts.map((a, idx) => {
                                 const active = selected?.kind === a.kind && selected?.id === a.id;
                                 const delay = prefersReducedMotion ? '0ms' : `${idx * 42}ms`;
+                                const isRenaming = renameTarget && renameTarget.kind === a.kind && renameTarget.id === a.id;
                                 return (
-                                    <button
+                                    <div
                                         key={`${a.kind}-${a.id}`}
-                                        type="button"
+                                        role="button"
+                                        tabIndex={0}
                                         onClick={() => setSelected(a)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                setSelected(a);
+                                            }
+                                        }}
                                         style={{ animationDelay: delay }}
-                                        className={`w-full text-left rounded-xl border px-3 py-3 transition-all duration-200 relative overflow-hidden group ${
+                                        className={`w-full text-left rounded-xl border px-3 py-3 transition-all duration-200 relative overflow-hidden group cursor-pointer ${
                                             active
                                                 ? isDark
                                                     ? 'border-cyan-500/70 bg-gray-900 shadow-[inset_3px_0_0_0_var(--ph-accent)]'
@@ -1055,14 +1122,63 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                                                 <i className={`fas ${a.kind === 'workflow' ? 'fa-sitemap' : 'fa-file-alt'}`} />
                                             </span>
                                             <div className="min-w-0 flex-1">
-                                                <div className={`font-medium truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{a.title}</div>
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    {isRenaming ? (
+                                                        <input
+                                                            autoFocus
+                                                            value={renameDraft}
+                                                            onChange={(e) => setRenameDraft(e.target.value)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onBlur={() => void commitListRename()}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    void commitListRename();
+                                                                }
+                                                                if (e.key === 'Escape') {
+                                                                    e.preventDefault();
+                                                                    skipListRenameBlurRef.current = true;
+                                                                    setRenameTarget(null);
+                                                                }
+                                                            }}
+                                                            className={`min-w-0 flex-1 rounded-md border px-2 py-1 text-sm font-medium outline-none focus:ring-2 focus:ring-cyan-500/40 ${
+                                                                isDark
+                                                                    ? 'border-gray-600 bg-gray-950 text-gray-100'
+                                                                    : 'border-gray-300 bg-white text-gray-900'
+                                                            }`}
+                                                            aria-label={a.kind === 'workflow' ? 'Process name' : 'Document title'}
+                                                        />
+                                                    ) : (
+                                                        <>
+                                                            <div
+                                                                className={`font-medium truncate flex-1 min-w-0 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                                onDoubleClick={(e) => startListRename(e, a)}
+                                                            >
+                                                                {a.title}
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => startListRename(e, a)}
+                                                                title={a.kind === 'workflow' ? 'Rename process' : 'Rename document'}
+                                                                aria-label={a.kind === 'workflow' ? 'Rename process' : 'Rename document'}
+                                                                className={`shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border transition-opacity opacity-70 hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 ${
+                                                                    isDark
+                                                                        ? 'border-gray-700 text-gray-400 hover:text-cyan-300'
+                                                                        : 'border-gray-300 text-gray-500 hover:text-sky-700'
+                                                                }`}
+                                                            >
+                                                                <i className="fas fa-pen text-xs" aria-hidden />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
                                                 <div className={`text-xs mt-0.5 font-mono ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{a.sub}</div>
                                                 <div className={`text-[10px] mt-1 ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
                                                     {new Date(a.updatedAt).toLocaleString()}
                                                 </div>
                                             </div>
                                         </div>
-                                    </button>
+                                    </div>
                                 );
                             })}
                         {!loading && artifacts.length === 0 && (
@@ -1134,6 +1250,12 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                             <input
                                 value={workflowTitleEdit}
                                 onChange={(e) => setWorkflowTitleEdit(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        e.currentTarget.blur();
+                                    }
+                                }}
                                 onBlur={async () => {
                                     if (!selectedWorkflow?.id || !ds?.updateTeamWorkflow) return;
                                     const t = workflowTitleEdit.trim();
@@ -1157,8 +1279,8 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                                 className={`flex-1 min-w-[160px] text-lg font-semibold bg-transparent border-b border-transparent focus:border-cyan-500 outline-none ${
                                     isDark ? 'text-white placeholder:text-gray-600' : 'text-gray-900 placeholder:text-gray-400'
                                 }`}
-                                placeholder="Flow title"
-                                aria-label="Flow title"
+                                placeholder="Process name"
+                                aria-label="Process name"
                             />
                             <button
                                 type="button"
