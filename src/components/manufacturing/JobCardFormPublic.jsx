@@ -22,8 +22,9 @@ const JOB_CARD_IMAGE_MAX_DIMENSION = 1920;
 const JOB_CARD_IMAGE_THUMB_MAX_DIMENSION = 360;
 const JOB_CARD_SYNC_WARN_PAYLOAD_BYTES = 18 * 1024 * 1024;
 const JOB_CARD_SYNC_HARD_PAYLOAD_BYTES = 28 * 1024 * 1024;
-const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 45000;
-const JOB_CARD_SYNC_RETRY_ATTEMPTS = 3;
+/** Per-attempt fetch budget. Large JSON (photos) + DB + reverse proxies often exceed 45s under load. */
+const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 80000;
+const JOB_CARD_SYNC_RETRY_ATTEMPTS = 2;
 const PRIOR_CARD_HEADING_MAX_CHARS = 36;
 
 /** Work-step fields that can each carry photos/videos (stored on JobCard.photos as { kind: 'sectionMedia', section, url, name }). */
@@ -4686,7 +4687,7 @@ const JobCardFormPublic = () => {
         } catch (error) {
           lastSyncError =
             error?.name === 'AbortError'
-              ? 'Request timed out while syncing. Please try again on a stable connection.'
+              ? 'Sync timed out: the server took too long (busy DB, large payload, or proxy limit)—not only weak signal. Retry from “View or Edit Existing Job Card”.'
               : (error.message || 'Network error');
           console.warn('⚠️ JobCardFormPublic: POST /api/jobcards failed:', error.message);
           return { ok: false, serverId: null };
@@ -4737,7 +4738,7 @@ const JobCardFormPublic = () => {
             console.warn('JobCardFormPublic: authenticated PATCH failed', e);
             lastSyncError =
               e?.name === 'AbortError'
-                ? 'Request timed out while syncing. Please try again on a stable connection.'
+                ? 'Sync timed out: the server took too long (busy DB, large payload, or proxy limit)—not only weak signal. Retry from “View or Edit Existing Job Card”.'
                 : (e.message || 'Network error');
           }
         } else if (!skipRemoteSync) {
