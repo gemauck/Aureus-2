@@ -1369,6 +1369,8 @@ model TeamWorkflow {
   description String                  @default("")
   status      String                  @default("Draft")
   steps       Json?                   @default("[]") // JSONB array of workflow step objects
+  canvasKind  String?                 // null | excalidraw | drawio — process hub diagrams
+  canvasData  Json?                   // editor payload (Excalidraw scene or { drawioXml })
   tags        Json?                   @default("[]") // JSONB array of strings
   ownerId     String?
   createdAt   DateTime                @default(now())

@@ -300,21 +300,144 @@
         }
     },
 
-    // Teams (localStorage only for now)
-    async getTeamDocuments() {
-        return safeStorageCall(window.storage, 'getTeamDocuments', []);
+    // Team documents (API — Process hub & legacy callers)
+    async getTeamDocuments(teamId) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+            if (!token) return [];
+            const q = new URLSearchParams();
+            if (teamId) q.set('teamId', teamId);
+            const response = await fetch(`/api/teams/documents?${q}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) throw new Error(`Failed to fetch documents: ${response.status}`);
+            const data = await response.json();
+            return data.data?.documents || [];
+        } catch (e) {
+            console.error('getTeamDocuments:', e);
+            return [];
+        }
     },
 
+    async createTeamDocument(payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const body = { ...payload, teamId: payload.teamId || payload.team };
+        if (!body.teamId) throw new Error('teamId is required');
+        const response = await fetch('/api/teams/documents', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Create document failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.document;
+    },
+
+    async updateTeamDocument(id, payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/documents/${id}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Update document failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.document;
+    },
+
+    async deleteTeamDocument(id) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/documents/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Delete document failed: ${response.status}`);
+        return true;
+    },
+
+    /** @deprecated Use create/updateTeamDocument API */
     async setTeamDocuments(documents) {
         if (typeof window.storage?.setTeamDocuments === 'function') {
             window.storage.setTeamDocuments(documents);
         }
     },
 
-    async getTeamWorkflows() {
-        return safeStorageCall(window.storage, 'getTeamWorkflows', []);
+    // Team workflows / process diagrams (API)
+    async getTeamWorkflows(teamId) {
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+            if (!token) return [];
+            const q = new URLSearchParams();
+            if (teamId) q.set('teamId', teamId);
+            const response = await fetch(`/api/teams/workflows?${q}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) throw new Error(`Failed to fetch workflows: ${response.status}`);
+            const data = await response.json();
+            return data.data?.workflows || [];
+        } catch (e) {
+            console.error('getTeamWorkflows:', e);
+            return [];
+        }
     },
 
+    async createTeamWorkflow(payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const body = { ...payload, teamId: payload.teamId || payload.team };
+        if (!body.teamId) throw new Error('teamId is required');
+        const response = await fetch('/api/teams/workflows', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Create workflow failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.workflow;
+    },
+
+    async updateTeamWorkflow(id, payload) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/workflows/${id}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Update workflow failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.data?.workflow;
+    },
+
+    async deleteTeamWorkflow(id) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch(`/api/teams/workflows/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Delete workflow failed: ${response.status}`);
+        return true;
+    },
+
+    /** @deprecated Use create/updateTeamWorkflow API */
     async setTeamWorkflows(workflows) {
         if (typeof window.storage?.setTeamWorkflows === 'function') {
             window.storage.setTeamWorkflows(workflows);

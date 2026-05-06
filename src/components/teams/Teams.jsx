@@ -245,7 +245,7 @@ const Teams = () => {
         const tab = urlParams.get('tab') || 'overview';
         // Map legacy tabs to discussions
         if (['documents', 'workflows', 'checklists', 'notices'].includes(tab)) return 'discussions';
-        if (['overview', 'discussions', 'meeting-notes', 'poa-review', 'sars-monitoring', 'members'].includes(tab)) return tab;
+        if (['overview', 'discussions', 'process-flows', 'meeting-notes', 'poa-review', 'sars-monitoring', 'members'].includes(tab)) return tab;
         return 'overview';
     };
     
@@ -314,6 +314,7 @@ const Teams = () => {
     const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
     // Force re-render when on discussions tab until lazy-loaded TeamDiscussions is available
     const [, setDiscussionsReadyTick] = useState(0);
+    const [, setProcessFlowsReadyTick] = useState(0);
     // Members management (admin only)
     const [membersLoading, setMembersLoading] = useState(false);
     const [availableUsers, setAvailableUsers] = useState([]);
@@ -548,6 +549,12 @@ const Teams = () => {
         return () => clearInterval(id);
     }, [activeTab]);
 
+    useEffect(() => {
+        if (activeTab !== 'process-flows' || window.TeamProcessHub) return;
+        const id = setInterval(() => setProcessFlowsReadyTick((t) => t + 1), 300);
+        return () => clearInterval(id);
+    }, [activeTab]);
+
     // Team discussion counts from API (teams list includes counts.discussions)
     const getTeamCounts = useCallback((teamId) => {
         const team = teams.find(t => t.id === teamId);
@@ -772,7 +779,7 @@ const Teams = () => {
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder="Search discussions…"
+                                    placeholder={activeTab === 'process-flows' ? 'Search flows and documents…' : 'Search discussions…'}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
@@ -806,6 +813,20 @@ const Teams = () => {
                                 <i className="fas fa-comments mr-1.5"></i>
                                 <span className="hidden sm:inline">Discussions</span>
                                 <span className="sm:hidden">Discuss</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('process-flows')}
+                                className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                    activeTab === 'process-flows'
+                                        ? isDark
+                                            ? 'bg-gradient-to-r from-cyan-900/80 to-sky-900/80 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.25)] border border-cyan-700/50'
+                                            : 'bg-gradient-to-r from-sky-100 to-cyan-50 text-sky-900 shadow-sm border border-sky-200/90'
+                                        : isDark ? 'text-gray-400 hover:text-cyan-200 hover:bg-gray-800/90' : 'text-gray-600 hover:text-sky-800 hover:bg-sky-50/80'
+                                }`}
+                            >
+                                <i className="fas fa-diagram-project mr-1.5"></i>
+                                <span className="hidden sm:inline">Process flows</span>
+                                <span className="sm:hidden">Flows</span>
                             </button>
                             {selectedTeam?.id === 'management' && (
                                 <button
@@ -912,7 +933,7 @@ const Teams = () => {
                                             </span>
                                         )}
                                         <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                            <span><i className="fas fa-comments mr-1"></i>{counts.docussions}</span>
+                                            <span><i className="fas fa-comments mr-1"></i>{counts.discussions}</span>
                                         </div>
                                     </button>
                                 );
@@ -959,6 +980,18 @@ const Teams = () => {
                             return (
                                 <TeamDiscussionsComponent team={selectedTeam} isDark={isDark} searchTerm={searchTerm} initialDiscussionId={getSearchParams().get('discussion') || undefined} />
                             );
+                        })()}
+                        {activeTab === 'process-flows' && (() => {
+                            const Hub = window.TeamProcessHub;
+                            if (!Hub) {
+                                return (
+                                    <div className={`flex items-center justify-center py-16 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <span className="animate-spin mr-2 inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full"></span>
+                                        <span className="text-sm">Loading process hub…</span>
+                                    </div>
+                                );
+                            }
+                            return <Hub team={selectedTeam} isDark={isDark} searchTerm={searchTerm} />;
                         })()}
                         {activeTab === 'sars-monitoring' && (selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (() => {
                             const SarsMonitoringComponent = window.SarsMonitoring;

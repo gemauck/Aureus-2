@@ -159,6 +159,7 @@
         'components/teams/NoticeModal.jsx',
         'components/teams/WorkflowExecutionModal.jsx',
         'components/teams/DiscussionModal.jsx',
+        'components/teams/TeamProcessHub.jsx',
         'components/teams/TeamDiscussions.jsx',
         'components/teams/ManagementMeetingNotes.jsx',
         'components/teams/SarsMonitoring.jsx',
