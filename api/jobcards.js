@@ -6,6 +6,7 @@ import { isAdminRole } from './_lib/authRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { insertJobCardActivityFromRequest } from './_lib/jobCardActivity.js'
 import { buildJobCardUpdateChanges, buildServiceFormInstanceChanges } from './_lib/jobCardActivityDiff.js'
+import { computeNextJobCardNumber } from './_lib/jobCardNumber.js'
 
 // Some deployments may not yet have the optional service form tables used by
 // the job card forms feature. When those tables are missing, Prisma throws
@@ -141,38 +142,6 @@ async function ensureMinimumJobCardActivity(prismaClient, jobCardId) {
       }
     })
   })
-}
-
-async function computeNextJobCardNumber() {
-  let nextNumber = 1
-  try {
-    const rows = await prisma.$queryRaw`
-      SELECT COALESCE(MAX(CAST(SUBSTRING("jobCardNumber" FROM 3) AS INTEGER)), 0)::int AS maxn
-      FROM "JobCard"
-      WHERE "jobCardNumber" ~ '^JC[0-9]+$'
-    `
-    const maxn = rows?.[0]?.maxn
-    const n = Number(maxn)
-    // Only trust aggregate when at least one JCnnnn row exists (maxn > 0). When maxn is 0 the table may be
-    // empty OR legacy rows may not match the regex — fall through to findFirst so we do not keep emitting JC0001.
-    if (Number.isFinite(n) && n > 0) {
-      nextNumber = n + 1
-      return `JC${String(nextNumber).padStart(4, '0')}`
-    }
-  } catch (e) {
-    console.warn('computeNextJobCardNumber: aggregate query failed, using fallback', e?.message)
-  }
-  const lastJobCard = await prisma.jobCard.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { jobCardNumber: true }
-  })
-  if (lastJobCard?.jobCardNumber?.startsWith('JC')) {
-    const match = lastJobCard.jobCardNumber.match(/JC(\d+)/)
-    if (match) {
-      nextNumber = parseInt(match[1], 10) + 1
-    }
-  }
-  return `JC${String(nextNumber).padStart(4, '0')}`
 }
 
 const LIST_SORT_WHITELIST = {
@@ -793,7 +762,7 @@ async function handler(req, res) {
         let jobCard = null
         const maxAttempts = 12
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          const jobCardNumber = await computeNextJobCardNumber()
+          const jobCardNumber = await computeNextJobCardNumber(prisma)
           try {
             jobCard = await prisma.jobCard.create(buildCreateArgs(jobCardNumber))
             break

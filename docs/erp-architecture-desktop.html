@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Abcotronics ERP — Architecture (desktop)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=Syne:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --panel: #141820;
+      --border: #2a3240;
+      --text: #e8eaef;
+      --muted: #8b95a8;
+      --accent: #3d9aed;
+      --accent-dim: #2563a8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 2.5rem 2rem 4rem;
+    }
+
+    header {
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+    }
+
+    h1 {
+      font-family: Syne, sans-serif;
+      font-weight: 700;
+      font-size: clamp(1.75rem, 3vw, 2.25rem);
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 62ch;
+    }
+
+    .kbd {
+      font-family: ui-monospace, monospace;
+      font-size: 0.85em;
+      background: var(--panel);
+      padding: 0.15em 0.45em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    section {
+      margin-bottom: 3rem;
+    }
+
+    section h2 {
+      font-family: Syne, sans-serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 0 0 1rem;
+      color: var(--accent);
+    }
+
+    .diagram {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1rem 1.5rem;
+      overflow-x: auto;
+    }
+
+    .diagram .mermaid {
+      display: flex;
+      justify-content: center;
+      min-height: 120px;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+
+    footer code {
+      color: var(--text);
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Abcotronics ERP architecture</h1>
+      <p class="subtitle">
+        Desktop reference: how code moves from your machine to production, and how the browser talks to one Node app on your DigitalOcean droplet.
+      </p>
+    </header>
+
+    <section aria-labelledby="s1">
+      <h2 id="s1">1. From editor to production</h2>
+      <div class="diagram">
+        <div class="mermaid">
+flowchart LR
+  subgraph local["Your machine"]
+    Cursor["Cursor — edit src/, api/"]
+    Git["git commit / push"]
+    Cursor --> Git
+  end
+  subgraph gh["GitHub"]
+    Repo["Repository\n(source of truth)"]
+  end
+  subgraph deploy["Deploy"]
+    SSH["SSH scripts\n(deploy-droplet*.sh)"]
+    Pull["Droplet: git pull,\nnpm ci / build,\npm2 restart"]
+    SSH --> Pull
+  end
+  subgraph do["DigitalOcean"]
+    Droplet["Droplet\n165.22.127.196"]
+    Nginx["Nginx :443"]
+    PM2["PM2: abcotronics-erp\nserver.js"]
+    PG[("Managed PostgreSQL")]
+  end
+  Git --> Repo
+  Repo --> SSH
+  Pull --> Droplet
+  Droplet --> Nginx
+  Nginx -->|"→ localhost:3000"| PM2
+  PM2 --> PG
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="s2">
+      <h2 id="s2">2. Users → one Node process → database</h2>
+      <div class="diagram">
+        <div class="mermaid">
+flowchart TB
+  Users["Staff / browsers\nhttps://abcoafrica.co.za"]
+  subgraph droplet["Same droplet"]
+    NX["Nginx — TLS & proxy"]
+    subgraph appserver["Node — server.js"]
+      API["REST /api/*\nExpress + api/*.js"]
+      UI["SPA + assets\nindex.html, dist/*"]
+    end
+    Prisma["Prisma Client"]
+  end
+  DB[("PostgreSQL\nDigitalOcean managed")]
+  Users --> NX
+  NX --> appserver
+  API --> Prisma
+  Prisma --> DB
+  UI --> Users
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="s3">
+      <h2 id="s3">3. ERP surface area (logical)</h2>
+      <div class="diagram">
+        <div class="mermaid">
+flowchart LR
+  ERP["Abcotronics ERP"]
+  ERP --> CRM["CRM & clients"]
+  ERP --> Lead["Leads & pipeline"]
+  ERP --> Proj["Projects & documents"]
+  ERP --> Mfg["Manufacturing & inventory"]
+  ERP --> Inv["Invoicing"]
+  ERP --> HR["HR & leave"]
+  ERP --> HD["Helpdesk & notifications"]
+  ERP --> Ext["Integrations\ncron, webhooks,\nSafety Culture, mail"]
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Open this file in your browser: <code>docs/erp-architecture-desktop.html</code><br />
+      Production URL and IP match values used in repo deploy docs; update the diagrams if DNS or hosting changes.
+    </footer>
+  </div>
+
+  <!-- UMD bundle so diagrams work when opening this file directly (file://) without ES module restrictions -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "dark",
+      securityLevel: "loose",
+      themeVariables: {
+        primaryColor: "#1e2430",
+        primaryTextColor: "#e8eaef",
+        primaryBorderColor: "#3d9aed",
+        lineColor: "#5c6b82",
+        secondaryColor: "#141820",
+        tertiaryColor: "#0c0e12",
+        fontFamily: '"IBM Plex Sans", sans-serif',
+      },
+      flowchart: {
+        curve: "basis",
+        padding: 12,
+        nodeSpacing: 48,
+        rankSpacing: 56,
+      },
+    });
+  </script>
+</body>
+</html>

@@ -23,6 +23,15 @@ Imports **ABCOTRONICS STOCK COUNT - 2026.xlsx** (or similar stock take Excel) in
    node scripts/import-stock-count-excel.js "/path/to/ABCOTRONICS STOCK COUNT - 2026.xlsx" --dry-run
    ```
 
+   **Pietermaritzburg / PMB** (no Location columns in sheet — e.g. `PART`, `QUANTITY`, `Box`, `Part Number`, `Supplier`, `Price`):
+
+   ```bash
+   node scripts/import-stock-count-excel.js "/path/to/file.xlsx" --dry-run --only-location=PMB
+   node scripts/import-stock-count-excel.js "/path/to/file.xlsx" --only-location=PMB --needs-catalog-review
+   ```
+
+   `--only-location=PMB` resolves an existing `StockLocation` by code **PMB**, then Pietermaritzburg-style names (`PIETERMARITZBURG` in name, etc.), then creates **PMB** if needed. `--needs-catalog-review` flags new lines for catalog review.
+
 2. **Run import** (requires `DATABASE_URL` in `.env` or environment):
 
    ```bash

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Editor → Production — Abcotronics ERP</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      color: #111;
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 12mm;
+    }
+    h1 {
+      font-size: 18pt;
+      margin: 0 0 8pt;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 6pt;
+    }
+    .meta { font-size: 9pt; color: #444; margin-bottom: 18pt; }
+    h2 {
+      font-size: 13pt;
+      margin: 18pt 0 8pt;
+      color: #1e3a5f;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11pt;
+      margin: 14pt 0 6pt;
+      page-break-after: avoid;
+    }
+    p { margin: 0 0 8pt; }
+    ul { margin: 6pt 0 10pt; padding-left: 18pt; }
+    li { margin-bottom: 4pt; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      margin: 10pt 0;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6pt 8pt;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #f0f4f8; }
+    code, pre {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 9pt;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+    pre {
+      padding: 10pt;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      page-break-inside: avoid;
+    }
+    .note {
+      font-size: 9.5pt;
+      border-left: 3px solid #2563eb;
+      padding-left: 10pt;
+      margin: 10pt 0;
+      color: #333;
+    }
+    @media print {
+      body { padding: 0; }
+      a { color: #000; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Editor → Production — Abcotronics ERP</h1>
+  <p class="meta">
+    Pipeline overview for your stack: Cursor (or any editor) → Git → GitHub → DigitalOcean droplet
+    (Nginx, PM2, Node <code>server.js</code>) → Prisma → managed PostgreSQL. Production domain referenced in repo docs:
+    <strong>abcoafrica.co.za</strong>.
+  </p>
+
+  <h2>Overview</h2>
+  <p>
+    Nothing reaches users until it is committed, pushed to GitHub, deployed to the server, and the Node process is restarted.
+    The application is a <strong>single Node/Express process</strong> that serves both <code>/api/*</code> and the SPA/static assets.
+    Persistent data lives in PostgreSQL; if the database is unreachable, API routes may return 503 or time out even when HTML still loads.
+  </p>
+
+  <h2>1. Editor (Cursor or any IDE)</h2>
+  <h3>What it is</h3>
+  <p>Where source files exist on your computer until you commit.</p>
+  <h3>What it is for</h3>
+  <p>
+    You change behaviour and UI here: React/JSX under <code>src/</code>, HTTP handlers under <code>api/</code>, Express entry <code>server.js</code>,
+    schema and migrations under <code>prisma/</code>. Production does not change until later steps.
+  </p>
+  <h3>How to implement</h3>
+  <ul>
+    <li>Use a feature branch for non-trivial work (<code>feature/…</code>, <code>fix/…</code>).</li>
+    <li>Run the live app locally as this repo expects: <code>npm run dev:backend</code> and <code>npm run watch:jsx</code>.</li>
+    <li>The separate <code>frontend/</code> tree is a separate modernization project; the production ERP UI is built from <code>src/</code> per project conventions.</li>
+    <li>Exercise the flows you care about (e.g. job cards, <code>/api/me</code>) before pushing.</li>
+  </ul>
+
+  <h2>2. Git commit</h2>
+  <h3>What it is</h3>
+  <p>A snapshot of the repository at a point in time, with a message and a commit hash.</p>
+  <h3>What it is for</h3>
+  <p>History, rollback, collaboration, and a fixed point that deployment can target.</p>
+  <h3>How to implement</h3>
+  <pre>git status
+git add -p   # or add specific paths
+git commit -m "Clear description of the change"</pre>
+
+  <h2>3. Git push</h2>
+  <h3>What it is</h3>
+  <p>Uploading local commits to the remote on GitHub.</p>
+  <h3>What it is for</h3>
+  <p>Off-machine backup, sharing with others, and the source that your droplet’s <code>git pull</code> uses.</p>
+  <h3>How to implement</h3>
+  <pre>git push origin your-branch
+# After merge to main:
+git checkout main &amp;&amp; git pull &amp;&amp; git push origin main</pre>
+  <p class="note">If you push only to a branch that is never merged or deployed, production stays on old code.</p>
+
+  <h2>4. GitHub (remote repository)</h2>
+  <h3>What it is</h3>
+  <p>The authoritative hosted copy: branches, pull requests, tags.</p>
+  <h3>What it is for</h3>
+  <p>Single source of truth, optional PR/review workflows. This repository does not include <code>.github/workflows</code> by default, so CI/CD must be defined elsewhere if used.</p>
+  <h3>How to implement</h3>
+  <p>Merge to the branch you actually deploy (often <code>main</code>). Optionally tag releases for traceability.</p>
+
+  <h2>5. Deploy (server update)</h2>
+  <h3>What it is</h3>
+  <p>Fetching latest code on the droplet, installing dependencies, building if required, running migrations when the schema changes, restarting PM2.</p>
+  <h3>What it is for</h3>
+  <p>Users hit the server, not your laptop. Restart loads new code and refreshed env when using <code>--update-env</code>.</p>
+  <h3>How to implement (typical pattern)</h3>
+  <pre>ssh root@abcoafrica.co.za   # or root@YOUR_DROPLET_IP
+cd /var/www/abcotronics-erp   # adjust to your server path
+git fetch origin &amp;&amp; git checkout main &amp;&amp; git pull
+npm ci                        # or npm install — be consistent with prod
+npm run build                 # when you ship built JSX/CSS to dist/
+npx prisma migrate deploy     # when prisma schema changed — per your release process
+pm2 restart abcotronics-erp --update-env</pre>
+  <p class="note">You may use existing scripts in the repo (e.g. deploy helpers) instead of typing these by hand—keep one documented path and stick to it.</p>
+
+  <h2>6. Droplet: Nginx → PM2 → Node</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Role</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Nginx</strong></td>
+        <td>Listens on 443 (HTTPS), terminates TLS, proxies to Node (often <code>http://127.0.0.1:3000</code>).</td>
+      </tr>
+      <tr>
+        <td><strong>PM2</strong></td>
+        <td>Runs <code>node server.js</code> under the process name (e.g. <code>abcotronics-erp</code>), restarts on failure, manages logs.</td>
+      </tr>
+      <tr>
+        <td><strong>Node / Express</strong></td>
+        <td>One process: REST under <code>/api/*</code>, Prisma, plus SPA and static files (<code>index.html</code>, <code>dist/</code>).</td>
+      </tr>
+    </tbody>
+  </table>
+  <h3>Verify</h3>
+  <ul>
+    <li>On the droplet: <code>curl -sS http://127.0.0.1:3000/</code> or your documented health/db endpoint.</li>
+    <li><code>pm2 status</code>, <code>pm2 logs abcotronics-erp</code>.</li>
+    <li><code>nginx -t</code> and confirm <code>proxy_pass</code> matches the Node port.</li>
+  </ul>
+
+  <h2>7. PostgreSQL (DigitalOcean managed)</h2>
+  <h3>What it is</h3>
+  <p>Managed Postgres; Prisma uses <code>DATABASE_URL</code> from production environment.</p>
+  <h3>What it is for</h3>
+  <p>All durable ERP data. Connection failures, timeouts, or pool exhaustion surface as API errors (e.g. 503 on <code>/api/me</code>).</p>
+  <h3>How to implement</h3>
+  <ul>
+    <li>Set <code>DATABASE_URL</code> in production <code>.env</code> beside <code>server.js</code> (never commit secrets).</li>
+    <li>Restrict DB network access to trusted hosts (e.g. droplet only).</li>
+    <li>Apply migrations when schema changes; monitor connection limits in DO and in logs.</li>
+  </ul>
+
+  <h2>End-to-end chain (one sentence)</h2>
+  <p>
+    <strong>Edit locally → commit → push → merge on GitHub → deploy on the droplet (pull, install, build, migrate if needed, PM2 restart) → Nginx serves HTTPS to Express → Prisma reads/writes PostgreSQL.</strong>
+  </p>
+
+  <h2>Post-deploy checklist</h2>
+  <ul>
+    <li>Site loads in browser; hard refresh after deploy.</li>
+    <li>Authenticated API checks succeed when DB is healthy (e.g. <code>/api/me</code>).</li>
+    <li>PM2 logs show no crash loops; no repeated DB connection errors.</li>
+  </ul>
+
+  <p class="meta" style="margin-top: 24pt;">Generated for Abcotronics ERP — editor-to-production reference.</p>
+</body>
+</html>
