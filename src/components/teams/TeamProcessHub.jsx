@@ -227,7 +227,6 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const [loading, setLoading] = useState(true);
     const [filterChip, setFilterChip] = useState('all');
     const [selected, setSelected] = useState(null);
-    const [saveStatus, setSaveStatus] = useState('idle');
     const [importDragging, setImportDragging] = useState(false);
     const [importQueue, setImportQueue] = useState([]);
     const [pdfImportChoice, setPdfImportChoice] = useState(null);
@@ -380,15 +379,11 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const persistWorkflowPatch = useCallback(
         async (id, patch) => {
             if (!ds?.updateTeamWorkflow) return;
-            setSaveStatus('saving');
             try {
                 await ds.updateTeamWorkflow(id, patch);
-                setSaveStatus('saved');
-                setTimeout(() => setSaveStatus('idle'), 1600);
                 await loadAll(true);
             } catch (e) {
                 console.error(e);
-                setSaveStatus('idle');
                 window.alert(e.message || 'Save failed');
             }
         },
@@ -926,21 +921,6 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                                 </button>
                             ))}
                         </div>
-                        {saveStatus !== 'idle' && (
-                            <span
-                                className={`text-xs font-mono px-2 py-1 rounded-lg ${
-                                    saveStatus === 'saving'
-                                        ? isDark
-                                            ? 'text-amber-300 bg-amber-950/50'
-                                            : 'text-amber-800 bg-amber-50'
-                                        : isDark
-                                          ? 'text-emerald-300 bg-emerald-950/40'
-                                          : 'text-emerald-800 bg-emerald-50'
-                                }`}
-                            >
-                                {saveStatus === 'saving' ? 'Saving…' : 'Saved'}
-                            </span>
-                        )}
                         <button
                             type="button"
                             onClick={() => setLibraryCollapsedPersist(!libraryCollapsed)}
@@ -1260,11 +1240,8 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                                     if (!selectedWorkflow?.id || !ds?.updateTeamWorkflow) return;
                                     const t = workflowTitleEdit.trim();
                                     if (!t || t === (selectedWorkflow.title || '')) return;
-                                    setSaveStatus('saving');
                                     try {
                                         await ds.updateTeamWorkflow(selectedWorkflow.id, { title: t });
-                                        setSaveStatus('saved');
-                                        setTimeout(() => setSaveStatus('idle'), 1600);
                                         await loadAll(true);
                                         setSelected((s) =>
                                             s?.kind === 'workflow' && s.id === selectedWorkflow.id
@@ -1273,7 +1250,6 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                                         );
                                     } catch (e) {
                                         window.alert(e.message || 'Could not save title');
-                                        setSaveStatus('idle');
                                     }
                                 }}
                                 className={`flex-1 min-w-[160px] text-lg font-semibold bg-transparent border-b border-transparent focus:border-cyan-500 outline-none ${
