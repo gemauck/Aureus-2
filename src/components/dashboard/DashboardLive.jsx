@@ -1793,7 +1793,7 @@ const DashboardLive = () => {
                         setEditMode(!editMode);
                         console.log('🎨 Edit Mode:', !editMode ? 'ENABLED' : 'DISABLED');
                     }}
-                    className={`px-5 py-2.5 text-sm font-medium rounded-lg ${editMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-500 text-white hover:bg-blue-600'} transition-all duration-200`}
+                    className={`px-5 py-2.5 text-sm font-medium rounded-lg ${editMode ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-green-500 text-white hover:bg-green-600'} transition-all duration-200`}
                     title={editMode ? 'Exit edit mode to hide controls' : 'Click to enable drag, drop, and resize'}
                 >
                     <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-2`}></i>

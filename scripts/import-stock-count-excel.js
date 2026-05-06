@@ -27,6 +27,11 @@ const HEADERS = {
   'PART NAME (NO LONGER NAME)': 'name',
   'Part Name': 'name',
   'PART NAME': 'name',
+  PART: 'name',
+  QUANTITY: 'quantity',
+  Box: 'boxNumber',
+  'Part Number': 'supplierPartNumber',
+  Price: 'unitCost',
   'Category': 'category',
   'Type': 'type',
   'Quantity': 'quantity',
@@ -75,10 +80,13 @@ function normalizeType(val) {
 }
 
 // Parse numeric cells: support both "362,593.29" (US) and "362 158,29" (SA: space=thousands, comma=decimal)
+// Strips leading currency markers (e.g. R6.077)
 function parseDecimal(val) {
   if (val == null || val === '') return 0
   if (typeof val === 'number' && !Number.isNaN(val)) return val
   let s = String(val).trim().replace(/\s/g, '')
+  if (!s) return 0
+  s = s.replace(/^ZAR/i, '').replace(/^[R$€£]/, '')
   if (!s) return 0
   // SA/EU format: comma is decimal only when no dot (e.g. "362 158,29" -> 362158.29)
   // If there's a dot, treat as US (comma = thousands), e.g. "362,593.29" -> 362593.29
@@ -158,9 +166,10 @@ async function main() {
   const onlyLocation = onlyLocationArg
     ? onlyLocationArg.replace('--only-location=', '').trim()
     : (process.env.ONLY_LOCATION || '').trim()
+  const needsCatalogReview = args.includes('--needs-catalog-review')
   const pathArg = args.find(a => !a.startsWith('--'))
   if (!pathArg) {
-    console.error('Usage: node scripts/import-stock-count-excel.js "/path/to/ABCOTRONICS STOCK COUNT - 2026.xlsx" [--dry-run] [--only-location=PMB] [--update-quantities-only] [--update-legacy-part-numbers]')
+    console.error('Usage: node scripts/import-stock-count-excel.js "/path/to/file.xlsx" [--dry-run] [--only-location=PMB] [--needs-catalog-review] [--update-quantities-only] [--update-legacy-part-numbers]')
     process.exit(1)
   }
   const inputPath = resolve(pathArg)
@@ -189,7 +198,9 @@ async function main() {
     if (key) colIndex[key] = i
   })
   if (colIndex.name === undefined) {
-    const nameCol = headerRow.findIndex(h => /part name|name|description/i.test(String(h)))
+    const nameCol = headerRow.findIndex(h =>
+      /part name|^part$|item name|name|description/i.test(String(h).trim())
+    )
     if (nameCol >= 0) colIndex.name = nameCol
   }
   const nameCol = colIndex.name
@@ -210,11 +221,16 @@ async function main() {
   }
 
   let dataRows = rows.slice(1).filter(row => row && (row[nameCol] != null && String(row[nameCol]).trim() !== ''))
+  const hasLocationCols =
+    colIndex.locationCode !== undefined || colIndex.location !== undefined
   if (onlyLocation) {
+    const onlyU = onlyLocation.toUpperCase()
     const locMatch = (row) => {
+      if (!hasLocationCols) return true
       const code = (row[colIndex.locationCode] != null ? String(row[colIndex.locationCode]).trim() : '').toUpperCase()
       const name = (row[colIndex.location] != null ? String(row[colIndex.location]).trim() : '')
-      return code === onlyLocation.toUpperCase() || (name && name.toUpperCase() === onlyLocation.toUpperCase())
+      if (!code && !name) return true
+      return code === onlyU || (name && name.toUpperCase() === onlyU)
     }
     const before = dataRows.length
     dataRows = dataRows.filter(locMatch)
@@ -391,7 +407,12 @@ async function main() {
   }
   if (onlyLocation) {
     const singleLoc = locationMap[normalizeCode(onlyLocation)] || locationMap[String(onlyLocation).trim()]
-    if (singleLoc) locationMap[''] = singleLoc
+    if (!singleLoc) {
+      console.error('Could not resolve --only-location=', onlyLocation)
+      await prisma.$disconnect()
+      process.exit(1)
+    }
+    locationMap[''] = singleLoc
   } else {
     const mainWarehouse = await prisma.stockLocation.findFirst({ where: { code: 'LOC001' } })
     if (mainWarehouse) {
@@ -447,7 +468,7 @@ async function main() {
     const locationCodeRaw = get('locationCode')
     const locationNameRaw = get('location')
     const locKey = normalizeCode(locationCodeRaw) || locationNameRaw
-    const location = locationMap[locKey] || locationMap[locationNameRaw] || mainWarehouse
+    const location = locationMap[locKey] || locationMap[locationNameRaw] || locationMap['']
     const locationId = location ? location.id : null
 
     const supplierRaw = get('supplier')
@@ -486,8 +507,19 @@ async function main() {
         legacyPartNumber: legacyPartNumber || '',
         boxNumber: boxNumber || '',
       }
+      if (needsCatalogReview) createData.needsCatalogReview = true
 
-      const item = await prisma.inventoryItem.create({ data: createData })
+      let item
+      try {
+        item = await prisma.inventoryItem.create({ data: createData })
+      } catch (createError) {
+        if (needsCatalogReview && createError.message && createError.message.includes('needsCatalogReview')) {
+          delete createData.needsCatalogReview
+          item = await prisma.inventoryItem.create({ data: createData })
+        } else {
+          throw createError
+        }
+      }
       created++
 
       if (locationId && quantity > 0) {
