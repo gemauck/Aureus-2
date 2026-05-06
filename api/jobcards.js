@@ -144,11 +144,28 @@ async function ensureMinimumJobCardActivity(prismaClient, jobCardId) {
 }
 
 async function computeNextJobCardNumber() {
+  let nextNumber = 1
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT COALESCE(MAX(CAST(SUBSTRING("jobCardNumber" FROM 3) AS INTEGER)), 0)::int AS maxn
+      FROM "JobCard"
+      WHERE "jobCardNumber" ~ '^JC[0-9]+$'
+    `
+    const maxn = rows?.[0]?.maxn
+    const n = Number(maxn)
+    // Only trust aggregate when at least one JCnnnn row exists (maxn > 0). When maxn is 0 the table may be
+    // empty OR legacy rows may not match the regex — fall through to findFirst so we do not keep emitting JC0001.
+    if (Number.isFinite(n) && n > 0) {
+      nextNumber = n + 1
+      return `JC${String(nextNumber).padStart(4, '0')}`
+    }
+  } catch (e) {
+    console.warn('computeNextJobCardNumber: aggregate query failed, using fallback', e?.message)
+  }
   const lastJobCard = await prisma.jobCard.findFirst({
     orderBy: { createdAt: 'desc' },
     select: { jobCardNumber: true }
   })
-  let nextNumber = 1
   if (lastJobCard?.jobCardNumber?.startsWith('JC')) {
     const match = lastJobCard.jobCardNumber.match(/JC(\d+)/)
     if (match) {

@@ -22,8 +22,8 @@ const JOB_CARD_IMAGE_MAX_DIMENSION = 1920;
 const JOB_CARD_IMAGE_THUMB_MAX_DIMENSION = 360;
 const JOB_CARD_SYNC_WARN_PAYLOAD_BYTES = 18 * 1024 * 1024;
 const JOB_CARD_SYNC_HARD_PAYLOAD_BYTES = 28 * 1024 * 1024;
-/** Per-attempt fetch budget. Large JSON (photos) + DB + reverse proxies often exceed 45s under load. */
-const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 80000;
+/** Per-attempt fetch budget; keeps wedged requests from blocking the UI for multiple minutes. */
+const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 60000;
 const JOB_CARD_SYNC_RETRY_ATTEMPTS = 2;
 const PRIOR_CARD_HEADING_MAX_CHARS = 36;
 
@@ -4487,6 +4487,7 @@ const JobCardFormPublic = () => {
     setIsSubmitting(true);
     setStepError('');
     try {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
       const nowIso = new Date().toISOString();
       const jobCardData = {
         ...formData,
