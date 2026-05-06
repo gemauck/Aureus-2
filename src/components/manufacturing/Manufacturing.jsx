@@ -4106,11 +4106,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           }
                         }, 100);
                       }}
-                      onChange={(e) => {
-                        // Mark that user is typing - don't update state yet
-                        isUserTypingRef.current = true;
-                        activeInputRef.current = e.target;
-                      }}
+                      onChange={(e) => handleColumnFilterChange('sku', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
