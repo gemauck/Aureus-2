@@ -437,6 +437,26 @@
         return true;
     },
 
+    /** Experimental: POST /api/teams/convert-pdf-sketch — Poppler SVG → Excalidraw elements (page 1 only). */
+    async convertPdfToSketch(dataUrl, page = 1) {
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+        if (!token) throw new Error('No auth token');
+        const response = await fetch('/api/teams/convert-pdf-sketch', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUrl, page })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const msg = data.error?.message || data.error || `Sketch conversion failed: ${response.status}`;
+            throw new Error(typeof msg === 'string' ? msg : 'Sketch conversion failed');
+        }
+        return {
+            canvasData: data.data?.canvasData,
+            meta: data.data?.meta || {}
+        };
+    },
+
     /** @deprecated Use create/updateTeamWorkflow API */
     async setTeamWorkflows(workflows) {
         if (typeof window.storage?.setTeamWorkflows === 'function') {

@@ -68,6 +68,89 @@ async function ensureJSZip() {
     return window.JSZip;
 }
 
+function genCanvasElId() {
+    return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+async function ensurePdfJs() {
+    if (window.pdfjsLib) return window.pdfjsLib;
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    const pdfjsLib = window.pdfjsLib;
+    if (!pdfjsLib) throw new Error('pdf.js failed to load');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return pdfjsLib;
+}
+
+/** Rasterize PDF page → Excalidraw canvasData with a locked dim image as trace background. */
+async function buildTraceCanvasDataFromPdf(file, pageNum, viewBackgroundColor) {
+    const pdfjsLib = await ensurePdfJs();
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(pageNum);
+    const scale = 2;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const renderTask = page.render({ canvasContext: ctx, viewport });
+    await renderTask.promise;
+    const dataURL = canvas.toDataURL('image/png');
+    const fileId = genCanvasElId();
+    const imageId = genCanvasElId();
+    const files = {
+        [fileId]: {
+            mimeType: 'image/png',
+            id: fileId,
+            dataURL,
+            created: Date.now(),
+            lastRetrieved: Date.now()
+        }
+    };
+    const elements = [
+        {
+            type: 'image',
+            id: imageId,
+            x: 0,
+            y: 0,
+            width: viewport.width,
+            height: viewport.height,
+            angle: 0,
+            strokeColor: '#000000',
+            backgroundColor: 'transparent',
+            fillStyle: 'solid',
+            strokeWidth: 1,
+            strokeStyle: 'solid',
+            roughness: 0,
+            opacity: 38,
+            groupIds: [],
+            roundness: null,
+            seed: Math.floor(Math.random() * 1e9),
+            version: 1,
+            versionNonce: Math.floor(Math.random() * 1e9),
+            isDeleted: false,
+            boundElements: null,
+            updated: Date.now(),
+            link: null,
+            locked: true,
+            status: 'saved',
+            fileId,
+            scale: [1, 1],
+            crop: null,
+            frameId: null
+        }
+    ];
+    return {
+        elements,
+        files,
+        appState: {
+            viewBackgroundColor: viewBackgroundColor || '#ffffff',
+            gridSize: null,
+            zenModeEnabled: false
+        }
+    };
+}
+
 function fileToDataUrl(file) {
     return new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -129,6 +212,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const [saveStatus, setSaveStatus] = useState('idle');
     const [importDragging, setImportDragging] = useState(false);
     const [importQueue, setImportQueue] = useState([]);
+    const [pdfImportChoice, setPdfImportChoice] = useState(null);
     const [leftWidth, setLeftWidth] = useState(380);
     const [resizeDrag, setResizeDrag] = useState(null);
 
@@ -386,6 +470,104 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
         }
     };
 
+    const handlePdfImportDocumentOnly = async () => {
+        const file = pdfImportChoice?.file;
+        if (!file || !team?.id || !ds?.createTeamDocument) return;
+        const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token');
+        if (!token) {
+            window.alert('Not authenticated');
+            return;
+        }
+        setPdfImportChoice(null);
+        const qid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setImportQueue((q) => [...q, { id: qid, name: file.name, status: 'working', error: null }]);
+        try {
+            const up = await uploadTeamFile(file, token);
+            await ds.createTeamDocument({
+                teamId: team.id,
+                title: sanitizeImportTitle(file.name),
+                category: 'Imported',
+                description: '',
+                content: '',
+                attachments: [{ name: up.name, url: up.url, mimeType: up.mimeType }],
+                tags: ['imported']
+            });
+            setImportQueue((q) => q.map((x) => (x.id === qid ? { ...x, status: 'done' } : x)));
+            await loadAll(true);
+        } catch (e) {
+            setImportQueue((q) =>
+                q.map((x) => (x.id === qid ? { ...x, status: 'error', error: e.message || 'Failed' } : x))
+            );
+        }
+    };
+
+    const handlePdfImportTrace = async () => {
+        const file = pdfImportChoice?.file;
+        if (!file || !team?.id || !ds?.createTeamWorkflow) return;
+        setPdfImportChoice(null);
+        const qid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setImportQueue((q) => [...q, { id: qid, name: file.name, status: 'working', error: null }]);
+        try {
+            const viewBg = isDark ? '#121212' : '#ffffff';
+            const canvasData = await buildTraceCanvasDataFromPdf(file, 1, viewBg);
+            const w = await ds.createTeamWorkflow({
+                teamId: team.id,
+                title: `${sanitizeImportTitle(file.name)} (trace)`,
+                description: 'Raster trace layer from PDF page 1 — draw over the dim background.',
+                status: 'Draft',
+                steps: [],
+                canvasKind: 'excalidraw',
+                canvasData,
+                tags: ['imported', 'trace-pdf']
+            });
+            await loadAll(true);
+            setSelected({ kind: 'workflow', id: w.id, title: w.title, updatedAt: w.updatedAt, sub: '', raw: w });
+            setImportQueue((q) => q.map((x) => (x.id === qid ? { ...x, status: 'done' } : x)));
+        } catch (e) {
+            setImportQueue((q) =>
+                q.map((x) => (x.id === qid ? { ...x, status: 'error', error: e.message || 'Failed' } : x))
+            );
+        }
+    };
+
+    const handlePdfImportSketch = async () => {
+        const file = pdfImportChoice?.file;
+        if (!file || !team?.id || !ds?.createTeamWorkflow) return;
+        if (!ds.convertPdfToSketch) {
+            window.alert('Please refresh the page to enable PDF sketch import.');
+            return;
+        }
+        setPdfImportChoice(null);
+        const qid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setImportQueue((q) => [...q, { id: qid, name: file.name, status: 'working', error: null }]);
+        try {
+            const dataUrl = await fileToDataUrl(file);
+            const { canvasData, meta } = await ds.convertPdfToSketch(dataUrl, 1);
+            const warns = Array.isArray(meta?.warnings) ? meta.warnings.filter(Boolean) : [];
+            if (warns.length) window.alert(`Sketch import notes:\n\n${warns.join('\n')}`);
+            const w = await ds.createTeamWorkflow({
+                teamId: team.id,
+                title: `${sanitizeImportTitle(file.name)} (sketch)`,
+                description:
+                    meta?.converter === 'poppler-svg'
+                        ? 'Experimental vector sketch from PDF (server).'
+                        : 'Experimental sketch — server vector extraction unavailable; shapes may be empty.',
+                status: 'Draft',
+                steps: [],
+                canvasKind: 'excalidraw',
+                canvasData,
+                tags: ['imported', 'pdf-sketch']
+            });
+            await loadAll(true);
+            setSelected({ kind: 'workflow', id: w.id, title: w.title, updatedAt: w.updatedAt, sub: '', raw: w });
+            setImportQueue((q) => q.map((x) => (x.id === qid ? { ...x, status: 'done' } : x)));
+        } catch (e) {
+            setImportQueue((q) =>
+                q.map((x) => (x.id === qid ? { ...x, status: 'error', error: e.message || 'Failed' } : x))
+            );
+        }
+    };
+
     const processIncomingFiles = async (fileList) => {
         const files = Array.from(fileList || []).filter(Boolean);
         if (!files.length || !team?.id) return;
@@ -393,6 +575,14 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
         if (!token) {
             window.alert('Not authenticated');
             return;
+        }
+
+        if (files.length === 1) {
+            const onlyKind = await sniffFileKind(files[0]);
+            if (onlyKind === 'pdf') {
+                setPdfImportChoice({ file: files[0] });
+                return;
+            }
         }
 
         const processOneFile = async (file, kind, tok) => {
@@ -639,7 +829,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                 <i className={`fas fa-cloud-upload-alt text-2xl mb-2 ${isDark ? 'text-cyan-400/90' : 'text-sky-600'}`} />
                 <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Drop files or zip to import</p>
                 <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                    PDF, Excel, Word, .drawio / XML, or zip archives.
+                    Single PDF: attach, trace canvas, or experimental sketch. Also Excel, Word, .drawio / XML, zip.
                 </p>
             </div>
 
@@ -814,6 +1004,85 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                     )}
                 </div>
             </div>
+
+            {pdfImportChoice?.file && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/55 backdrop-blur-[2px]"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="pdf-import-choice-title"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setPdfImportChoice(null);
+                    }}
+                >
+                    <div
+                        className={`max-w-md w-full rounded-2xl border shadow-2xl p-6 space-y-4 ${
+                            isDark ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-900'
+                        }`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <div>
+                            <h3 id="pdf-import-choice-title" className="text-lg font-semibold">
+                                Import PDF
+                            </h3>
+                            <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                <span className="font-mono text-xs break-all">{pdfImportChoice.file.name}</span>
+                            </p>
+                            <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                Trace uses page 1 as a dim locked layer in Excalidraw. Sketch uses server-side vector extraction
+                                (Poppler) when available.
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <button
+                                type="button"
+                                onClick={handlePdfImportDocumentOnly}
+                                className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium border text-left ${
+                                    isDark ? 'border-gray-600 hover:bg-gray-800' : 'border-gray-300 hover:bg-gray-50'
+                                }`}
+                            >
+                                <span className="block font-semibold">Attach as document only</span>
+                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    Upload file and open as team document (existing behavior).
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePdfImportTrace}
+                                className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium border text-left ${
+                                    isDark ? 'border-cyan-800 hover:bg-cyan-950/40' : 'border-sky-300 hover:bg-sky-50'
+                                }`}
+                            >
+                                <span className="block font-semibold">New flow — trace mode</span>
+                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    Raster page 1 as background; draw on top in Excalidraw.
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePdfImportSketch}
+                                className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium border text-left ${
+                                    isDark ? 'border-amber-900/60 hover:bg-amber-950/30' : 'border-amber-300 hover:bg-amber-50'
+                                }`}
+                            >
+                                <span className="block font-semibold">New flow — experimental sketch</span>
+                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    Heuristic SVG→shapes (best when Poppler is on the server).
+                                </span>
+                            </button>
+                        </div>
+                        <div className="flex justify-end pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setPdfImportChoice(null)}
+                                className={`text-sm px-3 py-1.5 rounded-lg ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
