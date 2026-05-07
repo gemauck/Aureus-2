@@ -42,6 +42,7 @@ const Tools = () => {
     const [toolComponents, setToolComponents] = useState({
         PDFToWordConverter: null,
         HandwritingToWord: null,
+        HandwritingTableToExcel: null,
         UnitConverter: null,
         TankSizeCalculator: null,
         DieselRefundEvidenceEvaluator: null,
@@ -82,6 +83,7 @@ const Tools = () => {
             const components = {
                 PDFToWordConverter: window.PDFToWordConverter,
                 HandwritingToWord: window.HandwritingToWord,
+                HandwritingTableToExcel: window.HandwritingTableToExcel,
                 UnitConverter: window.UnitConverter,
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
@@ -118,6 +120,7 @@ const Tools = () => {
                     UnitConverter: !!components.UnitConverter,
                     PDFToWordConverter: !!components.PDFToWordConverter,
                     HandwritingToWord: !!components.HandwritingToWord,
+                    HandwritingTableToExcel: !!components.HandwritingTableToExcel,
                     DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator,
                     DocumentParser: !!components.DocumentParser,
                     ExpenseCaptureTool: !!components.ExpenseCaptureTool,
@@ -145,6 +148,7 @@ const Tools = () => {
             const components = {
                 PDFToWordConverter: window.PDFToWordConverter,
                 HandwritingToWord: window.HandwritingToWord,
+                HandwritingTableToExcel: window.HandwritingTableToExcel,
                 UnitConverter: window.UnitConverter,
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator,
@@ -224,6 +228,14 @@ const Tools = () => {
                 icon: 'fa-pen-fancy',
                 color: 'primary',
                 component: toolComponents.HandwritingToWord
+            },
+            {
+                id: 'handwriting-table-excel',
+                name: 'Handwriting Tables to Excel',
+                description: 'Extract handwritten tables from PDF/images and export structured Excel sheets',
+                icon: 'fa-file-excel',
+                color: 'green',
+                component: toolComponents.HandwritingTableToExcel
             },
             {
                 id: 'diesel-refund-evaluator',

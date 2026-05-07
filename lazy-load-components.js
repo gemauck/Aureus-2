@@ -163,6 +163,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/tools/UnitConverter.jsx',
         './src/components/tools/PDFToWordConverter.jsx',
         './src/components/tools/HandwritingToWord.jsx',
+        './src/components/tools/HandwritingTableToExcel.jsx',
         './src/components/tools/DieselRefundEvidenceEvaluator.jsx',
         './src/components/tools/ExpenseCaptureTool.jsx',
         './src/components/tools/ExpenseCaptureStandalone.jsx',
