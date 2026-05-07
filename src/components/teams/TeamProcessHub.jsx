@@ -1498,14 +1498,6 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete }) {
                     Delete
                 </button>
             </div>
-            <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onBlur={() => onUpdate({ content })}
-                placeholder="Notes, SOP text, or checklist…"
-                rows={8}
-                className={`w-full rounded-xl border px-3 py-2 text-sm font-sans ${isDark ? 'bg-gray-900 border-gray-700 text-gray-100' : 'bg-white border-gray-300'}`}
-            />
             <div>
                 <h3 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Attachments</h3>
                 <ul className="space-y-2">
@@ -1563,6 +1555,17 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete }) {
                         )}
                     </div>
                 )}
+            </div>
+            <div>
+                <h3 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Notes</h3>
+                <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    onBlur={() => onUpdate({ content })}
+                    placeholder="Notes, SOP text, or checklist…"
+                    rows={8}
+                    className={`w-full rounded-xl border px-3 py-2 text-sm font-sans ${isDark ? 'bg-gray-900 border-gray-700 text-gray-100' : 'bg-white border-gray-300'}`}
+                />
             </div>
         </div>
     );
