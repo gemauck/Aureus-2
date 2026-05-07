@@ -296,7 +296,6 @@ const LeadDetailModal = ({
         }
     }, [lead?.id, lead?.engagementStage, lead?.aidaStatus]); // Also depend on engagementStage and aidaStatus to detect updates
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
-    const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
     const editingTimeoutRef = useRef(null); // Track timeout to clear editing flag
     const autoSaveDebounceTimeoutRef = useRef(null); // Debounce auto-save to prevent rate limiting
@@ -1147,7 +1146,7 @@ const LeadDetailModal = ({
         }
         
         // CRITICAL: Block if user is currently editing or saving
-        if (isEditingRef.current || isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current) {
+        if (isEditingRef.current || isAutoSavingRef.current || isSavingProposalsRef.current) {
             lastProcessedLeadRef.current = lead;
             return;
         }
@@ -1221,7 +1220,7 @@ const LeadDetailModal = ({
     
     // Ensure proposals from latest lead fetch are synced even when lead ID stays the same
     useEffect(() => {
-        if (!lead || isSavingProposalsRef.current || isCreatingProposalRef.current) {
+        if (!lead || isSavingProposalsRef.current) {
             return;
         }
         
@@ -1646,7 +1645,6 @@ const LeadDetailModal = ({
     const [editingStageAssignee, setEditingStageAssignee] = useState(null);
     const [showStageComments, setShowStageComments] = useState({});
     const [stageCommentInput, setStageCommentInput] = useState({});
-    const [isCreatingProposal, setIsCreatingProposal] = useState(false); // UI state for button disabled state
     const lastSaveTimeoutRef = useRef(null); // Debounce saves
     // @mention tagging state
     const [mentionState, setMentionState] = useState({}); // { [stageKey]: { show: false, query: '', position: 0 } }
@@ -3082,11 +3080,6 @@ const LeadDetailModal = ({
                                 {tab === 'sites' && formData.sites?.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.sites.length}
-                                    </span>
-                                )}
-                                {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
-                                        {formData.proposals.length}
                                     </span>
                                 )}
                             </button>
@@ -4720,265 +4713,13 @@ const LeadDetailModal = ({
                         {/* Proposals Tab */}
                         {activeTab === 'proposals' && isAdmin && (
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold text-gray-900">Proposals</h3>
-                                    <button
-                                        type="button"
-                                        disabled={isCreatingProposal || isCreatingProposalRef.current}
-                                        onClick={async () => {
-                                            // Use ref check for immediate guard (before state updates)
-                                            if (isCreatingProposalRef.current || isCreatingProposal) {
-                                                console.warn('⚠️ Proposal creation already in progress, ignoring click');
-                                                return;
-                                            }
-                                            
-                                            // Set both ref (immediate) and state (for UI)
-                                            isCreatingProposalRef.current = true;
-                                            setIsCreatingProposal(true);
-                                            
-                                            
-                                            // Generate a stable ID that won't change on re-renders
-                                            const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                                            
-                                            const newProposal = {
-                                                id: proposalId,
-                                                title: `Proposal for ${formData.name}`,
-                                                name: `Proposal for ${formData.name}`,
-                                                createdDate: new Date().toISOString().split('T')[0],
-                                                workflowStage: 'create-site-inspection',
-                                                workingDocumentLink: '',
-                                                stages: [
-                                                    { 
-                                                        name: 'Create Site Inspection Document', 
-                                                        department: 'Business Development',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Conduct site visit input data to Site Inspection Document', 
-                                                        department: 'Technical',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Comments on work loading requirements', 
-                                                        department: 'Data',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Comments on time allocations', 
-                                                        department: 'Support',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Relevant comments time allocations', 
-                                                        department: 'Compliance',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Creates proposal from template add client information', 
-                                                        department: 'Business Development',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Reviews proposal against Site Inspection comments', 
-                                                        department: 'Operations Manager',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Price proposal', 
-                                                        department: 'Commercial',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Final Approval', 
-                                                        department: 'CEO',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    }
-                                                ],
-                                                proposalContent: '',
-                                                siteInspectionData: '',
-                                                pricing: {
-                                                    subtotal: 0,
-                                                    tax: 0,
-                                                    total: 0
-                                                }
-                                            };
-                                            
-                                            // Check if proposal already exists (prevent duplicates)
-                                            // Use functional update pattern to get latest proposals
-                                            const checkProposals = () => {
-                                                // Use formDataRef for most up-to-date data
-                                                const refData = formDataRef.current;
-                                                const stateData = formData;
-                                                const lastSavedData = lastSavedDataRef.current;
-                                                
-                                                // Get proposals from all sources (including last saved)
-                                                const refProposals = refData?.proposals || [];
-                                                const stateProposals = stateData?.proposals || [];
-                                                const lastSavedProposals = lastSavedData?.proposals || [];
-                                                
-                                                // Merge them by ID (ref takes precedence, then lastSaved, then state)
-                                                const allProposalsMap = new Map();
-                                                
-                                                // Add state proposals first
-                                                stateProposals.forEach(p => {
-                                                    if (p.id) allProposalsMap.set(p.id, p);
-                                                });
-                                                
-                                                // Add lastSaved proposals (overwrites state if same ID)
-                                                lastSavedProposals.forEach(p => {
-                                                    if (p.id) allProposalsMap.set(p.id, p);
-                                                });
-                                                
-                                                // Add ref proposals last (highest priority - overwrites all)
-                                                refProposals.forEach(p => {
-                                                    if (p.id) allProposalsMap.set(p.id, p);
-                                                });
-                                                
-                                                return Array.from(allProposalsMap.values());
-                                            };
-                                            
-                                            const existingProposals = checkProposals();
-                                            
-                                            
-                                            // Check by ID first (most reliable) - this should always be unique
-                                            const proposalExistsById = existingProposals.some(p => p.id === proposalId);
-                                            
-                                            // Only check by title if we're creating within the same second (very rare but possible)
-                                            // Removed the date check since proposals created on the same day should be allowed
-                                            const recentProposals = existingProposals.filter(p => {
-                                                if (!p.id) return false;
-                                                // Check if proposal ID was created in the last 2 seconds
-                                                const pTimestamp = parseInt(p.id.split('-')[1]);
-                                                const currentTimestamp = Date.now();
-                                                return Math.abs(currentTimestamp - pTimestamp) < 2000;
-                                            });
-                                            
-                                            const proposalExistsByTitle = recentProposals.some(p => 
-                                                p.title === newProposal.title
-                                            );
-                                            
-                                            if (proposalExistsById) {
-                                                console.warn('⚠️ Proposal with same ID already exists, skipping creation', {
-                                                    proposalId,
-                                                    existingProposal: existingProposals.find(p => p.id === proposalId)
-                                                });
-                                                isCreatingProposalRef.current = false;
-                                                setIsCreatingProposal(false);
-                                                return;
-                                            }
-                                            
-                                            // Only block if we have a very recent proposal with the same title (within 2 seconds)
-                                            if (proposalExistsByTitle && recentProposals.length > 0) {
-                                                console.warn('⚠️ Very recent proposal with same title exists, skipping creation', {
-                                                    recentProposals: recentProposals.map(p => ({ id: p.id, title: p.title }))
-                                                });
-                                                isCreatingProposalRef.current = false;
-                                                setIsCreatingProposal(false);
-                                                return;
-                                            }
-                                            
-                                            
-                                            // Use functional update to merge with existing proposals properly
-                                            const updatedProposals = [...existingProposals, newProposal];
-                                            await saveProposals(updatedProposals);
-                                            
-                                            // Notify all assigned parties of the new proposal
-                                            await notifyAllAssignedParties(
-                                                newProposal,
-                                                `New Proposal Created: ${newProposal.title || newProposal.name}`,
-                                                `A new proposal "${newProposal.title || newProposal.name}" has been created for ${formData.name || 'this lead'}.`,
-                                                `#/clients?lead=${lead.id}&tab=proposals`,
-                                                {
-                                                    proposalId: newProposal.id,
-                                                    leadId: lead.id
-                                                }
-                                            );
-                                            
-                                            // Reset flags after a delay (longer to ensure save completes)
-                                            setTimeout(() => {
-                                                isCreatingProposalRef.current = false;
-                                                setIsCreatingProposal(false);
-                                            }, 2000);
-                                        }}
-                                        className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                                            (isCreatingProposal || isCreatingProposalRef.current)
-                                                ? 'bg-gray-400 text-white cursor-not-allowed' 
-                                                : 'bg-primary-600 text-white hover:bg-primary-700'
-                                        }`}
-                                    >
-                                        <i className="fas fa-plus mr-2"></i>
-                                        {(isCreatingProposal || isCreatingProposalRef.current) ? 'Creating...' : 'Create New Proposal'}
-                                    </button>
-                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">Proposals</h3>
 
                                 {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
                                     <div className="text-center py-12 text-gray-500">
                                         <i className="fas fa-file-contract text-4xl mb-3"></i>
                                         <p className="text-sm">No proposals created yet</p>
-                                        <p className="text-xs mt-1">Click "Create New Proposal" to start the approval workflow</p>
+                                        <p className="text-xs mt-1">Existing proposals will appear here.</p>
                                         {/* Debug info */}
                                         {process.env.NODE_ENV === 'development' && (
                                             <div className="mt-4 text-xs text-gray-400">

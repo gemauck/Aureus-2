@@ -1193,19 +1193,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         });
         hasUserEditedForm.current = true;
     };
-    const handleAddLeadProposal = () => {
-        const id = `proposal-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-        const list = Array.isArray(formDataRef.current?.proposals) ? formDataRef.current.proposals : [];
-        setLeadProposals([...list, {
-            id,
-            title: '',
-            amount: 0,
-            status: 'Draft',
-            workingDocumentLink: '',
-            notes: '',
-            createdDate: new Date().toISOString().split('T')[0]
-        }]);
-    };
     const patchLeadProposal = (index, partial) => {
         const list = [...(Array.isArray(formDataRef.current?.proposals) ? formDataRef.current.proposals : [])];
         if (!list[index]) return;
@@ -4521,11 +4508,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 } mr-1 sm:mr-2`}></i>
                                 <span className="hidden sm:inline">{tab === 'service-maintenance' ? 'Service & Maintenance' : tab === 'kyc' ? 'KYC' : (tab.charAt(0).toUpperCase() + tab.slice(1).replace(/-/g, ' '))}</span>
                                 <span className="sm:hidden">{tab === 'service-maintenance' ? 'S&M' : tab === 'kyc' ? 'KYC' : tab.charAt(0).toUpperCase()}</span>
-                                {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
-                                    <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs ${isDark ? 'bg-primary-900/50 text-primary-300' : 'bg-primary-100 text-primary-600'}`}>
-                                        {formData.proposals.length}
-                                    </span>
-                                )}
                             </button>
                         ))}
                     </div>
@@ -7460,22 +7442,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         Track proposal records for this lead. Changes save with the rest of the lead (auto-save after edits). Rich workflows can be added here later.
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
-                                    <button
-                                        type="button"
-                                        onClick={handleAddLeadProposal}
-                                        className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-                                    >
-                                        <i className="fas fa-plus mr-2"></i>
-                                        Add proposal
-                                    </button>
-                                </div>
+                                <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
                                 {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
                                     <div className={`text-center py-12 rounded-lg border border-dashed ${isDark ? 'border-gray-600 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
                                         <i className="fas fa-clipboard-list text-4xl mb-3 opacity-60"></i>
                                         <p className="text-sm">No proposals yet</p>
-                                        <p className="text-xs mt-1">Add a row to capture title, value, status, and document link</p>
+                                        <p className="text-xs mt-1">Existing proposals will appear here.</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
