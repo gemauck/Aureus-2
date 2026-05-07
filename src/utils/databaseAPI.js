@@ -1227,9 +1227,13 @@ const DatabaseAPI = {
     },
 
     async createCustomerEngagementLink(leadId, options = {}) {
+        const payload = { clearSubmission: options.clearSubmission === true };
+        if (Object.prototype.hasOwnProperty.call(options, 'prefill')) {
+            payload.prefill = options.prefill;
+        }
         const response = await this.makeRequest(`/leads/${encodeURIComponent(leadId)}/customer-engagement-link`, {
             method: 'POST',
-            body: JSON.stringify({ clearSubmission: options.clearSubmission === true })
+            body: JSON.stringify(payload)
         });
         this.clearCache(`/leads/${leadId}`);
         this.clearCache('/leads');

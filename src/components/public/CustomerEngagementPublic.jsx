@@ -12,21 +12,6 @@ const FONT = {
     body: "'DM Sans', system-ui, sans-serif"
 };
 
-/** Section banner images — contextual, compressed; decorative only */
-const SECTION_BANNERS = {
-    general:
-        'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=900&h=280&q=75',
-    commercial:
-        'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&w=900&h=280&q=75',
-    technical:
-        'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&w=900&h=280&q=75',
-    data: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=900&h=280&q=75',
-    compliance:
-        'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=900&h=280&q=75',
-    default:
-        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=900&h=280&q=75'
-};
-
 function apiOrigin() {
     return window.location.origin || '';
 }
@@ -66,7 +51,15 @@ function deepCopyCheckboxDefaults(groupField) {
     return o;
 }
 
-function buildInitialResponses(formDef, prefill) {
+const SECTION_GRADIENTS = [
+    'from-blue-950 via-blue-900 to-blue-600',
+    'from-slate-950 via-blue-900 to-indigo-700',
+    'from-indigo-950 via-blue-800 to-sky-600',
+    'from-slate-900 via-blue-950 to-blue-700',
+    'from-blue-900 via-indigo-900 to-blue-600'
+];
+
+function buildInitialResponses(formDef) {
     const out = {};
     if (!formDef?.sections) return out;
     for (const sec of formDef.sections) {
@@ -80,25 +73,21 @@ function buildInitialResponses(formDef, prefill) {
             }
         }
     }
-    if (prefill?.clientName && out['general.clientName'] !== undefined) {
-        out['general.clientName'] = prefill.clientName;
-    }
     return out;
 }
 
-function SectionBanner({ sectionId, index, total, title }) {
-    const src = SECTION_BANNERS[sectionId] || SECTION_BANNERS.default;
+function SectionBanner({ index, total, title }) {
+    const g = SECTION_GRADIENTS[index % SECTION_GRADIENTS.length];
     return (
-        <div className="relative h-32 sm:h-36 overflow-hidden">
-            <img
-                src={src}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                loading="lazy"
-                decoding="async"
+        <div className={`relative h-32 sm:h-36 overflow-hidden bg-gradient-to-br ${g}`}>
+            <div
+                className="pointer-events-none absolute inset-0 opacity-45 bg-[radial-gradient(ellipse_90%_120%_at_15%_0%,rgba(255,255,255,0.38),transparent_55%)]"
+                aria-hidden
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/45 to-slate-800/25" />
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-900/50 to-transparent sm:from-blue-900/40" />
+            <div
+                className="pointer-events-none absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_70%_80%_at_100%_100%,rgba(56,189,248,0.35),transparent)]"
+                aria-hidden
+            />
             <div className="relative h-full flex flex-col justify-end px-5 pb-4 sm:px-7 sm:pb-5">
                 <p
                     className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white/75 mb-1"
@@ -161,7 +150,7 @@ const CustomerEngagementPublic = () => {
                     setSubmittedAt(data.submittedAt || null);
                     setResponses(data.responses);
                 } else {
-                    setResponses(buildInitialResponses(data.form, data.prefill));
+                    setResponses(data.initialResponses || buildInitialResponses(data.form));
                 }
                 setPhase('ready');
             } catch (e) {
@@ -464,13 +453,18 @@ const CustomerEngagementPublic = () => {
                 <article className="rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-900 shadow-xl shadow-slate-300/30 dark:shadow-black/50">
                     {/* Hero strip + letterhead */}
                     <header className="relative">
-                        <div className="relative h-36 sm:h-44 overflow-hidden">
-                            <img
-                                src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&h=400&q=75"
-                                alt=""
-                                className="absolute inset-0 h-full w-full object-cover"
+                        <div
+                            className="relative h-36 sm:h-44 overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700"
+                        >
+                            <div
+                                className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_100%_80%_at_20%_-10%,rgba(255,255,255,0.45),transparent_50%)]"
+                                aria-hidden
                             />
-                            <div className="absolute inset-0 bg-gradient-to-br from-slate-900/88 via-blue-950/75 to-blue-900/55" />
+                            <div
+                                className="pointer-events-none absolute inset-0 opacity-35 bg-[radial-gradient(ellipse_80%_60%_at_100%_80%,rgba(56,189,248,0.45),transparent_45%)]"
+                                aria-hidden
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent" aria-hidden />
                             <div className="relative h-full flex flex-col justify-end px-6 sm:px-10 pb-6 sm:pb-8">
                                 <div className="flex flex-col sm:flex-row sm:items-end gap-5 sm:justify-between">
                                     <div className="flex gap-4 items-center">
@@ -553,12 +547,7 @@ const CustomerEngagementPublic = () => {
                                     key={sec.id}
                                     className="rounded-2xl overflow-hidden border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-md shadow-slate-200/50 dark:shadow-black/40 ring-1 ring-slate-100/80 dark:ring-slate-800"
                                 >
-                                    <SectionBanner
-                                        sectionId={sec.id}
-                                        index={si}
-                                        total={totalSteps}
-                                        title={sec.heading}
-                                    />
+                                    <SectionBanner index={si} total={totalSteps} title={sec.heading} />
                                     <div className="px-5 sm:px-8 py-6 sm:py-8 border-t border-slate-100 dark:border-slate-800">
                                         <div className="h-px w-12 bg-gradient-to-r from-blue-600 to-transparent rounded-full mb-6 opacity-80" aria-hidden />
                                         {sec.fields.map((f) => renderField(f))}

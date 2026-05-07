@@ -85,6 +85,7 @@ import './components/manufacturing/jobCardActivityDisplay.js';
 import './components/manufacturing/JobCardFormPublic.jsx';
 import './components/manufacturing/JobCardAppGate.jsx';
 import './components/public/CustomerEngagementPublic.jsx';
+import './components/public/CustomerEngagementReportView.jsx';
 
 // Application entry point
 import './App.jsx';

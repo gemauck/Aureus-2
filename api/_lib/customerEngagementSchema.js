@@ -343,3 +343,61 @@ export function buildEmptyResponses() {
   }
   return o
 }
+
+/**
+ * Admin-supplied defaults for the public form (no fileList). Null clears stored prefill.
+ */
+export function sanitizeCustomerEngagementPrefill(raw) {
+  if (raw === null) return null
+  if (raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) return null
+
+  const fields = flattenFieldDefs()
+  const byId = new Map(fields.map((f) => [f.id, f]))
+  const out = {}
+
+  for (const [k, v] of Object.entries(raw)) {
+    const f = byId.get(k)
+    if (!f || f.type === 'fileList') continue
+
+    if (f.type === 'checkboxGroup') {
+      if (typeof v !== 'object' || v === null || Array.isArray(v)) continue
+      const allowed = new Set((f.options || []).map((opt) => opt.id))
+      const checked = {}
+      for (const oid of allowed) {
+        if (v[oid] === true) checked[oid] = true
+      }
+      if (Object.keys(checked).length > 0) out[k] = checked
+      continue
+    }
+
+    if (typeof v !== 'string') continue
+    const maxLen = f.maxLength || MAX_TEXT
+    const s = v.trim() === '' ? '' : v.slice(0, maxLen)
+    if (s !== '') out[k] = s
+  }
+
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/**
+ * Full initial response object for the public GET (empty + stored prefill + lead name for client field).
+ */
+export function buildInitialResponsesForPublic(storedPrefillRaw, leadName) {
+  const base = buildEmptyResponses()
+  const sanitized = sanitizeCustomerEngagementPrefill(storedPrefillRaw)
+  if (sanitized) {
+    for (const [k, v] of Object.entries(sanitized)) {
+      if (base[k] === undefined) continue
+      if (typeof base[k] === 'object' && base[k] !== null && !Array.isArray(base[k]) && v && typeof v === 'object' && !Array.isArray(v)) {
+        base[k] = { ...base[k], ...v }
+      } else if (!Array.isArray(base[k])) {
+        base[k] = v
+      }
+    }
+  }
+  const name = String(leadName || '').trim()
+  if (name && !String(base['general.clientName'] || '').trim()) {
+    base['general.clientName'] = name
+  }
+  return base
+}

@@ -425,6 +425,7 @@ const publicCustomerEngagementLimiter = rateLimit({
 // Apply calendar-notes limiter first (before general API limiter)
 app.use('/api/calendar-notes', calendarNotesLimiter)
 app.use('/api/public/customer-engagement', publicCustomerEngagementLimiter)
+app.use('/api/public/customer-engagement-form', publicCustomerEngagementLimiter)
 
 // Apply general API rate limiting (skips calendar-notes)
 app.use('/api', apiLimiter)
@@ -2658,6 +2659,17 @@ app.all('/api/public/customer-engagement', async (req, res, next) => {
     return handler(req, res)
   } catch (e) {
     console.error('❌ Public customer-engagement API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/public/customer-engagement-form', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'customer-engagement-form.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public customer-engagement-form API error:', e)
     return next(e)
   }
 })

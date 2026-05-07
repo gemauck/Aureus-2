@@ -6,7 +6,8 @@ import { hashCustomerEngagementToken } from '../_lib/customerEngagementToken.js'
 import {
   CUSTOMER_ENGAGEMENT_SCHEMA_VERSION,
   getCustomerEngagementFormDefinition,
-  validateCustomerEngagementResponses
+  validateCustomerEngagementResponses,
+  buildInitialResponsesForPublic
 } from '../_lib/customerEngagementSchema.js'
 
 function allowPublicCustomerEngagement() {
@@ -40,6 +41,7 @@ async function findLeadByRawToken(rawToken) {
       customerEngagementRevokedAt: true,
       customerEngagementSubmittedAt: true,
       customerEngagementResponses: true,
+      customerEngagementPrefill: true,
       activityLogJsonb: true,
       activityLog: true
     }
@@ -81,12 +83,11 @@ async function handler(req, res) {
         return notFound(res, 'This link is invalid or has expired.')
       }
       const submitted = !!lead.customerEngagementSubmittedAt
+      const initialResponses = buildInitialResponsesForPublic(lead.customerEngagementPrefill, lead.name)
       return ok(res, {
         schemaVersion: CUSTOMER_ENGAGEMENT_SCHEMA_VERSION,
         form: formDef,
-        prefill: {
-          clientName: lead.name || ''
-        },
+        initialResponses,
         submitted,
         submittedAt: lead.customerEngagementSubmittedAt
           ? lead.customerEngagementSubmittedAt.toISOString()

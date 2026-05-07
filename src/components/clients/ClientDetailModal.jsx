@@ -75,6 +75,32 @@ const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
 // jump back to Overview. Must be long enough for parent re-renders and effect runs to settle.
 const TAB_PRESERVE_AFTER_INLINE_SAVE_MS = 3500;
 
+function buildEngagementPrefillDraft(formDef, storedPrefill, leadName) {
+    if (!formDef?.sections) return {};
+    const draft = {};
+    const storedObj = storedPrefill && typeof storedPrefill === 'object' && !Array.isArray(storedPrefill) ? storedPrefill : {};
+    for (const sec of formDef.sections) {
+        for (const f of sec.fields) {
+            if (f.type === 'fileList') continue;
+            if (f.type === 'checkboxGroup') {
+                const next = {};
+                for (const opt of f.options || []) {
+                    next[opt.id] = storedObj[f.id]?.[opt.id] === true;
+                }
+                draft[f.id] = next;
+            } else {
+                const v = storedObj[f.id];
+                draft[f.id] = typeof v === 'string' ? v : '';
+            }
+        }
+    }
+    const nm = String(leadName || '').trim();
+    if (nm && !String(draft['general.clientName'] || '').trim()) {
+        draft['general.clientName'] = nm;
+    }
+    return draft;
+}
+
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, onRevertToLead, initialSiteId, onInitialSiteOpened }) => {
     // entityType: 'client' or 'lead' - determines terminology and behavior
     const isLead = entityType === 'lead';
@@ -363,6 +389,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementBusy, setEngagementBusy] = useState(false);
     const [engagementHint, setEngagementHint] = useState('');
     const [showEngagementResponsesModal, setShowEngagementResponsesModal] = useState(false);
+    const [showEngagementPrefillModal, setShowEngagementPrefillModal] = useState(false);
+    const [engagementFormDef, setEngagementFormDef] = useState(null);
+    const [engagementPrefillDraft, setEngagementPrefillDraft] = useState({});
+    const [engagementPrefillLoading, setEngagementPrefillLoading] = useState(false);
+    const [engagementClearSubmission, setEngagementClearSubmission] = useState(false);
+    const [engagementReportBranding, setEngagementReportBranding] = useState(null);
+    const [engagementReportFormDef, setEngagementReportFormDef] = useState(null);
+    const [engagementReportLoading, setEngagementReportLoading] = useState(false);
+    const [engagementInternalNote, setEngagementInternalNote] = useState('');
+    const [engagementNoteSaving, setEngagementNoteSaving] = useState(false);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -439,7 +475,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         };
     }, [formData, onSave]);
 
-    const handleEngagementGenerate = async (clearSubmission) => {
+    const openEngagementPrefillModal = async (clearSubmission) => {
         if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
         if (
             clearSubmission &&
@@ -455,12 +491,37 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         ) {
             return;
         }
+        setEngagementClearSubmission(clearSubmission);
+        setShowEngagementPrefillModal(true);
+        setEngagementPrefillLoading(true);
+        setEngagementFormDef(null);
+        try {
+            const res = await fetch(`${window.location.origin}/api/public/customer-engagement-form`, { credentials: 'include' });
+            const json = await res.json();
+            const form = json?.data?.form;
+            setEngagementFormDef(form || null);
+            const latest = formDataRef.current;
+            setEngagementPrefillDraft(buildEngagementPrefillDraft(form, latest?.customerEngagementPrefill, latest?.name));
+        } catch (e) {
+            setEngagementHint(e.message || 'Could not load questionnaire');
+            setShowEngagementPrefillModal(false);
+        } finally {
+            setEngagementPrefillLoading(false);
+        }
+    };
+
+    const commitEngagementLinkFromModal = async () => {
+        if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
         setEngagementBusy(true);
         setEngagementHint('');
         try {
-            const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, { clearSubmission });
+            const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, {
+                clearSubmission: engagementClearSubmission,
+                prefill: engagementPrefillDraft
+            });
             const payload = res?.data ?? res;
             if (payload?.url) setEngagementLinkUrl(payload.url);
+            setShowEngagementPrefillModal(false);
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
             if (lead) {
@@ -471,6 +532,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     customerEngagementSubmittedAt: lead.customerEngagementSubmittedAt,
                     customerEngagementResponses: lead.customerEngagementResponses,
                     customerEngagementRevokedAt: lead.customerEngagementRevokedAt,
+                    customerEngagementPrefill: lead.customerEngagementPrefill,
                     activityLog:
                         typeof lead.activityLog === 'string'
                             ? JSON.parse(lead.activityLog || '[]')
@@ -478,13 +540,81 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }));
             }
             setEngagementHint(
-                clearSubmission ? 'New link created. Previous submission was cleared.' : 'Link created. Copy and send it to your contact.'
+                engagementClearSubmission
+                    ? 'New link created. Previous submission was cleared.'
+                    : 'Link created. Copy and send it to your contact.'
             );
         } catch (e) {
             setEngagementHint(e.message || 'Could not create link');
         } finally {
             setEngagementBusy(false);
             setTimeout(() => setEngagementHint(''), 5000);
+        }
+    };
+
+    useEffect(() => {
+        if (!showEngagementResponsesModal) return;
+        let cancelled = false;
+        setEngagementReportLoading(true);
+        setEngagementReportBranding(null);
+        setEngagementReportFormDef(null);
+        (async () => {
+            try {
+                const [bRes, fRes] = await Promise.all([
+                    fetch(`${window.location.origin}/api/public/document-branding`, { credentials: 'omit' }),
+                    fetch(`${window.location.origin}/api/public/customer-engagement-form`, { credentials: 'omit' })
+                ]);
+                const bJson = await bRes.json();
+                const fJson = await fRes.json();
+                if (cancelled) return;
+                setEngagementReportBranding(bJson?.data ?? bJson);
+                setEngagementReportFormDef(fJson?.data?.form ?? null);
+            } catch {
+                if (!cancelled) {
+                    setEngagementReportBranding(null);
+                    setEngagementReportFormDef(null);
+                }
+            } finally {
+                if (!cancelled) setEngagementReportLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [showEngagementResponsesModal]);
+
+    const appendEngagementInternalNote = async () => {
+        const text = engagementInternalNote.trim();
+        if (!text || typeof onSave !== 'function') return;
+        const user = window.storage?.getUser?.() || {};
+        const currentUser = {
+            name: user?.name || 'System',
+            email: user?.email || '',
+            id: user?.id || ''
+        };
+        const activity = {
+            id: `ce-int-${Date.now()}`,
+            type: 'Customer engagement (internal)',
+            description: text,
+            timestamp: new Date().toISOString(),
+            user: currentUser.name,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
+            relatedId: null,
+            meta: { source: 'customer_engagement_report' }
+        };
+        const base = formDataRef.current || formData;
+        const next = { ...base, activityLog: [...(base.activityLog || []), activity] };
+        setFormData(next);
+        setEngagementInternalNote('');
+        setEngagementNoteSaving(true);
+        try {
+            await onSave(next, true);
+        } catch (e) {
+            setEngagementHint(e.message || 'Could not save note');
+        } finally {
+            setEngagementNoteSaving(false);
+            setTimeout(() => setEngagementHint(''), 4000);
         }
     };
 
@@ -7631,7 +7761,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <button
                                             type="button"
                                             disabled={engagementBusy || !formData.id}
-                                            onClick={() => handleEngagementGenerate(false)}
+                                            onClick={() => openEngagementPrefillModal(false)}
                                             className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
                                                 isDark ? 'bg-primary-600 text-white hover:bg-primary-500' : 'bg-primary-600 text-white hover:bg-primary-700'
                                             } disabled:opacity-50`}
@@ -7641,7 +7771,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <button
                                             type="button"
                                             disabled={engagementBusy || !formData.id}
-                                            onClick={() => handleEngagementGenerate(true)}
+                                            onClick={() => openEngagementPrefillModal(true)}
                                             className={`text-xs px-3 py-1.5 rounded-lg border ${
                                                 isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
                                             } disabled:opacity-50`}
@@ -8090,56 +8220,223 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 </div>
             )}
             
-            {showEngagementResponsesModal && (
+            {showEngagementPrefillModal && (
                 <div
-                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4"
-                    onClick={() => setShowEngagementResponsesModal(false)}
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 p-4"
+                    onClick={() => !engagementBusy && setShowEngagementPrefillModal(false)}
                 >
                     <div
-                        className={`${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'} rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col`}
+                        className={`flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg shadow-xl ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
-                            <h2 className="text-lg font-semibold">Questionnaire responses</h2>
+                        <div className={`flex items-start justify-between gap-3 border-b px-6 py-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <div>
+                                <h2 className="text-lg font-semibold">Review & pre-fill questionnaire</h2>
+                                <p className={`mt-1 text-xs leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    These defaults are stored on the lead and appear when your contact opens the link. They can edit everything
+                                    before submitting.
+                                </p>
+                            </div>
                             <button
                                 type="button"
-                                onClick={() => setShowEngagementResponsesModal(false)}
-                                className={`p-2 rounded ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
+                                className={`shrink-0 rounded p-2 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                                onClick={() => !engagementBusy && setShowEngagementPrefillModal(false)}
                                 aria-label="Close"
                             >
                                 <i className="fas fa-times" />
                             </button>
                         </div>
-                        <div className="p-6 overflow-y-auto text-sm space-y-3">
-                            {(() => {
-                                const r = formData.customerEngagementResponses;
-                                if (!r || typeof r !== 'object') {
-                                    return <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>No responses stored.</p>;
-                                }
-                                return Object.keys(r)
-                                    .sort()
-                                    .map((key) => {
-                                        const val = r[key];
-                                        let display = '';
-                                        if (val && typeof val === 'object' && !Array.isArray(val)) {
-                                            const on = Object.entries(val).filter(([, v]) => v).map(([k]) => k);
-                                            display = on.length ? on.join(', ') : '—';
-                                        } else if (Array.isArray(val)) {
-                                            display = val.length ? `${val.length} image(s) attached` : '—';
-                                        } else {
-                                            display = String(val || '').trim() || '—';
-                                        }
-                                        return (
-                                            <div
-                                                key={key}
-                                                className={`border-b pb-2 ${isDark ? 'border-gray-700' : 'border-gray-100'}`}
-                                            >
-                                                <div className={`text-xs font-medium ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{key}</div>
-                                                <div className={`whitespace-pre-wrap mt-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{display}</div>
+                        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+                            {engagementPrefillLoading ? (
+                                <div className="py-12 text-center text-sm text-gray-500">Loading form…</div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {(engagementFormDef?.sections || []).map((sec) => (
+                                        <div key={sec.id}>
+                                            <h3 className={`mb-2 text-xs font-bold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                {sec.heading}
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {sec.fields.map((f) => {
+                                                    if (f.type === 'fileList') return null;
+                                                    if (f.type === 'checkboxGroup') {
+                                                        return (
+                                                            <div key={f.id}>
+                                                                <span className={`mb-1 block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    {f.label}
+                                                                </span>
+                                                                <div className="flex flex-col gap-1.5">
+                                                                    {(f.options || []).map((opt) => (
+                                                                        <label key={opt.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={!!engagementPrefillDraft[f.id]?.[opt.id]}
+                                                                                onChange={() =>
+                                                                                    setEngagementPrefillDraft((prev) => {
+                                                                                        const cur =
+                                                                                            prev[f.id] && typeof prev[f.id] === 'object'
+                                                                                                ? { ...prev[f.id] }
+                                                                                                : {};
+                                                                                        cur[opt.id] = !cur[opt.id];
+                                                                                        return { ...prev, [f.id]: cur };
+                                                                                    })
+                                                                                }
+                                                                                className="rounded border-gray-400"
+                                                                            />
+                                                                            <span>{opt.label}</span>
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    const lbl = (
+                                                        <span className={`mb-1 block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                            {f.label}
+                                                        </span>
+                                                    );
+                                                    if (f.type === 'textarea') {
+                                                        return (
+                                                            <div key={f.id}>
+                                                                {lbl}
+                                                                <textarea
+                                                                    className={`w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                                    rows={3}
+                                                                    value={engagementPrefillDraft[f.id] ?? ''}
+                                                                    onChange={(e) =>
+                                                                        setEngagementPrefillDraft((prev) => ({
+                                                                            ...prev,
+                                                                            [f.id]: e.target.value
+                                                                        }))
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        );
+                                                    }
+                                                    if (f.type === 'date') {
+                                                        return (
+                                                            <div key={f.id}>
+                                                                {lbl}
+                                                                <input
+                                                                    type="date"
+                                                                    className={`w-full max-w-xs rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                                    value={engagementPrefillDraft[f.id] ?? ''}
+                                                                    onChange={(e) =>
+                                                                        setEngagementPrefillDraft((prev) => ({
+                                                                            ...prev,
+                                                                            [f.id]: e.target.value
+                                                                        }))
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <div key={f.id}>
+                                                            {lbl}
+                                                            <input
+                                                                type="text"
+                                                                className={`w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                                value={engagementPrefillDraft[f.id] ?? ''}
+                                                                onChange={(e) =>
+                                                                    setEngagementPrefillDraft((prev) => ({
+                                                                        ...prev,
+                                                                        [f.id]: e.target.value
+                                                                    }))
+                                                                }
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
-                                        );
-                                    });
-                            })()}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className={`flex justify-end gap-2 border-t px-6 py-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <button
+                                type="button"
+                                disabled={engagementBusy}
+                                onClick={() => setShowEngagementPrefillModal(false)}
+                                className={`rounded-lg px-4 py-2 text-sm ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={engagementBusy || engagementPrefillLoading || !engagementFormDef}
+                                onClick={commitEngagementLinkFromModal}
+                                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                            >
+                                {engagementBusy ? 'Creating…' : 'Create link'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showEngagementResponsesModal && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 p-4"
+                    onClick={() => {
+                        setShowEngagementResponsesModal(false);
+                        setEngagementInternalNote('');
+                    }}
+                >
+                    <div
+                        className={`flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg shadow-xl ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className={`no-print flex items-center justify-between border-b px-6 py-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <h2 className="text-lg font-semibold">Questionnaire report</h2>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowEngagementResponsesModal(false);
+                                    setEngagementInternalNote('');
+                                }}
+                                className={`rounded p-2 ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
+                                aria-label="Close"
+                            >
+                                <i className="fas fa-times" />
+                            </button>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+                            {engagementReportLoading ? (
+                                <div className="py-16 text-center text-sm text-gray-500">Loading report…</div>
+                            ) : engagementReportFormDef &&
+                              formData.customerEngagementResponses &&
+                              typeof window.CustomerEngagementReportView === 'function' ? (
+                                React.createElement(window.CustomerEngagementReportView, {
+                                    formDef: engagementReportFormDef,
+                                    responses: formData.customerEngagementResponses,
+                                    branding: engagementReportBranding,
+                                    submittedAt: formData.customerEngagementSubmittedAt
+                                })
+                            ) : (
+                                <p className="text-sm text-gray-500">Could not load report. Try closing and opening again.</p>
+                            )}
+                        </div>
+                        <div className={`no-print border-t px-6 py-4 ${isDark ? 'border-gray-700 bg-gray-800/80' : 'border-gray-200 bg-gray-50'}`}>
+                            <label className={`mb-1 block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Internal note (saved to activity log)
+                            </label>
+                            <textarea
+                                value={engagementInternalNote}
+                                onChange={(e) => setEngagementInternalNote(e.target.value)}
+                                rows={2}
+                                className={`mb-2 w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`}
+                                placeholder="e.g. Follow up on diesel volumes…"
+                            />
+                            <button
+                                type="button"
+                                disabled={engagementNoteSaving || !engagementInternalNote.trim()}
+                                onClick={appendEngagementInternalNote}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${isDark ? 'bg-primary-500 hover:bg-primary-400' : 'bg-primary-600 hover:bg-primary-700'}`}
+                            >
+                                {engagementNoteSaving ? 'Saving…' : 'Add note'}
+                            </button>
                         </div>
                     </div>
                 </div>

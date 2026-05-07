@@ -1,4 +1,5 @@
 import { authRequired } from '../../_lib/authRequired.js'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../_lib/prisma.js'
 import { badRequest, forbidden, ok, notFound, serverError } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
@@ -6,11 +7,12 @@ import { withLogging } from '../../_lib/logger.js'
 import { isAdminRole } from '../../_lib/authRoles.js'
 import { generateCustomerEngagementToken, hashCustomerEngagementToken } from '../../_lib/customerEngagementToken.js'
 import { getAppUrl } from '../../_lib/getAppUrl.js'
+import { sanitizeCustomerEngagementPrefill } from '../../_lib/customerEngagementSchema.js'
 
 /**
  * POST — create or rotate token; DELETE — revoke link
  * /api/leads/:id/customer-engagement-link
- * POST body: { clearSubmission?: boolean } — when true, clear prior responses and submittedAt (new round)
+ * POST body: { clearSubmission?: boolean, prefill?: object | null } — prefill rotates with the link; null clears stored prefill
  */
 async function handler(req, res) {
   try {
@@ -60,19 +62,26 @@ async function handler(req, res) {
     const tokenHash = hashCustomerEngagementToken(rawToken)
     const now = new Date()
 
+    const data = {
+      customerEngagementTokenHash: tokenHash,
+      customerEngagementTokenCreatedAt: now,
+      customerEngagementRevokedAt: null,
+      ...(clearSubmission
+        ? {
+            customerEngagementSubmittedAt: null,
+            customerEngagementResponses: null
+          }
+        : {})
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'prefill')) {
+      const sanitized = sanitizeCustomerEngagementPrefill(body.prefill)
+      data.customerEngagementPrefill = sanitized === null ? Prisma.DbNull : sanitized
+    }
+
     await prisma.client.update({
       where: { id },
-      data: {
-        customerEngagementTokenHash: tokenHash,
-        customerEngagementTokenCreatedAt: now,
-        customerEngagementRevokedAt: null,
-        ...(clearSubmission
-          ? {
-              customerEngagementSubmittedAt: null,
-              customerEngagementResponses: null
-            }
-          : {})
-      }
+      data
     })
 
     const base = getAppUrl().replace(/\/$/, '')
