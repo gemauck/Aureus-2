@@ -254,7 +254,6 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const [loading, setLoading] = useState(true);
     const [filterChip, setFilterChip] = useState('all');
     const [selected, setSelected] = useState(null);
-    const [importDragging, setImportDragging] = useState(false);
     const [importQueue, setImportQueue] = useState([]);
     const [pdfImportChoice, setPdfImportChoice] = useState(null);
     const [leftWidth, setLeftWidth] = useState(380);
@@ -1011,38 +1010,6 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                         </button>
                     </div>
                 </div>
-            </div>
-
-            <div
-                className={`mx-4 mt-4 mb-2 rounded-xl border-2 border-dashed flex flex-col items-center justify-center px-4 py-6 transition-all ${
-                    importDragging
-                        ? isDark
-                            ? 'border-cyan-400 bg-cyan-950/30 shadow-[0_0_24px_var(--ph-accent-dim)]'
-                            : 'border-sky-500 bg-sky-50 shadow-[0_0_20px_var(--ph-accent-dim)]'
-                        : isDark
-                          ? 'border-gray-700/80 bg-gray-900/40'
-                          : 'border-gray-300/90 bg-gray-50/80'
-                }`}
-                onDragEnter={(e) => {
-                    e.preventDefault();
-                    setImportDragging(true);
-                }}
-                onDragOver={(e) => {
-                    e.preventDefault();
-                    setImportDragging(true);
-                }}
-                onDragLeave={() => setImportDragging(false)}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    setImportDragging(false);
-                    processIncomingFiles(e.dataTransfer.files);
-                }}
-            >
-                <i className={`fas fa-cloud-upload-alt text-2xl mb-2 ${isDark ? 'text-cyan-400/90' : 'text-sky-600'}`} />
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Drop files or zip to import</p>
-                <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                    PDF (attach / trace / sketch), SVG → diagram, Excel, Word, .drawio / XML, zip. Uploads use server-safe encoding.
-                </p>
             </div>
 
             {importQueue.length > 0 && (
