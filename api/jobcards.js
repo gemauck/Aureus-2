@@ -66,11 +66,157 @@ function normalizeJobCardStatus(status, fallback = 'draft') {
   return ALLOWED_JOB_CARD_STATUSES.has(normalized) ? normalized : null
 }
 
-function formatBillingDate(value) {
+const BILLING_PDF_HEADING_PREFIX = 'Heading:'
+const BILLING_PDF_PROJECT_PREFIX = 'Project Association:'
+
+function billingPdfParseJson(str, defaultValue = []) {
+  try {
+    if (!str) return defaultValue
+    return typeof str === 'string' ? JSON.parse(str) : str
+  } catch {
+    return defaultValue
+  }
+}
+
+async function loadBillingPdfBranding(prismaClient) {
+  const system = await prismaClient.systemSettings.findUnique({ where: { id: 'system' } })
+  const companyName = (system?.companyName && String(system.companyName).trim()) || 'Abcotronics'
+  let letterhead = {}
+  try {
+    const raw = system?.poLetterheadJson
+    letterhead = raw && typeof raw === 'string' ? JSON.parse(raw) : {}
+  } catch {
+    letterhead = {}
+  }
+  if (!letterhead || typeof letterhead !== 'object') letterhead = {}
+  return { companyName, letterhead }
+}
+
+function formatPdfDateSast(value) {
   if (!value) return '—'
   const dt = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(dt.getTime())) return '—'
-  return dt.toISOString().replace('T', ' ').slice(0, 19)
+  return dt.toLocaleString('en-ZA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'Africa/Johannesburg'
+  })
+}
+
+function extractHeadingFromOtherComments(rawComments) {
+  if (!rawComments || typeof rawComments !== 'string') return ''
+  const line = rawComments
+    .split('\n')
+    .find((entry) => typeof entry === 'string' && entry.trim().startsWith(BILLING_PDF_HEADING_PREFIX))
+  return line ? line.slice(BILLING_PDF_HEADING_PREFIX.length).trim() : ''
+}
+
+function technicianNotesFromOtherComments(rawComments) {
+  if (!rawComments || typeof rawComments !== 'string') return ''
+  const kept = []
+  for (const line of rawComments.split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    if (t.startsWith(BILLING_PDF_HEADING_PREFIX)) continue
+    if (t.startsWith(BILLING_PDF_PROJECT_PREFIX)) continue
+    if (t.startsWith('Customer:') || t.startsWith('Position:') || t.startsWith('Feedback:') || t.startsWith('Signature:')) {
+      continue
+    }
+    kept.push(line)
+  }
+  return kept.join('\n').trim()
+}
+
+function formatPdfMoneyZar(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return 'R 0.00'
+  return `R ${amount.toFixed(2)}`
+}
+
+function parseJobCardLatLng(jobCard) {
+  if (!jobCard) return null
+  const parseCoordinate = (value) => {
+    if (value == null) return null
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return null
+      const parsed = Number(trimmed)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    return null
+  }
+  const lat = parseCoordinate(jobCard.locationLatitude)
+  const lng = parseCoordinate(jobCard.locationLongitude)
+  if (lat == null || lng == null) return null
+  return { lat, lng }
+}
+
+function stockRowsForBillingPdf(jobCard) {
+  const raw = billingPdfParseJson(jobCard?.stockUsed, [])
+  if (!Array.isArray(raw)) return []
+  return raw
+}
+
+function materialsRowsForBillingPdf(jobCard) {
+  const raw = billingPdfParseJson(jobCard?.materialsBought, [])
+  if (!Array.isArray(raw)) return []
+  return raw
+}
+
+async function fetchImageBufferForBillingPdf(url, timeoutMs = 8000) {
+  if (!url || typeof url !== 'string') return null
+  const u = url.trim()
+  if (/^data:image\/(png|jpeg|jpg);base64,/i.test(u)) {
+    try {
+      const b64 = u.split(',')[1]
+      return Buffer.from(b64, 'base64')
+    } catch {
+      return null
+    }
+  }
+  if (!/^https:\/\//i.test(u)) return null
+  const ac = new AbortController()
+  const t = setTimeout(() => ac.abort(), timeoutMs)
+  try {
+    const res = await fetch(u, { signal: ac.signal, redirect: 'follow' })
+    if (!res.ok) return null
+    const ct = (res.headers.get('content-type') || '').toLowerCase()
+    if (!ct.startsWith('image/')) return null
+    const ab = await res.arrayBuffer()
+    const buf = Buffer.from(ab)
+    if (buf.length > 2_500_000) return null
+    return buf
+  } catch {
+    return null
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+async function loadBillingPdfImageBuffers(photosJson, { maxImages = 8 } = {}) {
+  const photos = billingPdfParseJson(photosJson, [])
+  if (!Array.isArray(photos)) return []
+  const out = []
+  for (const p of photos) {
+    if (out.length >= maxImages) break
+    if (!p || typeof p !== 'object') continue
+    if (p.kind === 'signature') continue
+    const url = typeof p.url === 'string' ? p.url : ''
+    const isVideo =
+      /^data:video\//i.test(url) ||
+      /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url) ||
+      String(p.mediaType || '').toLowerCase().includes('video')
+    if (isVideo) continue
+    const buf = await fetchImageBufferForBillingPdf(url)
+    if (buf) out.push(buf)
+  }
+  return out
 }
 
 async function resolveBillingRecipients(prismaClient) {
@@ -103,7 +249,25 @@ async function resolveBillingRecipients(prismaClient) {
   }
 }
 
-function buildJobCardBillingPdf(jobCard) {
+function billingBrandTextAlign(brandTextX, left) {
+  return brandTextX > left ? 'right' : 'left'
+}
+
+function drawBillingPdfMetaCell(doc, x, y, cellW, label, value) {
+  const labelText = String(label || '').toUpperCase()
+  doc.font('Helvetica-Bold').fontSize(8).fillColor('#6b7280').text(labelText, x, y, { width: cellW })
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827').text(String(value ?? '—'), x, y + 12, { width: cellW })
+}
+
+async function buildJobCardBillingPdf(prismaClient, jobCard) {
+  const { companyName, letterhead } = await loadBillingPdfBranding(prismaClient)
+  const heading = extractHeadingFromOtherComments(jobCard.otherComments)
+  const additionalNotes = technicianNotesFromOtherComments(jobCard.otherComments)
+  const stockRows = stockRowsForBillingPdf(jobCard)
+  const materialRows = materialsRowsForBillingPdf(jobCard)
+  const coords = parseJobCardLatLng(jobCard)
+  const imageBuffers = await loadBillingPdfImageBuffers(jobCard.photos, { maxImages: 12 })
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 42 })
     const chunks = []
@@ -111,39 +275,256 @@ function buildJobCardBillingPdf(jobCard) {
     doc.on('end', () => resolve(Buffer.concat(chunks)))
     doc.on('error', reject)
 
-    const title = `Job Card ${jobCard.jobCardNumber || jobCard.id || ''}`.trim()
-    doc.fontSize(18).text(title || 'Job Card')
-    doc.moveDown(0.4)
-    doc.fontSize(11).fillColor('#555555').text('Billing handoff export')
-    doc.moveDown(1)
-    doc.fillColor('#000000')
+    const left = doc.page.margins.left
+    const right = doc.page.width - doc.page.margins.right
+    const contentW = right - left
 
-    const lines = [
-      ['Status', String(jobCard.status || 'draft')],
-      ['Client', jobCard.clientName || '—'],
-      ['Site', jobCard.siteName || '—'],
-      ['Technician', jobCard.agentName || '—'],
-      ['Callout category', jobCard.callOutCategory || '—'],
-      ['Created', formatBillingDate(jobCard.createdAt)],
-      ['Submitted', formatBillingDate(jobCard.submittedAt)],
-      ['Completed', formatBillingDate(jobCard.completedAt)]
-    ]
-    for (const [label, value] of lines) {
-      doc.font('Helvetica-Bold').fontSize(10).text(`${label}: `, { continued: true })
-      doc.font('Helvetica').fontSize(10).text(String(value || '—'))
+    const headerTop = doc.page.margins.top
+    let brandTextX = left
+    const logoH = 50
+    if (
+      letterhead.logoDataUrl &&
+      /^data:image\/(png|jpeg|jpg);base64,/i.test(String(letterhead.logoDataUrl))
+    ) {
+      try {
+        const b64 = String(letterhead.logoDataUrl).split(',')[1]
+        const imgBuf = Buffer.from(b64, 'base64')
+        doc.image(imgBuf, left, headerTop, { height: logoH })
+        brandTextX = left + 115
+      } catch {
+        brandTextX = left
+      }
     }
 
-    const textSections = [
-      ['Reason for visit', jobCard.reasonForVisit || '—'],
-      ['Diagnosis', jobCard.diagnosis || '—'],
-      ['Actions taken', jobCard.actionsTaken || '—'],
-      ['Future work required', jobCard.futureWorkRequired || '—']
-    ]
-    for (const [heading, text] of textSections) {
-      doc.moveDown(0.8)
-      doc.font('Helvetica-Bold').fontSize(11).text(heading)
-      doc.font('Helvetica').fontSize(10).text(String(text || '—'))
+    doc.fillColor('#111827')
+    doc.font('Helvetica-Bold').fontSize(14).text(companyName, brandTextX, headerTop, {
+      width: right - brandTextX,
+      align: brandTextX > left ? 'right' : 'left'
+    })
+
+    const addressLines = Array.isArray(letterhead.addressLines) ? letterhead.addressLines : []
+    let ty = headerTop + 20
+    doc.font('Helvetica').fontSize(9).fillColor('#4b5563')
+    for (const line of addressLines) {
+      const s = String(line || '').trim()
+      if (!s) continue
+      doc.text(s, brandTextX, ty, { width: right - brandTextX, align: billingBrandTextAlign(brandTextX, left) })
+      ty += 11
     }
+    if (letterhead.phone) {
+      doc.text(`Tel: ${letterhead.phone}`, brandTextX, ty, {
+        width: right - brandTextX,
+        align: billingBrandTextAlign(brandTextX, left)
+      })
+      ty += 11
+    }
+    if (letterhead.email) {
+      doc.text(`Email: ${letterhead.email}`, brandTextX, ty, {
+        width: right - brandTextX,
+        align: billingBrandTextAlign(brandTextX, left)
+      })
+      ty += 11
+    }
+
+    const underlineY = Math.max(headerTop + logoH, ty) + 10
+    doc
+      .strokeColor('#2563eb')
+      .lineWidth(2)
+      .moveTo(left, underlineY)
+      .lineTo(right, underlineY)
+      .stroke()
+    doc.fillColor('#1d4ed8').font('Helvetica-Bold').fontSize(16).text('JOB CARD REPORT', left, underlineY + 12, {
+      width: contentW
+    })
+
+    const gridTop = underlineY + 36
+    const colW = contentW / 3
+    drawBillingPdfMetaCell(doc, left, gridTop, colW - 6, 'Job card number', jobCard.jobCardNumber || jobCard.id || '—')
+    drawBillingPdfMetaCell(doc, left + colW, gridTop, colW - 6, 'Client / site', `${jobCard.clientName || '—'}${jobCard.siteName ? `\n${jobCard.siteName}` : ''}`)
+    drawBillingPdfMetaCell(doc, left + colW * 2, gridTop, colW - 6, 'Technician', jobCard.agentName || '—')
+
+    const gridRow2Y = gridTop + 44
+    drawBillingPdfMetaCell(doc, left, gridRow2Y, colW - 6, 'Status', String(jobCard.status || 'draft').toUpperCase())
+    drawBillingPdfMetaCell(
+      doc,
+      left + colW,
+      gridRow2Y,
+      colW - 6,
+      'Created',
+      formatPdfDateSast(jobCard.startedAt || jobCard.createdAt)
+    )
+    drawBillingPdfMetaCell(doc, left + colW * 2, gridRow2Y, colW - 6, 'Printed', formatPdfDateSast(new Date()))
+
+    let contentY = gridRow2Y + 52
+    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(11).text('Visit narrative', left, contentY, { width: contentW })
+    contentY += 16
+    doc.font('Helvetica').fontSize(10)
+    const kv = (k, v) => {
+      doc.font('Helvetica-Bold').text(`${k}: `, left, contentY, { continued: true })
+      doc.font('Helvetica').text(String(v || '—'), { width: contentW })
+      contentY = doc.y + 2
+    }
+    kv('Heading', heading || '—')
+    kv('Call out category', jobCard.callOutCategory || '—')
+    kv('Reason for visit', jobCard.reasonForVisit || '—')
+    kv('Diagnosis', jobCard.diagnosis || '—')
+    kv('Actions taken', jobCard.actionsTaken || '—')
+    kv('Future actions', jobCard.futureWorkRequired || '—')
+    if (additionalNotes) {
+      doc.font('Helvetica-Bold').text('Additional notes: ', left, contentY, { continued: true, width: contentW })
+      doc.font('Helvetica').text(additionalNotes, { width: contentW })
+      contentY = doc.y + 4
+    }
+
+    contentY += 8
+    doc.font('Helvetica-Bold').fontSize(11).text('Travel and costs', left, contentY, { width: contentW })
+    contentY += 14
+    doc.font('Helvetica').fontSize(10)
+    const travelKv = (k, v) => {
+      doc.font('Helvetica-Bold').text(`${k}: `, left, contentY, { continued: true })
+      doc.font('Helvetica').text(String(v || '—'), { width: contentW })
+      contentY = doc.y + 2
+    }
+    travelKv('Vehicle', jobCard.vehicleUsed || 'Not specified')
+    travelKv(
+      'Kilometers',
+      `${jobCard.kmReadingBefore ?? '—'} -> ${jobCard.kmReadingAfter ?? '—'}`
+    )
+    const travelKm = Number(jobCard.travelKilometers)
+    travelKv('Travel distance', Number.isFinite(travelKm) ? `${travelKm.toFixed(1)} km` : '—')
+    travelKv('Total materials cost', formatPdfMoneyZar(jobCard.totalMaterialsCost ?? 0))
+
+    contentY += 8
+    doc.font('Helvetica-Bold').fontSize(11).text('Stock used', left, contentY, { width: contentW })
+    contentY += 14
+    const tableLeft = left
+    const tableW = contentW
+    const colStock = [tableLeft, tableLeft + tableW * 0.28, tableLeft + tableW * 0.45, tableLeft + tableW * 0.62]
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#374151')
+    doc.text('Item', colStock[0], contentY, { width: colStock[1] - colStock[0] - 4 })
+    doc.text('SKU', colStock[1], contentY, { width: colStock[2] - colStock[1] - 4 })
+    doc.text('Qty', colStock[2], contentY, { width: colStock[3] - colStock[2] - 4 })
+    doc.text('Location', colStock[3], contentY, { width: tableLeft + tableW - colStock[3] })
+    contentY += 12
+    doc.fillColor('#111827').font('Helvetica').fontSize(9)
+    if (stockRows.length === 0) {
+      doc.fillColor('#6b7280').font('Helvetica-Oblique').text('No stock lines recorded.', tableLeft, contentY, {
+        width: tableW
+      })
+      contentY = doc.y + 6
+      doc.fillColor('#111827').font('Helvetica')
+    } else {
+      for (const item of stockRows) {
+        if (typeof item === 'string' || typeof item === 'number') {
+          doc.text(String(item), tableLeft, contentY, { width: tableW })
+          contentY = doc.y + 4
+          continue
+        }
+        const qty = item?.quantity != null && item.quantity !== '' ? String(item.quantity) : '—'
+        doc.text(String(item?.itemName || item?.sku || 'Item'), colStock[0], contentY, {
+          width: colStock[1] - colStock[0] - 4
+        })
+        doc.text(String(item?.sku || '—'), colStock[1], contentY, { width: colStock[2] - colStock[1] - 4 })
+        doc.text(qty, colStock[2], contentY, { width: colStock[3] - colStock[2] - 4 })
+        doc.text(String(item?.locationName || item?.locationId || '—'), colStock[3], contentY, {
+          width: tableLeft + tableW - colStock[3]
+        })
+        contentY += 14
+      }
+    }
+
+    contentY += 10
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text('Purchases', left, contentY, { width: contentW })
+    contentY += 14
+    const colPur = [tableLeft, tableLeft + tableW * 0.38, tableLeft + tableW * 0.78]
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#374151')
+    doc.text('Item', colPur[0], contentY, { width: colPur[1] - colPur[0] - 4 })
+    doc.text('Reason / Description', colPur[1], contentY, { width: colPur[2] - colPur[1] - 4 })
+    doc.text('Cost', colPur[2], contentY, { width: tableLeft + tableW - colPur[2], align: 'right' })
+    contentY += 12
+    doc.font('Helvetica').fontSize(9).fillColor('#111827')
+    if (materialRows.length === 0) {
+      doc.fillColor('#6b7280').font('Helvetica-Oblique').text('No purchase lines recorded.', tableLeft, contentY, {
+        width: tableW
+      })
+      contentY = doc.y + 6
+      doc.fillColor('#111827').font('Helvetica')
+    } else {
+      for (const item of materialRows) {
+        if (typeof item === 'string' || typeof item === 'number') {
+          doc.text(String(item), tableLeft, contentY, { width: tableW })
+          contentY = doc.y + 4
+          continue
+        }
+        doc.text(String(item?.itemName || 'Purchase'), colPur[0], contentY, {
+          width: colPur[1] - colPur[0] - 4
+        })
+        doc.text(String(item?.reason || item?.description || '—'), colPur[1], contentY, {
+          width: colPur[2] - colPur[1] - 4
+        })
+        const costStr =
+          item?.cost != null && item?.cost !== ''
+            ? formatPdfMoneyZar(item.cost)
+            : '—'
+        doc.text(costStr, colPur[2], contentY, {
+          width: tableLeft + tableW - colPur[2],
+          align: 'right'
+        })
+        contentY += 14
+      }
+    }
+
+    contentY += 10
+    doc.font('Helvetica-Bold').fontSize(11).text('Map', left, contentY, { width: contentW })
+    contentY += 14
+    doc.font('Helvetica').fontSize(10)
+    const locLine = jobCard.location || jobCard.siteName || jobCard.clientName || 'Not specified'
+    doc.font('Helvetica-Bold').text('Location: ', left, contentY, { continued: true })
+    doc.font('Helvetica').text(locLine, { width: contentW })
+    contentY = doc.y + 4
+    if (coords) {
+      doc.font('Helvetica-Bold').text('Coordinates: ', left, contentY, { continued: true })
+      doc.font('Helvetica').text(`${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`, { width: contentW })
+    } else {
+      doc.fillColor('#6b7280').font('Helvetica-Oblique').text('No GPS coordinates recorded.', left, contentY, {
+        width: contentW
+      })
+    }
+    contentY = doc.y + 10
+
+    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(11).text('Site photos', left, contentY, { width: contentW })
+    contentY += 14
+    doc.font('Helvetica').fontSize(10)
+    if (imageBuffers.length === 0) {
+      doc.fillColor('#6b7280').font('Helvetica-Oblique').text(
+        'No images were available for this job card.',
+        left,
+        contentY,
+        { width: contentW }
+      )
+      contentY = doc.y + 6
+    } else {
+      doc.fillColor('#111827')
+      for (const imgBuf of imageBuffers) {
+        try {
+          const imgY = contentY
+          if (imgY > doc.page.height - 200) {
+            doc.addPage()
+            contentY = doc.page.margins.top
+          }
+          doc.image(imgBuf, left, contentY, { fit: [(contentW - 10) / 2, 140], align: 'left' })
+          contentY += 150
+        } catch {
+          /* skip corrupt image */
+        }
+      }
+    }
+
+    doc.fillColor('#6b7280').fontSize(9).font('Helvetica')
+    doc.text(`${companyName} • Job Card ${jobCard.jobCardNumber || jobCard.id || ''}`, left, doc.page.height - 54, {
+      width: contentW,
+      align: 'center'
+    })
 
     doc.end()
   })
@@ -182,7 +563,7 @@ async function notifyBillingRecipientsForJobCard(prismaClient, jobCard) {
   }
 
   if (emails.length > 0) {
-    const pdfBuffer = await buildJobCardBillingPdf(jobCard)
+    const pdfBuffer = await buildJobCardBillingPdf(prismaClient, jobCard)
     const safeNumber = String(jobCard.jobCardNumber || jobCard.id || 'job-card').replace(/[^a-zA-Z0-9_-]/g, '_')
     await sendEmail({
       to: emails,
