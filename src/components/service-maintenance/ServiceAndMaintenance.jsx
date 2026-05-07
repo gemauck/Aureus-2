@@ -9,9 +9,9 @@ const JOB_CARD_STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'open', label: 'Open' },
   { value: 'submitted', label: 'Submitted' },
-  { value: 'ready_for_invoice', label: 'Ready for invoice' },
   { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' }
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'ready_for_invoice', label: 'Ready for invoice' }
 ];
 
 function normalizeJobCardStatus(status) {
