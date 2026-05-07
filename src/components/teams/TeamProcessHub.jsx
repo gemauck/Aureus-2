@@ -315,6 +315,34 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
 
     const selectedWorkflow = selected?.kind === 'workflow' ? selected.raw : null;
     const selectedDocument = selected?.kind === 'document' ? selected.raw : null;
+    const groupedLibrary = useMemo(() => {
+        const workflowItems = artifacts.filter((a) => a.kind === 'workflow');
+        const documentItems = artifacts.filter((a) => a.kind === 'document');
+
+        const byStatus = new Map();
+        workflowItems.forEach((a) => {
+            const status = (a.raw?.status || 'Unspecified').trim() || 'Unspecified';
+            if (!byStatus.has(status)) byStatus.set(status, []);
+            byStatus.get(status).push(a);
+        });
+
+        const statusOrder = ['Draft', 'In Progress', 'Review', 'Approved', 'Active', 'Completed', 'Archived', 'Unspecified'];
+        const orderedWorkflowGroups = Array.from(byStatus.entries())
+            .sort((a, b) => {
+                const ai = statusOrder.indexOf(a[0]);
+                const bi = statusOrder.indexOf(b[0]);
+                const aRank = ai === -1 ? 999 : ai;
+                const bRank = bi === -1 ? 999 : bi;
+                if (aRank !== bRank) return aRank - bRank;
+                return a[0].localeCompare(b[0]);
+            })
+            .map(([status, items]) => ({ status, items }));
+
+        return {
+            workflowGroups: orderedWorkflowGroups,
+            documentItems
+        };
+    }, [artifacts]);
 
     useEffect(() => {
         if (selectedWorkflow) setWorkflowTitleEdit(selectedWorkflow.title || '');
@@ -837,6 +865,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     const meshBg = isDark
         ? 'radial-gradient(1200px 600px at 10% -10%, rgba(34,211,238,0.09), transparent 55%), radial-gradient(900px 500px at 90% 0%, rgba(59,130,246,0.06), transparent 50%)'
         : 'radial-gradient(1000px 500px at 8% -8%, rgba(2,132,199,0.07), transparent 55%), radial-gradient(800px 400px at 92% 4%, rgba(14,165,233,0.05), transparent 48%)';
+    let animationCursor = 0;
 
     return (
         <div className={`team-process-hub rounded-2xl border overflow-hidden shadow-lg ${hubVars} ${isDark ? 'border-cyan-900/40 bg-gray-950/80' : 'border-sky-200/80 bg-white/95'}`}>
@@ -1060,7 +1089,133 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                             </div>
                         )}
                         {!loading &&
-                            artifacts.map((a, idx) => {
+                            groupedLibrary.workflowGroups.map((group) => (
+                                <div key={`wf-group-${group.status}`} className="space-y-2">
+                                    <div
+                                        className={`px-2 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider ${
+                                            isDark ? 'text-cyan-300/80' : 'text-sky-800/80'
+                                        }`}
+                                    >
+                                        {group.status} <span className={`${isDark ? 'text-gray-500' : 'text-gray-500'}`}>({group.items.length})</span>
+                                    </div>
+                                    {group.items.map((a) => {
+                                        const idx = animationCursor++;
+                                        const active = selected?.kind === a.kind && selected?.id === a.id;
+                                        const delay = prefersReducedMotion ? '0ms' : `${idx * 42}ms`;
+                                        const isRenaming = renameTarget && renameTarget.kind === a.kind && renameTarget.id === a.id;
+                                        return (
+                                            <div
+                                                key={`${a.kind}-${a.id}`}
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => setSelected(a)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        setSelected(a);
+                                                    }
+                                                }}
+                                                style={{ animationDelay: delay }}
+                                                className={`w-full text-left rounded-xl border px-3 py-3 transition-all duration-200 relative overflow-hidden group cursor-pointer ${
+                                                    active
+                                                        ? isDark
+                                                            ? 'border-cyan-500/70 bg-gray-900 shadow-[inset_3px_0_0_0_var(--ph-accent)]'
+                                                            : 'border-sky-400 bg-sky-50/90 shadow-[inset_3px_0_0_0_var(--ph-accent)]'
+                                                        : isDark
+                                                          ? 'border-gray-800 hover:border-cyan-800 hover:-translate-y-0.5 hover:shadow-lg bg-gray-900/50'
+                                                          : 'border-gray-200 hover:border-sky-300 hover:-translate-y-0.5 hover:shadow-md bg-white'
+                                                }`}
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <span
+                                                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm ${
+                                                            a.kind === 'workflow'
+                                                                ? isDark
+                                                                    ? 'bg-cyan-950 text-cyan-300'
+                                                                    : 'bg-sky-100 text-sky-700'
+                                                                : isDark
+                                                                  ? 'bg-gray-800 text-gray-300'
+                                                                  : 'bg-gray-100 text-gray-600'
+                                                        }`}
+                                                    >
+                                                        <i className={`fas ${a.kind === 'workflow' ? 'fa-sitemap' : 'fa-file-alt'}`} />
+                                                    </span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            {isRenaming ? (
+                                                                <input
+                                                                    autoFocus
+                                                                    value={renameDraft}
+                                                                    onChange={(e) => setRenameDraft(e.target.value)}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    onBlur={() => void commitListRename()}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            void commitListRename();
+                                                                        }
+                                                                        if (e.key === 'Escape') {
+                                                                            e.preventDefault();
+                                                                            skipListRenameBlurRef.current = true;
+                                                                            setRenameTarget(null);
+                                                                        }
+                                                                    }}
+                                                                    className={`min-w-0 flex-1 rounded-md border px-2 py-1 text-sm font-medium outline-none focus:ring-2 focus:ring-cyan-500/40 ${
+                                                                        isDark
+                                                                            ? 'border-gray-600 bg-gray-950 text-gray-100'
+                                                                            : 'border-gray-300 bg-white text-gray-900'
+                                                                    }`}
+                                                                    aria-label={a.kind === 'workflow' ? 'Process name' : 'Document title'}
+                                                                />
+                                                            ) : (
+                                                                <>
+                                                                    <div
+                                                                        className={`font-medium truncate flex-1 min-w-0 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                                        onDoubleClick={(e) => startListRename(e, a)}
+                                                                    >
+                                                                        {a.title}
+                                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => startListRename(e, a)}
+                                                                        title={a.kind === 'workflow' ? 'Rename process' : 'Rename document'}
+                                                                        aria-label={a.kind === 'workflow' ? 'Rename process' : 'Rename document'}
+                                                                        className={`shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border transition-opacity opacity-70 hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 ${
+                                                                            isDark
+                                                                                ? 'border-gray-700 text-gray-400 hover:text-cyan-300'
+                                                                                : 'border-gray-300 text-gray-500 hover:text-sky-700'
+                                                                        }`}
+                                                                    >
+                                                                        <i className="fas fa-pen text-xs" aria-hidden />
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        <div className={`text-xs mt-0.5 font-mono ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{a.sub}</div>
+                                                        <div className={`text-[10px] mt-1 ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                                                            {new Date(a.updatedAt).toLocaleString()}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        {!loading && groupedLibrary.documentItems.length > 0 && (
+                            <div className="space-y-2">
+                                <div
+                                    className={`px-2 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider ${
+                                        isDark ? 'text-gray-300/80' : 'text-gray-700/80'
+                                    }`}
+                                >
+                                    Documents{' '}
+                                    <span className={`${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                        ({groupedLibrary.documentItems.length})
+                                    </span>
+                                </div>
+                                {groupedLibrary.documentItems.map((a) => {
+                                    const idx = animationCursor++;
                                 const active = selected?.kind === a.kind && selected?.id === a.id;
                                 const delay = prefersReducedMotion ? '0ms' : `${idx * 42}ms`;
                                 const isRenaming = renameTarget && renameTarget.kind === a.kind && renameTarget.id === a.id;
@@ -1161,6 +1316,8 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                                     </div>
                                 );
                             })}
+                            </div>
+                        )}
                         {!loading && artifacts.length === 0 && (
                             <div className={`px-4 py-16 text-center rounded-xl border border-dashed ${isDark ? 'border-gray-700 text-gray-400' : 'border-gray-300 text-gray-600'}`}>
                                 <svg className="w-16 h-16 mx-auto mb-3 opacity-40" viewBox="0 0 120 120" fill="none" aria-hidden>
