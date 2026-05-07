@@ -57,6 +57,7 @@ const HandwritingToWord = () => {
                 reader.onerror = reject;
                 reader.readAsDataURL(imageFile);
             });
+            const isPdf = imageFile.type === 'application/pdf';
 
             const apiResponse = await fetch('/api/tools/document-parser', {
                 method: 'POST',
@@ -91,9 +92,63 @@ const HandwritingToWord = () => {
                 }
             }
 
+            // Secondary path for scanned handwritten PDFs: table extractor endpoint
+            if (isPdf) {
+                const tableResponse = await fetch('/api/tools/handwriting-table-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify({
+                        file: {
+                            name: imageFile.name,
+                            dataUrl,
+                            type: imageFile.type
+                        }
+                    })
+                });
+
+                if (tableResponse.status === 401) {
+                    throw new Error('Your session expired. Please refresh the page and sign in again.');
+                }
+
+                if (tableResponse.ok) {
+                    const tablePayload = await tableResponse.json().catch(() => ({}));
+                    const tableData = tablePayload?.data || tablePayload;
+                    const lines = [];
+
+                    if (Array.isArray(tableData?.normalizedRows) && tableData.normalizedRows.length) {
+                        tableData.normalizedRows.forEach((row, idx) => {
+                            lines.push(
+                                `${idx + 1}. ${row.date || ''} | ${row.asset || ''} | ${row.litres ?? ''} | ${row.operator || ''} | ${row.location || ''} | ${row.shift || ''} | ${row.remarks || ''}`
+                            );
+                        });
+                    } else if (Array.isArray(tableData?.tables) && tableData.tables.length) {
+                        tableData.tables.forEach((table) => {
+                            lines.push(table.title || 'Table');
+                            if (Array.isArray(table.headers) && table.headers.length) {
+                                lines.push(table.headers.join(' | '));
+                            }
+                            (table.rows || []).forEach((row) => {
+                                lines.push((row || []).map((cell) => String(cell || '')).join(' | '));
+                            });
+                            lines.push('');
+                        });
+                    }
+
+                    const fallbackText = lines.join('\n').trim();
+                    if (fallbackText) {
+                        setRecognizedText(fallbackText);
+                        setProgress(100);
+                        return;
+                    }
+                }
+            }
+
             // Fallback path: client OCR for image files
             if (!imageFile.type.startsWith('image/')) {
-                throw new Error('Could not extract text from PDF. Please check parser configuration.');
+                throw new Error('Could not extract text from PDF. Please ensure the handwriting extraction service is configured.');
             }
 
             if (!window.Tesseract && window.loadTesseract) {
