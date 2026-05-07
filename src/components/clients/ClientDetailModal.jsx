@@ -71,6 +71,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
             comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
             contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+            proposals: typeof client.proposals === 'string' ? JSON.parse(client.proposals || '[]') : (Array.isArray(client.proposals) ? client.proposals : []),
             sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
             opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
@@ -109,6 +110,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             projectIds: [],
             comments: [],
             contracts: [],
+            proposals: [],
             sites: [],
             opportunities: [],
             activityLog: [],
@@ -139,11 +141,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
     const canManageLeadClientConversion = isAdmin;
     const canViewContracts = isAdmin;
+    const canViewLeadProposals = isLead && isAdmin;
     
     // Now initialize other state and refs AFTER formData
     const [activeTab, setActiveTab] = useState(() => {
         // If user tries to access contracts tab but is not admin, default to overview
         if (initialTab === 'contracts' && !canViewContracts) {
+            return 'overview';
+        }
+        if (initialTab === 'proposals' && !canViewLeadProposals) {
             return 'overview';
         }
         // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
@@ -195,6 +201,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
             comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
             contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+            proposals: typeof client.proposals === 'string' ? JSON.parse(client.proposals || '[]') : (Array.isArray(client.proposals) ? client.proposals : []),
             sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
             opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
@@ -231,6 +238,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             projectIds: [],
             comments: [],
             contracts: [],
+            proposals: [],
             sites: [],
             opportunities: [],
             activityLog: [],
@@ -257,7 +265,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const formDataRef = useRef(initialFormData);
     const isAutoSavingRef = useRef(false);
     const lastInlineSaveAtRef = useRef(0); // Timestamp when we last set isAutoSavingRef for add/update/delete (tab-preserve window)
-    const activeTabRef = useRef(initialTab); // Mirror of activeTab so effects can see "current tab" without depending on state
+    const activeTabRef = useRef(activeTab); // Mirror of activeTab (use resolved tab, not raw initialTab — e.g. proposals tab is admin-only)
     const lastSavedDataRef = useRef(null); // Track last saved state
     const autoSaveTimeoutRef = useRef(null); // Debounce timer for auto-save
     
@@ -605,6 +613,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (initialTab === 'contracts' && !canViewContracts) {
             nextTab = 'overview';
         }
+        if (initialTab === 'proposals' && !canViewLeadProposals) {
+            nextTab = 'overview';
+        }
         // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
         if (initialTab === 'service' || initialTab === 'maintenance') {
             nextTab = 'service-maintenance';
@@ -615,7 +626,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setActiveTab(nextTab);
             lastInitialTabRef.current = nextTab;
         }
-    }, [initialTab, isAdmin]);
+    }, [initialTab, isAdmin, isLead]);
     
     // Load external agents function
     const loadExternalAgents = useCallback(async () => {
@@ -925,6 +936,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     projectIds: typeof clientToUse.projectIds === 'string' ? JSON.parse(clientToUse.projectIds || '[]') : (clientToUse.projectIds || []),
                     comments: typeof clientToUse.comments === 'string' ? JSON.parse(clientToUse.comments || '[]') : (clientToUse.comments || []),
                     contracts: typeof clientToUse.contracts === 'string' ? JSON.parse(clientToUse.contracts || '[]') : (clientToUse.contracts || []),
+                    proposals: typeof clientToUse.proposals === 'string' ? JSON.parse(clientToUse.proposals || '[]') : (Array.isArray(clientToUse.proposals) ? clientToUse.proposals : []),
                     activityLog: typeof clientToUse.activityLog === 'string' ? JSON.parse(clientToUse.activityLog || '[]') : (clientToUse.activityLog || []),
                     services: typeof clientToUse.services === 'string' ? JSON.parse(clientToUse.services || '[]') : (clientToUse.services || []),
                     engagementStage: clientToUse.engagementStage ?? clientToUse.status ?? (isLead ? 'Potential' : undefined),
@@ -1054,6 +1066,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (tab === 'contracts' && !canViewContracts) {
             return;
         }
+        if (tab === 'proposals' && !canViewLeadProposals) {
+            return;
+        }
         // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
         if (tab === 'service' || tab === 'maintenance') {
             tab = 'service-maintenance';
@@ -1166,6 +1181,42 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         }
         if (onClose) onClose();
+    };
+    
+    const LEAD_PROPOSAL_STATUSES = ['Draft', 'Sent', 'Pending', 'Won', 'Lost'];
+    const setLeadProposals = (nextProposals) => {
+        const list = Array.isArray(nextProposals) ? nextProposals : [];
+        setFormData(prev => {
+            const n = { ...prev, proposals: list };
+            formDataRef.current = n;
+            return n;
+        });
+        hasUserEditedForm.current = true;
+    };
+    const handleAddLeadProposal = () => {
+        const id = `proposal-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+        const list = Array.isArray(formDataRef.current?.proposals) ? formDataRef.current.proposals : [];
+        setLeadProposals([...list, {
+            id,
+            title: '',
+            amount: 0,
+            status: 'Draft',
+            workingDocumentLink: '',
+            notes: '',
+            createdDate: new Date().toISOString().split('T')[0]
+        }]);
+    };
+    const patchLeadProposal = (index, partial) => {
+        const list = [...(Array.isArray(formDataRef.current?.proposals) ? formDataRef.current.proposals : [])];
+        if (!list[index]) return;
+        list[index] = { ...list[index], ...partial };
+        setLeadProposals(list);
+    };
+    const handleRemoveLeadProposal = (index) => {
+        if (!confirm('Remove this proposal from the lead?')) return;
+        const list = [...(Array.isArray(formDataRef.current?.proposals) ? formDataRef.current.proposals : [])];
+        list.splice(index, 1);
+        setLeadProposals(list);
     };
     
     // Job cards state - MUST be declared before loadJobCards function
@@ -2140,6 +2191,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         // Skip parsing sites - API already parsed them via parseClientJsonFields
                         sites: Array.isArray(dbClient.sites) ? dbClient.sites : (typeof dbClient.sites === 'string' ? JSON.parse(dbClient.sites || '[]') : []),
                         contracts: typeof dbClient.contracts === 'string' ? JSON.parse(dbClient.contracts || '[]') : (Array.isArray(dbClient.contracts) ? dbClient.contracts : []),
+                        proposals: typeof dbClient.proposals === 'string' ? JSON.parse(dbClient.proposals || '[]') : (Array.isArray(dbClient.proposals) ? dbClient.proposals : []),
                         activityLog: typeof dbClient.activityLog === 'string' ? JSON.parse(dbClient.activityLog || '[]') : (Array.isArray(dbClient.activityLog) ? dbClient.activityLog : []),
                         billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (typeof dbClient.billingTerms === 'object' ? dbClient.billingTerms : {})
                     };
@@ -4421,9 +4473,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             // Determine if lead has been converted to client
                             const isConverted = !isLead || formData.type === 'client';
                             
-                            // Base tabs - for leads and clients
-                            const baseTabs = isLead 
-                                ? ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc']
+                            // Base tabs - proposals on leads only, admins only (fresh lightweight tracker)
+                            const baseTabs = isLead
+                                ? [...['overview', 'contacts', 'sites', 'calendar'], ...(canViewLeadProposals ? ['proposals'] : []), 'activity', 'notes', 'kyc']
                                 : ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc'];
                             
                             // Tabs that should only show for clients or converted leads
@@ -4462,12 +4514,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     tab === 'projects' ? 'folder-open' :
                                     tab === 'service-maintenance' ? 'wrench' :
                                     tab === 'contracts' ? 'file-contract' :
+                                    tab === 'proposals' ? 'clipboard-list' :
                                     tab === 'activity' ? 'history' :
                                     tab === 'kyc' ? 'id-card' :
                                     'comment-alt'
                                 } mr-1 sm:mr-2`}></i>
                                 <span className="hidden sm:inline">{tab === 'service-maintenance' ? 'Service & Maintenance' : tab === 'kyc' ? 'KYC' : (tab.charAt(0).toUpperCase() + tab.slice(1).replace(/-/g, ' '))}</span>
                                 <span className="sm:hidden">{tab === 'service-maintenance' ? 'S&M' : tab === 'kyc' ? 'KYC' : tab.charAt(0).toUpperCase()}</span>
+                                {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
+                                    <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs ${isDark ? 'bg-primary-900/50 text-primary-300' : 'bg-primary-100 text-primary-600'}`}>
+                                        {formData.proposals.length}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>
@@ -7390,6 +7448,112 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             )}
                                         </div>
                                     </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Proposals (leads, admins only) — lightweight list; extend later as needed */}
+                        {activeTab === 'proposals' && canViewLeadProposals && (
+                            <div className="space-y-4">
+                                <div className={`rounded-lg p-4 ${isDark ? 'bg-gray-700/50 border border-gray-600' : 'bg-primary-50 border border-primary-100'}`}>
+                                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        Track proposal records for this lead. Changes save with the rest of the lead (auto-save after edits). Rich workflows can be added here later.
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddLeadProposal}
+                                        className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                                    >
+                                        <i className="fas fa-plus mr-2"></i>
+                                        Add proposal
+                                    </button>
+                                </div>
+                                {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
+                                    <div className={`text-center py-12 rounded-lg border border-dashed ${isDark ? 'border-gray-600 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
+                                        <i className="fas fa-clipboard-list text-4xl mb-3 opacity-60"></i>
+                                        <p className="text-sm">No proposals yet</p>
+                                        <p className="text-xs mt-1">Add a row to capture title, value, status, and document link</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {formData.proposals.map((proposal, proposalIndex) => {
+                                            const inputCls = `w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400' : 'border border-gray-300'}`;
+                                            const labelCls = `block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
+                                            return (
+                                                <div key={proposal.id || proposalIndex} className={`rounded-lg border p-4 ${isDark ? 'border-gray-600 bg-gray-800/50' : 'border-gray-200 bg-white'}`}>
+                                                    <div className="flex justify-between items-start gap-2 mb-3">
+                                                        <span className={`text-xs font-medium uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Proposal {proposalIndex + 1}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveLeadProposal(proposalIndex)}
+                                                            className={`text-xs px-2 py-1 rounded ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'}`}
+                                                        >
+                                                            <i className="fas fa-trash mr-1"></i>
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                    <div className={`grid gap-3 ${isFullPage ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+                                                        <div className="md:col-span-2">
+                                                            <label className={labelCls}>Title</label>
+                                                            <input
+                                                                type="text"
+                                                                value={proposal.title || ''}
+                                                                onChange={e => patchLeadProposal(proposalIndex, { title: e.target.value })}
+                                                                className={inputCls}
+                                                                placeholder="e.g. Fuel management — phase 1"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className={labelCls}>Amount (ZAR)</label>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                step="0.01"
+                                                                value={proposal.amount === undefined || proposal.amount === null ? '' : proposal.amount}
+                                                                onChange={e => patchLeadProposal(proposalIndex, { amount: parseFloat(e.target.value) || 0 })}
+                                                                className={inputCls}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className={labelCls}>Status</label>
+                                                            <select
+                                                                value={(LEAD_PROPOSAL_STATUSES.includes(proposal.status) ? proposal.status : 'Draft')}
+                                                                onChange={e => patchLeadProposal(proposalIndex, { status: e.target.value })}
+                                                                className={inputCls}
+                                                            >
+                                                                {LEAD_PROPOSAL_STATUSES.map(s => (
+                                                                    <option key={s} value={s}>{s}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="md:col-span-2">
+                                                            <label className={labelCls}>Working document link</label>
+                                                            <input
+                                                                type="url"
+                                                                value={proposal.workingDocumentLink || ''}
+                                                                onChange={e => patchLeadProposal(proposalIndex, { workingDocumentLink: e.target.value })}
+                                                                className={inputCls}
+                                                                placeholder="https://…"
+                                                            />
+                                                        </div>
+                                                        <div className="md:col-span-2">
+                                                            <label className={labelCls}>Notes</label>
+                                                            <textarea
+                                                                value={proposal.notes || ''}
+                                                                onChange={e => patchLeadProposal(proposalIndex, { notes: e.target.value })}
+                                                                className={inputCls}
+                                                                rows={3}
+                                                                placeholder="Internal notes…"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 )}
                             </div>
                         )}
