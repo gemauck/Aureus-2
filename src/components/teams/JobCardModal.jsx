@@ -131,6 +131,9 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [loadingServerForms, setLoadingServerForms] = useState(false);
+    const [stockLocations, setStockLocations] = useState([]);
+    const [inventoryByLocation, setInventoryByLocation] = useState({});
+    const loadingInventoryByLocationRef = useRef({});
 
     const signatureCanvasRef = useRef(null);
     const signatureWrapperRef = useRef(null);
@@ -334,6 +337,84 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             cancelled = true;
         };
     }, [isOpen]);
+
+    // Load stock locations (for "Stock used" location dropdown) when modal opens.
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+        const token = window.storage?.getToken?.();
+        (async () => {
+            try {
+                const res = await fetch('/api/public/locations', {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                if (!res.ok || cancelled) return;
+                const data = await res.json();
+                const inner = data?.data != null ? data.data : data;
+                const locs = Array.isArray(inner?.locations) ? inner.locations : [];
+                if (!cancelled) {
+                    setStockLocations(
+                        locs.filter((l) => l && l.status !== 'inactive' && l.status !== 'suspended')
+                    );
+                }
+            } catch (e) {
+                console.warn('JobCardModal: stock locations load failed', e);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen]);
+
+    /**
+     * Lazy-load inventory rows for a stock location (used to populate the SKU dropdown
+     * for one stock-used row). Cached per-location so switching between rows is fast.
+     */
+    const ensureInventoryForLocation = useCallback(async (locId) => {
+        if (!locId) return;
+        if (loadingInventoryByLocationRef.current[locId]) return;
+        let alreadyLoaded = false;
+        setInventoryByLocation((prev) => {
+            if (Array.isArray(prev[locId])) {
+                alreadyLoaded = true;
+            }
+            return prev;
+        });
+        if (alreadyLoaded) return;
+        loadingInventoryByLocationRef.current[locId] = true;
+        const token = window.storage?.getToken?.();
+        try {
+            const res = await fetch(
+                `/api/public/inventory?locationId=${encodeURIComponent(locId)}`,
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            );
+            let rows = [];
+            if (res.ok) {
+                const data = await res.json();
+                const inner = data?.data != null ? data.data : data;
+                rows = Array.isArray(inner?.inventory) ? inner.inventory : [];
+            }
+            setInventoryByLocation((prev) => ({ ...prev, [locId]: rows }));
+        } catch (e) {
+            console.warn('JobCardModal: inventory fetch failed for', locId, e);
+            setInventoryByLocation((prev) => ({ ...prev, [locId]: [] }));
+        } finally {
+            loadingInventoryByLocationRef.current[locId] = false;
+        }
+    }, []);
+
+    // Pre-fetch inventory for any locations already referenced by existing stock rows
+    // so the SKU dropdowns can show the saved selections on edit.
+    useEffect(() => {
+        if (!isOpen) return;
+        const locIds = new Set();
+        (formData.stockUsed || []).forEach((row) => {
+            if (row && row.locationId) locIds.add(String(row.locationId));
+        });
+        locIds.forEach((id) => {
+            void ensureInventoryForLocation(id);
+        });
+    }, [isOpen, formData.stockUsed, ensureInventoryForLocation]);
 
     // Load sites when client changes
     useEffect(() => {
@@ -580,10 +661,25 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     };
 
     const addStockRow = () => {
+        // Default new row to the location of the first existing row (if any) so users
+        // do not have to re-pick the same warehouse for every line.
+        const firstLocId =
+            (formData.stockUsed || []).find((r) => r && r.locationId)?.locationId || '';
         setFormData(prev => ({
             ...prev,
-            stockUsed: [...(prev.stockUsed || []), { sku: '', quantity: '', locationId: '', itemName: '', unitCost: '' }]
+            stockUsed: [
+                ...(prev.stockUsed || []),
+                {
+                    sku: '',
+                    quantity: '',
+                    locationId: firstLocId,
+                    locationName: '',
+                    itemName: '',
+                    unitCost: ''
+                }
+            ]
         }));
+        if (firstLocId) void ensureInventoryForLocation(firstLocId);
     };
 
     const updateStockRow = (index, patch) => {
@@ -591,6 +687,30 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             ...prev,
             stockUsed: (prev.stockUsed || []).map((s, i) => (i === index ? { ...s, ...patch } : s))
         }));
+    };
+
+    const handleStockLocationChange = (index, locationId) => {
+        const loc = stockLocations.find((l) => String(l.id) === String(locationId));
+        updateStockRow(index, {
+            locationId: locationId || '',
+            locationName: loc?.name || '',
+            sku: '',
+            itemName: '',
+            unitCost: ''
+        });
+        if (locationId) void ensureInventoryForLocation(locationId);
+    };
+
+    const handleStockSkuChange = (index, sku) => {
+        const row = (formData.stockUsed || [])[index];
+        const locId = row?.locationId || '';
+        const items = inventoryByLocation[locId] || [];
+        const item = items.find((it) => String(it.sku) === String(sku));
+        updateStockRow(index, {
+            sku: sku || '',
+            itemName: item?.name || row?.itemName || '',
+            unitCost: item?.unitCost ?? row?.unitCost ?? ''
+        });
     };
 
     const removeStockRow = (index) => {
@@ -661,10 +781,16 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             const stockUsed = (formData.stockUsed || [])
                 .filter(s => String(s.sku || '').trim() && parseFloat(s.quantity) > 0)
                 .map(s => {
+                    const locId = String(s.locationId || '').trim();
+                    const locName =
+                        String(s.locationName || '').trim() ||
+                        stockLocations.find((l) => String(l.id) === locId)?.name ||
+                        '';
                     const row = {
                         sku: String(s.sku || '').trim(),
                         quantity: parseFloat(s.quantity) || 0,
-                        locationId: String(s.locationId || '').trim(),
+                        locationId: locId,
+                        locationName: locName,
                         itemName: String(s.itemName || '').trim()
                     };
                     if (s.unitCost !== '' && s.unitCost != null && !Number.isNaN(parseFloat(s.unitCost))) {
@@ -1317,57 +1443,96 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             <p className="text-xs text-gray-500 dark:text-slate-400">No stock lines. Add consumables used on site.</p>
                         ) : (
                             <div className="space-y-2">
-                                {(formData.stockUsed || []).map((row, idx) => (
-                                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
-                                        <div className="col-span-3">
-                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">SKU</span>
-                                            <input
-                                                type="text"
-                                                value={row.sku || ''}
-                                                onChange={e => updateStockRow(idx, { sku: e.target.value })}
-                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
-                                            />
+                                <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-1 dark:bg-amber-900/30 dark:border-amber-800/60 dark:text-amber-200">
+                                    Pick the <strong>location</strong> first — the SKU list shows only items on hand at that warehouse.
+                                </p>
+                                {(formData.stockUsed || []).map((row, idx) => {
+                                    const locId = row.locationId || '';
+                                    const items = inventoryByLocation[locId] || [];
+                                    const knownSkus = new Set(items.map((it) => String(it.sku)));
+                                    const hasUnknownSelectedSku =
+                                        Boolean(row.sku) && !knownSkus.has(String(row.sku));
+                                    return (
+                                        <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                                            <div className="col-span-3">
+                                                <span className="text-[10px] text-gray-500 dark:text-slate-400">Location</span>
+                                                <select
+                                                    value={row.locationId || ''}
+                                                    onChange={(e) => handleStockLocationChange(idx, e.target.value)}
+                                                    className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                                >
+                                                    <option value="">Select location…</option>
+                                                    {stockLocations.map((loc) => (
+                                                        <option key={loc.id} value={loc.id}>
+                                                            {loc.name}{loc.code ? ` (${loc.code})` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="col-span-4">
+                                                <span className="text-[10px] text-gray-500 dark:text-slate-400">SKU</span>
+                                                <select
+                                                    value={row.sku || ''}
+                                                    onChange={(e) => handleStockSkuChange(idx, e.target.value)}
+                                                    disabled={!row.locationId}
+                                                    className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 disabled:bg-gray-100 disabled:cursor-not-allowed dark:disabled:bg-slate-800"
+                                                >
+                                                    <option value="">
+                                                        {row.locationId
+                                                            ? items.length === 0
+                                                                ? 'No on-hand stock at this location'
+                                                                : 'Select SKU…'
+                                                            : 'Choose location first…'}
+                                                    </option>
+                                                    {items.map((it) => {
+                                                        const qty = Number(it.quantity) || 0;
+                                                        return (
+                                                            <option key={it.sku} value={it.sku}>
+                                                                {(it.name || it.sku)} ({it.sku}) — {qty} on hand
+                                                            </option>
+                                                        );
+                                                    })}
+                                                    {hasUnknownSelectedSku && (
+                                                        <option value={row.sku}>
+                                                            {row.itemName ? `${row.itemName} (${row.sku})` : row.sku} — saved value
+                                                        </option>
+                                                    )}
+                                                </select>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <span className="text-[10px] text-gray-500 dark:text-slate-400">Qty</span>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    value={row.quantity ?? ''}
+                                                    onChange={e => updateStockRow(idx, { quantity: e.target.value })}
+                                                    className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
+                                                />
+                                            </div>
+                                            <div className="col-span-2">
+                                                <span className="text-[10px] text-gray-500 dark:text-slate-400">Item name</span>
+                                                <input
+                                                    type="text"
+                                                    value={row.itemName || ''}
+                                                    readOnly
+                                                    placeholder="Auto-filled"
+                                                    className="w-full px-2 py-1 text-xs border rounded bg-gray-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
+                                                />
+                                            </div>
+                                            <div className="col-span-1 flex justify-end pb-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeStockRow(idx)}
+                                                    className="text-red-500 hover:text-red-700 text-xs"
+                                                    title="Remove"
+                                                >
+                                                    <i className="fas fa-times" />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="col-span-2">
-                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Qty</span>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={row.quantity ?? ''}
-                                                onChange={e => updateStockRow(idx, { quantity: e.target.value })}
-                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
-                                            />
-                                        </div>
-                                        <div className="col-span-3">
-                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Location ID</span>
-                                            <input
-                                                type="text"
-                                                value={row.locationId || ''}
-                                                onChange={e => updateStockRow(idx, { locationId: e.target.value })}
-                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
-                                            />
-                                        </div>
-                                        <div className="col-span-3">
-                                            <span className="text-[10px] text-gray-500 dark:text-slate-400">Item name</span>
-                                            <input
-                                                type="text"
-                                                value={row.itemName || ''}
-                                                onChange={e => updateStockRow(idx, { itemName: e.target.value })}
-                                                className="w-full px-2 py-1 text-xs border rounded dark:bg-slate-700 dark:border-slate-600"
-                                            />
-                                        </div>
-                                        <div className="col-span-1 flex justify-end pb-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => removeStockRow(idx)}
-                                                className="text-red-500 hover:text-red-700 text-xs"
-                                                title="Remove"
-                                            >
-                                                <i className="fas fa-times" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
