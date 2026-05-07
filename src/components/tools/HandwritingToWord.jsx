@@ -14,8 +14,10 @@ const HandwritingToWord = () => {
         const file = e.target.files[0];
         if (!file) return;
 
-        if (!file.type.startsWith('image/')) {
-            setError('Please select a valid image file');
+        const isImage = file.type.startsWith('image/');
+        const isPdf = file.type === 'application/pdf';
+        if (!isImage && !isPdf) {
+            setError('Please select a valid image or PDF file');
             return;
         }
 
@@ -24,12 +26,16 @@ const HandwritingToWord = () => {
         setRecognizedText('');
         setProgress(0);
 
-        // Create preview
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            setImagePreview(e.target.result);
-        };
-        reader.readAsDataURL(file);
+        // Create preview for images only
+        if (isImage) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setImagePreview(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            setImagePreview(null);
+        }
     };
 
     const recognizeText = async () => {
@@ -40,16 +46,52 @@ const HandwritingToWord = () => {
         setProgress(0);
 
         try {
-            // Lazy load Tesseract.js if not already loaded
+            // Primary path: server parser (supports PDF and images)
+            const reader = new FileReader();
+            const dataUrl = await new Promise((resolve, reject) => {
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(imageFile);
+            });
+
+            const apiResponse = await fetch('/api/tools/document-parser', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    file: {
+                        name: imageFile.name,
+                        dataUrl,
+                        type: imageFile.type
+                    },
+                    mode: 'handwriting',
+                    extractTables: false,
+                    extractStructuredData: false
+                })
+            });
+
+            if (apiResponse.ok) {
+                const payload = await apiResponse.json().catch(() => ({}));
+                const parsedData = payload?.data || payload;
+                const extractedText = String(parsedData?.extractedText || '').trim();
+                if (extractedText) {
+                    setRecognizedText(extractedText);
+                    setProgress(100);
+                    return;
+                }
+            }
+
+            // Fallback path: client OCR for image files
+            if (!imageFile.type.startsWith('image/')) {
+                throw new Error('Could not extract text from PDF. Please check parser configuration.');
+            }
+
             if (!window.Tesseract && window.loadTesseract) {
                 await window.loadTesseract();
             }
-            
             if (!window.Tesseract) {
                 throw new Error('Tesseract.js library failed to load');
             }
 
-            // Initialize Tesseract worker
             const worker = await window.Tesseract.createWorker({
                 logger: (m) => {
                     if (m.status === 'recognizing text') {
@@ -60,15 +102,10 @@ const HandwritingToWord = () => {
 
             await worker.loadLanguage('eng');
             await worker.initialize('eng');
-
-            // Recognize text
             const { data: { text } } = await worker.recognize(imageFile);
-            
             setRecognizedText(text);
             setProgress(100);
-
             await worker.terminate();
-
         } catch (err) {
             console.error('Error recognizing text:', err);
             setError('Failed to recognize text: ' + err.message);
@@ -193,7 +230,7 @@ const HandwritingToWord = () => {
         <div className="space-y-3">
             {/* Upload Section */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Upload Handwritten Image</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Upload Handwritten File</h3>
                 
                 <div className="space-y-3">
                     <div
@@ -202,15 +239,15 @@ const HandwritingToWord = () => {
                     >
                         <i className="fas fa-image text-3xl text-gray-400 mb-2"></i>
                         <p className="text-xs text-gray-600 mb-1">
-                            Click to select image or drag and drop
+                            Click to select image/PDF or drag and drop
                         </p>
                         <p className="text-[10px] text-gray-500">
-                            Supports: JPG, PNG, BMP, GIF • Maximum size: 5MB
+                            Supports: JPG, PNG, BMP, GIF, PDF • Maximum size: 50MB
                         </p>
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept="image/*"
+                            accept="image/*,.pdf"
                             onChange={handleFileSelect}
                             className="hidden"
                         />
@@ -220,7 +257,7 @@ const HandwritingToWord = () => {
                         <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center space-x-2">
-                                    <i className="fas fa-file-image text-blue-600 text-lg"></i>
+                                    <i className={`fas ${imageFile.type.startsWith('image/') ? 'fa-file-image text-blue-600' : 'fa-file-pdf text-red-600'} text-lg`}></i>
                                     <div>
                                         <p className="text-xs font-medium text-gray-900">{imageFile.name}</p>
                                         <p className="text-[10px] text-gray-600">
