@@ -9,6 +9,10 @@ const HandwritingToWord = () => {
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState(null);
     const fileInputRef = useRef(null);
+    const getAuthHeaders = () => {
+        const token = window.storage?.getToken?.();
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    };
 
     const handleFileSelect = (e) => {
         const file = e.target.files[0];
@@ -56,7 +60,10 @@ const HandwritingToWord = () => {
 
             const apiResponse = await fetch('/api/tools/document-parser', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders()
+                },
                 body: JSON.stringify({
                     file: {
                         name: imageFile.name,
@@ -68,6 +75,10 @@ const HandwritingToWord = () => {
                     extractStructuredData: false
                 })
             });
+
+            if (apiResponse.status === 401) {
+                throw new Error('Your session expired. Please refresh the page and sign in again.');
+            }
 
             if (apiResponse.ok) {
                 const payload = await apiResponse.json().catch(() => ({}));
