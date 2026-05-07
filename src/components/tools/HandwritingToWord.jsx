@@ -112,6 +112,14 @@ const HandwritingToWord = () => {
                 if (tableResponse.status === 401) {
                     throw new Error('Your session expired. Please refresh the page and sign in again.');
                 }
+                if (!tableResponse.ok) {
+                    const tableErrorPayload = await tableResponse.json().catch(() => ({}));
+                    const tableErrorMessage =
+                        tableErrorPayload?.error?.message ||
+                        tableErrorPayload?.error ||
+                        `Handwriting table extraction failed (${tableResponse.status}).`;
+                    throw new Error(tableErrorMessage);
+                }
 
                 if (tableResponse.ok) {
                     const tablePayload = await tableResponse.json().catch(() => ({}));
