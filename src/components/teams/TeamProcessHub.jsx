@@ -1420,22 +1420,54 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete }) {
     const firstPdf = safeAttachments.find((a) => (a.mimeType && a.mimeType.includes('pdf')) || (a.name || '').toLowerCase().endsWith('.pdf'));
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
     const [pdfPreviewError, setPdfPreviewError] = useState('');
+    const [pdfPagePreviews, setPdfPagePreviews] = useState([]);
 
     useEffect(() => {
         let cancelled = false;
         let objectUrl = '';
         setPdfPreviewUrl('');
         setPdfPreviewError('');
+        setPdfPagePreviews([]);
 
         if (!firstPdf?.url) return undefined;
 
         (async () => {
             try {
-                const response = await fetch(firstPdf.url, { credentials: 'omit' });
+                const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token');
+                const isSameOrigin = (() => {
+                    try {
+                        const target = new URL(firstPdf.url, window.location.origin);
+                        return target.origin === window.location.origin;
+                    } catch (_) {
+                        return false;
+                    }
+                })();
+                const response = await fetch(firstPdf.url, {
+                    credentials: isSameOrigin ? 'include' : 'omit',
+                    headers: token && isSameOrigin ? { Authorization: `Bearer ${token}` } : undefined
+                });
                 if (!response.ok) throw new Error(`PDF fetch failed (${response.status})`);
                 const blob = await response.blob();
+                const pdfArrayBuffer = await blob.arrayBuffer();
                 objectUrl = URL.createObjectURL(blob);
                 if (!cancelled) setPdfPreviewUrl(objectUrl);
+
+                // Browser PDF plugins are inconsistent; build a reliable canvas preview with pdf.js.
+                const pdfjsLib = await ensurePdfJs();
+                const pdfDoc = await pdfjsLib.getDocument({ data: pdfArrayBuffer }).promise;
+                const pageImages = [];
+                const maxPages = Math.min(pdfDoc.numPages || 0, 12);
+                for (let p = 1; p <= maxPages; p++) {
+                    const page = await pdfDoc.getPage(p);
+                    const viewport = page.getViewport({ scale: 1.15 });
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    await page.render({ canvasContext: ctx, viewport }).promise;
+                    pageImages.push(canvas.toDataURL('image/png'));
+                }
+                if (!cancelled) setPdfPagePreviews(pageImages);
             } catch (e) {
                 if (!cancelled) {
                     setPdfPreviewError(e?.message || 'Could not load inline PDF preview.');
@@ -1498,24 +1530,37 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete }) {
                                 {pdfPreviewError} Use the attachment link above to open it in a new tab.
                             </p>
                         )}
-                        <object
-                            data={pdfPreviewUrl || firstPdf.url}
-                            type="application/pdf"
-                            className={`w-full h-[min(70vh,520px)] rounded-xl border ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
-                        >
-                            <div className={`text-sm p-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                PDF preview is unavailable in this browser. Open{' '}
-                                <a
-                                    href={firstPdf.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={`underline ${isDark ? 'text-cyan-400' : 'text-sky-700'}`}
-                                >
-                                    {firstPdf.name || 'the PDF'}
-                                </a>
-                                .
+                        {pdfPagePreviews.length > 0 ? (
+                            <div className={`w-full max-h-[min(70vh,520px)] overflow-auto rounded-xl border p-2 space-y-2 ${isDark ? 'border-gray-700 bg-gray-950/60' : 'border-gray-300 bg-gray-100/70'}`}>
+                                {pdfPagePreviews.map((src, idx) => (
+                                    <img
+                                        key={`${doc.id}-pdf-page-${idx}`}
+                                        src={src}
+                                        alt={`PDF page ${idx + 1}`}
+                                        className={`w-full rounded-lg border ${isDark ? 'border-gray-800 bg-white' : 'border-gray-200 bg-white'}`}
+                                    />
+                                ))}
                             </div>
-                        </object>
+                        ) : (
+                            <object
+                                data={pdfPreviewUrl || firstPdf.url}
+                                type="application/pdf"
+                                className={`w-full h-[min(70vh,520px)] rounded-xl border ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+                            >
+                                <div className={`text-sm p-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    PDF preview is unavailable in this browser. Open{' '}
+                                    <a
+                                        href={firstPdf.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={`underline ${isDark ? 'text-cyan-400' : 'text-sky-700'}`}
+                                    >
+                                        {firstPdf.name || 'the PDF'}
+                                    </a>
+                                    .
+                                </div>
+                            </object>
+                        )}
                     </div>
                 )}
             </div>
