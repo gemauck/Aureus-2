@@ -7,6 +7,9 @@ import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { insertJobCardActivityFromRequest } from './_lib/jobCardActivity.js'
 import { buildJobCardUpdateChanges, buildServiceFormInstanceChanges } from './_lib/jobCardActivityDiff.js'
 import { computeNextJobCardNumber } from './_lib/jobCardNumber.js'
+import { sendEmail } from './_lib/email.js'
+import { getAppUrl } from './_lib/getAppUrl.js'
+import PDFDocument from 'pdfkit'
 
 // Some deployments may not yet have the optional service form tables used by
 // the job card forms feature. When those tables are missing, Prisma throws
@@ -47,12 +50,154 @@ function isTerminalJobCardStatus(s) {
   return s === 'submitted' || s === 'completed'
 }
 
-const ALLOWED_JOB_CARD_STATUSES = new Set(['draft', 'open', 'submitted', 'completed', 'cancelled'])
+const ALLOWED_JOB_CARD_STATUSES = new Set([
+  'draft',
+  'open',
+  'submitted',
+  'ready_for_invoice',
+  'completed',
+  'cancelled'
+])
+const BILLING_RECIPIENT_KEYWORDS = ['bianca', 'gareth', 'garethm', 'greg']
 
 function normalizeJobCardStatus(status, fallback = 'draft') {
   if (status === undefined || status === null || String(status).trim() === '') return fallback
   const normalized = String(status).trim().toLowerCase().replace(/\s+/g, '_')
   return ALLOWED_JOB_CARD_STATUSES.has(normalized) ? normalized : null
+}
+
+function formatBillingDate(value) {
+  if (!value) return '—'
+  const dt = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(dt.getTime())) return '—'
+  return dt.toISOString().replace('T', ' ').slice(0, 19)
+}
+
+async function resolveBillingRecipients(prismaClient) {
+  const envEmails = String(process.env.BILLING_RECIPIENT_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+
+  const users = await prismaClient.user.findMany({
+    select: { id: true, name: true, email: true },
+    where: {
+      OR: BILLING_RECIPIENT_KEYWORDS.flatMap((kw) => [
+        { name: { contains: kw, mode: 'insensitive' } },
+        { email: { contains: kw, mode: 'insensitive' } }
+      ])
+    }
+  })
+
+  const emailSet = new Set(envEmails)
+  const inAppUsers = []
+  for (const user of users) {
+    const email = String(user.email || '').trim().toLowerCase()
+    if (email) emailSet.add(email)
+    inAppUsers.push(user)
+  }
+
+  return {
+    emails: Array.from(emailSet),
+    users: inAppUsers
+  }
+}
+
+function buildJobCardBillingPdf(jobCard) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 42 })
+    const chunks = []
+    doc.on('data', (chunk) => chunks.push(chunk))
+    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('error', reject)
+
+    const title = `Job Card ${jobCard.jobCardNumber || jobCard.id || ''}`.trim()
+    doc.fontSize(18).text(title || 'Job Card')
+    doc.moveDown(0.4)
+    doc.fontSize(11).fillColor('#555555').text('Billing handoff export')
+    doc.moveDown(1)
+    doc.fillColor('#000000')
+
+    const lines = [
+      ['Status', String(jobCard.status || 'draft')],
+      ['Client', jobCard.clientName || '—'],
+      ['Site', jobCard.siteName || '—'],
+      ['Technician', jobCard.agentName || '—'],
+      ['Callout category', jobCard.callOutCategory || '—'],
+      ['Created', formatBillingDate(jobCard.createdAt)],
+      ['Submitted', formatBillingDate(jobCard.submittedAt)],
+      ['Completed', formatBillingDate(jobCard.completedAt)]
+    ]
+    for (const [label, value] of lines) {
+      doc.font('Helvetica-Bold').fontSize(10).text(`${label}: `, { continued: true })
+      doc.font('Helvetica').fontSize(10).text(String(value || '—'))
+    }
+
+    const textSections = [
+      ['Reason for visit', jobCard.reasonForVisit || '—'],
+      ['Diagnosis', jobCard.diagnosis || '—'],
+      ['Actions taken', jobCard.actionsTaken || '—'],
+      ['Future work required', jobCard.futureWorkRequired || '—']
+    ]
+    for (const [heading, text] of textSections) {
+      doc.moveDown(0.8)
+      doc.font('Helvetica-Bold').fontSize(11).text(heading)
+      doc.font('Helvetica').fontSize(10).text(String(text || '—'))
+    }
+
+    doc.end()
+  })
+}
+
+async function notifyBillingRecipientsForJobCard(prismaClient, jobCard) {
+  const { emails, users } = await resolveBillingRecipients(prismaClient)
+  if (emails.length === 0 && users.length === 0) return
+
+  const appUrl = getAppUrl()
+  const jobCardLink = `${appUrl}/#/service-maintenance/${encodeURIComponent(jobCard.id)}`
+  const title = `Job card ${jobCard.jobCardNumber || jobCard.id} is ready for invoice`
+  const body =
+    `A job card has been marked as Ready for Invoice.<br/>` +
+    `<br/><strong>Client:</strong> ${String(jobCard.clientName || '—')}<br/>` +
+    `<strong>Technician:</strong> ${String(jobCard.agentName || '—')}<br/>` +
+    `<strong>Status:</strong> ${String(jobCard.status || 'ready_for_invoice')}<br/>` +
+    `<br/><a href="${jobCardLink}">Open job card in ERP</a>`
+
+  if (users.length > 0) {
+    await prismaClient.notification.createMany({
+      data: users.map((u) => ({
+        userId: u.id,
+        type: 'invoice',
+        title,
+        message: `${title}.`,
+        link: `#/service-maintenance/${encodeURIComponent(jobCard.id)}`,
+        metadata: JSON.stringify({
+          source: 'job_card_ready_for_invoice',
+          jobCardId: jobCard.id,
+          jobCardNumber: jobCard.jobCardNumber || null
+        }),
+        read: false
+      }))
+    })
+  }
+
+  if (emails.length > 0) {
+    const pdfBuffer = await buildJobCardBillingPdf(jobCard)
+    const safeNumber = String(jobCard.jobCardNumber || jobCard.id || 'job-card').replace(/[^a-zA-Z0-9_-]/g, '_')
+    await sendEmail({
+      to: emails,
+      subject: title,
+      html: `<p>${body}</p>`,
+      text: `${title}\n\nClient: ${jobCard.clientName || '—'}\nTechnician: ${jobCard.agentName || '—'}\nLink: ${jobCardLink}`,
+      attachments: [
+        {
+          filename: `${safeNumber}.pdf`,
+          contentType: 'application/pdf',
+          contentBase64: pdfBuffer.toString('base64')
+        }
+      ]
+    })
+  }
 }
 
 function parseFiniteNumber(value, fallback = 0) {
@@ -1031,6 +1176,14 @@ async function handler(req, res) {
           summary: `Updated job card ${jobCard.jobCardNumber}`,
           jobCardNumber: jobCard.jobCardNumber
         })
+
+        if (prevStatus !== jobCard.status && jobCard.status === 'ready_for_invoice') {
+          try {
+            await notifyBillingRecipientsForJobCard(prisma, jobCard)
+          } catch (notifyError) {
+            console.error('jobcards: failed to notify billing recipients', notifyError)
+          }
+        }
 
         return ok(res, { 
           jobCard: {

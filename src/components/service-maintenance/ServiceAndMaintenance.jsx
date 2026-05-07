@@ -5,6 +5,51 @@ const { useState, useEffect, useMemo, useCallback, useRef } = ReactGlobal;
 /** Same convention as mobile job card wizard — project line embedded in `otherComments`. */
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
 const HEADING_PREFIX = 'Heading:';
+const JOB_CARD_STATUS_OPTIONS = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'open', label: 'Open' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'ready_for_invoice', label: 'Ready for invoice' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' }
+];
+
+function normalizeJobCardStatus(status) {
+  return String(status || 'draft').trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function formatJobCardStatusLabel(status) {
+  const normalized = normalizeJobCardStatus(status);
+  if (normalized === 'ready_for_invoice') return 'READY FOR INVOICE';
+  return normalized.toUpperCase();
+}
+
+function jobCardStatusBadgeClasses(status, isDark) {
+  const normalized = normalizeJobCardStatus(status);
+  if (normalized === 'completed') {
+    return isDark
+      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40'
+      : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  }
+  if (normalized === 'ready_for_invoice') {
+    return isDark
+      ? 'bg-violet-500/10 text-violet-300 border-violet-400/40'
+      : 'bg-violet-50 text-violet-700 border-violet-200';
+  }
+  if (normalized === 'open') {
+    return isDark
+      ? 'bg-sky-500/10 text-sky-300 border-sky-400/40'
+      : 'bg-sky-50 text-sky-700 border-sky-200';
+  }
+  if (normalized === 'cancelled') {
+    return isDark
+      ? 'bg-rose-500/10 text-rose-300 border-rose-400/40'
+      : 'bg-rose-50 text-rose-700 border-rose-200';
+  }
+  return isDark
+    ? 'bg-gray-800 text-gray-100 border-gray-700'
+    : 'bg-gray-100 text-gray-700 border-gray-200';
+}
 
 function parseProjectAssociationFromComments(rawComments) {
   if (!rawComments || typeof rawComments !== 'string') {
@@ -357,6 +402,7 @@ const ServiceAndMaintenance = () => {
   const [jobCardActivities, setJobCardActivities] = useState([]);
   const [jobCardActivitiesLoading, setJobCardActivitiesLoading] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showFormsManager, setShowFormsManager] = useState(false);
   const [formsManagerReady, setFormsManagerReady] = useState(
     typeof window !== 'undefined' && !!window.ServiceFormsManager
@@ -873,6 +919,33 @@ const ServiceAndMaintenance = () => {
     window.addEventListener('jobcards:saved', onSaved);
     return () => window.removeEventListener('jobcards:saved', onSaved);
   }, [selectedJobCard?.id, refetchJobCardDetailAfterSave]);
+
+  const handleChangeJobCardStatus = useCallback(async (nextStatusRaw) => {
+    const jobCardId = selectedJobCard?.id;
+    if (!jobCardId || !window.DatabaseAPI?.updateJobCard) return;
+
+    const nextStatus = normalizeJobCardStatus(nextStatusRaw);
+    const prevStatus = normalizeJobCardStatus(selectedJobCard.status || 'draft');
+    if (!nextStatus || nextStatus === prevStatus) return;
+
+    setUpdatingStatus(true);
+    try {
+      await window.DatabaseAPI.updateJobCard(jobCardId, { status: nextStatus });
+      setSelectedJobCard((prev) => (prev?.id === jobCardId ? { ...prev, status: nextStatus } : prev));
+      await refetchJobCardDetailAfterSave(jobCardId);
+      if (nextStatus === 'ready_for_invoice') {
+        window.alert(
+          'Marked as Ready for Invoice. Billing recipients were notified and emailed with the job card PDF.'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to update job card status:', error);
+      window.alert(error?.message || 'Failed to update job card status.');
+      await refetchJobCardDetailAfterSave(jobCardId);
+    } finally {
+      setUpdatingStatus(false);
+    }
+  }, [selectedJobCard?.id, selectedJobCard?.status, refetchJobCardDetailAfterSave]);
 
   // Safely parse GPS coordinates from a job card record
   const getJobCardCoordinates = (jobCard) => {
@@ -2387,18 +2460,10 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     </span>
                   ) : null}
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                      (selectedJobCard.status || 'draft').toString().toLowerCase() === 'completed'
-                        ? (isDark ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200')
-                        : (selectedJobCard.status || 'draft').toString().toLowerCase() === 'open'
-                        ? (isDark ? 'bg-sky-500/10 text-sky-300 border-sky-400/40' : 'bg-sky-50 text-sky-700 border-sky-200')
-                        : (selectedJobCard.status || 'draft').toString().toLowerCase() === 'cancelled'
-                        ? (isDark ? 'bg-rose-500/10 text-rose-300 border-rose-400/40' : 'bg-rose-50 text-rose-700 border-rose-200')
-                        : (isDark ? 'bg-gray-800 text-gray-100 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-200')
-                    }`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${jobCardStatusBadgeClasses(selectedJobCard.status, isDark)}`}
                   >
                     <span className="h-2 w-2 rounded-full bg-current" />
-                    {(selectedJobCard.status || 'draft').toString().toUpperCase()}
+                    {formatJobCardStatusLabel(selectedJobCard.status)}
                   </span>
                 </div>
                 <p className={`mt-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>
@@ -2409,10 +2474,31 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
             </div>
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-2">
+                <label className="sr-only" htmlFor="jobcard-status-select">Job card status</label>
+                <select
+                  id="jobcard-status-select"
+                  value={normalizeJobCardStatus(selectedJobCard.status || 'draft')}
+                  disabled={updatingStatus}
+                  onChange={(e) => {
+                    const nextStatus = e.target.value;
+                    void handleChangeJobCardStatus(nextStatus);
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium ${
+                    isDark
+                      ? 'border-gray-700 bg-gray-800 text-gray-100'
+                      : 'border-gray-200 bg-white text-gray-800'
+                  } ${updatingStatus ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                  {JOB_CARD_STATUS_OPTIONS.map((statusOpt) => (
+                    <option key={statusOpt.value} value={statusOpt.value}>
+                      {statusOpt.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={handleDownloadJobCardPdf}
-                  disabled={downloadingPdf}
+                  disabled={downloadingPdf || updatingStatus}
                   className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <i className={`fa-solid ${downloadingPdf ? 'fa-spinner fa-spin' : 'fa-file-pdf'}`} />

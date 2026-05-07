@@ -29,6 +29,23 @@ function appendLegalFooterToPlainText(text) {
     return `${text.trim()}\n\n${EMAIL_LEGAL_FOOTER_LINE}`;
 }
 
+function normalizeOutboundAttachments(attachments) {
+    if (!Array.isArray(attachments)) return [];
+    return attachments
+        .map((item) => {
+            if (!item || typeof item !== 'object') return null;
+            const filename = String(item.filename || '').trim();
+            const contentBase64 = String(item.contentBase64 || item.content || item.base64 || '').trim();
+            if (!filename || !contentBase64) return null;
+            return {
+                filename,
+                contentBase64,
+                contentType: String(item.contentType || item.type || 'application/octet-stream')
+            };
+        })
+        .filter(Boolean);
+}
+
 // Build transporter from environment variables
 // Supported envs:
 // - SMTP_URL (e.g. smtp://user:pass@smtp.gmail.com:587)
@@ -92,6 +109,13 @@ async function sendViaResendAPI(mailOptions, apiKey) {
     // Custom headers (e.g. Message-ID for reply threading - reply In-Reply-To will match this)
     if (mailOptions.headers && typeof mailOptions.headers === 'object') {
         payload.headers = mailOptions.headers;
+    }
+    if (Array.isArray(mailOptions.attachments) && mailOptions.attachments.length > 0) {
+        payload.attachments = mailOptions.attachments.map((att) => ({
+            filename: att.filename,
+            content: att.contentBase64,
+            ...(att.contentType ? { content_type: att.contentType } : {})
+        }));
     }
     
     console.log('📧 Resend API payload:', JSON.stringify({
@@ -202,6 +226,14 @@ async function sendViaSendGridAPI(mailOptions, apiKey) {
             type: 'text/html',
             value: mailOptions.text.replace(/\n/g, '<br>')
         });
+    }
+    if (Array.isArray(mailOptions.attachments) && mailOptions.attachments.length > 0) {
+        payload.attachments = mailOptions.attachments.map((att) => ({
+            content: att.contentBase64,
+            filename: att.filename,
+            type: att.contentType || 'application/octet-stream',
+            disposition: 'attachment'
+        }));
     }
     
     
@@ -365,11 +397,11 @@ function checkEmailConfiguration() {
 /**
  * Send a simple email (raw subject/body). Used for document collection requests,
  * leave notifications, and other custom user-drafted emails.
- * @param {{ to: string|string[], cc?: string|string[], bcc?: string|string[], subject: string, html?: string, text?: string, replyTo?: string, fromName?: string, from?: string, headers?: Record<string, string> }} opts
+ * @param {{ to: string|string[], cc?: string|string[], bcc?: string|string[], subject: string, html?: string, text?: string, replyTo?: string, fromName?: string, from?: string, headers?: Record<string, string>, attachments?: Array<{ filename: string, contentBase64: string, contentType?: string }> }} opts
  * @returns {{ success: boolean, messageId: string }}
  */
 export async function sendEmail(opts) {
-    const { to, cc, bcc, subject, html, text, replyTo, fromName, from: fromOverride, headers: customHeaders } = opts;
+    const { to, cc, bcc, subject, html, text, replyTo, fromName, from: fromOverride, headers: customHeaders, attachments } = opts;
     if (!to || !subject) {
         throw new Error('sendEmail requires "to" and "subject"');
     }
@@ -407,6 +439,10 @@ export async function sendEmail(opts) {
     }
     if (fromName && typeof fromName === 'string') {
         mailOptions.fromName = fromName;
+    }
+    const normalizedAttachments = normalizeOutboundAttachments(attachments);
+    if (normalizedAttachments.length > 0) {
+        mailOptions.attachments = normalizedAttachments;
     }
 
     checkEmailConfiguration();

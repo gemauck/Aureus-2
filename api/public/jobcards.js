@@ -145,7 +145,7 @@ async function handler(req, res) {
           ? String(body.longitude)
           : ''
 
-    const allowedStatuses = ['draft', 'submitted', 'completed']
+    const allowedStatuses = ['draft', 'submitted', 'ready_for_invoice', 'completed']
     const status = allowedStatuses.includes(body.status) ? body.status : 'draft'
     const now = new Date()
     let submittedAt = null
