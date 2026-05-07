@@ -213,7 +213,7 @@ async function handler(req, res) {
     if (otherCommentsUpdate !== undefined) data.otherComments = otherCommentsUpdate
     if (photos !== undefined) data.photos = photos
     if (body.status !== undefined) {
-      data.status = ['draft', 'submitted', 'ready_for_invoice', 'completed'].includes(body.status)
+      data.status = ['draft', 'submitted', 'completed'].includes(body.status)
         ? body.status
         : existing.status
     }
@@ -228,7 +228,7 @@ async function handler(req, res) {
     }
 
     const finalizedStatus =
-      body.status !== undefined && ['draft', 'submitted', 'ready_for_invoice', 'completed'].includes(body.status)
+      body.status !== undefined && ['draft', 'submitted', 'completed'].includes(body.status)
         ? body.status
         : existing.status
     if (finalizedStatus === 'completed') {

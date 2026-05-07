@@ -385,6 +385,8 @@ function escapeHtml(value) {
 
 const ServiceAndMaintenance = () => {
   const { user } = window.useAuth();
+  const isAdminUser =
+    typeof window.isAdminRole === 'function' ? window.isAdminRole(user?.role) : false;
   const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
@@ -923,6 +925,7 @@ const ServiceAndMaintenance = () => {
   const handleChangeJobCardStatus = useCallback(async (nextStatusRaw) => {
     const jobCardId = selectedJobCard?.id;
     if (!jobCardId || !window.DatabaseAPI?.updateJobCard) return;
+    if (!isAdminUser) return;
 
     const nextStatus = normalizeJobCardStatus(nextStatusRaw);
     const prevStatus = normalizeJobCardStatus(selectedJobCard.status || 'draft');
@@ -945,7 +948,7 @@ const ServiceAndMaintenance = () => {
     } finally {
       setUpdatingStatus(false);
     }
-  }, [selectedJobCard?.id, selectedJobCard?.status, refetchJobCardDetailAfterSave]);
+  }, [selectedJobCard?.id, selectedJobCard?.status, refetchJobCardDetailAfterSave, isAdminUser]);
 
   // Safely parse GPS coordinates from a job card record
   const getJobCardCoordinates = (jobCard) => {
@@ -2478,7 +2481,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                 <select
                   id="jobcard-status-select"
                   value={normalizeJobCardStatus(selectedJobCard.status || 'draft')}
-                  disabled={updatingStatus}
+                  disabled={updatingStatus || !isAdminUser}
                   onChange={(e) => {
                     const nextStatus = e.target.value;
                     void handleChangeJobCardStatus(nextStatus);
@@ -2487,7 +2490,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     isDark
                       ? 'border-gray-700 bg-gray-800 text-gray-100'
                       : 'border-gray-200 bg-white text-gray-800'
-                  } ${updatingStatus ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  } ${updatingStatus || !isAdminUser ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
                   {JOB_CARD_STATUS_OPTIONS.map((statusOpt) => (
                     <option key={statusOpt.value} value={statusOpt.value}>
@@ -2495,6 +2498,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     </option>
                   ))}
                 </select>
+                {!isAdminUser ? (
+                  <span className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                    Admin only
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={handleDownloadJobCardPdf}
