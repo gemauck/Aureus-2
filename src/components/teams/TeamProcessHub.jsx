@@ -1418,6 +1418,36 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete }) {
     if (!Array.isArray(safeAttachments)) safeAttachments = [];
 
     const firstPdf = safeAttachments.find((a) => (a.mimeType && a.mimeType.includes('pdf')) || (a.name || '').toLowerCase().endsWith('.pdf'));
+    const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+    const [pdfPreviewError, setPdfPreviewError] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        let objectUrl = '';
+        setPdfPreviewUrl('');
+        setPdfPreviewError('');
+
+        if (!firstPdf?.url) return undefined;
+
+        (async () => {
+            try {
+                const response = await fetch(firstPdf.url, { credentials: 'omit' });
+                if (!response.ok) throw new Error(`PDF fetch failed (${response.status})`);
+                const blob = await response.blob();
+                objectUrl = URL.createObjectURL(blob);
+                if (!cancelled) setPdfPreviewUrl(objectUrl);
+            } catch (e) {
+                if (!cancelled) {
+                    setPdfPreviewError(e?.message || 'Could not load inline PDF preview.');
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [firstPdf?.url]);
 
     return (
         <div className={`flex-1 overflow-y-auto p-5 space-y-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
@@ -1462,11 +1492,31 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete }) {
                     ))}
                 </ul>
                 {firstPdf && (
-                    <iframe
-                        title={firstPdf.name || 'PDF'}
-                        src={firstPdf.url}
-                        className={`w-full h-[min(70vh,520px)] rounded-xl border mt-4 ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
-                    />
+                    <div className="mt-4">
+                        {pdfPreviewError && (
+                            <p className={`text-xs mb-2 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                                {pdfPreviewError} Use the attachment link above to open it in a new tab.
+                            </p>
+                        )}
+                        <object
+                            data={pdfPreviewUrl || firstPdf.url}
+                            type="application/pdf"
+                            className={`w-full h-[min(70vh,520px)] rounded-xl border ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+                        >
+                            <div className={`text-sm p-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                PDF preview is unavailable in this browser. Open{' '}
+                                <a
+                                    href={firstPdf.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`underline ${isDark ? 'text-cyan-400' : 'text-sky-700'}`}
+                                >
+                                    {firstPdf.name || 'the PDF'}
+                                </a>
+                                .
+                            </div>
+                        </object>
+                    </div>
                 )}
             </div>
         </div>
