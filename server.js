@@ -413,8 +413,18 @@ const calendarNotesLimiter = rateLimit({
   skipSuccessfulRequests: false, // Count all requests (including successful saves)
 })
 
+// Stricter limit for public customer engagement (token probe + submit)
+const publicCustomerEngagementLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 45,
+  message: 'Too many questionnaire requests. Try again shortly.',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 // Apply calendar-notes limiter first (before general API limiter)
 app.use('/api/calendar-notes', calendarNotesLimiter)
+app.use('/api/public/customer-engagement', publicCustomerEngagementLimiter)
 
 // Apply general API rate limiting (skips calendar-notes)
 app.use('/api', apiLimiter)
@@ -1311,6 +1321,33 @@ app.all('/api/clients', async (req, res, next) => {
       res.setHeader('Content-Type', 'application/json')
       res.setHeader('Content-Length', Buffer.byteLength(body, 'utf8'))
       return res.end(body)
+    }
+    return next(e)
+  }
+})
+
+// Lead customer engagement share link (admin) — before /api/leads/:id
+app.all('/api/leads/:id/customer-engagement-link', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leads', '[id]', 'customer-engagement-link.js'))
+    if (!handler) {
+      console.error('❌ customer-engagement-link handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    req.params = req.params || {}
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in customer-engagement-link handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
     }
     return next(e)
   }
@@ -2599,6 +2636,28 @@ app.all('/api/public/service-forms', async (req, res, next) => {
     return handler(req, res)
   } catch (e) {
     console.error('❌ Public service-forms API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/public/document-branding', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'document-branding.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public document-branding API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/public/customer-engagement', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'customer-engagement.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public customer-engagement API error:', e)
     return next(e)
   }
 })

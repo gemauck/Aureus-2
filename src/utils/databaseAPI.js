@@ -1226,6 +1226,25 @@ const DatabaseAPI = {
         return response;
     },
 
+    async createCustomerEngagementLink(leadId, options = {}) {
+        const response = await this.makeRequest(`/leads/${encodeURIComponent(leadId)}/customer-engagement-link`, {
+            method: 'POST',
+            body: JSON.stringify({ clearSubmission: options.clearSubmission === true })
+        });
+        this.clearCache(`/leads/${leadId}`);
+        this.clearCache('/leads');
+        return response;
+    },
+
+    async revokeCustomerEngagementLink(leadId) {
+        const response = await this.makeRequest(`/leads/${encodeURIComponent(leadId)}/customer-engagement-link`, {
+            method: 'DELETE'
+        });
+        this.clearCache(`/leads/${leadId}`);
+        this.clearCache('/leads');
+        return response;
+    },
+
     async createLead(leadData) {
         const response = await this.makeRequest('/leads', {
             method: 'POST',

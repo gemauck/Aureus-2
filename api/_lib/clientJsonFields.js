@@ -366,7 +366,13 @@ export function parseClientJsonFields(client) {
     delete parsed.clientProposals
     delete parsed.clientFollowUps
     delete parsed.clientServices
-    
+
+    if (Object.prototype.hasOwnProperty.call(parsed, 'customerEngagementTokenHash')) {
+      parsed.customerEngagementLinkActive =
+        !!parsed.customerEngagementTokenHash && !parsed.customerEngagementRevokedAt
+      delete parsed.customerEngagementTokenHash
+    }
+
     return parsed
   } catch (error) {
     console.error(`❌ Error parsing client ${client?.id}:`, error.message)

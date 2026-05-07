@@ -200,6 +200,13 @@ model Client {
   proposalsJsonb    Json?           @default("[]")
   servicesJsonb     Json?           @default("[]")
   kycJsonb          Json?           @default("{}")
+
+  // Customer engagement questionnaire (public link, token is stored hashed only)
+  customerEngagementTokenHash     String?
+  customerEngagementTokenCreatedAt DateTime?
+  customerEngagementSubmittedAt   DateTime?
+  customerEngagementResponses     Json?
+  customerEngagementRevokedAt     DateTime?
   owner             User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   externalAgent     ExternalAgent?  @relation(fields: [externalAgentId], references: [id])
   newsArticles      ClientNews[]

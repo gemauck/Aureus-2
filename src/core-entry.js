@@ -84,6 +84,7 @@ import './components/manufacturing/JobCardVoiceNoteTextarea.jsx';
 import './components/manufacturing/jobCardActivityDisplay.js';
 import './components/manufacturing/JobCardFormPublic.jsx';
 import './components/manufacturing/JobCardAppGate.jsx';
+import './components/public/CustomerEngagementPublic.jsx';
 
 // Application entry point
 import './App.jsx';

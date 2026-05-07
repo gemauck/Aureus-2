@@ -359,6 +359,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Track initial loading state to prevent jittery progressive rendering
     // Only render full content once all initial data loads are complete
     const [isInitialLoading, setIsInitialLoading] = useState(false);
+    const [engagementLinkUrl, setEngagementLinkUrl] = useState('');
+    const [engagementBusy, setEngagementBusy] = useState(false);
+    const [engagementHint, setEngagementHint] = useState('');
+    const [showEngagementResponsesModal, setShowEngagementResponsesModal] = useState(false);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -434,6 +438,98 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         };
     }, [formData, onSave]);
+
+    const handleEngagementGenerate = async (clearSubmission) => {
+        if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
+        if (
+            clearSubmission &&
+            formData.customerEngagementSubmittedAt &&
+            !window.confirm('Clear the previous submission and open a new questionnaire round?')
+        ) {
+            return;
+        }
+        if (
+            !clearSubmission &&
+            formData.customerEngagementLinkActive &&
+            !window.confirm('Create a new link? Anyone with the old link will no longer be able to use it.')
+        ) {
+            return;
+        }
+        setEngagementBusy(true);
+        setEngagementHint('');
+        try {
+            const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, { clearSubmission });
+            const payload = res?.data ?? res;
+            if (payload?.url) setEngagementLinkUrl(payload.url);
+            const r2 = await window.DatabaseAPI.getLead(formData.id);
+            const lead = r2?.data?.lead || r2?.lead;
+            if (lead) {
+                setFormData((prev) => ({
+                    ...prev,
+                    customerEngagementLinkActive: lead.customerEngagementLinkActive,
+                    customerEngagementTokenCreatedAt: lead.customerEngagementTokenCreatedAt,
+                    customerEngagementSubmittedAt: lead.customerEngagementSubmittedAt,
+                    customerEngagementResponses: lead.customerEngagementResponses,
+                    customerEngagementRevokedAt: lead.customerEngagementRevokedAt,
+                    activityLog:
+                        typeof lead.activityLog === 'string'
+                            ? JSON.parse(lead.activityLog || '[]')
+                            : lead.activityLog || prev.activityLog
+                }));
+            }
+            setEngagementHint(
+                clearSubmission ? 'New link created. Previous submission was cleared.' : 'Link created. Copy and send it to your contact.'
+            );
+        } catch (e) {
+            setEngagementHint(e.message || 'Could not create link');
+        } finally {
+            setEngagementBusy(false);
+            setTimeout(() => setEngagementHint(''), 5000);
+        }
+    };
+
+    const handleEngagementRevoke = async () => {
+        if (!formData?.id || !window.DatabaseAPI?.revokeCustomerEngagementLink) return;
+        if (!window.confirm('Revoke the public questionnaire link?')) return;
+        setEngagementBusy(true);
+        setEngagementHint('');
+        try {
+            await window.DatabaseAPI.revokeCustomerEngagementLink(formData.id);
+            setEngagementLinkUrl('');
+            const r2 = await window.DatabaseAPI.getLead(formData.id);
+            const lead = r2?.data?.lead || r2?.lead;
+            if (lead) {
+                setFormData((prev) => ({
+                    ...prev,
+                    customerEngagementLinkActive: lead.customerEngagementLinkActive,
+                    customerEngagementTokenCreatedAt: lead.customerEngagementTokenCreatedAt,
+                    customerEngagementRevokedAt: lead.customerEngagementRevokedAt
+                }));
+            }
+            setEngagementHint('Link revoked.');
+        } catch (e) {
+            setEngagementHint(e.message || 'Could not revoke');
+        } finally {
+            setEngagementBusy(false);
+            setTimeout(() => setEngagementHint(''), 4000);
+        }
+    };
+
+    const handleEngagementCopy = async () => {
+        const url = engagementLinkUrl;
+        if (!url) {
+            setEngagementHint('Generate a link first, then copy.');
+            setTimeout(() => setEngagementHint(''), 3000);
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(url);
+            setEngagementHint('Copied to clipboard');
+        } catch {
+            setEngagementHint('Copy failed — select and copy manually');
+        }
+        setTimeout(() => setEngagementHint(''), 2500);
+    };
     
     // Track last processed client data to detect changes
     const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, kyc: null, id: null });
@@ -4521,9 +4617,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             // Determine if lead has been converted to client
                             const isConverted = !isLead || formData.type === 'client';
                             
-                            // Base tabs - proposals on leads only, admins only (fresh lightweight tracker)
+                            // Base — Proposals is appended last (after client-only tabs) for leads
                             const baseTabs = isLead
-                                ? [...['overview', 'contacts', 'sites', 'calendar'], ...(canViewLeadProposals ? ['proposals'] : []), 'activity', 'notes', 'kyc']
+                                ? ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc']
                                 : ['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', 'kyc'];
                             
                             // Tabs that should only show for clients or converted leads
@@ -4535,8 +4631,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 }
                             }
                             
-                            // Combine all tabs
-                            const allTabs = [...baseTabs, ...clientOnlyTabs];
+                            const proposalTabs = isLead && canViewLeadProposals ? ['proposals'] : [];
+                            const allTabs = [...baseTabs, ...clientOnlyTabs, ...proposalTabs];
                             
                             return allTabs;
                         })().map(tab => (
@@ -7503,6 +7599,98 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         Track proposal records for this lead. Changes save with the rest of the lead (auto-save after edits). The standard proposal process is shown below for reference.
                                     </p>
                                 </div>
+                                <div className={`rounded-lg border p-4 ${isDark ? 'border-gray-600 bg-gray-800/50' : 'border-gray-200 bg-white'}`}>
+                                    <h4 className={`text-sm font-semibold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                        Customer engagement questionnaire
+                                    </h4>
+                                    <p className={`text-xs mb-3 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Send a polished site-visit questionnaire (Abcotronics letterhead) — recipients open the link without logging in.
+                                    </p>
+                                    <div className={`text-xs mb-3 space-y-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {formData.customerEngagementSubmittedAt ? (
+                                            <div>
+                                                <span className="font-medium text-emerald-600 dark:text-emerald-400">Submitted</span>{' '}
+                                                {new Date(formData.customerEngagementSubmittedAt).toLocaleString('en-ZA')}
+                                            </div>
+                                        ) : null}
+                                        {formData.customerEngagementLinkActive ? (
+                                            <div>
+                                                <span className="font-medium">Link active</span>
+                                                {formData.customerEngagementTokenCreatedAt
+                                                    ? ` · created ${new Date(formData.customerEngagementTokenCreatedAt).toLocaleString('en-ZA')}`
+                                                    : ''}
+                                            </div>
+                                        ) : (
+                                            <div>No active share link</div>
+                                        )}
+                                        {engagementHint ? (
+                                            <div className={`mt-1 ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>{engagementHint}</div>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={engagementBusy || !formData.id}
+                                            onClick={() => handleEngagementGenerate(false)}
+                                            className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
+                                                isDark ? 'bg-primary-600 text-white hover:bg-primary-500' : 'bg-primary-600 text-white hover:bg-primary-700'
+                                            } disabled:opacity-50`}
+                                        >
+                                            {formData.customerEngagementLinkActive ? 'New link' : 'Generate link'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={engagementBusy || !formData.id}
+                                            onClick={() => handleEngagementGenerate(true)}
+                                            className={`text-xs px-3 py-1.5 rounded-lg border ${
+                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
+                                            } disabled:opacity-50`}
+                                        >
+                                            New link + clear submission
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={engagementBusy}
+                                            onClick={handleEngagementCopy}
+                                            className={`text-xs px-3 py-1.5 rounded-lg border ${
+                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            Copy link
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={engagementBusy || !formData.customerEngagementLinkActive}
+                                            onClick={handleEngagementRevoke}
+                                            className={`text-xs px-3 py-1.5 rounded-lg ${
+                                                isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'
+                                            } disabled:opacity-50`}
+                                        >
+                                            Revoke link
+                                        </button>
+                                        {formData.customerEngagementResponses &&
+                                        typeof formData.customerEngagementResponses === 'object' ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowEngagementResponsesModal(true)}
+                                                className={`text-xs px-3 py-1.5 rounded-lg border ${
+                                                    isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                View responses
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                    {engagementLinkUrl ? (
+                                        <p
+                                            className={`mt-3 text-[11px] break-all font-mono p-2 rounded border ${
+                                                isDark ? 'border-gray-600 bg-gray-900/50 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-700'
+                                            }`}
+                                        >
+                                            {engagementLinkUrl}
+                                        </p>
+                                    ) : null}
+                                </div>
                                 <LeadProposalProcessFlow isDark={isDark} />
                                 <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
                                 {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
@@ -7902,6 +8090,61 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 </div>
             )}
             
+            {showEngagementResponsesModal && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4"
+                    onClick={() => setShowEngagementResponsesModal(false)}
+                >
+                    <div
+                        className={`${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'} rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
+                            <h2 className="text-lg font-semibold">Questionnaire responses</h2>
+                            <button
+                                type="button"
+                                onClick={() => setShowEngagementResponsesModal(false)}
+                                className={`p-2 rounded ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
+                                aria-label="Close"
+                            >
+                                <i className="fas fa-times" />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto text-sm space-y-3">
+                            {(() => {
+                                const r = formData.customerEngagementResponses;
+                                if (!r || typeof r !== 'object') {
+                                    return <p className={isDark ? 'text-gray-400' : 'text-gray-500'}>No responses stored.</p>;
+                                }
+                                return Object.keys(r)
+                                    .sort()
+                                    .map((key) => {
+                                        const val = r[key];
+                                        let display = '';
+                                        if (val && typeof val === 'object' && !Array.isArray(val)) {
+                                            const on = Object.entries(val).filter(([, v]) => v).map(([k]) => k);
+                                            display = on.length ? on.join(', ') : '—';
+                                        } else if (Array.isArray(val)) {
+                                            display = val.length ? `${val.length} image(s) attached` : '—';
+                                        } else {
+                                            display = String(val || '').trim() || '—';
+                                        }
+                                        return (
+                                            <div
+                                                key={key}
+                                                className={`border-b pb-2 ${isDark ? 'border-gray-700' : 'border-gray-100'}`}
+                                            >
+                                                <div className={`text-xs font-medium ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{key}</div>
+                                                <div className={`whitespace-pre-wrap mt-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{display}</div>
+                                            </div>
+                                        );
+                                    });
+                            })()}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Manage External Agents Modal - Admin Only */}
             {showManageExternalAgentsModal && (
                 <div 

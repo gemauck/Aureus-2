@@ -470,11 +470,19 @@ const App = () => {
     const isPublicJobCardPage =
         pathname === '/job-card' || pathname === '/jobcard' || pathname === '/job-cards';
 
+    const isPublicCustomerEngagementPage =
+        pathname === '/customer-engagement' || pathname === '/ce';
+
     // Track readiness of the public job card component so we can
     // re-render when it becomes available on window.JobCardFormPublic.
     const [publicJobCardReady, setPublicJobCardReady] = window.React.useState(
         () =>
             !!(window.JobCardAppGate && typeof window.JobCardAppGate === 'function')
+    );
+
+    const [publicCustomerEngagementReady, setPublicCustomerEngagementReady] = window.React.useState(
+        () =>
+            !!(window.CustomerEngagementPublic && typeof window.CustomerEngagementPublic === 'function')
     );
 
     window.React.useEffect(() => {
@@ -520,6 +528,31 @@ const App = () => {
         };
     }, [isPublicJobCardPage, publicJobCardReady]);
 
+    window.React.useEffect(() => {
+        if (!isPublicCustomerEngagementPage || publicCustomerEngagementReady) {
+            return;
+        }
+        const checkCe = () => {
+            if (window.CustomerEngagementPublic && typeof window.CustomerEngagementPublic === 'function') {
+                setPublicCustomerEngagementReady(true);
+                return true;
+            }
+            return false;
+        };
+        if (checkCe()) {
+            return;
+        }
+        let attempts = 0;
+        const maxAttempts = 100;
+        const interval = setInterval(() => {
+            attempts += 1;
+            if (checkCe() || attempts >= maxAttempts) {
+                clearInterval(interval);
+            }
+        }, 100);
+        return () => clearInterval(interval);
+    }, [isPublicCustomerEngagementPage, publicCustomerEngagementReady]);
+
     if (isPublicJobCardPage) {
         return (
             <window.ThemeProvider>
@@ -536,6 +569,23 @@ const App = () => {
                         </div>
                     )}
                 </window.AuthProvider>
+            </window.ThemeProvider>
+        );
+    }
+
+    if (isPublicCustomerEngagementPage) {
+        return (
+            <window.ThemeProvider>
+                {window.CustomerEngagementPublic && publicCustomerEngagementReady ? (
+                    <window.CustomerEngagementPublic />
+                ) : (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                        <div className="text-center px-4">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
+                            <p className="text-gray-600 dark:text-gray-400 text-sm">Loading questionnaire…</p>
+                        </div>
+                    </div>
+                )}
             </window.ThemeProvider>
         );
     }
