@@ -5,6 +5,67 @@
 // FIX: formData initialization moved to top to prevent TDZ errors
 const { useState, useEffect, useRef, useCallback } = React;
 
+const LEAD_PROPOSAL_PROCESS_STEPS = [
+    { step: 1, label: 'Customer Engagement Mandate' },
+    { step: 2, label: 'Proposal Drafting' },
+    { step: 3, label: 'Circulation for comment, pricing and approval' },
+    { step: 4, label: 'Submission to Client' },
+];
+
+const LeadProposalProcessFlow = ({ isDark }) => {
+    const borderCls = isDark ? 'border-gray-600' : 'border-gray-200';
+    const panelCls = isDark ? 'bg-gray-800/60' : 'bg-white';
+    const kickerCls = isDark ? 'text-gray-300' : 'text-gray-600';
+    const labelCls = isDark ? 'text-gray-100' : 'text-gray-900';
+    const connectorCls = isDark ? 'bg-gray-600' : 'bg-primary-200';
+    const chevronCls = isDark ? 'text-gray-500' : 'text-primary-500';
+
+    return (
+        <div className={`rounded-lg border p-4 ${borderCls} ${panelCls}`} role="region" aria-label="Standard proposal process">
+            <div className={`flex items-center gap-2 mb-3 ${kickerCls}`}>
+                <i className="fas fa-route text-primary-600 text-sm" aria-hidden />
+                <span className="text-xs font-semibold uppercase tracking-wide">Standard proposal process</span>
+            </div>
+
+            <div className="hidden md:flex items-start w-full">
+                {LEAD_PROPOSAL_PROCESS_STEPS.map((s, i) => (
+                    <React.Fragment key={s.step}>
+                        <div className="flex min-w-0 flex-1 flex-col items-center text-center px-1">
+                            <div
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-sm"
+                                aria-hidden
+                            >
+                                {s.step}
+                            </div>
+                            <p className={`mt-2 text-xs lg:text-sm font-medium leading-snug ${labelCls}`}>{s.label}</p>
+                        </div>
+                        {i < LEAD_PROPOSAL_PROCESS_STEPS.length - 1 && (
+                            <div className="flex flex-shrink-0 items-center self-start pt-[1.125rem] px-0.5" aria-hidden>
+                                <div className={`h-0.5 w-4 lg:w-8 ${connectorCls}`} />
+                                <i className={`fas fa-chevron-right text-[9px] ${chevronCls} -ml-px`} />
+                            </div>
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+
+            <ol className="md:hidden space-y-3 list-none m-0 p-0">
+                {LEAD_PROPOSAL_PROCESS_STEPS.map(s => (
+                    <li key={s.step} className={`flex gap-3 rounded-lg border p-3 ${isDark ? 'border-gray-600 bg-gray-800/80' : 'border-gray-100 bg-gray-50/80'}`}>
+                        <div
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-semibold text-white"
+                            aria-hidden
+                        >
+                            {s.step}
+                        </div>
+                        <p className={`text-sm font-medium leading-snug pt-1 ${labelCls}`}>{s.label}</p>
+                    </li>
+                ))}
+            </ol>
+        </div>
+    );
+};
+
 // Module-level tracking to prevent duplicate loads across remounts
 // This persists even if the component remounts
 const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
@@ -7439,9 +7500,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             <div className="space-y-4">
                                 <div className={`rounded-lg p-4 ${isDark ? 'bg-gray-700/50 border border-gray-600' : 'bg-primary-50 border border-primary-100'}`}>
                                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                        Track proposal records for this lead. Changes save with the rest of the lead (auto-save after edits). Rich workflows can be added here later.
+                                        Track proposal records for this lead. Changes save with the rest of the lead (auto-save after edits). The standard proposal process is shown below for reference.
                                     </p>
                                 </div>
+                                <LeadProposalProcessFlow isDark={isDark} />
                                 <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
                                 {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
                                     <div className={`text-center py-12 rounded-lg border border-dashed ${isDark ? 'border-gray-600 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
