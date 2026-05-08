@@ -18,7 +18,7 @@ function SectionBanner({ index, total, title }) {
                 >
                     Section {index + 1} of {total}
                 </p>
-                <h3 className="text-lg font-bold leading-tight text-slate-900 sm:text-xl" style={{ fontFamily: FONT.display }}>
+                <h3 className="text-xl font-bold leading-tight text-slate-900 sm:text-2xl" style={{ fontFamily: FONT.display }}>
                     {title}
                 </h3>
             </div>
@@ -71,7 +71,7 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
     const renderReadonlyField = (f) => {
         const val = responses ? responses[f.id] : undefined;
         const label = (
-            <div className="mb-1.5 text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100" style={{ fontFamily: FONT.body }}>
+            <div className="mb-2 text-base font-semibold tracking-tight text-slate-800 dark:text-slate-100 sm:text-lg" style={{ fontFamily: FONT.body }}>
                 {f.label}
             </div>
         );
@@ -83,8 +83,8 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
             return (
                 <div key={f.id} className="mb-6 last:mb-0">
                     {label}
-                    {f.hint ? <p className="mb-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{f.hint}</p> : null}
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800 dark:text-slate-200">{display}</p>
+                    {f.hint ? <p className="mb-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{f.hint}</p> : null}
+                    <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-800 dark:text-slate-200 sm:text-lg">{display}</p>
                 </div>
             );
         }
@@ -94,9 +94,9 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
             return (
                 <div key={f.id} className="mb-6 last:mb-0">
                     {label}
-                    {f.hint ? <p className="mb-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{f.hint}</p> : null}
+                    {f.hint ? <p className="mb-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{f.hint}</p> : null}
                     {items.length === 0 ? (
-                        <p className="text-sm text-slate-500">—</p>
+                        <p className="text-base text-slate-500">—</p>
                     ) : (
                         <ul className="mt-2 flex list-none flex-wrap gap-4 p-0">
                             {items.map((it, i) => (
@@ -128,8 +128,8 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
         return (
             <div key={f.id} className="mb-6 last:mb-0">
                 {label}
-                {f.hint ? <p className="mb-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{f.hint}</p> : null}
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800 dark:text-slate-200">{textDisplay}</p>
+                {f.hint ? <p className="mb-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{f.hint}</p> : null}
+                <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-800 dark:text-slate-200 sm:text-lg">{textDisplay}</p>
             </div>
         );
     };
@@ -142,11 +142,11 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
 
     return (
         <div className="ce-report-print-root text-slate-800 dark:text-slate-100" style={{ fontFamily: FONT.body }}>
-            <div className="no-print mb-3 flex justify-end">
+            <div className="no-print mb-4 flex justify-end">
                 <button
                     type="button"
                     onClick={print}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                 >
                     Print
                 </button>
@@ -154,8 +154,8 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
 
             <article className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xl dark:border-slate-700/90 dark:bg-slate-900 sm:rounded-3xl">
                 <header className="relative">
-                    <div className="relative h-36 overflow-hidden border-b border-slate-200 bg-white sm:h-40">
-                        <div className="relative flex h-full flex-col justify-end px-6 pb-6 sm:px-10 sm:pb-8">
+                    <div className="relative h-40 overflow-hidden border-b border-slate-200 bg-white sm:h-44">
+                        <div className="relative flex h-full flex-col justify-end px-6 pb-6 sm:px-12 sm:pb-9">
                             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                                 <div className="flex items-center gap-4">
                                     {letterhead.logoDataUrl ? (
@@ -179,7 +179,7 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                                             Submitted questionnaire
                                         </p>
                                         <h1
-                                            className="inline-block rounded-md bg-white/95 px-2.5 py-0.5 text-2xl font-bold tracking-tight text-slate-900 shadow-sm sm:text-3xl"
+                                            className="inline-block rounded-md bg-white/95 px-2.5 py-0.5 text-3xl font-bold tracking-tight text-slate-900 shadow-sm sm:text-4xl"
                                             style={{ fontFamily: FONT.display }}
                                         >
                                             {companyName}
@@ -192,8 +192,8 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                             </div>
                         </div>
                     </div>
-                    <div className="border-b border-slate-100 bg-white px-6 pb-6 pt-6 dark:border-slate-800 dark:bg-slate-900 sm:px-10 sm:pt-8">
-                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="border-b border-slate-100 bg-white px-6 pb-6 pt-6 dark:border-slate-800 dark:bg-slate-900 sm:px-12 sm:pb-8 sm:pt-9">
+                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-500 dark:text-slate-400">
                             {(letterhead.addressLines || []).map((line, i) => (
                                 <span key={i}>{line}</span>
                             ))}
@@ -201,23 +201,23 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                             {letterhead.email ? <span>Email · {letterhead.email}</span> : null}
                             {letterhead.vatNumber ? <span>VAT · {letterhead.vatNumber}</span> : null}
                         </div>
-                        <h2 className="mt-6 text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl" style={{ fontFamily: FONT.display }}>
+                        <h2 className="mt-6 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl" style={{ fontFamily: FONT.display }}>
                             {docTitle}
                         </h2>
-                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                        <p className="mt-3 max-w-4xl text-base leading-relaxed text-slate-600 dark:text-slate-400 sm:text-lg">
                             This is how the response appears to your contact. Use Print for a clean copy for the file.
                         </p>
                     </div>
                 </header>
 
-                <div className="bg-slate-50/70 px-4 py-6 dark:bg-slate-950/40 sm:px-6 sm:py-8">
+                <div className="bg-slate-50/70 px-5 py-8 dark:bg-slate-950/40 sm:px-10 sm:py-10">
                     {sections.map((sec, si) => (
                         <div
                             key={sec.id}
                             className="mb-8 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-md ring-1 ring-slate-100/80 last:mb-0 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40 dark:ring-slate-800"
                         >
                             <SectionBanner index={si} total={totalSteps} title={sec.heading} />
-                            <div className="border-t border-slate-100 px-5 py-6 dark:border-slate-800 sm:px-8 sm:py-8">
+                            <div className="border-t border-slate-100 px-6 py-8 dark:border-slate-800 sm:px-10 sm:py-10">
                                 <div className="mb-6 h-px w-12 rounded-full bg-gradient-to-r from-blue-600 to-transparent opacity-80" aria-hidden />
                                 {sec.fields.map((f) => renderReadonlyField(f))}
                             </div>

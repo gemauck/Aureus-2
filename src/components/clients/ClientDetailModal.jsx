@@ -2174,10 +2174,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setLeadProposalWizardHint('Add a proposal title before saving.');
             return;
         }
-        const prevWorkflowSnapshot =
-            leadProposalWizardEditIndex != null
-                ? formDataRef.current?.proposals?.[leadProposalWizardEditIndex]?.workflow
-                : null;
         setLeadProposalWizardSaving(true);
         setLeadProposalWizardHint('');
         try {
@@ -2203,39 +2199,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const leadId = fd?.id;
             if (leadId && isLead) {
                 await mergeLeadEngagementAfterQuestionnaireMutation();
-                const prev = normalizeLeadProposalWorkflowUi(prevWorkflowSnapshot || {});
-                const next = normalized.workflow;
-                const token = window.storage?.getToken?.();
-                const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-                const leadName = fd.name || fd.companyName || 'Lead';
-                const titleSafe = String(normalized.title || '').trim() || 'Untitled';
-                for (const d of LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS) {
-                    const prevId = String(prev.circulationDepartments?.[d.key]?.responsibleUserId || '').trim();
-                    const nextId = String(next.circulationDepartments?.[d.key]?.responsibleUserId || '').trim();
-                    if (!nextId || nextId === prevId) continue;
-                    try {
-                        await fetch(`${window.location.origin}/api/notifications`, {
-                            method: 'POST',
-                            headers,
-                            credentials: 'include',
-                            body: JSON.stringify({
-                                userId: nextId,
-                                type: 'system',
-                                title: `Proposal circulation: ${d.label}`,
-                                message: `You were assigned as responsible person for ${d.label} on proposal "${titleSafe}" (${leadName}).`,
-                                link: `#/clients?lead=${encodeURIComponent(leadId)}&tab=proposals`,
-                                metadata: {
-                                    source: 'lead_proposal_circulation',
-                                    leadId,
-                                    departmentKey: d.key,
-                                    proposalTitle: titleSafe
-                                }
-                            })
-                        });
-                    } catch (_) {
-                        /* non-fatal */
-                    }
-                }
+                /* Circulation assignee email + in-app notifications are sent server-side when proposals persist (PATCH lead). */
             }
             setShowLeadProposalWizard(false);
             setLeadProposalWizardDraft(null);
@@ -10315,21 +10279,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             {showEngagementResponsesModal && (() => {
                 const engagementResponsesOverlay = (
                 <div
-                    className="fixed inset-0 z-[10150] flex items-center justify-center bg-black bg-opacity-50 p-4"
+                    className="fixed inset-0 z-[10150] flex items-center justify-center bg-black bg-opacity-50 p-4 sm:p-8"
                     onClick={() => {
                         setShowEngagementResponsesModal(false);
                         setEngagementInternalNote('');
                     }}
                 >
                     <div
-                        className={`flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg shadow-xl ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                        className={`flex max-h-[96vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl shadow-2xl ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className={`no-print flex items-center justify-between border-b px-6 py-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <div className={`no-print flex items-center justify-between border-b px-6 py-5 sm:px-10 sm:py-6 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div>
-                                <h2 className="text-lg font-semibold">Questionnaire report</h2>
+                                <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Questionnaire report</h2>
                                 {engagementReportVersionNumber != null ? (
-                                    <p className={`mt-0.5 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         Submission version {engagementReportVersionNumber}
                                     </p>
                                 ) : null}
@@ -10340,15 +10304,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     setShowEngagementResponsesModal(false);
                                     setEngagementInternalNote('');
                                 }}
-                                className={`rounded p-2 ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
+                                className={`rounded-lg p-2.5 text-lg ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
                                 aria-label="Close"
                             >
                                 <i className="fas fa-times" />
                             </button>
                         </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-10 sm:py-8">
                             {engagementReportLoading ? (
-                                <div className="py-16 text-center text-sm text-gray-500">Loading report…</div>
+                                <div className="py-20 text-center text-base text-gray-500">Loading report…</div>
                             ) : (() => {
                                 const selectedRow =
                                     getEngagementQuestionnaires().find(
@@ -10377,28 +10341,28 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         (l) => l.value && String(l.value).trim()
                                     );
                                     return (
-                                        <div className="space-y-3">
-                                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        <div className="space-y-4">
+                                            <p className={`text-base leading-relaxed sm:text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                 No submission on file yet. This is the{' '}
                                                 <span className="font-medium">prefill snapshot</span> stored with the questionnaire (fields
                                                 the recipient sees filled when they open the link).
                                             </p>
                                             <div
-                                                className={`rounded-lg border p-4 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}
+                                                className={`rounded-xl border p-6 sm:p-8 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}
                                             >
-                                                <h3 className={`mb-3 text-xs font-bold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                <h3 className={`mb-4 text-sm font-bold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                     Prefill snapshot
                                                 </h3>
                                                 {lines.length === 0 ? (
-                                                    <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                                                         (No non-empty prefill values.)
                                                     </p>
                                                 ) : (
-                                                    <dl className="space-y-2 text-sm">
+                                                    <dl className="space-y-3 text-base sm:text-lg">
                                                         {lines.map((l) => (
                                                             <div key={l.label}>
-                                                                <dt className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{l.label}</dt>
-                                                                <dd className={`mt-0.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{l.value}</dd>
+                                                                <dt className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{l.label}</dt>
+                                                                <dd className={`mt-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{l.value}</dd>
                                                             </div>
                                                         ))}
                                                     </dl>
@@ -10407,25 +10371,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         </div>
                                     );
                                 }
-                                return <p className="text-sm text-gray-500">Could not load report. Try closing and opening again.</p>;
+                                return <p className="text-base text-gray-500">Could not load report. Try closing and opening again.</p>;
                             })()}
                         </div>
-                        <div className={`no-print border-t px-6 py-4 ${isDark ? 'border-gray-700 bg-gray-800/80' : 'border-gray-200 bg-gray-50'}`}>
-                            <label className={`mb-1 block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        <div className={`no-print border-t px-6 py-5 sm:px-10 sm:py-6 ${isDark ? 'border-gray-700 bg-gray-800/80' : 'border-gray-200 bg-gray-50'}`}>
+                            <label className={`mb-2 block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                 Internal note (saved to activity log)
                             </label>
                             <textarea
                                 value={engagementInternalNote}
                                 onChange={(e) => setEngagementInternalNote(e.target.value)}
-                                rows={2}
-                                className={`mb-2 w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`}
+                                rows={3}
+                                className={`mb-3 w-full rounded-lg border px-4 py-3 text-base ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`}
                                 placeholder="e.g. Follow up on diesel volumes…"
                             />
                             <button
                                 type="button"
                                 disabled={engagementNoteSaving || !engagementInternalNote.trim()}
                                 onClick={appendEngagementInternalNote}
-                                className={`rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${isDark ? 'bg-primary-500 hover:bg-primary-400' : 'bg-primary-600 hover:bg-primary-700'}`}
+                                className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${isDark ? 'bg-primary-500 hover:bg-primary-400' : 'bg-primary-600 hover:bg-primary-700'}`}
                             >
                                 {engagementNoteSaving ? 'Saving…' : 'Add note'}
                             </button>

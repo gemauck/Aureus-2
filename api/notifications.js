@@ -72,7 +72,9 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     }
     // Prefer frontend-supplied link for client/lead/helpdesk/task/teams deep links (same logic as tracker links)
     const linkIsEntityDeepLink = validLink && String(validLink).trim() && (
-        validLink.includes('#/clients/') || validLink.includes('#/leads/') ||
+        validLink.includes('#/clients/') ||
+        validLink.includes('#/clients?') ||
+        validLink.includes('#/leads/') ||
         validLink.includes('#/helpdesk/') || validLink.includes('#/teams') ||
         validLink.includes('#/reports') || validLink.includes('#/leave-platform') ||
         (validLink.includes('#/projects/') && validLink.includes('task='))
@@ -362,6 +364,14 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                           ? 'Reports, User feedback'
                           : 'Reports, Feedback';
                 pushWhere(whereLabel);
+            }
+            if (!appendedWhereBlock && metadataObj.source === 'lead_proposal_circulation') {
+                const parts = ['Clients', 'Lead', 'Proposals'];
+                const pt = metadataObj.proposalTitle != null ? String(metadataObj.proposalTitle).trim() : '';
+                const dl = metadataObj.departmentLabel != null ? String(metadataObj.departmentLabel).trim() : '';
+                if (pt) parts.push(pt);
+                if (dl) parts.push(dl);
+                pushWhere(parts.join(', '));
             }
             if (!appendedWhereBlock && (metadataObj.source === 'user_note' || metadataObj.source === 'project_note' || metadataObj.source === 'client_note' || metadataObj.source === 'lead_note')) {
                 const kind =

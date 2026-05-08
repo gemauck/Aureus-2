@@ -11,6 +11,7 @@ import { isAdminRole } from '../_lib/authRoles.js'
 import { notifyClientCreationStakeholders } from '../_lib/notifyClientCreationStakeholders.js'
 import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
+import { notifyLeadProposalCirculationChanges } from '../_lib/notifyLeadProposalCirculationChanges.js'
 
 async function handler(req, res) {
   try {
@@ -956,8 +957,11 @@ async function handler(req, res) {
           try {
             const existingProposals = await prisma.clientProposal.findMany({
               where: { clientId: id },
-              select: { id: true }
+              select: { id: true, workflowJson: true }
             })
+            const previousWorkflowByProposalId = new Map(
+              existingProposals.map((p) => [p.id, p.workflowJson])
+            )
             const existingProposalIds = new Set(existingProposals.map(p => p.id))
             const proposalsToKeep = new Set()
             
@@ -1012,6 +1016,18 @@ async function handler(req, res) {
                 NOT: { id: { in: Array.from(proposalsToKeep) } }
               }
             })
+
+            const leadForNotify = await prisma.client.findUnique({ where: { id }, select: { name: true } })
+            try {
+              await notifyLeadProposalCirculationChanges({
+                leadId: id,
+                leadName: leadForNotify?.name || '',
+                proposalsIncoming: proposalsArray,
+                previousWorkflowByProposalId
+              })
+            } catch (circNotifyErr) {
+              console.warn('⚠️ Proposal circulation notifications skipped:', circNotifyErr?.message || circNotifyErr)
+            }
           } catch (proposalSyncError) {
             console.warn('⚠️ Failed to sync proposals to normalized table:', proposalSyncError.message)
           }
