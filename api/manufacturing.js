@@ -141,8 +141,9 @@ async function applyFinalProductBuildableUnits(items = []) {
     const sku = String(item?.sku || '').trim()
     if (!sku) continue
     const quantity = parseFiniteNumber(item?.quantity, 0)
-    const allocatedQuantity = parseFiniteNumber(item?.allocatedQuantity, 0)
-    availableBySku.set(sku, quantity - allocatedQuantity)
+    // Use on-hand quantity for buildable calculations.
+    // allocatedQuantity is template/global in some views and can understate local availability.
+    availableBySku.set(sku, quantity)
     if (String(item?.type || '').toLowerCase() === 'final_product') {
       finalProductSkus.add(sku)
     }
