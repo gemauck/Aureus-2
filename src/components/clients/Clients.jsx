@@ -74,6 +74,21 @@ const logClientsDebug = (...args) => {
     }
 };
 
+/** Query string for `/clients/:id` deep links (tabs + optional Sites drill-down). Empty = Overview (no query). */
+const buildClientsDetailSearch = (options = {}) => {
+    const tab = options.initialTab || 'overview';
+    const siteId = options.initialSiteId;
+    if (siteId) {
+        const s = new URLSearchParams({ tab: 'sites' });
+        s.set('siteId', String(siteId));
+        return s.toString();
+    }
+    if (tab && tab !== 'overview') {
+        return new URLSearchParams({ tab: String(tab) }).toString();
+    }
+    return '';
+};
+
 // Map of critical modal bundles to ensure they can be recovered if the initial script tag failed to load
 const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1764013200',
@@ -1653,17 +1668,15 @@ const Clients = React.memo(() => {
             }
         }
 
-        // Deep URL: /clients/{id} or /clients/{id}?tab=sites&siteId=... for site platform click-through
+        // Deep URL: /clients/{id} or /clients/{id}?tab=… (& siteId for Sites)
         if (window.RouteState && clientId) {
             const segments = [String(clientId)];
-            const hasSite = options.initialTab === 'sites' || options.initialSiteId;
-            if (hasSite) {
-                const search = new URLSearchParams({ tab: 'sites' });
-                if (options.initialSiteId) search.set('siteId', String(options.initialSiteId));
+            const searchStr = buildClientsDetailSearch(options);
+            if (searchStr) {
                 window.RouteState.navigate({
                     page: 'clients',
                     segments,
-                    search: search.toString(),
+                    search: searchStr,
                     preserveSearch: false,
                     preserveHash: false,
                     replace: false
@@ -1728,17 +1741,15 @@ const Clients = React.memo(() => {
         selectedClientRef.current = null;
         isFormOpenRef.current = true;
         
-        // Deep URL: /clients/{id} or /clients/{id}?tab=sites&siteId=... for site platform click-through
+        // Deep URL: /clients/{id} or /clients/{id}?tab=… (& siteId for Sites)
         if (window.RouteState && normalizedId) {
             const segments = [normalizedId];
-            const hasSite = options.initialTab === 'sites' || options.initialSiteId;
-            if (hasSite) {
-                const search = new URLSearchParams({ tab: 'sites' });
-                if (options.initialSiteId) search.set('siteId', String(options.initialSiteId));
+            const searchStr = buildClientsDetailSearch(options);
+            if (searchStr) {
                 window.RouteState.navigate({
                     page: 'clients',
                     segments,
-                    search: search.toString(),
+                    search: searchStr,
                     preserveSearch: false,
                     preserveHash: false,
                     replace: false
@@ -1763,6 +1774,67 @@ const Clients = React.memo(() => {
         if (options.initialSiteId !== undefined) setOpenSiteIdForLead(options.initialSiteId || null);
         setViewMode('lead-detail');
     }, [stopSync]);
+
+    /** Keep the browser URL in sync when switching tabs so shared/email links match the current screen. */
+    const handleClientTabChange = useCallback(
+        (tab) => {
+            setCurrentTab(tab);
+            if (!editingClientId || viewMode !== 'client-detail') return;
+            const segments = [String(editingClientId)];
+            const searchStr = buildClientsDetailSearch({
+                initialTab: tab,
+                initialSiteId: tab === 'sites' ? openSiteIdForClient || undefined : undefined
+            });
+            if (!window.RouteState) return;
+            if (searchStr) {
+                window.RouteState.navigate({
+                    page: 'clients',
+                    segments,
+                    search: searchStr,
+                    preserveSearch: false,
+                    preserveHash: false,
+                    replace: true
+                });
+            } else {
+                window.RouteState.setPageSubpath('clients', segments, {
+                    replace: true,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+            }
+        },
+        [editingClientId, viewMode, openSiteIdForClient]
+    );
+
+    const handleLeadTabChange = useCallback(
+        (tab) => {
+            setCurrentLeadTab(tab);
+            if (!editingLeadId || viewMode !== 'lead-detail') return;
+            const segments = [String(editingLeadId)];
+            const searchStr = buildClientsDetailSearch({
+                initialTab: tab,
+                initialSiteId: tab === 'sites' ? openSiteIdForLead || undefined : undefined
+            });
+            if (!window.RouteState) return;
+            if (searchStr) {
+                window.RouteState.navigate({
+                    page: 'clients',
+                    segments,
+                    search: searchStr,
+                    preserveSearch: false,
+                    preserveHash: false,
+                    replace: true
+                });
+            } else {
+                window.RouteState.setPageSubpath('clients', segments, {
+                    replace: true,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+            }
+        },
+        [editingLeadId, viewMode, openSiteIdForLead]
+    );
 
     const handleOpenLeadToSite = useCallback((lead, site) => {
         if (!lead?.id) return;
@@ -1799,21 +1871,17 @@ const Clients = React.memo(() => {
                 }
                 
                 if (entity) {
+                    const openOpts = {};
+                    if (options?.tab) openOpts.initialTab = options.tab;
+                    if (options?.siteId) openOpts.initialSiteId = options.siteId;
                     if (entityType === 'client') {
-                        handleOpenClient(entity);
+                        handleOpenClient(entity, openOpts);
                     } else if (entityType === 'lead') {
-                        handleOpenLead(entity);
+                        handleOpenLead(entity, openOpts);
                     } else if (entityType === 'opportunity') {
                         // Open opportunity detail view
                         setViewMode('opportunity-detail');
                         selectedLeadRef.current = entity;
-                    }
-                    
-                    // Handle tab navigation if specified
-                    if (options?.tab && window.setCurrentTab) {
-                        setTimeout(() => {
-                            window.setCurrentTab?.(options.tab);
-                        }, 100);
                     }
                 } else {
                     // Entity not found in cache, try to fetch it
@@ -9516,7 +9584,7 @@ const Clients = React.memo(() => {
                         onNavigateToProject={handleNavigateToProject}
                         isFullPage={true}
                         initialTab={currentTab}
-                        onTabChange={setCurrentTab}
+                        onTabChange={handleClientTabChange}
                         initialSiteId={openSiteIdForClient}
                         onInitialSiteOpened={() => setOpenSiteIdForClient(null)}
                         onOpenOpportunity={(opportunityId, client) => {
@@ -9594,7 +9662,7 @@ const Clients = React.memo(() => {
                         onNavigateToProject={handleNavigateToProject}
                         isFullPage={true}
                         initialTab={currentLeadTab}
-                        onTabChange={setCurrentLeadTab}
+                        onTabChange={handleLeadTabChange}
                         onPauseSync={handlePauseSync}
                         initialSiteId={openSiteIdForLead}
                         onInitialSiteOpened={() => setOpenSiteIdForLead(null)}

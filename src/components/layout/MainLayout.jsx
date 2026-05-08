@@ -445,7 +445,8 @@ const MainLayout = () => {
                                     tab: currentRoute.search?.get('tab') || parsed.options?.tab,
                                     section: currentRoute.search?.get('section') || parsed.options?.section,
                                     commentId: currentRoute.search?.get('commentId') || parsed.options?.commentId,
-                                    task: currentRoute.search?.get('task') || parsed.options?.task
+                                    task: currentRoute.search?.get('task') || parsed.options?.task,
+                                    siteId: currentRoute.search?.get('siteId') || parsed.options?.siteId
                                 }
                             }
                         }));

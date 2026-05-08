@@ -1997,7 +1997,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (onClose) onClose();
     };
     
-    const LEAD_PROPOSAL_STATUSES = ['Draft', 'Sent', 'Pending', 'Won', 'Lost'];
     const setLeadProposals = (nextProposals) => {
         const list = Array.isArray(nextProposals) ? nextProposals : [];
         setFormData(prev => {
@@ -2006,12 +2005,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return n;
         });
         hasUserEditedForm.current = true;
-    };
-    const patchLeadProposal = (index, partial) => {
-        const list = [...(Array.isArray(formDataRef.current?.proposals) ? formDataRef.current.proposals : [])];
-        if (!list[index]) return;
-        list[index] = { ...list[index], ...partial };
-        setLeadProposals(list);
     };
     const handleRemoveLeadProposal = (index) => {
         if (!confirm('Remove this proposal from the lead?')) return;
@@ -8583,7 +8576,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     </button>
                                 </div>
                                 <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    Quick edits below save with the lead. Open <strong className="font-medium">Process</strong> on a proposal for the guided steps (questionnaire, draft link, circulation, client submission).
+                                    Click a proposal to open the guided workflow (questionnaire, draft link, circulation, client submission). Use <strong className="font-medium">Update</strong> at the bottom of this screen to save lead changes.
                                 </p>
                                 {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
                                     <div className={`text-center py-12 rounded-lg border border-dashed ${isDark ? 'border-gray-600 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
@@ -8602,8 +8595,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 ) : (
                                     <div className="space-y-4">
                                         {formData.proposals.map((proposal, proposalIndex) => {
-                                            const inputCls = `w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400' : 'border border-gray-300'}`;
-                                            const labelCls = `block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
                                             const qn = getEngagementQuestionnaires();
                                             const w = normalizeLeadProposalWorkflowUi(proposal.workflow);
                                             const linkedQ = w.engagementQuestionnaireId
@@ -8622,118 +8613,61 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     className={`rounded-xl border overflow-hidden ${isDark ? 'border-gray-600 bg-gray-800/50' : 'border-gray-200 bg-white shadow-sm'}`}
                                                 >
                                                     <div
-                                                        className={`px-4 py-3 ${isDark ? 'bg-gray-900/40 border-b border-gray-700' : 'bg-gradient-to-r from-primary-50/90 to-white border-b border-gray-100'}`}
+                                                        className={`flex flex-wrap items-stretch justify-between gap-2 ${isDark ? 'bg-gray-900/40' : 'bg-gradient-to-r from-primary-50/90 to-white'}`}
                                                     >
-                                                        <div className="flex flex-wrap items-start justify-between gap-2">
-                                                            <div className="min-w-0">
-                                                                <div className={`text-sm font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                                    {proposal.title?.trim() || `Proposal ${proposalIndex + 1}`}
-                                                                </div>
-                                                                <div className={`text-[11px] mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                                    {linkedQ
-                                                                        ? `Questionnaire: ${linkedQ.name || linkedQ.id}`
-                                                                        : 'Step 1: link a customer engagement questionnaire'}
-                                                                    {proposal.workingDocumentLink ? ' · Draft link on file' : ''}
-                                                                    {String(w.manualEngagementMandateLink || '').trim()
-                                                                        ? ' · Manual mandate on file'
-                                                                        : ''}
-                                                                </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openLeadProposalWizardEdit(proposalIndex)}
+                                                            className={`min-w-0 flex-1 px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${isDark ? 'focus-visible:ring-offset-gray-900 hover:bg-gray-800/60' : 'focus-visible:ring-offset-white hover:bg-primary-50/80'}`}
+                                                            title="Open proposal workflow"
+                                                        >
+                                                            <div className={`text-sm font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                {proposal.title?.trim() || `Proposal ${proposalIndex + 1}`}
                                                             </div>
-                                                            <div className="flex flex-wrap gap-1.5 shrink-0">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => openLeadProposalWizardEdit(proposalIndex)}
-                                                                    className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
-                                                                        isDark
-                                                                            ? 'bg-primary-600 text-white hover:bg-primary-500'
-                                                                            : 'bg-primary-600 text-white hover:bg-primary-700'
-                                                                    }`}
-                                                                >
-                                                                    <i className="fas fa-stream mr-1" aria-hidden />
-                                                                    Process
-                                                                </button>
-                                                                {canReviewLinkedQuestionnaireReport && linkedQ?.id ? (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() =>
-                                                                            void handleOpenEngagementReport(String(linkedQ.id))
-                                                                        }
-                                                                        className={`text-xs px-3 py-1.5 rounded-lg font-medium border ${
-                                                                            isDark
-                                                                                ? 'border-primary-400 text-primary-200 hover:bg-gray-800'
-                                                                                : 'border-primary-500 text-primary-800 hover:bg-primary-50'
-                                                                        }`}
-                                                                        title="Open the submitted questionnaire report"
-                                                                    >
-                                                                        <i className="fas fa-file-alt mr-1" aria-hidden />
-                                                                        Review submitted report
-                                                                    </button>
-                                                                ) : null}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleRemoveLeadProposal(proposalIndex)}
-                                                                    className={`text-xs px-2.5 py-1.5 rounded-lg ${isDark ? 'text-red-300 hover:bg-gray-800' : 'text-red-700 hover:bg-red-50'}`}
-                                                                >
-                                                                    Remove
-                                                                </button>
+                                                            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                                {linkedQ
+                                                                    ? `Questionnaire: ${linkedQ.name || linkedQ.id}`
+                                                                    : 'Step 1: link a customer engagement questionnaire'}
+                                                                {proposal.workingDocumentLink ? ' · Draft link on file' : ''}
+                                                                {String(w.manualEngagementMandateLink || '').trim()
+                                                                    ? ' · Manual mandate on file'
+                                                                    : ''}
                                                             </div>
-                                                        </div>
-                                                    </div>
-                                                    <div className={`p-4 grid gap-3 ${isFullPage ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
-                                                        <div className="md:col-span-2">
-                                                            <label className={labelCls}>Title</label>
-                                                            <input
-                                                                type="text"
-                                                                value={proposal.title || ''}
-                                                                onChange={(e) => patchLeadProposal(proposalIndex, { title: e.target.value })}
-                                                                className={inputCls}
-                                                                placeholder="e.g. Fuel management — phase 1"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className={labelCls}>Amount (ZAR)</label>
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.01"
-                                                                value={proposal.amount === undefined || proposal.amount === null ? '' : proposal.amount}
-                                                                onChange={(e) => patchLeadProposal(proposalIndex, { amount: parseFloat(e.target.value) || 0 })}
-                                                                className={inputCls}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className={labelCls}>Status</label>
-                                                            <select
-                                                                value={LEAD_PROPOSAL_STATUSES.includes(proposal.status) ? proposal.status : 'Draft'}
-                                                                onChange={(e) => patchLeadProposal(proposalIndex, { status: e.target.value })}
-                                                                className={inputCls}
+                                                            <span
+                                                                className={`mt-2 inline-block text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-primary-300' : 'text-primary-700'}`}
                                                             >
-                                                                {LEAD_PROPOSAL_STATUSES.map((s) => (
-                                                                    <option key={s} value={s}>
-                                                                        {s}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div className="md:col-span-2">
-                                                            <label className={labelCls}>Working document link</label>
-                                                            <input
-                                                                type="url"
-                                                                value={proposal.workingDocumentLink || ''}
-                                                                onChange={(e) => patchLeadProposal(proposalIndex, { workingDocumentLink: e.target.value })}
-                                                                className={inputCls}
-                                                                placeholder="https://…"
-                                                            />
-                                                        </div>
-                                                        <div className="md:col-span-2">
-                                                            <label className={labelCls}>Notes</label>
-                                                            <textarea
-                                                                value={proposal.notes || ''}
-                                                                onChange={(e) => patchLeadProposal(proposalIndex, { notes: e.target.value })}
-                                                                className={inputCls}
-                                                                rows={2}
-                                                                placeholder="Internal notes…"
-                                                            />
+                                                                Open workflow →
+                                                            </span>
+                                                        </button>
+                                                        <div
+                                                            className="flex flex-wrap items-center gap-1.5 shrink-0 border-l px-3 py-2"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onKeyDown={(e) => e.stopPropagation()}
+                                                        >
+                                                            {canReviewLinkedQuestionnaireReport && linkedQ?.id ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        void handleOpenEngagementReport(String(linkedQ.id))
+                                                                    }
+                                                                    className={`text-xs px-3 py-1.5 rounded-lg font-medium border ${
+                                                                        isDark
+                                                                            ? 'border-primary-400 text-primary-200 hover:bg-gray-800'
+                                                                            : 'border-primary-500 text-primary-800 hover:bg-primary-50'
+                                                                    }`}
+                                                                    title="Open the submitted questionnaire report"
+                                                                >
+                                                                    <i className="fas fa-file-alt mr-1" aria-hidden />
+                                                                    Review report
+                                                                </button>
+                                                            ) : null}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveLeadProposal(proposalIndex)}
+                                                                className={`text-xs px-2.5 py-1.5 rounded-lg ${isDark ? 'text-red-300 hover:bg-gray-800' : 'text-red-700 hover:bg-red-50'}`}
+                                                            >
+                                                                Remove
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -9056,9 +8990,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
             {showLeadProposalWizard && leadProposalWizardDraft ? (() => {
                 const leadProposalWizardOverlay = (
-                    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/55 p-4 sm:p-6">
+                    <div className="fixed inset-0 z-[10050] flex min-h-0 flex-col overflow-hidden" role="presentation">
                         <div
-                            className={`flex max-h-[98vh] w-full max-w-[min(1920px,99vw)] flex-col rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                            className={`flex min-h-0 h-[100dvh] w-full max-w-none flex-1 flex-col overflow-hidden rounded-none shadow-none ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="lead-proposal-wizard-title"
