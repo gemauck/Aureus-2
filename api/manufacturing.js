@@ -100,6 +100,92 @@ function normalizeBomComponentsForCost(rawComponents = []) {
   return { components, totalMaterialCost }
 }
 
+function parseBomComponents(rawComponents) {
+  if (Array.isArray(rawComponents)) return rawComponents
+  if (typeof rawComponents !== 'string' || !rawComponents.trim()) return []
+  try {
+    const parsed = JSON.parse(rawComponents)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function computeBuildableUnitsFromComponents(components, availableBySku) {
+  if (!Array.isArray(components) || components.length === 0) return null
+  let buildableUnits = Number.POSITIVE_INFINITY
+  let hasValidComponent = false
+
+  for (const component of components) {
+    const sku = String(component?.sku || '').trim()
+    const requiredQty = parseFiniteNumber(component?.quantity, 0)
+    if (!sku || requiredQty <= 0) continue
+
+    hasValidComponent = true
+    const availableQty = parseFiniteNumber(availableBySku.get(sku), 0)
+    const unitsFromComponent = Math.floor(Math.max(0, availableQty) / requiredQty)
+    buildableUnits = Math.min(buildableUnits, unitsFromComponent)
+  }
+
+  if (!hasValidComponent || !Number.isFinite(buildableUnits)) return null
+  return Math.max(0, buildableUnits)
+}
+
+async function applyFinalProductBuildableUnits(items = []) {
+  if (!Array.isArray(items) || items.length === 0) return items
+
+  const availableBySku = new Map()
+  const finalProductSkus = new Set()
+
+  for (const item of items) {
+    const sku = String(item?.sku || '').trim()
+    if (!sku) continue
+    const quantity = parseFiniteNumber(item?.quantity, 0)
+    const allocatedQuantity = parseFiniteNumber(item?.allocatedQuantity, 0)
+    availableBySku.set(sku, quantity - allocatedQuantity)
+    if (String(item?.type || '').toLowerCase() === 'final_product') {
+      finalProductSkus.add(sku)
+    }
+  }
+
+  if (finalProductSkus.size === 0) return items
+
+  const bomRows = await prisma.bOM.findMany({
+    where: { productSku: { in: Array.from(finalProductSkus) } },
+    select: {
+      productSku: true,
+      components: true,
+      updatedAt: true
+    },
+    orderBy: { updatedAt: 'desc' }
+  })
+
+  const bomByProductSku = new Map()
+  for (const bomRow of bomRows) {
+    const productSku = String(bomRow?.productSku || '').trim()
+    if (!productSku || bomByProductSku.has(productSku)) continue
+    bomByProductSku.set(productSku, bomRow)
+  }
+
+  return items.map(item => {
+    if (String(item?.type || '').toLowerCase() !== 'final_product') return item
+
+    const sku = String(item?.sku || '').trim()
+    const bom = bomByProductSku.get(sku)
+    if (!bom) return item
+
+    const components = parseBomComponents(bom.components)
+    const buildableUnits = computeBuildableUnitsFromComponents(components, availableBySku)
+    if (buildableUnits == null) return item
+
+    return {
+      ...item,
+      quantity: buildableUnits,
+      buildableUnits
+    }
+  })
+}
+
 async function createStockMovementTxWithRetry(tx, payload) {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -2494,6 +2580,9 @@ async function handler(req, res) {
           // One row per SKU (aggregated across locations); no per-location duplicate rows
           items = await buildAllLocationsInventoryResponse()
         }
+
+        // Final products should display buildable totals based on component availability.
+        items = await applyFinalProductBuildableUnits(items)
 
         // Optional pagination: page (1-based), pageSize (max 200). Omit for full list.
         const page = Math.max(1, parseInt(req.query?.page || req.query?.pageNumber, 10) || 0) || 1
