@@ -43,6 +43,10 @@ function normalizeQuestionnaires(raw) {
   return Array.isArray(raw) ? raw.filter((q) => q && typeof q === 'object') : []
 }
 
+function normalizeSubmissionVersions(raw) {
+  return Array.isArray(raw) ? raw.filter((v) => v && typeof v === 'object') : []
+}
+
 async function findLeadByRawToken(rawToken, questionnaireId) {
   if (!rawToken || rawToken.length < 20) return null
   const hash = hashCustomerEngagementToken(rawToken)
@@ -203,13 +207,6 @@ async function handler(req, res) {
           ? sanitizeCustomerEngagementCustomFields(match.questionnaire?.customFields)
           : []
       const formDef = getCustomerEngagementFormDefinition(customFields)
-      if (match.mode === 'questionnaire') {
-        if (match.questionnaire?.submittedAt) {
-          return badRequest(res, 'This questionnaire has already been submitted.')
-        }
-      } else if (lead.customerEngagementSubmittedAt) {
-        return badRequest(res, 'This questionnaire has already been submitted.')
-      }
       const responses = body.responses
       const validation = validateCustomerEngagementResponses(responses, formDef)
       if (!validation.ok) {
@@ -217,17 +214,28 @@ async function handler(req, res) {
       }
 
       const now = new Date()
+      const nowIso = now.toISOString()
       const log = getActivityLogArray(lead)
+      const questionnaireVersion =
+        match.mode === 'questionnaire'
+          ? normalizeSubmissionVersions(match.questionnaire?.submissions).length + 1
+          : null
       log.push({
         id: `ce-${Date.now()}`,
         type: 'Customer engagement',
-        description: 'Customer engagement questionnaire submitted via public link',
-        timestamp: now.toISOString(),
+        description:
+          match.mode === 'questionnaire'
+            ? `Customer engagement questionnaire submitted via public link (version ${questionnaireVersion})`
+            : 'Customer engagement questionnaire submitted via public link',
+        timestamp: nowIso,
         user: 'External (questionnaire)',
         userId: null,
         userEmail: null,
         relatedId: null,
-        meta: { source: 'customer_engagement_public' }
+        meta: {
+          source: 'customer_engagement_public',
+          ...(match.mode === 'questionnaire' ? { version: questionnaireVersion } : {})
+        }
       })
 
       if (match.mode === 'questionnaire') {
@@ -235,9 +243,13 @@ async function handler(req, res) {
           q.id === match.questionnaire.id
             ? {
                 ...q,
+                submissions: [
+                  ...normalizeSubmissionVersions(q.submissions),
+                  { submittedAt: nowIso, responses }
+                ],
                 responses,
-                submittedAt: now.toISOString(),
-                updatedAt: now.toISOString()
+                submittedAt: nowIso,
+                updatedAt: nowIso
               }
             : q
         )
@@ -261,7 +273,11 @@ async function handler(req, res) {
         })
       }
 
-      return ok(res, { success: true, submittedAt: now.toISOString() })
+      return ok(res, {
+        success: true,
+        submittedAt: nowIso,
+        version: questionnaireVersion || 1
+      })
     }
 
     return badRequest(res, 'Method not allowed')

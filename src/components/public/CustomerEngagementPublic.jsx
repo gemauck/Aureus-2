@@ -51,14 +51,6 @@ function deepCopyCheckboxDefaults(groupField) {
     return o;
 }
 
-const SECTION_GRADIENTS = [
-    'from-blue-950 via-blue-900 to-blue-600',
-    'from-slate-950 via-blue-900 to-indigo-700',
-    'from-indigo-950 via-blue-800 to-sky-600',
-    'from-slate-900 via-blue-950 to-blue-700',
-    'from-blue-900 via-indigo-900 to-blue-600'
-];
-
 function buildInitialResponses(formDef) {
     const out = {};
     if (!formDef?.sections) return out;
@@ -191,7 +183,7 @@ const CustomerEngagementPublic = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!token || submitted) return;
+        if (!token) return;
         setSaving(true);
         setError('');
         try {
@@ -310,7 +302,7 @@ const CustomerEngagementPublic = () => {
                                     type="checkbox"
                                     className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
                                     checked={!!(val && val[opt.id])}
-                                    disabled={submitted}
+                                    disabled={saving}
                                     onChange={() => toggleCheckbox(f.id, opt.id)}
                                 />
                                 <span className="text-sm text-slate-700 dark:text-slate-200 leading-snug">{opt.label}</span>
@@ -330,7 +322,7 @@ const CustomerEngagementPublic = () => {
                     <textarea
                         className={`${inputBase} min-h-[100px] resize-y`}
                         value={typeof val === 'string' ? val : ''}
-                        disabled={submitted}
+                        disabled={saving}
                         placeholder={f.placeholder || ''}
                         onChange={(e) => setField(f.id, e.target.value)}
                     />
@@ -345,7 +337,7 @@ const CustomerEngagementPublic = () => {
                         type="date"
                         className={`${inputBase} max-w-xs`}
                         value={typeof val === 'string' ? val : ''}
-                        disabled={submitted}
+                        disabled={saving}
                         onChange={(e) => setField(f.id, e.target.value)}
                     />
                 </div>
@@ -359,8 +351,7 @@ const CustomerEngagementPublic = () => {
                     {f.hint ? (
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">{f.hint}</p>
                     ) : null}
-                    {!submitted ? (
-                        <div className="rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30 px-4 py-6 text-center hover:border-blue-300 dark:hover:border-blue-600 transition">
+                    <div className="rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-800/30 px-4 py-6 text-center hover:border-blue-300 dark:hover:border-blue-600 transition">
                             <svg
                                 className="mx-auto h-10 w-10 text-slate-400 dark:text-slate-500 mb-2"
                                 fill="none"
@@ -384,7 +375,6 @@ const CustomerEngagementPublic = () => {
                             />
                             <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">PNG or JPEG, up to 8 files</p>
                         </div>
-                    ) : null}
                     {items.length > 0 && (
                         <ul className="mt-3 flex flex-wrap gap-2">
                             {items.map((it, i) => (
@@ -410,7 +400,7 @@ const CustomerEngagementPublic = () => {
                     type="text"
                     className={inputBase}
                     value={typeof val === 'string' ? val : ''}
-                    disabled={submitted}
+                    disabled={saving}
                     placeholder={f.placeholder || ''}
                     onChange={(e) => setField(f.id, e.target.value)}
                 />
@@ -420,9 +410,9 @@ const CustomerEngagementPublic = () => {
 
     return (
         <div className={`${shellClass} pb-28 sm:pb-32`} style={{ fontFamily: FONT.body }}>
-            <div className="max-w-3xl mx-auto px-4 py-8 sm:py-10 lg:py-12">
+            <div className="max-w-5xl mx-auto px-4 py-8 sm:py-10 lg:py-12">
                 {/* Section quick-nav */}
-                {!submitted && totalSteps > 0 ? (
+                {totalSteps > 0 ? (
                     <nav
                         className="flex flex-wrap items-center justify-center gap-2 mb-8 sm:mb-10"
                         aria-label="Questionnaire sections"
@@ -540,23 +530,21 @@ const CustomerEngagementPublic = () => {
                                 </div>
                             ))}
 
-                            {!submitted ? (
-                                <div className="sticky bottom-0 left-0 right-0 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-4 pb-2 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent dark:from-slate-950 dark:via-slate-950 dark:to-transparent">
-                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-4 py-4 sm:px-6 shadow-lg shadow-slate-300/40 dark:shadow-black/50">
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 sm:mr-auto sm:max-w-xs leading-relaxed order-2 sm:order-1">
-                                            By submitting, you confirm the information is accurate to the best of your knowledge.
-                                        </p>
-                                        <button
-                                            type="submit"
-                                            disabled={saving}
-                                            className="order-1 sm:order-2 w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-600/25 disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
-                                            style={{ fontFamily: FONT.display }}
-                                        >
-                                            {saving ? 'Sending…' : 'Submit questionnaire'}
-                                        </button>
-                                    </div>
+                            <div className="sticky bottom-0 left-0 right-0 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-4 pb-2 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent dark:from-slate-950 dark:via-slate-950 dark:to-transparent">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-4 py-4 sm:px-6 shadow-lg shadow-slate-300/40 dark:shadow-black/50">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 sm:mr-auto sm:max-w-xs leading-relaxed order-2 sm:order-1">
+                                        By submitting, you confirm the information is accurate to the best of your knowledge.
+                                    </p>
+                                    <button
+                                        type="submit"
+                                        disabled={saving}
+                                        className="order-1 sm:order-2 w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-lg shadow-blue-600/25 disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
+                                        style={{ fontFamily: FONT.display }}
+                                    >
+                                        {saving ? 'Sending…' : submitted ? 'Submit updated version' : 'Submit questionnaire'}
+                                    </button>
                                 </div>
-                            ) : null}
+                            </div>
                         </form>
                     </div>
                 </article>

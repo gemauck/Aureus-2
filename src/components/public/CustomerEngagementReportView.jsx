@@ -8,14 +8,6 @@ const FONT = {
     body: "'DM Sans', system-ui, sans-serif"
 };
 
-const SECTION_GRADIENTS = [
-    'from-blue-950 via-blue-900 to-blue-600',
-    'from-slate-950 via-blue-900 to-indigo-700',
-    'from-indigo-950 via-blue-800 to-sky-600',
-    'from-slate-900 via-blue-950 to-blue-700',
-    'from-blue-900 via-indigo-900 to-blue-600'
-];
-
 function SectionBanner({ index, total, title }) {
     return (
         <div className="relative h-28 sm:h-32 overflow-hidden border-b border-slate-200 bg-white">
