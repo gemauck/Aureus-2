@@ -9333,9 +9333,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     : leadProposalWizardOverlay;
             })() : null}
             
-            {showEngagementPrefillModal && (
+            {showEngagementPrefillModal && (() => {
+                const engagementPrefillOverlay = (
                 <div
-                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 p-4"
+                    className="fixed inset-0 z-[10100] flex items-center justify-center bg-black bg-opacity-50 p-4"
                     onClick={() => !engagementBusy && setShowEngagementPrefillModal(false)}
                 >
                     <div
@@ -9697,11 +9698,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         </div>
                     </div>
                 </div>
-            )}
+                );
+                return typeof document !== 'undefined' &&
+                    window.ReactDOM &&
+                    typeof window.ReactDOM.createPortal === 'function'
+                    ? window.ReactDOM.createPortal(engagementPrefillOverlay, document.body)
+                    : engagementPrefillOverlay;
+            })()}
 
-            {showEngagementResponsesModal && (
+            {showEngagementResponsesModal && (() => {
+                const engagementResponsesOverlay = (
                 <div
-                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 p-4"
+                    className="fixed inset-0 z-[10150] flex items-center justify-center bg-black bg-opacity-50 p-4"
                     onClick={() => {
                         setShowEngagementResponsesModal(false);
                         setEngagementInternalNote('');
@@ -9809,7 +9817,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         </div>
                     </div>
                 </div>
-            )}
+                );
+                return typeof document !== 'undefined' &&
+                    window.ReactDOM &&
+                    typeof window.ReactDOM.createPortal === 'function'
+                    ? window.ReactDOM.createPortal(engagementResponsesOverlay, document.body)
+                    : engagementResponsesOverlay;
+            })()}
 
             {/* Manage External Agents Modal - Admin Only */}
             {showManageExternalAgentsModal && (
