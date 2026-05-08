@@ -7926,12 +7926,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         <button
                                                             type="button"
                                                             onClick={() => {
-                                                                if (q.responses) {
-                                                                    setSelectedEngagementQuestionnaireId(q.id || '');
-                                                                    setShowEngagementResponsesModal(true);
-                                                                } else {
-                                                                    openEngagementPrefillModal(false, q);
-                                                                }
+                                                                openEngagementPrefillModal(false, q);
                                                             }}
                                                             className={`text-left text-sm font-semibold underline-offset-2 hover:underline ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
                                                         >
@@ -7976,39 +7971,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            disabled={engagementBusy}
-                                                            onClick={() => openEngagementPrefillModal(true, q)}
+                                                            disabled={engagementBusy || !q.responses}
                                                             className={`text-[11px] px-2.5 py-1 rounded border ${
                                                                 isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                            }`}
-                                                        >
-                                                            New round
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            disabled={!q.responses}
+                                                            } disabled:opacity-50`}
                                                             onClick={() => {
                                                                 setSelectedEngagementQuestionnaireId(q.id || '');
                                                                 setShowEngagementResponsesModal(true);
                                                             }}
-                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
-                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                            } disabled:opacity-50`}
                                                         >
                                                             View report
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            disabled={engagementBusy || !q.linkActive || !!q.revokedAt}
-                                                            onClick={() => {
-                                                                setSelectedEngagementQuestionnaireId(q.id || '');
-                                                                handleEngagementRevoke();
-                                                            }}
-                                                            className={`text-[11px] px-2.5 py-1 rounded ${
-                                                                isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'
-                                                            } disabled:opacity-50`}
-                                                        >
-                                                            Revoke
                                                         </button>
                                                         <button
                                                             type="button"
@@ -8440,14 +8412,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     onClick={() => !engagementBusy && setShowEngagementPrefillModal(false)}
                 >
                     <div
-                        className={`flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg shadow-xl ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                        className={`flex max-h-[92vh] w-full max-w-4xl flex-col rounded-xl shadow-2xl ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className={`flex items-start justify-between gap-3 border-b px-6 py-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div>
-                                <h2 className="text-lg font-semibold">Review & pre-fill questionnaire</h2>
+                                <h2 className="text-lg font-semibold">Questionnaire editor</h2>
                                 <p className={`mt-1 text-xs leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    Name the questionnaire, add/edit custom fields, then set defaults before generating the share link.
+                                    Opened from the questionnaire list. Edit it here as your contact will see it, then generate a fresh share link.
                                 </p>
                             </div>
                             <button
@@ -8568,7 +8540,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         </div>
                                     </div>
                                     {(engagementFormDef?.sections || []).map((sec) => (
-                                        <div key={sec.id}>
+                                        <div
+                                            key={sec.id}
+                                            className={`rounded-xl border p-4 ${isDark ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50/60'}`}
+                                        >
                                             <h3 className={`mb-2 text-xs font-bold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {sec.heading}
                                             </h3>
