@@ -12,11 +12,52 @@ const LEAD_PROPOSAL_PROCESS_STEPS = [
     { step: 4, label: 'Submission to Client' },
 ];
 
+/** Step 3 circulation — keys must match api/_lib/leadProposalWorkflow.js LEAD_PROPOSAL_CIRCULATION_DEPT_KEYS */
+const LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS = [
+    { key: 'technical', label: 'Technical' },
+    { key: 'support', label: 'Support' },
+    { key: 'data', label: 'Data' },
+    { key: 'compliance', label: 'Compliance' },
+    { key: 'businessDevelopment', label: 'Business Development' },
+    { key: 'commercialAndPricing', label: 'Commercial and Pricing' },
+    { key: 'legalOperationsReview', label: 'Legal / Operations Review' },
+    { key: 'director', label: 'Director' },
+];
+
+function defaultCirculationDepartmentsUi() {
+    const o = {};
+    for (const d of LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS) {
+        o[d.key] = { comment: '', responsibleUserId: '' };
+    }
+    return o;
+}
+
+function normalizeCirculationDepartmentsUi(rawWorkflow) {
+    const base = defaultCirculationDepartmentsUi();
+    const circIn =
+        rawWorkflow?.circulationDepartments && typeof rawWorkflow.circulationDepartments === 'object'
+            ? rawWorkflow.circulationDepartments
+            : {};
+    for (const d of LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS) {
+        const row = circIn[d.key] && typeof circIn[d.key] === 'object' ? circIn[d.key] : {};
+        base[d.key] = {
+            comment: String(row.comment || ''),
+            responsibleUserId: String(row.responsibleUserId || '').trim()
+        };
+    }
+    const legacy = String(rawWorkflow?.departmentalComments || '').trim();
+    if (legacy && !base.technical.comment) {
+        base.technical = { ...base.technical, comment: legacy };
+    }
+    return base;
+}
+
 function defaultLeadProposalWorkflow() {
     return {
         currentStep: 1,
         engagementQuestionnaireId: '',
         departmentalComments: '',
+        circulationDepartments: defaultCirculationDepartmentsUi(),
         signOffBy: '',
         submittedToClientAt: null,
         submissionNotes: '',
@@ -34,6 +75,7 @@ function normalizeLeadProposalWorkflowUi(raw) {
         currentStep: Math.min(4, Math.max(1, Math.floor(step))),
         engagementQuestionnaireId: String(raw.engagementQuestionnaireId || '').trim(),
         departmentalComments: String(raw.departmentalComments || ''),
+        circulationDepartments: normalizeCirculationDepartmentsUi(raw),
         signOffBy: String(raw.signOffBy || '').trim(),
         submittedToClientAt:
             typeof raw.submittedToClientAt === 'string' && raw.submittedToClientAt.trim()
@@ -581,6 +623,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [leadProposalWizardUploadBusy, setLeadProposalWizardUploadBusy] = useState(false);
     const [leadProposalWizardHint, setLeadProposalWizardHint] = useState('');
     const [leadProposalWizardCreatingQ, setLeadProposalWizardCreatingQ] = useState(false);
+    /** Users list for Step 3 circulation “responsible person” selects */
+    const [circulationAssigneeUsers, setCirculationAssigneeUsers] = useState([]);
     const leadProposalWizardSessionDraftIdRef = useRef(null);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
@@ -660,6 +704,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         };
     }, [formData, onSave, showLeadProposalWizard, leadProposalWizardSaving]);
+
+    useEffect(() => {
+        if (!showLeadProposalWizard || !isLead) return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const res = window.DatabaseAPI?.getUsers ? await window.DatabaseAPI.getUsers() : null;
+                const list =
+                    res?.data?.users ||
+                    res?.data?.data?.users ||
+                    res?.users ||
+                    res?.data ||
+                    [];
+                if (cancelled || !Array.isArray(list)) return;
+                const active = list.filter((u) => u && u.status !== 'inactive');
+                setCirculationAssigneeUsers(active.length ? active : list);
+            } catch (_) {
+                if (!cancelled) setCirculationAssigneeUsers([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [showLeadProposalWizard, isLead]);
 
     const getEngagementQuestionnaires = () => {
         const latest = formDataRef.current || formData;
@@ -2056,12 +2124,26 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         });
     };
 
+    const updateCirculationDepartment = (deptKey, partial) => {
+        setLeadProposalWizardDraft((prev) => {
+            if (!prev) return prev;
+            const w = normalizeLeadProposalWorkflowUi(prev.workflow);
+            const cd = normalizeCirculationDepartmentsUi(w);
+            cd[deptKey] = { ...(cd[deptKey] || { comment: '', responsibleUserId: '' }), ...partial };
+            return { ...prev, workflow: { ...w, circulationDepartments: cd } };
+        });
+    };
+
     const saveLeadProposalWizard = async () => {
         const draft = leadProposalWizardDraft;
         if (!draft || !String(draft.title || '').trim()) {
             setLeadProposalWizardHint('Add a proposal title before saving.');
             return;
         }
+        const prevWorkflowSnapshot =
+            leadProposalWizardEditIndex != null
+                ? formDataRef.current?.proposals?.[leadProposalWizardEditIndex]?.workflow
+                : null;
         setLeadProposalWizardSaving(true);
         setLeadProposalWizardHint('');
         try {
@@ -2082,6 +2164,43 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             hasUserEditedForm.current = true;
             if (typeof onSave === 'function') {
                 await onSave(toSave, true);
+            }
+            const fd = formDataRef.current || toSave;
+            const leadId = fd?.id;
+            if (leadId && isLead) {
+                const prev = normalizeLeadProposalWorkflowUi(prevWorkflowSnapshot || {});
+                const next = normalized.workflow;
+                const token = window.storage?.getToken?.();
+                const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+                const leadName = fd.name || fd.companyName || 'Lead';
+                const titleSafe = String(normalized.title || '').trim() || 'Untitled';
+                for (const d of LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS) {
+                    const prevId = String(prev.circulationDepartments?.[d.key]?.responsibleUserId || '').trim();
+                    const nextId = String(next.circulationDepartments?.[d.key]?.responsibleUserId || '').trim();
+                    if (!nextId || nextId === prevId) continue;
+                    try {
+                        await fetch(`${window.location.origin}/api/notifications`, {
+                            method: 'POST',
+                            headers,
+                            credentials: 'include',
+                            body: JSON.stringify({
+                                userId: nextId,
+                                type: 'system',
+                                title: `Proposal circulation: ${d.label}`,
+                                message: `You were assigned as responsible person for ${d.label} on proposal "${titleSafe}" (${leadName}).`,
+                                link: `#/clients?lead=${encodeURIComponent(leadId)}&tab=proposals`,
+                                metadata: {
+                                    source: 'lead_proposal_circulation',
+                                    leadId,
+                                    departmentKey: d.key,
+                                    proposalTitle: titleSafe
+                                }
+                            })
+                        });
+                    } catch (_) {
+                        /* non-fatal */
+                    }
+                }
             }
             setShowLeadProposalWizard(false);
             setLeadProposalWizardDraft(null);
@@ -9272,26 +9391,64 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     );
                                 }
                                 if (leadProposalWizardStep === 3) {
+                                    const cd = w.circulationDepartments || defaultCirculationDepartmentsUi();
                                     return (
                                         <div className={stepPanelCls}>
                                             <h3 className={wizStepTitleCls}>
                                                 Step 3 — Circulation for comment, pricing and approval
                                             </h3>
                                             <p className={wizDescCls}>
-                                                Capture departmental comments and feedback for the record. This is internal to your team.
+                                                Capture comments by department and assign a responsible person for each. Assignees are
+                                                notified when you save.
                                             </p>
-                                            <label className={labelCls}>Departmental comments</label>
-                                            <textarea
-                                                value={w.departmentalComments || ''}
-                                                onChange={(e) =>
-                                                    updateLeadProposalWizardWorkflow({
-                                                        departmentalComments: e.target.value
-                                                    })
-                                                }
-                                                rows={8}
-                                                className={inputCls}
-                                                placeholder="e.g. Finance: approve margin. Operations: confirm site access…"
-                                            />
+                                            <div className="space-y-5">
+                                                {LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS.map((dept) => {
+                                                    const row = cd[dept.key] || { comment: '', responsibleUserId: '' };
+                                                    return (
+                                                        <div
+                                                            key={dept.key}
+                                                            className={`rounded-xl border p-4 sm:p-5 ${isDark ? 'border-gray-600 bg-gray-900/35' : 'border-gray-200 bg-white'}`}
+                                                        >
+                                                            <div className="mb-3">
+                                                                <span
+                                                                    className={`text-sm md:text-base font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                                >
+                                                                    {dept.label}
+                                                                </span>
+                                                            </div>
+                                                            <label className={`${labelCls} text-sm`}>Comments</label>
+                                                            <textarea
+                                                                value={row.comment || ''}
+                                                                onChange={(e) =>
+                                                                    updateCirculationDepartment(dept.key, {
+                                                                        comment: e.target.value
+                                                                    })
+                                                                }
+                                                                rows={3}
+                                                                className={`${inputCls} mb-4`}
+                                                                placeholder="Departmental feedback…"
+                                                            />
+                                                            <label className={`${labelCls} text-sm`}>Responsible person</label>
+                                                            <select
+                                                                value={row.responsibleUserId || ''}
+                                                                onChange={(e) =>
+                                                                    updateCirculationDepartment(dept.key, {
+                                                                        responsibleUserId: e.target.value
+                                                                    })
+                                                                }
+                                                                className={inputCls}
+                                                            >
+                                                                <option value="">— Select responsible person —</option>
+                                                                {circulationAssigneeUsers.map((u) => (
+                                                                    <option key={u.id} value={u.id}>
+                                                                        {u.name || u.email || u.id}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     );
                                 }

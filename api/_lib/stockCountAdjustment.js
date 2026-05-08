@@ -1,5 +1,25 @@
 import { computedInventoryTotalValue } from './inventoryValue.js'
 
+/**
+ * Stock-count location semantics (movements vs on-hand):
+ *
+ * - **Current pipeline** (`applyStockCountAdjustmentTx`, template import, stock-take apply): creates
+ *   `StockMovement` with `fromLocation` = **location UUID**, `toLocation` = `''`, and **always** upserts
+ *   `LocationInventory` at that `locationId` (and updates `InventoryItem` aggregates).
+ *
+ * - **Legacy** `scripts/import-stock-count-excel.js` (`reference: STOCK_COUNT_IMPORT`): wrote
+ *   `toLocation` = **location code** (e.g. `"PMB"`), `fromLocation` = `''`. It also created
+ *   `InventoryItem` + `LocationInventory` when the row succeeded. If catalog / per-location rows were
+ *   removed later, movements can remain **without** matching `LocationInventory` — the ledger may show
+ *   history while the location stock list shows nothing for that SKU.
+ *
+ * - **`PMB` vs Piet office**: `StockLocation` with code **`PMB`** is not the same row as **`01_LOC1`**
+ *   (PIETERMARITZBURG OFFICE). Legacy imports resolve `"PMB"` via `ensureLocation` → the **`PMB`** site.
+ *
+ * - **Backfill movement strings** to UUIDs (so per-location ledger filters match):
+ *   `node scripts/backfill-stock-movement-location-ids.js` (dry run) then `--write`.
+ */
+
 export const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {
   if (quantity > (reorderPoint || 0)) return 'in_stock'
   if (quantity > 0) return 'low_stock'

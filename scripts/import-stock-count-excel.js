@@ -591,6 +591,8 @@ async function main() {
           ? parseInt(lastMov.movementId.replace('MOV', ''), 10) + 1
           : 1
         const locCode = location ? location.code : ''
+        // Legacy format: store location *code* in toLocation (not UUID). New adjustments use fromLocation = UUID
+        // (see api/_lib/stockCountAdjustment.js). Run scripts/backfill-stock-movement-location-ids.js to normalize.
         await prisma.stockMovement.create({
           data: {
             movementId: `MOV${String(nextNum).padStart(4, '0')}`,

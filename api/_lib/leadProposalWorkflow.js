@@ -1,7 +1,28 @@
+/** Stable keys for Step 3 circulation — keep in sync with ClientDetailModal LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS */
+export const LEAD_PROPOSAL_CIRCULATION_DEPT_KEYS = Object.freeze([
+  'technical',
+  'support',
+  'data',
+  'compliance',
+  'businessDevelopment',
+  'commercialAndPricing',
+  'legalOperationsReview',
+  'director'
+])
+
+function defaultCirculationDepartments() {
+  const o = {}
+  for (const k of LEAD_PROPOSAL_CIRCULATION_DEPT_KEYS) {
+    o[k] = { comment: '', responsibleUserId: '' }
+  }
+  return o
+}
+
 const DEFAULT_WORKFLOW = Object.freeze({
   currentStep: 1,
   engagementQuestionnaireId: '',
   departmentalComments: '',
+  circulationDepartments: defaultCirculationDepartments(),
   signOffBy: '',
   submittedToClientAt: null,
   submissionNotes: '',
@@ -18,10 +39,30 @@ export function sanitizeLeadProposalWorkflow(raw) {
   let step = Number(w.currentStep)
   if (!Number.isFinite(step)) step = 1
   step = Math.min(4, Math.max(1, Math.floor(step)))
+  const circulationDepartments = defaultCirculationDepartments()
+  const circIn =
+    w.circulationDepartments && typeof w.circulationDepartments === 'object' && !Array.isArray(w.circulationDepartments)
+      ? w.circulationDepartments
+      : {}
+  for (const k of LEAD_PROPOSAL_CIRCULATION_DEPT_KEYS) {
+    const row = circIn[k] && typeof circIn[k] === 'object' ? circIn[k] : {}
+    circulationDepartments[k] = {
+      comment: String(row.comment || ''),
+      responsibleUserId: String(row.responsibleUserId || '').trim()
+    }
+  }
+  const legacyDept = String(w.departmentalComments || '').trim()
+  if (legacyDept && !circulationDepartments.technical.comment) {
+    circulationDepartments.technical = {
+      ...circulationDepartments.technical,
+      comment: legacyDept
+    }
+  }
   return {
     currentStep: step,
     engagementQuestionnaireId: String(w.engagementQuestionnaireId || '').trim(),
     departmentalComments: String(w.departmentalComments || ''),
+    circulationDepartments,
     signOffBy: String(w.signOffBy || '').trim(),
     submittedToClientAt:
       typeof w.submittedToClientAt === 'string' && w.submittedToClientAt.trim()
