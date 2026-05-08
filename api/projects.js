@@ -418,11 +418,11 @@ function mergeDocFieldsWithServer(existingDoc, incomingDoc) {
     // Previous behavior kept server comments when list was empty, causing deleted comments to reappear.
     mergedComments[key] = list
   }
-  const existingStatus =
-    existing.collectionStatus && typeof existing.collectionStatus === 'object' ? existing.collectionStatus : {}
   const incomingStatus =
     incoming.collectionStatus && typeof incoming.collectionStatus === 'object' ? incoming.collectionStatus : {}
-  const mergedStatus = { ...existingStatus, ...incomingStatus }
+  // Treat incoming statuses as canonical for the document so explicit clears
+  // (removing a month key in the UI) persist instead of being rehydrated from server state.
+  const mergedStatus = { ...incomingStatus }
 
   const existingNotes =
     existing.notesByMonth && typeof existing.notesByMonth === 'object' ? existing.notesByMonth : {}
