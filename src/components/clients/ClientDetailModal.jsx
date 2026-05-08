@@ -436,7 +436,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Track initial loading state to prevent jittery progressive rendering
     // Only render full content once all initial data loads are complete
     const [isInitialLoading, setIsInitialLoading] = useState(false);
-    const [engagementLinkUrl, setEngagementLinkUrl] = useState('');
     const [engagementBusy, setEngagementBusy] = useState(false);
     const [engagementHint, setEngagementHint] = useState('');
     const [showEngagementResponsesModal, setShowEngagementResponsesModal] = useState(false);
@@ -454,7 +453,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementQuestionnaireName, setEngagementQuestionnaireName] = useState('');
     const [engagementCustomFieldsDraft, setEngagementCustomFieldsDraft] = useState([]);
     const [selectedEngagementQuestionnaireId, setSelectedEngagementQuestionnaireId] = useState('');
-    const [engagementLinkUrlsById, setEngagementLinkUrlsById] = useState({});
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -595,16 +593,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             });
             const payload = res?.data ?? res;
             if (payload?.url) {
-                setEngagementLinkUrl(payload.url);
-                const qid = payload?.questionnaireId || selectedEngagementQuestionnaireId || '';
-                if (qid) {
-                    setEngagementLinkUrlsById((prev) => ({ ...(prev || {}), [qid]: payload.url }));
-                }
                 try {
                     await navigator.clipboard.writeText(payload.url);
-                    setEngagementHint('Link created and copied to clipboard.');
+                    setEngagementHint('Questionnaire saved and share link copied.');
                 } catch {
-                    setEngagementHint('Link created. Use “Copy link” to copy.');
+                    setEngagementHint('Questionnaire saved. Share link is ready.');
                 }
             }
             setShowEngagementPrefillModal(false);
@@ -739,7 +732,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setEngagementHint('');
         try {
             await window.DatabaseAPI.revokeCustomerEngagementLink(formData.id, questionnaireId || undefined);
-            setEngagementLinkUrl('');
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
             if (lead) {
@@ -768,12 +760,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setEngagementHint('');
         try {
             await window.DatabaseAPI.deleteCustomerEngagementQuestionnaire(formData.id, questionnaireId);
-            setEngagementLinkUrl('');
-            setEngagementLinkUrlsById((prev) => {
-                const next = { ...(prev || {}) };
-                delete next[questionnaireId];
-                return next;
-            });
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
             if (lead) {
@@ -794,51 +780,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
-    const handleEngagementCopy = async () => {
-        const url = engagementLinkUrl;
-        if (!url) {
-            setEngagementHint('Generate a link first, then copy.');
-            setTimeout(() => setEngagementHint(''), 3000);
-            return;
-        }
-        try {
-            await navigator.clipboard.writeText(url);
-            setEngagementHint('Copied to clipboard');
-        } catch {
-            setEngagementHint('Copy failed — select and copy manually');
-        }
-        setTimeout(() => setEngagementHint(''), 2500);
-    };
-
-    const handleEngagementCopyForQuestionnaire = async (q) => {
-        if (!formData?.id || !q || !window.DatabaseAPI?.createCustomerEngagementLink) return;
-        setEngagementBusy(true);
-        setEngagementHint('');
-        try {
-            const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, {
-                questionnaireId: q.id,
-                questionnaireName: q.name,
-                customFields: q.customFields || [],
-                prefill: q.prefill || {},
-                clearSubmission: false
-            });
-            const payload = res?.data ?? res;
-            const url = payload?.url;
-            if (!url) throw new Error('No link generated');
-            setEngagementLinkUrl(url);
-            if (q.id) {
-                setEngagementLinkUrlsById((prev) => ({ ...(prev || {}), [q.id]: url }));
-            }
-            await navigator.clipboard.writeText(url);
-            setEngagementHint('Link generated and copied to clipboard');
-        } catch (e) {
-            setEngagementHint(e.message || 'Could not generate/copy link');
-        } finally {
-            setEngagementBusy(false);
-            setTimeout(() => setEngagementHint(''), 3500);
-        }
-    };
-    
     // Track last processed client data to detect changes
     const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, kyc: null, id: null });
     
@@ -7931,16 +7872,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         >
                                             New questionnaire
                                         </button>
-                                        <button
-                                            type="button"
-                                            disabled={engagementBusy || !engagementLinkUrl}
-                                            onClick={handleEngagementCopy}
-                                            className={`text-xs px-3 py-1.5 rounded-lg border ${
-                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
-                                            }`}
-                                        >
-                                            Copy latest link
-                                        </button>
                                     </div>
                                     <div className="mt-3 space-y-2">
                                         {(() => {
@@ -8004,7 +7935,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                         {selected.name || 'Customer engagement questionnaire'}
                                                                     </div>
                                                                     <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                                        Click “Open & edit” to manage this questionnaire.
+                                                                        Open in the platform to edit, review responses, and manage sharing.
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-wrap gap-1.5">
@@ -8016,17 +7947,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                             isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
                                                                         }`}
                                                                     >
-                                                                        Open & edit
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={engagementBusy}
-                                                                        onClick={() => handleEngagementCopyForQuestionnaire(selected)}
-                                                                        className={`text-[11px] px-2.5 py-1 rounded border ${
-                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                                        } disabled:opacity-50`}
-                                                                    >
-                                                                        Generate + copy link
+                                                                        Open in platform
                                                                     </button>
                                                                     <button
                                                                         type="button"
@@ -8059,15 +7980,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             );
                                         })()}
                                     </div>
-                                    {engagementLinkUrl ? (
-                                        <p
-                                            className={`mt-3 text-[11px] break-all font-mono p-2 rounded border ${
-                                                isDark ? 'border-gray-600 bg-gray-900/50 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-700'
-                                            }`}
-                                        >
-                                            {engagementLinkUrl}
-                                        </p>
-                                    ) : null}
                                 </div>
                                 <LeadProposalProcessFlow isDark={isDark} />
                                 <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>

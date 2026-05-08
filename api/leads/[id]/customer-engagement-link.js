@@ -135,7 +135,6 @@ async function handler(req, res) {
     }
 
     const body = req.body && typeof req.body === 'object' ? req.body : {}
-    const clearSubmission = body.clearSubmission === true
     const questionnaireId = String(body.questionnaireId || '').trim()
     const questionnaireNameRaw = String(body.questionnaireName || '').trim()
     const customFields = sanitizeCustomerEngagementCustomFields(body.customFields)
@@ -183,12 +182,9 @@ async function handler(req, res) {
         tokenCreatedAt: nowIso,
         revokedAt: null,
         updatedAt: nowIso,
-        ...(clearSubmission
-          ? {
-              submittedAt: null,
-              responses: null
-            }
-          : {})
+        // Generating a fresh link always opens a fresh response round.
+        submittedAt: null,
+        responses: null
       }
       current[index] = record
     } else {
@@ -215,12 +211,9 @@ async function handler(req, res) {
         customerEngagementTokenHash: tokenHash,
         customerEngagementTokenCreatedAt: now,
         customerEngagementRevokedAt: null,
-        ...(clearSubmission
-          ? {
-              customerEngagementSubmittedAt: null,
-              customerEngagementResponses: null
-            }
-          : {}),
+        // Keep legacy fields aligned with a fresh round too.
+        customerEngagementSubmittedAt: null,
+        customerEngagementResponses: null,
         customerEngagementPrefill:
           sanitizedPrefill === null ? Prisma.DbNull : sanitizedPrefill,
         customerEngagementQuestionnaires: current
@@ -234,7 +227,7 @@ async function handler(req, res) {
       url,
       tokenCreatedAt: now.toISOString(),
       leadName: lead.name,
-      clearedSubmission: clearSubmission,
+      clearedSubmission: true,
       questionnaireId: record.id,
       questionnaireName: record.name,
       questionnaires: current.map(summarizeQuestionnaire)

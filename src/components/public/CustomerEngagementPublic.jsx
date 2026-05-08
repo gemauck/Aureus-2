@@ -88,14 +88,15 @@ function SectionBanner({ index, total, title }) {
                 className="pointer-events-none absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_70%_80%_at_100%_100%,rgba(56,189,248,0.35),transparent)]"
                 aria-hidden
             />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-900/20 to-transparent" aria-hidden />
             <div className="relative h-full flex flex-col justify-end px-5 pb-4 sm:px-7 sm:pb-5">
                 <p
-                    className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white/75 mb-1"
+                    className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
                     style={{ fontFamily: FONT.body }}
                 >
                     Step {index + 1} of {total}
                 </p>
-                <h3 className="text-lg sm:text-xl font-bold text-white leading-tight" style={{ fontFamily: FONT.display }}>
+                <h3 className="text-lg sm:text-xl font-bold text-white leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]" style={{ fontFamily: FONT.display }}>
                     {title}
                 </h3>
             </div>
