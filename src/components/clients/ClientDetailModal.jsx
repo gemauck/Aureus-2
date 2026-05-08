@@ -454,6 +454,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementQuestionnaireName, setEngagementQuestionnaireName] = useState('');
     const [engagementCustomFieldsDraft, setEngagementCustomFieldsDraft] = useState([]);
     const [selectedEngagementQuestionnaireId, setSelectedEngagementQuestionnaireId] = useState('');
+    const [engagementLinkUrlsById, setEngagementLinkUrlsById] = useState({});
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -593,7 +594,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 customFields: sanitizeEngagementCustomFields(engagementCustomFieldsDraft)
             });
             const payload = res?.data ?? res;
-            if (payload?.url) setEngagementLinkUrl(payload.url);
+            if (payload?.url) {
+                setEngagementLinkUrl(payload.url);
+                const qid = payload?.questionnaireId || selectedEngagementQuestionnaireId || '';
+                if (qid) {
+                    setEngagementLinkUrlsById((prev) => ({ ...(prev || {}), [qid]: payload.url }));
+                }
+                try {
+                    await navigator.clipboard.writeText(payload.url);
+                    setEngagementHint('Link created and copied to clipboard.');
+                } catch {
+                    setEngagementHint('Link created. Use “Copy link” to copy.');
+                }
+            }
             setShowEngagementPrefillModal(false);
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
@@ -7876,7 +7889,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             >
                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                     <div>
-                                                        <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{q.name || 'Customer engagement questionnaire'}</div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (q.responses) {
+                                                                    setSelectedEngagementQuestionnaireId(q.id || '');
+                                                                    setShowEngagementResponsesModal(true);
+                                                                } else {
+                                                                    openEngagementPrefillModal(false, q);
+                                                                }
+                                                            }}
+                                                            className={`text-left text-sm font-semibold underline-offset-2 hover:underline ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                        >
+                                                            {q.name || 'Customer engagement questionnaire'}
+                                                        </button>
                                                         <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                             {q.tokenCreatedAt ? `Link created ${new Date(q.tokenCreatedAt).toLocaleString('en-ZA')}` : 'No link yet'}
                                                             {q.submittedAt ? ` · Submitted ${new Date(q.submittedAt).toLocaleString('en-ZA')}` : ''}
@@ -7886,13 +7912,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <div className="flex flex-wrap gap-1.5">
                                                         <button
                                                             type="button"
+                                                            disabled={!engagementLinkUrlsById?.[q.id]}
+                                                            onClick={async () => {
+                                                                const url = engagementLinkUrlsById?.[q.id];
+                                                                if (!url) return;
+                                                                try {
+                                                                    await navigator.clipboard.writeText(url);
+                                                                    setEngagementHint('Copied to clipboard');
+                                                                } catch {
+                                                                    setEngagementHint('Copy failed — select and copy manually');
+                                                                }
+                                                                setTimeout(() => setEngagementHint(''), 2500);
+                                                            }}
+                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
+                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                            } disabled:opacity-50`}
+                                                        >
+                                                            Copy link
+                                                        </button>
+                                                        <button
+                                                            type="button"
                                                             disabled={engagementBusy}
                                                             onClick={() => openEngagementPrefillModal(false, q)}
                                                             className={`text-[11px] px-2.5 py-1 rounded border ${
                                                                 isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
                                                             }`}
                                                         >
-                                                            Edit + new link
+                                                            Edit / new link
                                                         </button>
                                                         <button
                                                             type="button"
@@ -8385,6 +8431,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             onChange={(e) => setEngagementQuestionnaireName(e.target.value)}
                                             placeholder="e.g. Opencast Mine Q2 Site Visit"
                                         />
+                                        {!String(engagementQuestionnaireName || '').trim() ? (
+                                            <p className={`mt-1 text-[11px] ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                                                Name is required to create a link.
+                                            </p>
+                                        ) : null}
                                     </div>
                                     <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
                                         <div className="mb-2 flex items-center justify-between">
@@ -8586,7 +8637,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             </button>
                             <button
                                 type="button"
-                                disabled={engagementBusy || engagementPrefillLoading || !engagementFormDef}
+                                disabled={
+                                    engagementBusy ||
+                                    engagementPrefillLoading ||
+                                    !engagementFormDef ||
+                                    !String(engagementQuestionnaireName || '').trim()
+                                }
                                 onClick={commitEngagementLinkFromModal}
                                 className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
                             >
