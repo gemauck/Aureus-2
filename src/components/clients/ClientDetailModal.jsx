@@ -791,13 +791,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
+            let canOpen = false;
             if (lead) {
+                const rows = normalizeEngagementQuestionnaires(lead.customerEngagementQuestionnaires);
+                const selectedRow = rows.find((q) => String(q.id || '') === String(questionnaireId || ''));
+                canOpen = !!(
+                    selectedRow?.responses ||
+                    selectedRow?.submittedAt ||
+                    lead.customerEngagementResponses ||
+                    lead.customerEngagementSubmittedAt
+                );
                 setFormData((prev) => ({
                     ...prev,
                     customerEngagementSubmittedAt: lead.customerEngagementSubmittedAt,
                     customerEngagementResponses: lead.customerEngagementResponses,
                     customerEngagementQuestionnaires: lead.customerEngagementQuestionnaires
                 }));
+            }
+            if (!canOpen) {
+                setEngagementHint('No submitted report found for this questionnaire yet.');
+                setTimeout(() => setEngagementHint(''), 4000);
+                return;
             }
             setShowEngagementResponsesModal(true);
         } catch (e) {
@@ -7920,7 +7934,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     const statusBits = [];
                                                                     if (q.submittedAt) statusBits.push('Submitted');
                                                                     if (q.linkActive) statusBits.push('Active link');
-                                                                    const hasReport = !!(q.responses || q.submittedAt);
                                                                     return (
                                                                         <div
                                                                             key={q.id}
@@ -7962,7 +7975,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                                     </button>
                                                                                     <button
                                                                                         type="button"
-                                                                                        disabled={engagementBusy || !hasReport}
+                                                                                        disabled={engagementBusy}
                                                                                         onClick={() => handleOpenEngagementReport(q.id || '')}
                                                                                         className={`px-2.5 py-1 rounded border ${
                                                                                             isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
@@ -8687,25 +8700,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
                             {engagementReportLoading ? (
                                 <div className="py-16 text-center text-sm text-gray-500">Loading report…</div>
-                            ) : engagementReportFormDef &&
-                              (
-                                (getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId)?.responses) ||
-                                formData.customerEngagementResponses
-                              ) &&
-                              typeof window.CustomerEngagementReportView === 'function' ? (
-                                React.createElement(window.CustomerEngagementReportView, {
-                                    formDef: engagementReportFormDef,
-                                    responses:
-                                        getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId)?.responses ||
-                                        formData.customerEngagementResponses,
-                                    branding: engagementReportBranding,
-                                    submittedAt:
-                                        getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId)?.submittedAt ||
-                                        formData.customerEngagementSubmittedAt
-                                })
-                            ) : (
-                                <p className="text-sm text-gray-500">Could not load report. Try closing and opening again.</p>
-                            )}
+                            ) : (() => {
+                                const selectedRow =
+                                    getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId) || null;
+                                const reportResponses = selectedRow?.responses || formData.customerEngagementResponses;
+                                const reportSubmittedAt = selectedRow?.submittedAt || formData.customerEngagementSubmittedAt;
+                                if (
+                                    engagementReportFormDef &&
+                                    reportResponses &&
+                                    typeof window.CustomerEngagementReportView === 'function'
+                                ) {
+                                    return React.createElement(window.CustomerEngagementReportView, {
+                                        formDef: engagementReportFormDef,
+                                        responses: reportResponses,
+                                        branding: engagementReportBranding,
+                                        submittedAt: reportSubmittedAt
+                                    });
+                                }
+                                return <p className="text-sm text-gray-500">Could not load report. Try closing and opening again.</p>;
+                            })()}
                         </div>
                         <div className={`no-print border-t px-6 py-4 ${isDark ? 'border-gray-700 bg-gray-800/80' : 'border-gray-200 bg-gray-50'}`}>
                             <label className={`mb-1 block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
