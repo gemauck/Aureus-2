@@ -549,8 +549,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [leadProposalWizardHint, setLeadProposalWizardHint] = useState('');
     const [leadProposalWizardCreatingQ, setLeadProposalWizardCreatingQ] = useState(false);
     const leadProposalWizardSessionDraftIdRef = useRef(null);
-    /** Ignore backdrop close briefly after open — avoids ghost click closing the wizard immediately. */
-    const leadProposalBackdropIgnoreUntilRef = useRef(0);
+    const closeLeadProposalWizardRef = useRef(() => {});
+    const leadProposalWizardSavingRef = useRef(false);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -1907,7 +1907,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const openLeadProposalWizardCreate = () => {
         if (!formData?.id) return;
-        leadProposalBackdropIgnoreUntilRef.current = Date.now() + 500;
         setLeadProposalWizardEditIndex(null);
         setLeadProposalWizardStep(1);
         setLeadProposalWizardHint('');
@@ -1950,7 +1949,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const list = Array.isArray(formDataRef.current?.proposals) ? formDataRef.current.proposals : [];
         const row = list[index];
         if (!row) return;
-        leadProposalBackdropIgnoreUntilRef.current = Date.now() + 500;
         setLeadProposalWizardEditIndex(index);
         setLeadProposalWizardStep(normalizeLeadProposalWorkflowUi(row.workflow).currentStep || 1);
         setLeadProposalWizardHint('');
@@ -1972,12 +1970,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setLeadProposalWizardCreatingQ(false);
     };
 
-    const handleLeadProposalBackdropClose = (e) => {
-        if (e.target !== e.currentTarget) return;
-        if (leadProposalWizardSaving) return;
-        if (Date.now() < leadProposalBackdropIgnoreUntilRef.current) return;
-        closeLeadProposalWizard();
-    };
+    closeLeadProposalWizardRef.current = closeLeadProposalWizard;
+    leadProposalWizardSavingRef.current = leadProposalWizardSaving;
+
+    useEffect(() => {
+        if (!showLeadProposalWizard) return;
+        const onDocKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            if (leadProposalWizardSavingRef.current) return;
+            e.preventDefault();
+            e.stopPropagation();
+            closeLeadProposalWizardRef.current();
+        };
+        document.addEventListener('keydown', onDocKeyDown, true);
+        return () => document.removeEventListener('keydown', onDocKeyDown, true);
+    }, [showLeadProposalWizard]);
 
     const updateLeadProposalWizardWorkflow = (partial) => {
         setLeadProposalWizardDraft((prev) => {
@@ -8783,22 +8790,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 </div>
             )}
 
-            {showLeadProposalWizard && leadProposalWizardDraft ? (
-                <div
-                    className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/55 p-4 sm:p-6"
-                    onClick={handleLeadProposalBackdropClose}
-                    onMouseDown={(e) => {
-                        if (e.target === e.currentTarget) e.preventDefault();
-                    }}
-                >
-                    <div
-                        className={`flex max-h-[98vh] w-full max-w-[min(1920px,99vw)] flex-col rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="lead-proposal-wizard-title"
-                    >
+            {showLeadProposalWizard && leadProposalWizardDraft ? (() => {
+                const leadProposalWizardOverlay = (
+                    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/55 p-4 sm:p-6">
+                        <div
+                            className={`flex max-h-[98vh] w-full max-w-[min(1920px,99vw)] flex-col rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="lead-proposal-wizard-title"
+                        >
                         <div className={`shrink-0 border-b px-6 py-5 sm:px-8 sm:py-6 ${isDark ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gradient-to-r from-primary-50/80 to-white'}`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -9330,7 +9330,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         </div>
                     </div>
                 </div>
-            ) : null}
+                );
+                return typeof document !== 'undefined' &&
+                    window.ReactDOM &&
+                    typeof window.ReactDOM.createPortal === 'function'
+                    ? window.ReactDOM.createPortal(leadProposalWizardOverlay, document.body)
+                    : leadProposalWizardOverlay;
+            })() : null}
             
             {showEngagementPrefillModal && (
                 <div
