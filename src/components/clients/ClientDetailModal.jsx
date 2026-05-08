@@ -617,6 +617,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementCustomFieldsDraft, setEngagementCustomFieldsDraft] = useState([]);
     const [selectedEngagementQuestionnaireId, setSelectedEngagementQuestionnaireId] = useState('');
     const [engagementShareLink, setEngagementShareLink] = useState('');
+    /** Raw token URLs cannot be recomputed from DB (only hashes stored); keep last issued URL per questionnaire for this session. */
+    const engagementStaffShareUrlByQuestionnaireIdRef = useRef({});
     /** True when the opened questionnaire already had an active public link — saves preserve the token unless user regenerates. */
     const [engagementOpenedWithActiveLink, setEngagementOpenedWithActiveLink] = useState(false);
 
@@ -804,7 +806,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setEngagementBaseFormDef(null);
         setEngagementQuestionnaireName(questionnaireRow?.name || '');
         setSelectedEngagementQuestionnaireId(questionnaireRow?.id || '');
-        setEngagementShareLink('');
+        {
+            const qidOpen = String(questionnaireRow?.id || '').trim();
+            const remembered =
+                qidOpen && engagementStaffShareUrlByQuestionnaireIdRef.current[qidOpen]
+                    ? engagementStaffShareUrlByQuestionnaireIdRef.current[qidOpen]
+                    : '';
+            setEngagementShareLink(remembered);
+        }
         try {
             const res = await fetch(`${window.location.origin}/api/public/customer-engagement-form`, { credentials: 'include' });
             const json = await res.json();
@@ -852,8 +861,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 generatedUrl = payload.url;
                 setEngagementShareLink(payload.url);
                 setEngagementOpenedWithActiveLink(true);
-                if (payload?.questionnaireId) {
-                    setSelectedEngagementQuestionnaireId(String(payload.questionnaireId));
+                const sid = String(payload.questionnaireId || selectedEngagementQuestionnaireId || '').trim();
+                if (sid) {
+                    setSelectedEngagementQuestionnaireId((prev) => prev || sid);
+                    engagementStaffShareUrlByQuestionnaireIdRef.current[sid] = payload.url;
                 }
                 if (copyToClipboard) {
                     try {
@@ -1067,6 +1078,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setEngagementHint('');
         try {
             await window.DatabaseAPI.revokeCustomerEngagementLink(formData.id, questionnaireId || undefined);
+            if (questionnaireId) {
+                delete engagementStaffShareUrlByQuestionnaireIdRef.current[String(questionnaireId)];
+            } else {
+                engagementStaffShareUrlByQuestionnaireIdRef.current = {};
+            }
+            setEngagementShareLink('');
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
             if (lead) {
@@ -1095,6 +1112,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setEngagementHint('');
         try {
             await window.DatabaseAPI.deleteCustomerEngagementQuestionnaire(formData.id, questionnaireId);
+            delete engagementStaffShareUrlByQuestionnaireIdRef.current[String(questionnaireId)];
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
             if (lead) {
@@ -2027,6 +2045,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         });
     };
 
+    /** Proposal wizard Step 1: refresh questionnaire rows from API so submissions match the server (public submissions do not push to this modal). */
+    useEffect(() => {
+        if (!showLeadProposalWizard || leadProposalWizardStep !== 1 || !formData?.id || !isLead) return;
+        void mergeLeadEngagementAfterQuestionnaireMutation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only when wizard step/id gates change (omit merge fn to avoid loops)
+    }, [showLeadProposalWizard, leadProposalWizardStep, formData?.id, isLead]);
+
     /** Creates a new questionnaire row on the lead (never reuses an existing one). */
     const createFreshQuestionnaireForProposal = async (titleHint) => {
         if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) {
@@ -2043,6 +2068,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const payload = res?.data ?? res;
         const qid = payload?.questionnaireId;
         if (!qid) throw new Error('No questionnaire id returned');
+        if (payload?.url) {
+            engagementStaffShareUrlByQuestionnaireIdRef.current[String(qid)] = payload.url;
+        }
         await mergeLeadEngagementAfterQuestionnaireMutation();
         return String(qid);
     };
@@ -2174,6 +2202,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const fd = formDataRef.current || toSave;
             const leadId = fd?.id;
             if (leadId && isLead) {
+                await mergeLeadEngagementAfterQuestionnaireMutation();
                 const prev = normalizeLeadProposalWorkflowUi(prevWorkflowSnapshot || {});
                 const next = normalized.workflow;
                 const token = window.storage?.getToken?.();
@@ -9243,21 +9272,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         >
                                                             Open questionnaire editor
                                                         </button>
-                                                        {canViewSubmissionReport ? (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => void handleOpenEngagementReport(String(selectedQ.id || ''))}
-                                                                className={`text-xs font-semibold px-4 py-2.5 rounded-lg border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'}`}
-                                                            >
-                                                                Review submitted report
-                                                            </button>
-                                                        ) : null}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleOpenEngagementReport(String(selectedQ.id || ''))}
+                                                            className={`text-xs font-semibold px-4 py-2.5 rounded-lg border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'}`}
+                                                            title="Fetches the latest submission from the server (use after the client submits the public form)."
+                                                        >
+                                                            Review submission report
+                                                        </button>
                                                     </div>
                                                     <p className={`mt-3 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-                                                        {selectedQ.submittedAt
-                                                            ? 'Submission received.'
+                                                        {canViewSubmissionReport
+                                                            ? 'Submission on file — open the report above or click the questionnaire card.'
                                                             : selectedQ.linkActive
-                                                              ? 'Share link is active — open the editor to copy or regenerate.'
+                                                              ? 'Share link is active — open the editor to copy the URL (remembered in this session) or regenerate. After the client submits, use Review submission report.'
                                                               : 'Open the editor to generate and share the link.'}
                                                     </p>
                                                 </>
