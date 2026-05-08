@@ -13609,7 +13609,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               return { movement, qty };
             });
             const movementNetChange = rowsWithBalances.reduce((sum, row) => sum + row.qty, 0);
-            const currentQuantity = displayQuantity;
+            const currentQuantity = selectedDetailLocationId
+              ? (parseFloat(selectedLocationInfo?.quantity) || 0)
+              : displayQuantity;
             let opening = currentQuantity - movementNetChange;
             const rowsCalculated = rowsWithBalances.map(({ movement, qty }) => {
               const openingBalance = opening;
