@@ -8341,7 +8341,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
 
     if (modalType === 'view_item') {
-      const selectedItemMetrics = selectedItem ? getInventoryDetailMetrics(selectedItem) : null;
+      const selectedItemTotalFromLocations = Array.isArray(selectedItem?.locations)
+        ? selectedItem.locations.reduce((sum, loc) => sum + (parseFloat(loc?.quantity) || 0), 0)
+        : null;
+      const selectedItemMetrics = selectedItem
+        ? getInventoryDetailMetrics(
+            selectedItemTotalFromLocations != null
+              ? { ...selectedItem, quantity: selectedItemTotalFromLocations }
+              : selectedItem
+          )
+        : null;
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -8415,7 +8424,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <div>
                       <p className="text-xs text-gray-500">Total Value</p>
                       <p className="text-sm font-semibold text-blue-600">
-                        {formatCurrency(inventoryLineTotalValue(selectedItem.quantity, selectedItem.unitCost))}
+                        {formatCurrency(inventoryLineTotalValue(selectedItemMetrics?.quantity ?? selectedItem.quantity, selectedItem.unitCost))}
                       </p>
                     </div>
                     <div>
@@ -12647,8 +12656,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     const detailLocations = Array.isArray(item.locations) ? item.locations : (item.locationId && item.location ? [{ locationId: item.locationId, locationName: item.location, locationCode: '', quantity: item.quantity || 0, status: item.status }] : []);
 
-    const catalogLineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
-
     const selectedDetailLocationCode = useMemo(() => {
       const loc = detailLocations.find(l => l.locationId === selectedDetailLocationId);
       return loc?.locationCode || loc?.locationName || '';
@@ -12869,13 +12876,27 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const selectedLocationInfo = selectedDetailLocationId && detailLocations.find(l => l.locationId === selectedDetailLocationId);
     const totalQuantityFromLocations = detailLocations.reduce((sum, loc) => sum + (parseFloat(loc?.quantity) || 0), 0);
     const hasLocationBreakdown = detailLocations.length > 0;
-    // Keep detail stock cards aligned with list rows: always use catalog/global quantities.
-    // Location selector is still used for location table + ledger filtering only.
-    const detailMetrics = getInventoryDetailMetrics(item);
+    // Prefer location-derived quantity for detail cards so stockholding reflects selected location
+    // (and correctly shows full reversals netting to zero). Fall back to catalog quantity when
+    // no location breakdown is available.
+    const detailMetricsSource = selectedLocationInfo
+      ? {
+          ...item,
+          quantity: selectedLocationInfo.quantity,
+          allocatedQuantity: selectedLocationInfo.allocatedQuantity
+        }
+      : hasLocationBreakdown
+        ? {
+            ...item,
+            quantity: totalQuantityFromLocations
+          }
+        : item;
+    const detailMetrics = getInventoryDetailMetrics(detailMetricsSource);
     const displayQuantity = detailMetrics.quantity;
     const allocatedQtyForDisplay = detailMetrics.allocated;
     const availableQty = detailMetrics.available;
     const computedDetailStatus = detailMetrics.status;
+    const catalogLineTotalValue = inventoryLineTotalValue(displayQuantity, item.unitCost);
 
     const handleSaveEdit = async () => {
       try {

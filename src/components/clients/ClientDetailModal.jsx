@@ -453,6 +453,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementQuestionnaireName, setEngagementQuestionnaireName] = useState('');
     const [engagementCustomFieldsDraft, setEngagementCustomFieldsDraft] = useState([]);
     const [selectedEngagementQuestionnaireId, setSelectedEngagementQuestionnaireId] = useState('');
+    const [engagementShareLink, setEngagementShareLink] = useState('');
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -534,6 +535,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         return normalizeEngagementQuestionnaires(latest?.customerEngagementQuestionnaires);
     };
 
+    const getEngagementSubmissionVersions = (questionnaireRow) => {
+        if (!questionnaireRow || typeof questionnaireRow !== 'object') return [];
+        const out = [];
+        const submissions = Array.isArray(questionnaireRow.submissions) ? questionnaireRow.submissions : [];
+        submissions.forEach((entry, idx) => {
+            if (!entry || typeof entry !== 'object') return;
+            const submittedAt = entry.submittedAt || null;
+            const responses = entry.responses || null;
+            if (!submittedAt && !responses) return;
+            out.push({
+                id: `${questionnaireRow.id || 'q'}-v-${idx + 1}`,
+                version: idx + 1,
+                submittedAt,
+                responses
+            });
+        });
+        if (out.length === 0 && (questionnaireRow.submittedAt || questionnaireRow.responses)) {
+            out.push({
+                id: `${questionnaireRow.id || 'q'}-v-1`,
+                version: 1,
+                submittedAt: questionnaireRow.submittedAt || null,
+                responses: questionnaireRow.responses || null
+            });
+        }
+        return out;
+    };
+
     const openEngagementPrefillModal = async (clearSubmission, questionnaireRow = null) => {
         if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
         const hasSubmission = questionnaireRow ? !!questionnaireRow.submittedAt : !!formData.customerEngagementSubmittedAt;
@@ -559,6 +587,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setEngagementBaseFormDef(null);
         setEngagementQuestionnaireName(questionnaireRow?.name || '');
         setSelectedEngagementQuestionnaireId(questionnaireRow?.id || '');
+        setEngagementShareLink('');
         try {
             const res = await fetch(`${window.location.origin}/api/public/customer-engagement-form`, { credentials: 'include' });
             const json = await res.json();
@@ -579,10 +608,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
-    const commitEngagementLinkFromModal = async () => {
+    const commitEngagementLinkFromModal = async ({ copyToClipboard = true } = {}) => {
         if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
         setEngagementBusy(true);
         setEngagementHint('');
+        let generatedUrl = '';
         try {
             const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, {
                 clearSubmission: engagementClearSubmission,
@@ -593,14 +623,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             });
             const payload = res?.data ?? res;
             if (payload?.url) {
-                try {
-                    await navigator.clipboard.writeText(payload.url);
-                    setEngagementHint('Questionnaire saved and share link copied.');
-                } catch {
+                generatedUrl = payload.url;
+                setEngagementShareLink(payload.url);
+                if (payload?.questionnaireId) {
+                    setSelectedEngagementQuestionnaireId(String(payload.questionnaireId));
+                }
+                if (copyToClipboard) {
+                    try {
+                        await navigator.clipboard.writeText(payload.url);
+                        setEngagementHint('Questionnaire saved and share link copied.');
+                    } catch {
+                        setEngagementHint('Questionnaire saved. Share link is ready.');
+                    }
+                } else {
                     setEngagementHint('Questionnaire saved. Share link is ready.');
                 }
             }
-            setShowEngagementPrefillModal(false);
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
             if (lead) {
@@ -619,17 +657,49 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             : lead.activityLog || prev.activityLog
                 }));
             }
-            setEngagementHint(
-                engagementClearSubmission
-                    ? 'New link created. Previous submission was cleared.'
-                    : 'Link created. Copy and send it to your contact.'
-            );
+            if (!generatedUrl) {
+                setEngagementHint(
+                    engagementClearSubmission
+                        ? 'New link created. Previous submission was cleared.'
+                        : 'Link created. Copy and send it to your contact.'
+                );
+            }
+            return generatedUrl;
         } catch (e) {
             setEngagementHint(e.message || 'Could not create link');
+            return '';
         } finally {
             setEngagementBusy(false);
             setTimeout(() => setEngagementHint(''), 5000);
         }
+    };
+
+    const handleCopyEngagementLinkFromModal = async () => {
+        let url = String(engagementShareLink || '').trim();
+        if (!url) {
+            url = await commitEngagementLinkFromModal({ copyToClipboard: false });
+        }
+        if (!url) return;
+        try {
+            await navigator.clipboard.writeText(url);
+            setEngagementHint('Share link copied.');
+        } catch {
+            setEngagementHint('Could not copy link.');
+        }
+        setTimeout(() => setEngagementHint(''), 4000);
+    };
+
+    const handleEmailEngagementLinkFromModal = async () => {
+        let url = String(engagementShareLink || '').trim();
+        if (!url) {
+            url = await commitEngagementLinkFromModal({ copyToClipboard: false });
+        }
+        if (!url) return;
+        const subject = encodeURIComponent(`Customer engagement questionnaire: ${engagementQuestionnaireName || 'Site visit'}`);
+        const body = encodeURIComponent(
+            `Hi,\n\nPlease complete the customer engagement questionnaire using the link below:\n\n${url}\n\nThank you.`
+        );
+        window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
     };
 
     useEffect(() => {
@@ -8416,9 +8486,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     >
                         <div className={`flex items-start justify-between gap-3 border-b px-6 py-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div>
-                                <h2 className="text-lg font-semibold">Questionnaire editor</h2>
+                                <h2 className="text-lg font-semibold">Questionnaire platform</h2>
                                 <p className={`mt-1 text-xs leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    Opened from the questionnaire list. Edit it here as your contact will see it, then generate a fresh share link.
+                                    Edit and resend from one place: manage versions, generate/copy/email links, and review submissions.
                                 </p>
                             </div>
                             <button
@@ -8449,6 +8519,81 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         {!String(engagementQuestionnaireName || '').trim() ? (
                                             <p className={`mt-1 text-[11px] ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
                                                 Name is required to create a link.
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    {(() => {
+                                        const selectedRow =
+                                            getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId) || null;
+                                        const versions = getEngagementSubmissionVersions(selectedRow);
+                                        return (
+                                            <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <h4 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                        Submission versions
+                                                    </h4>
+                                                    <span className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                        {versions.length} submitted
+                                                    </span>
+                                                </div>
+                                                {versions.length === 0 ? (
+                                                    <p className={`mt-2 text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                        No submissions yet. Generate and share a link to collect the first response.
+                                                    </p>
+                                                ) : (
+                                                    <div className="mt-2 space-y-1.5">
+                                                        {versions
+                                                            .slice()
+                                                            .reverse()
+                                                            .map((v) => (
+                                                                <div key={v.id} className={`flex items-center justify-between rounded border px-2.5 py-1.5 text-xs ${isDark ? 'border-gray-700 bg-gray-800/60 text-gray-300' : 'border-gray-200 bg-white text-gray-700'}`}>
+                                                                    <span>Version {v.version}</span>
+                                                                    <span>{v.submittedAt ? new Date(v.submittedAt).toLocaleString('en-ZA') : 'Unknown date'}</span>
+                                                                </div>
+                                                            ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                    <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <h4 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                Share actions
+                                            </h4>
+                                            {engagementShareLink ? (
+                                                <span className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Link ready</span>
+                                            ) : null}
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={engagementBusy}
+                                                onClick={() => commitEngagementLinkFromModal({ copyToClipboard: false })}
+                                                className={`text-[11px] px-2.5 py-1 rounded border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'} disabled:opacity-50`}
+                                            >
+                                                {engagementBusy ? 'Saving…' : 'Generate / resend link'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={engagementBusy}
+                                                onClick={handleCopyEngagementLinkFromModal}
+                                                className={`text-[11px] px-2.5 py-1 rounded border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'} disabled:opacity-50`}
+                                            >
+                                                Copy link
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={engagementBusy}
+                                                onClick={handleEmailEngagementLinkFromModal}
+                                                className={`text-[11px] px-2.5 py-1 rounded border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'} disabled:opacity-50`}
+                                            >
+                                                Email link
+                                            </button>
+                                        </div>
+                                        {engagementShareLink ? (
+                                            <p className={`mt-2 break-all rounded border px-2 py-1 text-[11px] ${isDark ? 'border-gray-700 bg-gray-800/60 text-gray-300' : 'border-gray-200 bg-white text-gray-700'}`}>
+                                                {engagementShareLink}
                                             </p>
                                         ) : null}
                                     </div>
@@ -8661,10 +8806,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     !engagementFormDef ||
                                     !String(engagementQuestionnaireName || '').trim()
                                 }
-                                onClick={commitEngagementLinkFromModal}
+                                onClick={() => commitEngagementLinkFromModal({ copyToClipboard: true })}
                                 className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
                             >
-                                {engagementBusy ? 'Creating…' : 'Create link'}
+                                {engagementBusy ? 'Saving…' : 'Save + copy link'}
                             </button>
                         </div>
                     </div>
