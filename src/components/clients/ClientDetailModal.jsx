@@ -8632,10 +8632,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         aria-modal="true"
                         aria-labelledby="lead-proposal-wizard-title"
                     >
-                        <div className={`shrink-0 border-b px-5 py-4 ${isDark ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gradient-to-r from-primary-50/80 to-white'}`}>
+                        <div className={`shrink-0 border-b px-6 py-5 sm:px-8 sm:py-6 ${isDark ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gradient-to-r from-primary-50/80 to-white'}`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                    <h2 id="lead-proposal-wizard-title" className="text-lg font-bold tracking-tight">
+                                    <h2 id="lead-proposal-wizard-title" className="text-xl font-bold tracking-tight">
                                         {leadProposalWizardEditIndex != null ? 'Edit proposal process' : 'Add proposal'}
                                     </h2>
                                     <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -8684,14 +8684,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             }`}
                                         >
                                             <span className="opacity-80 mr-1">{s.step}.</span>
-                                            {s.label.length > 28 ? `${s.label.slice(0, 26)}…` : s.label}
+                                            {s.label.length > 48 ? `${s.label.slice(0, 46)}…` : s.label}
                                         </button>
                                     );
                                 })}
                             </div>
                         </div>
 
-                        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
                             {leadProposalWizardHint ? (
                                 <div
                                     className={`mb-3 rounded-lg border px-3 py-2 text-xs ${isDark ? 'border-amber-700/50 bg-amber-900/20 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
@@ -8706,7 +8706,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 const selectedQ = w.engagementQuestionnaireId
                                     ? qn.find((q) => String(q.id || '') === String(w.engagementQuestionnaireId))
                                     : null;
-                                const stepPanelCls = `rounded-xl border p-4 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50/80'}`;
+                                const stepPanelCls = `rounded-xl border p-5 sm:p-6 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50/80'}`;
                                 const labelCls = `block text-xs font-semibold mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
                                 const inputCls = `w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`;
 
@@ -8905,7 +8905,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             })()}
                         </div>
 
-                        <div className={`shrink-0 flex flex-wrap items-center justify-between gap-2 border-t px-5 py-4 ${isDark ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+                        <div className={`shrink-0 flex flex-wrap items-center justify-between gap-2 border-t px-6 py-4 sm:px-8 ${isDark ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
