@@ -1878,6 +1878,16 @@ const DatabaseAPI = {
         return response;
     },
 
+    /** Admin-only: delete all stock movements for a SKU and zero LocationInventory + catalog quantities. */
+    async resetSkuLedgerAndStock({ sku, confirmSku }) {
+        const response = await this.makeRequest('/manufacturing/inventory/reset-sku-ledger', {
+            method: 'POST',
+            body: JSON.stringify({ sku, confirmSku })
+        });
+        this.invalidateInventoryCache();
+        return response;
+    },
+
     // MANUFACTURING OPERATIONS - STOCK LOCATIONS
     async getStockLocations() {
         const raw = await this.makeRequest('/manufacturing/locations');

@@ -4496,9 +4496,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {item.type === 'final_product' ? (
                         <div className="space-y-1">
                           <div className="text-xs font-semibold text-gray-900">Total: {item.quantity || 0}</div>
-                          {item.buildableUnits !== undefined && item.buildableUnits !== null ? (
-                            <div className="text-xs text-blue-700">Buildable: {item.buildableUnits}</div>
-                          ) : null}
                           <div className="text-xs">
                             <span className="text-orange-600">In-Prod: {(item.inProductionQuantity || 0)}</span>
                             {' • '}

@@ -111,39 +111,14 @@ function parseBomComponents(rawComponents) {
   }
 }
 
-function computeBuildableUnitsFromComponents(components, availableBySku) {
-  if (!Array.isArray(components) || components.length === 0) return null
-  let buildableUnits = Number.POSITIVE_INFINITY
-  let hasValidComponent = false
-
-  for (const component of components) {
-    const sku = String(component?.sku || '').trim()
-    const requiredQty = parseFiniteNumber(component?.quantity, 0)
-    if (!sku || requiredQty <= 0) continue
-
-    hasValidComponent = true
-    const availableQty = parseFiniteNumber(availableBySku.get(sku), 0)
-    const unitsFromComponent = Math.floor(Math.max(0, availableQty) / requiredQty)
-    buildableUnits = Math.min(buildableUnits, unitsFromComponent)
-  }
-
-  if (!hasValidComponent || !Number.isFinite(buildableUnits)) return null
-  return Math.max(0, buildableUnits)
-}
-
-async function applyFinalProductBuildableUnits(items = []) {
+/** Enrich final-product rows with BOM-derived unit cost when the catalog row lacks it. Does not alter quantity. */
+async function applyFinalProductBomUnitCost(items = []) {
   if (!Array.isArray(items) || items.length === 0) return items
 
-  const availableBySku = new Map()
   const finalProductSkus = new Set()
-
   for (const item of items) {
     const sku = String(item?.sku || '').trim()
     if (!sku) continue
-    const quantity = parseFiniteNumber(item?.quantity, 0)
-    // Use on-hand quantity for buildable calculations.
-    // allocatedQuantity is template/global in some views and can understate local availability.
-    availableBySku.set(sku, quantity)
     if (String(item?.type || '').toLowerCase() === 'final_product') {
       finalProductSkus.add(sku)
     }
@@ -185,27 +160,11 @@ async function applyFinalProductBuildableUnits(items = []) {
       return sum + (qty * unitCost)
     }, 0)
     const bomUnitCost = bomTotalMaterialCost > 0 ? bomTotalMaterialCost : computedBomUnitCost
-    const hasBomUnitCost = bomUnitCost > 0
-
-    const buildableUnits = computeBuildableUnitsFromComponents(components, availableBySku)
-    if (buildableUnits == null) {
-      if (!hasBomUnitCost) return item
-      return {
-        ...item,
-        unitCost: bomUnitCost
-      }
-    }
-    const currentQuantity = parseFiniteNumber(item?.quantity, 0)
-    const displayQuantity = Math.max(currentQuantity, buildableUnits)
-    const reorderPoint = parseFiniteNumber(item?.reorderPoint, 0)
-    const displayStatus = getStatusFromQuantity(displayQuantity, reorderPoint)
+    if (!(bomUnitCost > 0)) return item
 
     return {
       ...item,
-      quantity: displayQuantity,
-      ...(hasBomUnitCost ? { unitCost: bomUnitCost } : {}),
-      buildableUnits,
-      status: displayStatus
+      unitCost: bomUnitCost
     }
   })
 }
@@ -871,7 +830,7 @@ async function buildAllLocationsInventoryResponse() {
  */
 async function buildInventoryLocationValueSummary() {
   // Keep summary valuation aligned with inventory list rows by applying the
-  // same final-product transformations (buildable quantity + BOM-based unit cost).
+  // same final-product BOM-based unit cost enrichment.
   const stockLocations = await prisma.stockLocation.findMany({
     orderBy: [{ code: 'asc' }]
   })
@@ -882,7 +841,7 @@ async function buildInventoryLocationValueSummary() {
 
   for (const loc of stockLocations) {
     const locationRows = await buildLocationInventoryResponse(loc.id)
-    const transformedRows = await applyFinalProductBuildableUnits(locationRows)
+    const transformedRows = await applyFinalProductBomUnitCost(locationRows)
 
     let locationTotalValue = 0
     let locationTotalUnits = 0
@@ -2551,6 +2510,86 @@ async function handler(req, res) {
       return respondInventoryLocationValueSummary(res)
     }
 
+    /**
+     * Destructive admin reset: delete all StockMovement rows for one SKU and zero on-hand
+     * everywhere (LocationInventory + all InventoryItem rows for that SKU).
+     * POST /api/manufacturing/inventory/reset-sku-ledger
+     * Body: { "sku": "YOUR-SKU", "confirmSku": "YOUR-SKU" } (must match exactly)
+     */
+    if (resourceType === 'inventory' && id === 'reset-sku-ledger') {
+      if (req.method !== 'POST') {
+        return badRequest(res, 'Use POST with JSON body { sku, confirmSku }')
+      }
+      const canReset = isAdminRole(req.user?.role) || isSuperAdminUser(req.user)
+      if (!canReset) {
+        return forbidden(res, 'Only administrators can reset SKU stock and movement history.')
+      }
+      try {
+        const body = await parseJsonBody(req)
+        const sku = String(body?.sku ?? '').trim()
+        const confirmSku = String(body?.confirmSku ?? '').trim()
+        if (!sku || sku !== confirmSku) {
+          return badRequest(res, 'sku and confirmSku are required and must match exactly (typo protection).')
+        }
+
+        const [movProbe, liProbe, itemProbe] = await Promise.all([
+          prisma.stockMovement.findFirst({ where: { sku }, select: { id: true } }),
+          prisma.locationInventory.findFirst({ where: { sku }, select: { id: true } }),
+          prisma.inventoryItem.findFirst({ where: { sku }, select: { id: true } })
+        ])
+        if (!movProbe && !liProbe && !itemProbe) {
+          return notFound(res, `No movements, location stock, or catalog rows found for SKU "${sku}".`)
+        }
+
+        const outcome = await prisma.$transaction(async (tx) => {
+          const movDel = await tx.stockMovement.deleteMany({ where: { sku } })
+          await tx.locationInventory.updateMany({
+            where: { sku },
+            data: {
+              quantity: 0,
+              status: 'out_of_stock',
+              lastRestocked: null
+            }
+          })
+          const liCount = await tx.locationInventory.count({ where: { sku } })
+          const catalogRows = await tx.inventoryItem.findMany({ where: { sku } })
+          for (const row of catalogRows) {
+            const st = getStatusFromQuantity(0, row.reorderPoint || 0)
+            await tx.inventoryItem.update({
+              where: { id: row.id },
+              data: {
+                quantity: 0,
+                allocatedQuantity: 0,
+                totalValue: computedInventoryTotalValue(0, row.unitCost || 0),
+                status: st,
+                lastRestocked: null
+              }
+            })
+          }
+          return {
+            movementsDeleted: movDel.count,
+            locationInventoryRowsZeroed: liCount,
+            catalogRowsUpdated: catalogRows.length
+          }
+        })
+
+        auditManufacturing('reset', 'inventory-reset-sku', sku, {
+          summary: `Reset SKU ${sku}: deleted stock movements and zeroed location + catalog quantities`,
+          ...outcome
+        })
+        return ok(res, {
+          ok: true,
+          sku,
+          warning:
+            'Open sales or production workflows may still reference this SKU; allocations were zeroed on catalog rows only. Review orders if needed.',
+          ...outcome
+        })
+      } catch (error) {
+        console.error('❌ reset-sku-ledger failed:', error)
+        return serverError(res, 'Failed to reset SKU ledger and stock', error.message)
+      }
+    }
+
     // LIST (GET /api/manufacturing/inventory)
     if (req.method === 'GET' && !id) {
       try {
@@ -2586,8 +2625,7 @@ async function handler(req, res) {
           items = await buildAllLocationsInventoryResponse()
         }
 
-        // Final products should display buildable totals based on component availability.
-        items = await applyFinalProductBuildableUnits(items)
+        items = await applyFinalProductBomUnitCost(items)
 
         // Optional pagination: page (1-based), pageSize (max 200). Omit for full list.
         const page = Math.max(1, parseInt(req.query?.page || req.query?.pageNumber, 10) || 0) || 1
