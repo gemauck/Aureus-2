@@ -102,7 +102,24 @@ export async function reverseStockMovementDeletionTx(tx, id, performedBy = 'Syst
     })
   }
 
-  const newLocQty = (li.quantity || 0) + reverseQty
+  let newLocQty = (li.quantity || 0) + reverseQty
+
+  // Legacy safety: some historic movements were saved without stable location ids.
+  // If the resolved row would go negative, find another row for this SKU that can
+  // absorb the reversal (typically where the original import quantity currently sits).
+  if (newLocQty < 0) {
+    const fallbackRows = await tx.locationInventory.findMany({
+      where: { sku },
+      orderBy: [{ quantity: 'desc' }, { updatedAt: 'desc' }]
+    })
+
+    const fallback = fallbackRows.find((row) => ((row.quantity || 0) + reverseQty) >= 0)
+    if (fallback) {
+      li = fallback
+      newLocQty = (li.quantity || 0) + reverseQty
+    }
+  }
+
   if (newLocQty < 0) {
     throw httpError(
       400,
