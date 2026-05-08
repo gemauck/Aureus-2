@@ -780,6 +780,34 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
+    const handleOpenEngagementReport = async (questionnaireId) => {
+        if (!questionnaireId) return;
+        setSelectedEngagementQuestionnaireId(questionnaireId);
+        if (!formData?.id || !window.DatabaseAPI?.getLead) {
+            setShowEngagementResponsesModal(true);
+            return;
+        }
+        setEngagementBusy(true);
+        try {
+            const r2 = await window.DatabaseAPI.getLead(formData.id);
+            const lead = r2?.data?.lead || r2?.lead;
+            if (lead) {
+                setFormData((prev) => ({
+                    ...prev,
+                    customerEngagementSubmittedAt: lead.customerEngagementSubmittedAt,
+                    customerEngagementResponses: lead.customerEngagementResponses,
+                    customerEngagementQuestionnaires: lead.customerEngagementQuestionnaires
+                }));
+            }
+            setShowEngagementResponsesModal(true);
+        } catch (e) {
+            setEngagementHint(e.message || 'Could not load report');
+            setTimeout(() => setEngagementHint(''), 4000);
+        } finally {
+            setEngagementBusy(false);
+        }
+    };
+
     // Track last processed client data to detect changes
     const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, kyc: null, id: null });
     
@@ -7876,9 +7904,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <div className="mt-3 space-y-2">
                                         {(() => {
                                             const questionnaires = getEngagementQuestionnaires();
-                                            const selectedId =
-                                                selectedEngagementQuestionnaireId || (questionnaires[0]?.id || '');
-                                            const selected = questionnaires.find((q) => q.id === selectedId) || null;
                                             return (
                                                 <>
                                                     {questionnaires.length === 0 ? (
@@ -7891,91 +7916,78 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 Questionnaires
                                                             </div>
                                                             <div className={`${isDark ? 'bg-gray-900/20' : 'bg-white'} divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-100'}`}>
-                                                                {questionnaires.map((q) => (
-                                                                    <button
-                                                                        key={q.id}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setSelectedEngagementQuestionnaireId(q.id || '');
-                                                                            openEngagementPrefillModal(false, q);
-                                                                        }}
-                                                                        className={`w-full px-3 py-2 text-left transition ${
-                                                                            selectedId === q.id
-                                                                                ? (isDark ? 'bg-primary-900/30' : 'bg-primary-50')
-                                                                                : (isDark ? 'hover:bg-gray-800/60' : 'hover:bg-gray-50')
-                                                                        }`}
-                                                                    >
-                                                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                            <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                                                {q.name || 'Customer engagement questionnaire'}
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1">
-                                                                                {q.submittedAt ? (
-                                                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>Submitted</span>
-                                                                                ) : null}
-                                                                                {q.linkActive ? (
-                                                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDark ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>Active link</span>
-                                                                                ) : null}
+                                                                {questionnaires.map((q) => {
+                                                                    const statusBits = [];
+                                                                    if (q.submittedAt) statusBits.push('Submitted');
+                                                                    if (q.linkActive) statusBits.push('Active link');
+                                                                    const hasReport = !!(q.responses || q.submittedAt);
+                                                                    return (
+                                                                        <div
+                                                                            key={q.id}
+                                                                            className={`px-3 py-2 transition ${isDark ? 'hover:bg-gray-800/60' : 'hover:bg-gray-50'}`}
+                                                                        >
+                                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setSelectedEngagementQuestionnaireId(q.id || '');
+                                                                                        openEngagementPrefillModal(false, q);
+                                                                                    }}
+                                                                                    className={`text-left ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                                                >
+                                                                                    <div className="text-sm font-semibold">
+                                                                                        {q.name || 'Customer engagement questionnaire'}
+                                                                                    </div>
+                                                                                    <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                                                        {[
+                                                                                            q.tokenCreatedAt
+                                                                                                ? `Updated ${new Date(q.tokenCreatedAt).toLocaleString('en-ZA')}`
+                                                                                                : 'No link generated yet',
+                                                                                            statusBits.length ? statusBits.join(' • ') : null
+                                                                                        ]
+                                                                                            .filter(Boolean)
+                                                                                            .join(' • ')}
+                                                                                    </div>
+                                                                                </button>
+                                                                                <div className="flex items-center gap-1.5 text-[11px]">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        disabled={engagementBusy}
+                                                                                        onClick={() => openEngagementPrefillModal(false, q)}
+                                                                                        className={`px-2.5 py-1 rounded border ${
+                                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                                                        }`}
+                                                                                    >
+                                                                                        Open
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        disabled={engagementBusy || !hasReport}
+                                                                                        onClick={() => handleOpenEngagementReport(q.id || '')}
+                                                                                        className={`px-2.5 py-1 rounded border ${
+                                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                                                        } disabled:opacity-50`}
+                                                                                    >
+                                                                                        Report
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        disabled={engagementBusy}
+                                                                                        onClick={() => handleEngagementDelete(q.id || '')}
+                                                                                        className={`px-2.5 py-1 rounded ${
+                                                                                            isDark ? 'text-red-300 hover:bg-gray-700' : 'text-red-700 hover:bg-red-50'
+                                                                                        } disabled:opacity-50`}
+                                                                                    >
+                                                                                        Delete
+                                                                                    </button>
+                                                                                </div>
                                                                             </div>
                                                                         </div>
-                                                                        <div className={`mt-0.5 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                                            {q.tokenCreatedAt ? `Updated ${new Date(q.tokenCreatedAt).toLocaleString('en-ZA')}` : 'No link generated yet'}
-                                                                        </div>
-                                                                    </button>
-                                                                ))}
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}
-
-                                                    {selected ? (
-                                                        <div className={`rounded-xl border p-3 ${isDark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50/70'}`}>
-                                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                <div>
-                                                                    <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                                        {selected.name || 'Customer engagement questionnaire'}
-                                                                    </div>
-                                                                    <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                                        Open in the platform to edit, review responses, and manage sharing.
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={engagementBusy}
-                                                                        onClick={() => openEngagementPrefillModal(false, selected)}
-                                                                        className={`text-[11px] px-2.5 py-1 rounded border ${
-                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                                        }`}
-                                                                    >
-                                                                        Open in platform
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={engagementBusy || !selected.responses}
-                                                                        className={`text-[11px] px-2.5 py-1 rounded border ${
-                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                                        } disabled:opacity-50`}
-                                                                        onClick={() => {
-                                                                            setSelectedEngagementQuestionnaireId(selected.id || '');
-                                                                            setShowEngagementResponsesModal(true);
-                                                                        }}
-                                                                    >
-                                                                        View report
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={engagementBusy}
-                                                                        onClick={() => handleEngagementDelete(selected.id || '')}
-                                                                        className={`text-[11px] px-2.5 py-1 rounded ${
-                                                                            isDark ? 'text-red-300 hover:bg-gray-700' : 'text-red-700 hover:bg-red-50'
-                                                                        } disabled:opacity-50`}
-                                                                    >
-                                                                        Delete
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ) : null}
                                                 </>
                                             );
                                         })()}
