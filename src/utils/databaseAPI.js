@@ -1260,6 +1260,17 @@ const DatabaseAPI = {
         return response;
     },
 
+    async deleteCustomerEngagementQuestionnaire(leadId, questionnaireId) {
+        if (!questionnaireId) throw new Error('questionnaireId required');
+        const response = await this.makeRequest(`/leads/${encodeURIComponent(leadId)}/customer-engagement-link`, {
+            method: 'DELETE',
+            body: JSON.stringify({ questionnaireId, remove: true })
+        });
+        this.clearCache(`/leads/${leadId}`);
+        this.clearCache('/leads');
+        return response;
+    },
+
     async createLead(leadData) {
         const response = await this.makeRequest('/leads', {
             method: 'POST',

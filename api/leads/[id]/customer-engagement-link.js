@@ -44,7 +44,7 @@ function summarizeQuestionnaire(q) {
  *     prefill?: object | null
  *   }
  * DELETE body/query:
- *   { questionnaireId?: string } (if omitted, revoke all)
+ *   { questionnaireId?: string, remove?: boolean } (remove=true deletes questionnaire row)
  */
 async function handler(req, res) {
   try {
@@ -79,10 +79,16 @@ async function handler(req, res) {
     if (req.method === 'DELETE') {
       const body = req.body && typeof req.body === 'object' ? req.body : {}
       const questionnaireId = String(body.questionnaireId || req.query?.questionnaireId || '').trim()
+      const removeQuestionnaire = body.remove === true || String(req.query?.remove || '').toLowerCase() === 'true'
       const nowIso = new Date().toISOString()
       const current = normalizeQuestionnaires(lead.customerEngagementQuestionnaires)
+      if (removeQuestionnaire && !questionnaireId) {
+        return badRequest(res, 'questionnaireId required when remove=true')
+      }
       const next =
-        questionnaireId.length > 0
+        removeQuestionnaire
+          ? current.filter((q) => q.id !== questionnaireId)
+          : questionnaireId.length > 0
           ? current.map((q) =>
               q.id === questionnaireId
                 ? {
@@ -112,6 +118,7 @@ async function handler(req, res) {
         }
       })
       return ok(res, {
+        removed: removeQuestionnaire,
         revoked: true,
         revokedAll: questionnaireId.length === 0,
         questionnaireId: questionnaireId || null,

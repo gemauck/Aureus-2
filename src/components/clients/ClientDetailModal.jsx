@@ -760,6 +760,40 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
+    const handleEngagementDelete = async (questionnaireId) => {
+        if (!formData?.id || !window.DatabaseAPI?.deleteCustomerEngagementQuestionnaire) return;
+        if (!questionnaireId) return;
+        if (!window.confirm('Delete this questionnaire permanently? This cannot be undone.')) return;
+        setEngagementBusy(true);
+        setEngagementHint('');
+        try {
+            await window.DatabaseAPI.deleteCustomerEngagementQuestionnaire(formData.id, questionnaireId);
+            setEngagementLinkUrl('');
+            setEngagementLinkUrlsById((prev) => {
+                const next = { ...(prev || {}) };
+                delete next[questionnaireId];
+                return next;
+            });
+            const r2 = await window.DatabaseAPI.getLead(formData.id);
+            const lead = r2?.data?.lead || r2?.lead;
+            if (lead) {
+                setFormData((prev) => ({
+                    ...prev,
+                    customerEngagementQuestionnaires: lead.customerEngagementQuestionnaires
+                }));
+            }
+            if (selectedEngagementQuestionnaireId === questionnaireId) {
+                setSelectedEngagementQuestionnaireId('');
+            }
+            setEngagementHint('Questionnaire deleted.');
+        } catch (e) {
+            setEngagementHint(e.message || 'Could not delete questionnaire');
+        } finally {
+            setEngagementBusy(false);
+            setTimeout(() => setEngagementHint(''), 4000);
+        }
+    };
+
     const handleEngagementCopy = async () => {
         const url = engagementLinkUrl;
         if (!url) {
@@ -7975,6 +8009,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             } disabled:opacity-50`}
                                                         >
                                                             Revoke
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={engagementBusy}
+                                                            onClick={() => handleEngagementDelete(q.id || '')}
+                                                            className={`text-[11px] px-2.5 py-1 rounded ${
+                                                                isDark ? 'text-red-300 hover:bg-gray-700' : 'text-red-700 hover:bg-red-50'
+                                                            } disabled:opacity-50`}
+                                                        >
+                                                            Delete
                                                         </button>
                                                     </div>
                                                 </div>
