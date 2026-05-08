@@ -354,6 +354,7 @@ try {
   const [activeTab, setActiveTab] = useState(getInitialTabFromURL);
   const [inventory, setInventory] = useState([]);
   const [inventoryLoadedFromAPI, setInventoryLoadedFromAPI] = useState(false);
+  const [manufacturingServiceWarning, setManufacturingServiceWarning] = useState('');
   /** Per stock location: value & units (GET …/inventory/location-value-summary). Independent of inventory tab filter. */
   const [inventoryValueByLocationSummary, setInventoryValueByLocationSummary] = useState(null);
   const [inventoryValueByLocationSummaryLoaded, setInventoryValueByLocationSummaryLoaded] = useState(false);
@@ -672,6 +673,45 @@ try {
   const [manufacturingActivityTotal, setManufacturingActivityTotal] = useState(0);
   const [manufacturingActivityLoading, setManufacturingActivityLoading] = useState(false);
   const [manufacturingActivityError, setManufacturingActivityError] = useState(null);
+  const getHttpStatusFromError = (error) => {
+    const status = error?.status ?? error?.statusCode ?? error?.response?.status ?? error?.data?.status;
+    const parsed = Number(status);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const isManufacturingServiceUnavailableError = (error) => {
+    const status = getHttpStatusFromError(error);
+    if (status === 502 || status === 503 || status === 504) return true;
+    const code = String(
+      error?.code ||
+      error?.error?.code ||
+      error?.response?.data?.error?.code ||
+      error?.data?.error?.code ||
+      ''
+    ).toUpperCase();
+    if (code.includes('UNAVAILABLE') || code.includes('TIMEOUT')) return true;
+    const message = String(
+      error?.message ||
+      error?.error?.message ||
+      error?.response?.data?.error?.message ||
+      error?.data?.error?.message ||
+      ''
+    ).toLowerCase();
+    return (
+      message.includes('bad gateway') ||
+      message.includes('gateway') ||
+      message.includes('service unavailable') ||
+      message.includes('timed out') ||
+      message.includes('timeout')
+    );
+  };
+  const updateManufacturingServiceWarningFromResults = (results = []) => {
+    const hasUnavailable = Array.isArray(results) && results.some((r) => r?.error && isManufacturingServiceUnavailableError(r.error));
+    setManufacturingServiceWarning(
+      hasUnavailable
+        ? 'Manufacturing service is temporarily unavailable (upstream 502/503). Showing cached/partial data where possible. Please retry in a moment.'
+        : ''
+    );
+  };
   const [manufacturingActivityExpandedId, setManufacturingActivityExpandedId] = useState(null);
   const manufacturingActivityPollRef = useRef(null);
   const inventoryAutoRefreshPollRef = useRef(null);
@@ -1088,15 +1128,25 @@ try {
 
         // Execute high-priority calls first so inventory view renders fast.
         if (primaryApiCalls.length > 0) {
-          await Promise.all(primaryApiCalls);
+          const primaryResults = await Promise.all(primaryApiCalls);
+          updateManufacturingServiceWarningFromResults(primaryResults);
         }
 
         // Continue loading secondary datasets in the background.
         if (deferredApiCalls.length > 0) {
           setTimeout(() => {
-            Promise.all(deferredApiCalls).catch((error) => {
-              console.error('Error loading deferred manufacturing datasets:', error);
-            });
+            Promise.all(deferredApiCalls)
+              .then((deferredResults) => {
+                updateManufacturingServiceWarningFromResults([...(deferredResults || [])]);
+              })
+              .catch((error) => {
+                console.error('Error loading deferred manufacturing datasets:', error);
+                if (isManufacturingServiceUnavailableError(error)) {
+                  setManufacturingServiceWarning(
+                    'Manufacturing service is temporarily unavailable (upstream 502/503). Showing cached/partial data where possible. Please retry in a moment.'
+                  );
+                }
+              });
           }, 0);
         }
 
@@ -1296,7 +1346,8 @@ try {
       }
 
       if (apiCalls.length > 0) {
-        await Promise.all(apiCalls);
+        const results = await Promise.all(apiCalls);
+        updateManufacturingServiceWarningFromResults(results);
         const endTime = performance.now();
         const loadTime = ((endTime - startTime) / 1000).toFixed(2);
       }
@@ -2351,6 +2402,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (available <= 0) status = 'out_of_stock';
     else if (available <= reorderPoint) status = 'low_stock';
     return { quantity, allocated, available, reorderPoint, status };
+  };
+
+  /** Per-location breakdown: API may send stale `loc.status`; derive from qty + catalog reorder point. */
+  const getLocationBreakdownStatus = (loc, catalogItem) => {
+    const available = toSafeNumber(loc?.quantity);
+    const reorderPoint = getItemReorderPoint(catalogItem || {});
+    if (available <= 0) return 'out_of_stock';
+    if (available <= reorderPoint) return 'low_stock';
+    return 'in_stock';
   };
 
   const formatMovementDateLabel = (movement) => {
@@ -13018,9 +13078,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <td className="px-3 py-2 text-gray-900">{loc.locationName || loc.locationCode || loc.locationId}</td>
                           <td className="px-3 py-2 text-right font-medium">{loc.quantity} {item.unit || 'pcs'}</td>
                           <td className="px-3 py-2 text-right">
-                            <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(loc.status || '')}`}>
-                              {(loc.status || '').replace('_', ' ')}
-                            </span>
+                            {(() => {
+                              const rowStatus = getLocationBreakdownStatus(loc, item);
+                              return (
+                                <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(rowStatus)}`}>
+                                  {rowStatus.replace('_', ' ')}
+                                </span>
+                              );
+                            })()}
                           </td>
                         </tr>
                       ))}
@@ -13716,6 +13781,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               ))}
             </div>
           </div>
+
+          {manufacturingServiceWarning && (
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                isDark
+                  ? 'bg-amber-900/20 border-amber-800 text-amber-100'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}
+              role="status"
+            >
+              {manufacturingServiceWarning}
+            </div>
+          )}
 
           {/* Content Area */}
           <div className="min-w-0 max-w-full">

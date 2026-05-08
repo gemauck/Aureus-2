@@ -705,8 +705,8 @@ async function buildLocationInventoryResponse(locationId) {
     const quantity = record.quantity ?? 0
     const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
     const unitCost = record.unitCost ?? template.unitCost ?? 0
-    const baseStatus = record.status || template.status
-    const status = baseStatus || getStatusFromQuantity(quantity, reorderPoint)
+    // Quantity is authoritative for stock state; stored/template status can be stale after transfers.
+    const status = getStatusFromQuantity(quantity, reorderPoint)
 
     return {
       // Spread the base inventory template first so we can
@@ -791,7 +791,7 @@ async function buildAllLocationsInventoryResponse() {
     const quantity = record.quantity ?? 0
     const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
     const unitCost = record.unitCost ?? template.unitCost ?? 0
-    const status = record.status || getStatusFromQuantity(quantity, reorderPoint)
+    const status = getStatusFromQuantity(quantity, reorderPoint)
 
     if (!bySku.has(sku)) {
       bySku.set(sku, {
@@ -870,57 +870,38 @@ async function buildAllLocationsInventoryResponse() {
  * Valuation rules match LocationInventory rows + template unitCost fallback.
  */
 async function buildInventoryLocationValueSummary() {
-  // Do not run sync here — it can take minutes (every SKU × every location).
-  // On-demand full materialization: POST /api/manufacturing/sync
-
-  const allTemplates = await prisma.inventoryItem.findMany({
-    orderBy: [{ locationId: 'asc' }, { updatedAt: 'desc' }]
-  })
-  const templateBySku = new Map()
-  for (const meta of allTemplates) {
-    if (!templateBySku.has(meta.sku)) {
-      templateBySku.set(meta.sku, meta)
-    }
-  }
-
+  // Keep summary valuation aligned with inventory list rows by applying the
+  // same final-product transformations (buildable quantity + BOM-based unit cost).
   const stockLocations = await prisma.stockLocation.findMany({
     orderBy: [{ code: 'asc' }]
   })
 
-  const records = await prisma.locationInventory.findMany({
-    select: {
-      locationId: true,
-      sku: true,
-      quantity: true,
-      unitCost: true
-    }
-  })
-
-  const aggByLocation = new Map()
-  for (const r of records) {
-    const template = templateBySku.get(r.sku) || {}
-    const quantity = Number(r.quantity) || 0
-    const unitCost = r.unitCost ?? template.unitCost ?? 0
-    const lineValue = computedInventoryTotalValue(quantity, unitCost)
-    const prev = aggByLocation.get(r.locationId) || { totalValue: 0, totalUnits: 0 }
-    prev.totalValue += lineValue
-    prev.totalUnits += quantity
-    aggByLocation.set(r.locationId, prev)
-  }
-
   let grandTotal = 0
   let totalUnitsOnHand = 0
-  const locations = stockLocations.map((loc) => {
-    const agg = aggByLocation.get(loc.id) || { totalValue: 0, totalUnits: 0 }
-    grandTotal += agg.totalValue
-    totalUnitsOnHand += agg.totalUnits
-    return {
+  const locations = []
+
+  for (const loc of stockLocations) {
+    const locationRows = await buildLocationInventoryResponse(loc.id)
+    const transformedRows = await applyFinalProductBuildableUnits(locationRows)
+
+    let locationTotalValue = 0
+    let locationTotalUnits = 0
+    for (const row of transformedRows) {
+      const quantity = parseFiniteNumber(row?.quantity, 0)
+      const unitCost = parseFiniteNumber(row?.unitCost, 0)
+      locationTotalUnits += quantity
+      locationTotalValue += computedInventoryTotalValue(quantity, unitCost)
+    }
+
+    grandTotal += locationTotalValue
+    totalUnitsOnHand += locationTotalUnits
+    locations.push({
       locationId: loc.id,
       code: loc.code || '',
       name: loc.name || '',
-      totalValue: agg.totalValue
-    }
-  })
+      totalValue: locationTotalValue
+    })
+  }
 
   return { locations, grandTotal, totalUnitsOnHand }
 }
@@ -2374,7 +2355,7 @@ async function handler(req, res) {
             const qty = rec.quantity ?? 0
             const rp = rec.reorderPoint ?? t.reorderPoint ?? 0
             const uc = rec.unitCost ?? t.unitCost ?? 0
-            const st = rec.status || getStatusFromQuantity(qty, rp)
+            const st = getStatusFromQuantity(qty, rp)
             const sp = firstSupplierPartFromJson(t.supplierPartNumbers || '[]')
             aoa.push([
               loc.id,
