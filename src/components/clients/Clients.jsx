@@ -9546,9 +9546,9 @@ const Clients = React.memo(() => {
             : selectedClient;
         
         return (
-        <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className={`min-h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Header with breadcrumb */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 shrink-0`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <button 
@@ -9570,8 +9570,8 @@ const Clients = React.memo(() => {
                 </div>
             </div>
 
-            {/* Full-page client detail content */}
-            <div className="p-6">
+            {/* Full-page client detail content — flex child so nested overlays stay inside main column (sidebar visible) */}
+            <div className="flex-1 min-h-0 flex flex-col p-6">
                 {ClientDetailModalComponent ? (
                     <ClientDetailModalComponent
                         key={editingClientId || 'new-client'}
@@ -9623,9 +9623,9 @@ const Clients = React.memo(() => {
         const selectedLead = selectedLeadFromList || selectedLeadFromRef;
         
         return (
-        <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className={`min-h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Header with breadcrumb */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 shrink-0`}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <button 
@@ -9648,8 +9648,8 @@ const Clients = React.memo(() => {
                 </div>
             </div>
 
-            {/* Full-page lead detail content - using unified ClientDetailModal */}
-            <div className="p-6">
+            {/* Full-page lead detail — flex child so proposal wizard overlays this column only (ERP chrome stays) */}
+            <div className="flex-1 min-h-0 flex flex-col p-6">
                 {ClientDetailModalComponent ? (
                     <ClientDetailModalComponent
                         client={selectedLead} // Use 'client' prop (ClientDetailModal handles both)

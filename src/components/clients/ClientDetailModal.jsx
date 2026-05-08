@@ -5416,8 +5416,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     };
 
     return (
-            <div className={isFullPage ? `w-full h-full ${isDark ? 'bg-gray-900' : 'bg-gray-50'}` : "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"}>
-                <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} ${isFullPage ? 'w-full h-full rounded-none' : 'rounded-lg w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh]'} overflow-hidden flex flex-col`}>
+            <div
+                className={
+                    isFullPage
+                        ? `relative flex flex-col flex-1 min-h-0 w-full ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`
+                        : 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4'
+                }
+            >
+                <div
+                    className={`${isDark ? 'bg-gray-800' : 'bg-white'} ${
+                        isFullPage
+                            ? 'relative flex flex-col flex-1 min-h-0 w-full rounded-none overflow-hidden'
+                            : 'rounded-lg w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden'
+                    } flex flex-col`}
+                >
                     {/* Breadcrumb Navigation */}
                     {isFullPage && (
                         <div className={`px-3 sm:px-6 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -8989,10 +9001,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             )}
 
             {showLeadProposalWizard && leadProposalWizardDraft ? (() => {
+                /** Full-page CRM: overlay only this detail panel so MainLayout sidebar/header stay visible. */
+                const embedProposalWizardInLayout = Boolean(isFullPage);
                 const leadProposalWizardOverlay = (
-                    <div className="fixed inset-0 z-[10050] flex min-h-0 flex-col overflow-hidden" role="presentation">
+                    <div
+                        className={
+                            embedProposalWizardInLayout
+                                ? 'absolute inset-0 z-[10050] flex min-h-0 flex-col overflow-hidden'
+                                : 'fixed inset-0 z-[10050] flex min-h-0 flex-col overflow-hidden bg-black/35'
+                        }
+                        role="presentation"
+                    >
                         <div
-                            className={`flex min-h-0 h-[100dvh] w-full max-w-none flex-1 flex-col overflow-hidden rounded-none shadow-none ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                            className={`flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden rounded-none shadow-none ${
+                                embedProposalWizardInLayout ? 'h-full' : 'h-[100dvh]'
+                            } ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="lead-proposal-wizard-title"
@@ -9801,6 +9824,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     </div>
                 </div>
                 );
+                if (embedProposalWizardInLayout) {
+                    return leadProposalWizardOverlay;
+                }
                 return typeof document !== 'undefined' &&
                     window.ReactDOM &&
                     typeof window.ReactDOM.createPortal === 'function'
