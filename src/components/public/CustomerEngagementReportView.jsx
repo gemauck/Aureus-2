@@ -185,11 +185,11 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                                 <div className="flex items-center gap-4">
                                     {letterhead.logoDataUrl ? (
-                                        <div className="shrink-0 rounded-xl bg-white/95 p-2 shadow-lg dark:bg-white">
+                                        <div className="shrink-0 rounded-xl bg-white p-2.5 shadow-lg ring-1 ring-white/80 dark:bg-white">
                                             <img
                                                 src={letterhead.logoDataUrl}
                                                 alt=""
-                                                className="h-11 w-auto max-w-[140px] object-contain sm:h-12"
+                                                className="h-11 w-auto max-w-[150px] object-contain sm:h-12"
                                             />
                                         </div>
                                     ) : (
@@ -205,7 +205,7 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                                             Submitted questionnaire
                                         </p>
                                         <h1
-                                            className="inline-block rounded-md bg-slate-950/35 px-2 py-0.5 text-2xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] sm:text-3xl"
+                                            className="inline-block rounded-md bg-white/95 px-2.5 py-0.5 text-2xl font-bold tracking-tight text-slate-900 shadow-sm sm:text-3xl"
                                             style={{ fontFamily: FONT.display }}
                                         >
                                             {companyName}
