@@ -2593,6 +2593,50 @@ async function handler(req, res) {
         let nextSkuNumber = maxNumber + 1
         const created = []
         const errors = []
+        const skippedDuplicates = []
+
+        const normalizeFingerprintText = (val) =>
+          String(val || '')
+            .trim()
+            .replace(/\s+/g, ' ')
+            .toLowerCase()
+
+        const normalizeFingerprintNumber = (val) => {
+          const n = Number(val)
+          if (!Number.isFinite(n)) return '0'
+          return Number.isInteger(n) ? String(n) : String(n)
+        }
+
+        const mainWarehouse = await prisma.stockLocation.findFirst({
+          where: { code: 'LOC001' },
+          select: { id: true }
+        })
+
+        // Idempotency guard for bulk uploads:
+        // skip rows that map to an existing canonical fingerprint so re-imports
+        // or duplicate lines in the same file do not create new SKUs repeatedly.
+        const fingerprintSet = new Set()
+        const existingForFingerprint = await prisma.inventoryItem.findMany({
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            quantity: true,
+            locationId: true,
+            legacyPartNumber: true,
+            manufacturingPartNumber: true
+          }
+        })
+        for (const row of existingForFingerprint) {
+          const key = [
+            String(row.locationId || ''),
+            normalizeFingerprintText(row.name),
+            normalizeFingerprintNumber(row.quantity),
+            normalizeFingerprintText(row.legacyPartNumber),
+            normalizeFingerprintText(row.manufacturingPartNumber)
+          ].join('|')
+          fingerprintSet.add(key)
+        }
 
         // Helper functions
         const determineCategory = (partNumber, description) => {
@@ -2704,17 +2748,30 @@ async function handler(req, res) {
               })
               if (byCode) locationId = byCode.id
             }
-            if (!locationId) {
-              const mainWarehouse = await prisma.stockLocation.findFirst({
-                where: { code: 'LOC001' }
-              })
-              if (mainWarehouse) {
-                locationId = mainWarehouse.id
-              }
+            if (!locationId && mainWarehouse?.id) {
+              locationId = mainWarehouse.id
             }
             
             // Add locationId to createData
             createData.locationId = locationId
+
+            const importFingerprint = [
+              String(locationId || ''),
+              normalizeFingerprintText(name),
+              normalizeFingerprintNumber(quantity),
+              normalizeFingerprintText(itemData.legacyPartNumber),
+              normalizeFingerprintText(itemData.manufacturingPartNumber)
+            ].join('|')
+            if (fingerprintSet.has(importFingerprint)) {
+              skippedDuplicates.push({
+                name,
+                quantity,
+                locationId: locationId || null,
+                legacyPartNumber: String(itemData.legacyPartNumber || '').trim() || null,
+                manufacturingPartNumber: String(itemData.manufacturingPartNumber || '').trim() || null
+              })
+              continue
+            }
 
             // Try to create with new fields, fallback to core fields if columns don't exist
             let inventoryItem;
@@ -2781,6 +2838,7 @@ async function handler(req, res) {
             }
             
             created.push({ sku: inventoryItem.sku, name: inventoryItem.name })
+            fingerprintSet.add(importFingerprint)
           } catch (error) {
             errors.push({ 
               item: itemData.partNumber || itemData.name || 'Unknown', 
@@ -2790,16 +2848,19 @@ async function handler(req, res) {
         }
 
         auditManufacturing('create', 'inventory', 'bulk-import', {
-          summary: `Bulk import: ${created.length} created, ${errors.length} errors`,
+          summary: `Bulk import: ${created.length} created, ${errors.length} errors, ${skippedDuplicates.length} duplicates skipped`,
           createdCount: created.length,
-          errorCount: errors.length
+          errorCount: errors.length,
+          skippedDuplicateCount: skippedDuplicates.length
         })
         return ok(res, {
-          message: `Bulk import completed: ${created.length} items created, ${errors.length} errors`,
+          message: `Bulk import completed: ${created.length} items created, ${errors.length} errors, ${skippedDuplicates.length} duplicates skipped`,
           created: created.length,
           errors: errors.length,
+          skippedDuplicates: skippedDuplicates.length,
           createdItems: created,
-          errorItems: errors
+          errorItems: errors,
+          skippedDuplicateItems: skippedDuplicates.slice(0, 200)
         })
       } catch (error) {
         console.error('❌ Bulk import failed:', error)
