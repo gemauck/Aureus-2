@@ -591,6 +591,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             clearTimeout(autoSaveTimeoutRef.current);
             autoSaveTimeoutRef.current = null;
         }
+        // Proposal wizard: mergeLeadEngagementAfterQuestionnaireMutation updates formData; auto-save would call
+        // handleSaveLead → lead list refresh / cache churn and repeatedly dismiss or fight the overlay.
+        if (showLeadProposalWizard || leadProposalWizardSaving) return;
         if (!formData?.id || typeof onSave !== 'function') return;
         // Only start timer after initial load for this client (avoid saving stale list data)
         if (initialDataLoadedForClientIdRef.current !== formData.id) return;
@@ -623,7 +626,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 autoSaveTimeoutRef.current = null;
             }
         };
-    }, [formData, onSave]);
+    }, [formData, onSave, showLeadProposalWizard, leadProposalWizardSaving]);
 
     const getEngagementQuestionnaires = () => {
         const latest = formDataRef.current || formData;
