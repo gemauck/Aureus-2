@@ -17,25 +17,16 @@ const SECTION_GRADIENTS = [
 ];
 
 function SectionBanner({ index, total, title }) {
-    const g = SECTION_GRADIENTS[index % SECTION_GRADIENTS.length];
     return (
-        <div className={`relative h-28 sm:h-32 overflow-hidden bg-gradient-to-br ${g}`}>
-            <div
-                className="pointer-events-none absolute inset-0 opacity-45 bg-[radial-gradient(ellipse_90%_120%_at_15%_0%,rgba(255,255,255,0.38),transparent_55%)]"
-                aria-hidden
-            />
-            <div
-                className="pointer-events-none absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_70%_80%_at_100%_100%,rgba(56,189,248,0.35),transparent)]"
-                aria-hidden
-            />
+        <div className="relative h-28 sm:h-32 overflow-hidden border-b border-slate-200 bg-white">
             <div className="relative flex h-full flex-col justify-end px-5 pb-4 sm:px-7 sm:pb-5">
                 <p
-                    className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/75 sm:text-[11px]"
+                    className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-[11px]"
                     style={{ fontFamily: FONT.body }}
                 >
                     Section {index + 1} of {total}
                 </p>
-                <h3 className="text-lg font-bold leading-tight text-white sm:text-xl" style={{ fontFamily: FONT.display }}>
+                <h3 className="text-lg font-bold leading-tight text-slate-900 sm:text-xl" style={{ fontFamily: FONT.display }}>
                     {title}
                 </h3>
             </div>
@@ -171,16 +162,7 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
 
             <article className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xl dark:border-slate-700/90 dark:bg-slate-900 sm:rounded-3xl">
                 <header className="relative">
-                    <div className="relative h-36 overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700 sm:h-40">
-                        <div
-                            className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_100%_80%_at_20%_-10%,rgba(255,255,255,0.45),transparent_50%)]"
-                            aria-hidden
-                        />
-                        <div
-                            className="pointer-events-none absolute inset-0 opacity-35 bg-[radial-gradient(ellipse_80%_60%_at_100%_80%,rgba(56,189,248,0.45),transparent_45%)]"
-                            aria-hidden
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent" aria-hidden />
+                    <div className="relative h-36 overflow-hidden border-b border-slate-200 bg-white sm:h-40">
                         <div className="relative flex h-full flex-col justify-end px-6 pb-6 sm:px-10 sm:pb-8">
                             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                                 <div className="flex items-center gap-4">
@@ -194,14 +176,14 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                                         </div>
                                     ) : (
                                         <div
-                                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15 text-lg font-bold text-white shadow-inner backdrop-blur"
+                                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg font-bold text-slate-900 shadow-inner"
                                             style={{ fontFamily: FONT.display }}
                                         >
                                             A
                                         </div>
                                     )}
                                     <div>
-                                        <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">
+                                        <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
                                             Submitted questionnaire
                                         </p>
                                         <h1
@@ -213,7 +195,7 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                                     </div>
                                 </div>
                                 {submittedAt ? (
-                                    <p className="text-xs font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">Received · {formatSubmittedAt(submittedAt)}</p>
+                                    <p className="text-xs font-medium text-slate-700">Received · {formatSubmittedAt(submittedAt)}</p>
                                 ) : null}
                             </div>
                         </div>

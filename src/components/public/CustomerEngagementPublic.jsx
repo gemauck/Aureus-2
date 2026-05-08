@@ -77,26 +77,16 @@ function buildInitialResponses(formDef) {
 }
 
 function SectionBanner({ index, total, title }) {
-    const g = SECTION_GRADIENTS[index % SECTION_GRADIENTS.length];
     return (
-        <div className={`relative h-32 sm:h-36 overflow-hidden bg-gradient-to-br ${g}`}>
-            <div
-                className="pointer-events-none absolute inset-0 opacity-45 bg-[radial-gradient(ellipse_90%_120%_at_15%_0%,rgba(255,255,255,0.38),transparent_55%)]"
-                aria-hidden
-            />
-            <div
-                className="pointer-events-none absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_70%_80%_at_100%_100%,rgba(56,189,248,0.35),transparent)]"
-                aria-hidden
-            />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-900/20 to-transparent" aria-hidden />
+        <div className="relative h-32 sm:h-36 overflow-hidden border-b border-slate-200 bg-white">
             <div className="relative h-full flex flex-col justify-end px-5 pb-4 sm:px-7 sm:pb-5">
                 <p
-                    className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90 mb-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
+                    className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-1"
                     style={{ fontFamily: FONT.body }}
                 >
                     Step {index + 1} of {total}
                 </p>
-                <h3 className="text-lg sm:text-xl font-bold text-white leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]" style={{ fontFamily: FONT.display }}>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 leading-tight" style={{ fontFamily: FONT.display }}>
                     {title}
                 </h3>
             </div>
@@ -458,17 +448,8 @@ const CustomerEngagementPublic = () => {
                     {/* Hero strip + letterhead */}
                     <header className="relative">
                         <div
-                            className="relative h-36 sm:h-44 overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700"
+                            className="relative h-36 sm:h-44 overflow-hidden border-b border-slate-200 bg-white"
                         >
-                            <div
-                                className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_100%_80%_at_20%_-10%,rgba(255,255,255,0.45),transparent_50%)]"
-                                aria-hidden
-                            />
-                            <div
-                                className="pointer-events-none absolute inset-0 opacity-35 bg-[radial-gradient(ellipse_80%_60%_at_100%_80%,rgba(56,189,248,0.45),transparent_45%)]"
-                                aria-hidden
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent" aria-hidden />
                             <div className="relative h-full flex flex-col justify-end px-6 sm:px-10 pb-6 sm:pb-8">
                                 <div className="flex flex-col sm:flex-row sm:items-end gap-5 sm:justify-between">
                                     <div className="flex gap-4 items-center">
@@ -478,17 +459,17 @@ const CustomerEngagementPublic = () => {
                                             </div>
                                         ) : (
                                             <div
-                                                className="h-12 w-12 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-white font-bold text-lg shadow-inner"
+                                                className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-900 font-bold text-lg shadow-inner"
                                                 style={{ fontFamily: FONT.display }}
                                             >
                                                 A
                                             </div>
                                         )}
                                         <div>
-                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70 mb-0.5">
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 mb-0.5">
                                                 Confidential · Site visit
                                             </p>
-                                            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight" style={{ fontFamily: FONT.display }}>
+                                            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight" style={{ fontFamily: FONT.display }}>
                                                 {companyName}
                                             </h1>
                                         </div>
