@@ -145,8 +145,16 @@ fi
 npm run build
 
 # Ensure Vite projects bundle exists (avoids 502 on /vite-projects/projects-module.js)
-if [ ! -f "${APP_DIR}/dist/vite-projects/projects-module.js" ]; then
-  echo "ERROR: dist/vite-projects/projects-module.js missing after build. Run: npm run build:vite-projects"
+VITE_PROJECTS_DIR="${APP_DIR}/dist/vite-projects"
+VITE_PROJECTS_ENTRY="${VITE_PROJECTS_DIR}/projects-module.js"
+if [ ! -f "${VITE_PROJECTS_ENTRY}" ]; then
+  echo "  ⚠ projects-module.js missing after full build. Retrying vite-projects build..."
+  npm run build:vite-projects
+fi
+if [ ! -f "${VITE_PROJECTS_ENTRY}" ]; then
+  echo "ERROR: dist/vite-projects/projects-module.js still missing after retry."
+  echo "       Current dist/vite-projects contents:"
+  ls -la "${VITE_PROJECTS_DIR}" 2>/dev/null || echo "       (directory not found)"
   exit 1
 fi
 echo "  ✓ Vite projects bundle present"
