@@ -3119,7 +3119,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   // Merge list refetches into the open detail view (qty, locations). Do not depend on `viewingInventoryItemDetail`
   // or we overwrite a fresh GET /inventory/:id response before the list catches up.
   useEffect(() => {
-    if (isInventoryDetailOpen) return;
+    if (!isInventoryDetailOpen) return;
     if (!detailInventoryCanonicalId || !inventory.length) return;
     const viewedId = detailInventoryCanonicalId;
     const fromList = inventory.find(inv => getInventoryItemId(inv) === viewedId);
@@ -3153,7 +3153,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
   // Load canonical InventoryItem from the API so detail matches the database (list rows can be merged/stale).
   useEffect(() => {
-    if (isInventoryDetailOpen) return;
+    if (!isInventoryDetailOpen) return;
     if (!detailInventoryCanonicalId || typeof window.DatabaseAPI?.getInventoryItemById !== 'function') return;
     let cancelled = false;
     (async () => {
