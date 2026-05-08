@@ -180,11 +180,14 @@ async function applyFinalProductBuildableUnits(items = []) {
     if (buildableUnits == null) return item
     const currentQuantity = parseFiniteNumber(item?.quantity, 0)
     const displayQuantity = Math.max(currentQuantity, buildableUnits)
+    const reorderPoint = parseFiniteNumber(item?.reorderPoint, 0)
+    const displayStatus = getStatusFromQuantity(displayQuantity, reorderPoint)
 
     return {
       ...item,
       quantity: displayQuantity,
-      buildableUnits
+      buildableUnits,
+      status: displayStatus
     }
   })
 }

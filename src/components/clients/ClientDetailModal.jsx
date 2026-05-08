@@ -8452,92 +8452,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             </p>
                                         ) : null}
                                     </div>
-                                    <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
-                                        <div className="mb-2 flex items-center justify-between">
-                                            <h4 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Custom fields</h4>
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    setEngagementCustomFieldsDraft((prev) => [
-                                                        ...prev,
-                                                        { id: `custom.new_${Date.now()}`, label: '', type: 'text', required: false, placeholder: '', hint: '', maxLength: 400 }
-                                                    ])
-                                                }
-                                                className={`text-[11px] px-2 py-1 rounded border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-white'}`}
-                                            >
-                                                Add field
-                                            </button>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {engagementCustomFieldsDraft.length === 0 ? (
-                                                <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No custom fields yet.</div>
-                                            ) : engagementCustomFieldsDraft.map((cf, idx) => (
-                                                <div key={cf.id || idx} className={`rounded border p-2 ${isDark ? 'border-gray-700 bg-gray-800/60' : 'border-gray-200 bg-white'}`}>
-                                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                                        <input
-                                                            type="text"
-                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
-                                                            value={cf.label || ''}
-                                                            onChange={(e) =>
-                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, label: e.target.value } : row))
-                                                            }
-                                                            placeholder="Field label"
-                                                        />
-                                                        <select
-                                                            value={cf.type || 'text'}
-                                                            onChange={(e) =>
-                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, type: e.target.value } : row))
-                                                            }
-                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
-                                                        >
-                                                            <option value="text">Text</option>
-                                                            <option value="textarea">Textarea</option>
-                                                            <option value="date">Date</option>
-                                                        </select>
-                                                        <label className="inline-flex items-center gap-2 text-xs">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={cf.required === true}
-                                                                onChange={(e) =>
-                                                                    setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, required: e.target.checked } : row))
-                                                                }
-                                                            />
-                                                            Required
-                                                        </label>
-                                                    </div>
-                                                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                        <input
-                                                            type="text"
-                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
-                                                            value={cf.placeholder || ''}
-                                                            onChange={(e) =>
-                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, placeholder: e.target.value } : row))
-                                                            }
-                                                            placeholder="Placeholder (optional)"
-                                                        />
-                                                        <div className="flex items-center gap-2">
-                                                            <input
-                                                                type="text"
-                                                                className={`flex-1 rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
-                                                                value={cf.hint || ''}
-                                                                onChange={(e) =>
-                                                                    setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, hint: e.target.value } : row))
-                                                                }
-                                                                placeholder="Hint (optional)"
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setEngagementCustomFieldsDraft((prev) => prev.filter((_, i) => i !== idx))}
-                                                                className={`text-[11px] px-2 py-1 rounded ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'}`}
-                                                            >
-                                                                Remove
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
                                     {(engagementFormDef?.sections || []).map((sec) => (
                                         <div
                                             key={sec.id}
@@ -8641,6 +8555,92 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             </div>
                                         </div>
                                     ))}
+                                    <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <h4 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Custom fields</h4>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setEngagementCustomFieldsDraft((prev) => [
+                                                        ...prev,
+                                                        { id: `custom.new_${Date.now()}`, label: '', type: 'text', required: false, placeholder: '', hint: '', maxLength: 400 }
+                                                    ])
+                                                }
+                                                className={`text-[11px] px-2 py-1 rounded border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-white'}`}
+                                            >
+                                                Add field
+                                            </button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {engagementCustomFieldsDraft.length === 0 ? (
+                                                <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No custom fields yet.</div>
+                                            ) : engagementCustomFieldsDraft.map((cf, idx) => (
+                                                <div key={cf.id || idx} className={`rounded border p-2 ${isDark ? 'border-gray-700 bg-gray-800/60' : 'border-gray-200 bg-white'}`}>
+                                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                                        <input
+                                                            type="text"
+                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                            value={cf.label || ''}
+                                                            onChange={(e) =>
+                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, label: e.target.value } : row))
+                                                            }
+                                                            placeholder="Field label"
+                                                        />
+                                                        <select
+                                                            value={cf.type || 'text'}
+                                                            onChange={(e) =>
+                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, type: e.target.value } : row))
+                                                            }
+                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                        >
+                                                            <option value="text">Text</option>
+                                                            <option value="textarea">Textarea</option>
+                                                            <option value="date">Date</option>
+                                                        </select>
+                                                        <label className="inline-flex items-center gap-2 text-xs">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={cf.required === true}
+                                                                onChange={(e) =>
+                                                                    setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, required: e.target.checked } : row))
+                                                                }
+                                                            />
+                                                            Required
+                                                        </label>
+                                                    </div>
+                                                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                        <input
+                                                            type="text"
+                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                            value={cf.placeholder || ''}
+                                                            onChange={(e) =>
+                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, placeholder: e.target.value } : row))
+                                                            }
+                                                            placeholder="Placeholder (optional)"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="text"
+                                                                className={`flex-1 rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                                value={cf.hint || ''}
+                                                                onChange={(e) =>
+                                                                    setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, hint: e.target.value } : row))
+                                                                }
+                                                                placeholder="Hint (optional)"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEngagementCustomFieldsDraft((prev) => prev.filter((_, i) => i !== idx))}
+                                                                className={`text-[11px] px-2 py-1 rounded ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'}`}
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>

@@ -201,16 +201,19 @@ function CustomerEngagementReportView({ formDef, responses, branding, submittedA
                                         </div>
                                     )}
                                     <div>
-                                        <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                                        <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">
                                             Submitted questionnaire
                                         </p>
-                                        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl" style={{ fontFamily: FONT.display }}>
+                                        <h1
+                                            className="inline-block rounded-md bg-slate-950/35 px-2 py-0.5 text-2xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] sm:text-3xl"
+                                            style={{ fontFamily: FONT.display }}
+                                        >
                                             {companyName}
                                         </h1>
                                     </div>
                                 </div>
                                 {submittedAt ? (
-                                    <p className="text-xs font-medium text-white/85">Received · {formatSubmittedAt(submittedAt)}</p>
+                                    <p className="text-xs font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">Received · {formatSubmittedAt(submittedAt)}</p>
                                 ) : null}
                             </div>
                         </div>
