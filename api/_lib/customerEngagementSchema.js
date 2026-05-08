@@ -4,13 +4,53 @@ export const CUSTOMER_ENGAGEMENT_SCHEMA_VERSION = 1
 const MAX_PHOTO_COUNT = 8
 const MAX_PHOTO_CHARS = 900_000
 const MAX_TEXT = 8000
+const ALLOWED_CUSTOM_FIELD_TYPES = new Set(['text', 'textarea', 'date'])
+
+function toSafeFieldId(seed, fallback) {
+  const s = String(seed || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return s || fallback
+}
+
+export function sanitizeCustomerEngagementCustomFields(raw) {
+  if (!Array.isArray(raw)) return []
+  const out = []
+  const seen = new Set()
+  for (let i = 0; i < raw.length; i++) {
+    const f = raw[i]
+    if (!f || typeof f !== 'object') continue
+    const label = String(f.label || '').trim()
+    if (!label) continue
+    const type = String(f.type || 'text').trim().toLowerCase()
+    if (!ALLOWED_CUSTOM_FIELD_TYPES.has(type)) continue
+    const id = `custom.${toSafeFieldId(f.id || label, `field_${i + 1}`)}`
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push({
+      id,
+      type,
+      label: label.slice(0, 160),
+      required: f.required === true,
+      maxLength:
+        type === 'date'
+          ? 40
+          : Math.max(40, Math.min(MAX_TEXT, parseInt(f.maxLength, 10) || 400)),
+      placeholder: typeof f.placeholder === 'string' ? f.placeholder.slice(0, 200) : '',
+      hint: typeof f.hint === 'string' ? f.hint.slice(0, 280) : ''
+    })
+  }
+  return out
+}
 
 /**
  * Form sections for the public questionnaire (matches site-visit Word template).
  * Field keys are stable for stored JSON.
  */
-export function getCustomerEngagementFormDefinition() {
-  return {
+export function getCustomerEngagementFormDefinition(customFields = []) {
+  const def = {
     schemaVersion: CUSTOMER_ENGAGEMENT_SCHEMA_VERSION,
     title: 'Site visit / Customer engagement questionnaire',
     sections: [
@@ -242,10 +282,19 @@ export function getCustomerEngagementFormDefinition() {
       }
     ]
   }
+  const extra = sanitizeCustomerEngagementCustomFields(customFields)
+  if (extra.length > 0) {
+    def.sections.push({
+      id: 'custom',
+      heading: 'Additional information',
+      fields: extra
+    })
+  }
+  return def
 }
 
-export function flattenFieldDefs() {
-  const def = getCustomerEngagementFormDefinition()
+export function flattenFieldDefs(formDef) {
+  const def = formDef && Array.isArray(formDef.sections) ? formDef : getCustomerEngagementFormDefinition()
   const out = []
   for (const sec of def.sections) {
     for (const f of sec.fields) {
@@ -255,13 +304,13 @@ export function flattenFieldDefs() {
   return out
 }
 
-export function validateCustomerEngagementResponses(responses) {
+export function validateCustomerEngagementResponses(responses, formDef) {
   const errors = []
   if (!responses || typeof responses !== 'object') {
     return { ok: false, errors: ['Invalid submission payload'] }
   }
 
-  const fields = flattenFieldDefs()
+  const fields = flattenFieldDefs(formDef)
   for (const f of fields) {
     const v = responses[f.id]
     if (f.required && (v === undefined || v === null || String(v).trim() === '')) {
@@ -327,9 +376,9 @@ export function validateCustomerEngagementResponses(responses) {
   return { ok: errors.length === 0, errors }
 }
 
-export function buildEmptyResponses() {
+export function buildEmptyResponses(formDef) {
   const o = {}
-  for (const f of flattenFieldDefs()) {
+  for (const f of flattenFieldDefs(formDef)) {
     if (f.type === 'checkboxGroup') {
       o[f.id] = {}
       for (const opt of f.options || []) {
@@ -347,11 +396,11 @@ export function buildEmptyResponses() {
 /**
  * Admin-supplied defaults for the public form (no fileList). Null clears stored prefill.
  */
-export function sanitizeCustomerEngagementPrefill(raw) {
+export function sanitizeCustomerEngagementPrefill(raw, formDef) {
   if (raw === null) return null
   if (raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) return null
 
-  const fields = flattenFieldDefs()
+  const fields = flattenFieldDefs(formDef)
   const byId = new Map(fields.map((f) => [f.id, f]))
   const out = {}
 
@@ -382,9 +431,9 @@ export function sanitizeCustomerEngagementPrefill(raw) {
 /**
  * Full initial response object for the public GET (empty + stored prefill + lead name for client field).
  */
-export function buildInitialResponsesForPublic(storedPrefillRaw, leadName) {
-  const base = buildEmptyResponses()
-  const sanitized = sanitizeCustomerEngagementPrefill(storedPrefillRaw)
+export function buildInitialResponsesForPublic(storedPrefillRaw, leadName, formDef) {
+  const base = buildEmptyResponses(formDef)
+  const sanitized = sanitizeCustomerEngagementPrefill(storedPrefillRaw, formDef)
   if (sanitized) {
     for (const [k, v] of Object.entries(sanitized)) {
       if (base[k] === undefined) continue

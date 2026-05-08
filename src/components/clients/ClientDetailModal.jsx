@@ -101,6 +101,57 @@ function buildEngagementPrefillDraft(formDef, storedPrefill, leadName) {
     return draft;
 }
 
+function normalizeEngagementQuestionnaires(value) {
+    return Array.isArray(value) ? value.filter((q) => q && typeof q === 'object') : [];
+}
+
+function sanitizeEngagementCustomFields(value) {
+    if (!Array.isArray(value)) return [];
+    const out = [];
+    const seen = new Set();
+    value.forEach((f, i) => {
+        if (!f || typeof f !== 'object') return;
+        const label = String(f.label || '').trim();
+        if (!label) return;
+        const typeRaw = String(f.type || 'text').trim().toLowerCase();
+        const type = ['text', 'textarea', 'date'].includes(typeRaw) ? typeRaw : 'text';
+        const idSeed = String(f.id || label)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '') || `field_${i + 1}`;
+        const id = `custom.${idSeed}`;
+        if (seen.has(id)) return;
+        seen.add(id);
+        out.push({
+            id,
+            type,
+            label,
+            required: f.required === true,
+            placeholder: typeof f.placeholder === 'string' ? f.placeholder : '',
+            hint: typeof f.hint === 'string' ? f.hint : '',
+            maxLength: Number.isFinite(Number(f.maxLength)) ? Number(f.maxLength) : 400
+        });
+    });
+    return out;
+}
+
+function buildEngagementFormWithCustomFields(baseForm, customFields) {
+    if (!baseForm || !Array.isArray(baseForm.sections)) return baseForm;
+    const form = {
+        ...baseForm,
+        sections: baseForm.sections.map((sec) => ({ ...sec, fields: Array.isArray(sec.fields) ? [...sec.fields] : [] }))
+    };
+    const extra = sanitizeEngagementCustomFields(customFields);
+    if (extra.length > 0) {
+        form.sections.push({
+            id: 'custom',
+            heading: 'Additional information',
+            fields: extra
+        });
+    }
+    return form;
+}
+
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, onRevertToLead, initialSiteId, onInitialSiteOpened }) => {
     // entityType: 'client' or 'lead' - determines terminology and behavior
     const isLead = entityType === 'lead';
@@ -390,6 +441,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementHint, setEngagementHint] = useState('');
     const [showEngagementResponsesModal, setShowEngagementResponsesModal] = useState(false);
     const [showEngagementPrefillModal, setShowEngagementPrefillModal] = useState(false);
+    const [engagementBaseFormDef, setEngagementBaseFormDef] = useState(null);
     const [engagementFormDef, setEngagementFormDef] = useState(null);
     const [engagementPrefillDraft, setEngagementPrefillDraft] = useState({});
     const [engagementPrefillLoading, setEngagementPrefillLoading] = useState(false);
@@ -399,6 +451,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementReportLoading, setEngagementReportLoading] = useState(false);
     const [engagementInternalNote, setEngagementInternalNote] = useState('');
     const [engagementNoteSaving, setEngagementNoteSaving] = useState(false);
+    const [engagementQuestionnaireName, setEngagementQuestionnaireName] = useState('');
+    const [engagementCustomFieldsDraft, setEngagementCustomFieldsDraft] = useState([]);
+    const [selectedEngagementQuestionnaireId, setSelectedEngagementQuestionnaireId] = useState('');
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -475,18 +530,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         };
     }, [formData, onSave]);
 
-    const openEngagementPrefillModal = async (clearSubmission) => {
+    const getEngagementQuestionnaires = () => {
+        const latest = formDataRef.current || formData;
+        return normalizeEngagementQuestionnaires(latest?.customerEngagementQuestionnaires);
+    };
+
+    const openEngagementPrefillModal = async (clearSubmission, questionnaireRow = null) => {
         if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
+        const hasSubmission = questionnaireRow ? !!questionnaireRow.submittedAt : !!formData.customerEngagementSubmittedAt;
+        const hasActiveLink = questionnaireRow ? !!questionnaireRow.linkActive : !!formData.customerEngagementLinkActive;
         if (
             clearSubmission &&
-            formData.customerEngagementSubmittedAt &&
+            hasSubmission &&
             !window.confirm('Clear the previous submission and open a new questionnaire round?')
         ) {
             return;
         }
         if (
             !clearSubmission &&
-            formData.customerEngagementLinkActive &&
+            hasActiveLink &&
             !window.confirm('Create a new link? Anyone with the old link will no longer be able to use it.')
         ) {
             return;
@@ -495,13 +557,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setShowEngagementPrefillModal(true);
         setEngagementPrefillLoading(true);
         setEngagementFormDef(null);
+        setEngagementBaseFormDef(null);
+        setEngagementQuestionnaireName(questionnaireRow?.name || '');
+        setSelectedEngagementQuestionnaireId(questionnaireRow?.id || '');
         try {
             const res = await fetch(`${window.location.origin}/api/public/customer-engagement-form`, { credentials: 'include' });
             const json = await res.json();
-            const form = json?.data?.form;
+            const baseForm = json?.data?.form;
+            const customFields = sanitizeEngagementCustomFields(questionnaireRow?.customFields);
+            const form = buildEngagementFormWithCustomFields(baseForm, customFields);
+            setEngagementBaseFormDef(baseForm || null);
             setEngagementFormDef(form || null);
             const latest = formDataRef.current;
-            setEngagementPrefillDraft(buildEngagementPrefillDraft(form, latest?.customerEngagementPrefill, latest?.name));
+            const storedPrefill = questionnaireRow?.prefill || latest?.customerEngagementPrefill;
+            setEngagementPrefillDraft(buildEngagementPrefillDraft(form, storedPrefill, latest?.name));
+            setEngagementCustomFieldsDraft(customFields);
         } catch (e) {
             setEngagementHint(e.message || 'Could not load questionnaire');
             setShowEngagementPrefillModal(false);
@@ -517,7 +587,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, {
                 clearSubmission: engagementClearSubmission,
-                prefill: engagementPrefillDraft
+                prefill: engagementPrefillDraft,
+                questionnaireName: engagementQuestionnaireName,
+                questionnaireId: selectedEngagementQuestionnaireId || undefined,
+                customFields: sanitizeEngagementCustomFields(engagementCustomFieldsDraft)
             });
             const payload = res?.data ?? res;
             if (payload?.url) setEngagementLinkUrl(payload.url);
@@ -533,6 +606,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     customerEngagementResponses: lead.customerEngagementResponses,
                     customerEngagementRevokedAt: lead.customerEngagementRevokedAt,
                     customerEngagementPrefill: lead.customerEngagementPrefill,
+                    customerEngagementQuestionnaires: lead.customerEngagementQuestionnaires,
                     activityLog:
                         typeof lead.activityLog === 'string'
                             ? JSON.parse(lead.activityLog || '[]')
@@ -553,6 +627,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     };
 
     useEffect(() => {
+        if (!showEngagementPrefillModal || !engagementBaseFormDef) return;
+        const form = buildEngagementFormWithCustomFields(engagementBaseFormDef, engagementCustomFieldsDraft);
+        setEngagementFormDef(form);
+        setEngagementPrefillDraft((prev) => {
+            const next = { ...(prev || {}) };
+            for (const sec of form?.sections || []) {
+                for (const f of sec.fields || []) {
+                    if (f.type === 'fileList') continue;
+                    if (!(f.id in next)) {
+                        if (f.type === 'checkboxGroup') {
+                            const o = {};
+                            for (const opt of f.options || []) o[opt.id] = false;
+                            next[f.id] = o;
+                        } else {
+                            next[f.id] = '';
+                        }
+                    }
+                }
+            }
+            return next;
+        });
+    }, [showEngagementPrefillModal, engagementBaseFormDef, engagementCustomFieldsDraft]);
+
+    useEffect(() => {
         if (!showEngagementResponsesModal) return;
         let cancelled = false;
         setEngagementReportLoading(true);
@@ -567,8 +665,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const bJson = await bRes.json();
                 const fJson = await fRes.json();
                 if (cancelled) return;
+                const selectedRow = getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId) || null;
+                const form = buildEngagementFormWithCustomFields(fJson?.data?.form ?? null, selectedRow?.customFields);
                 setEngagementReportBranding(bJson?.data ?? bJson);
-                setEngagementReportFormDef(fJson?.data?.form ?? null);
+                setEngagementReportFormDef(form ?? null);
             } catch {
                 if (!cancelled) {
                     setEngagementReportBranding(null);
@@ -581,7 +681,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         return () => {
             cancelled = true;
         };
-    }, [showEngagementResponsesModal]);
+    }, [showEngagementResponsesModal, selectedEngagementQuestionnaireId]);
 
     const appendEngagementInternalNote = async () => {
         const text = engagementInternalNote.trim();
@@ -620,11 +720,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleEngagementRevoke = async () => {
         if (!formData?.id || !window.DatabaseAPI?.revokeCustomerEngagementLink) return;
-        if (!window.confirm('Revoke the public questionnaire link?')) return;
+        const questionnaireId = selectedEngagementQuestionnaireId || '';
+        if (!window.confirm(questionnaireId ? 'Revoke this questionnaire link?' : 'Revoke the public questionnaire link?')) return;
         setEngagementBusy(true);
         setEngagementHint('');
         try {
-            await window.DatabaseAPI.revokeCustomerEngagementLink(formData.id);
+            await window.DatabaseAPI.revokeCustomerEngagementLink(formData.id, questionnaireId || undefined);
             setEngagementLinkUrl('');
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
@@ -633,10 +734,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     ...prev,
                     customerEngagementLinkActive: lead.customerEngagementLinkActive,
                     customerEngagementTokenCreatedAt: lead.customerEngagementTokenCreatedAt,
-                    customerEngagementRevokedAt: lead.customerEngagementRevokedAt
+                    customerEngagementRevokedAt: lead.customerEngagementRevokedAt,
+                    customerEngagementQuestionnaires: lead.customerEngagementQuestionnaires
                 }));
             }
-            setEngagementHint('Link revoked.');
+            setEngagementHint(questionnaireId ? 'Questionnaire link revoked.' : 'Link revoked.');
         } catch (e) {
             setEngagementHint(e.message || 'Could not revoke');
         } finally {
@@ -7737,22 +7839,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         Send a polished site-visit questionnaire (Abcotronics letterhead) — recipients open the link without logging in.
                                     </p>
                                     <div className={`text-xs mb-3 space-y-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        {formData.customerEngagementSubmittedAt ? (
-                                            <div>
-                                                <span className="font-medium text-emerald-600 dark:text-emerald-400">Submitted</span>{' '}
-                                                {new Date(formData.customerEngagementSubmittedAt).toLocaleString('en-ZA')}
-                                            </div>
-                                        ) : null}
-                                        {formData.customerEngagementLinkActive ? (
-                                            <div>
-                                                <span className="font-medium">Link active</span>
-                                                {formData.customerEngagementTokenCreatedAt
-                                                    ? ` · created ${new Date(formData.customerEngagementTokenCreatedAt).toLocaleString('en-ZA')}`
-                                                    : ''}
-                                            </div>
-                                        ) : (
-                                            <div>No active share link</div>
-                                        )}
+                                        <div>{getEngagementQuestionnaires().length} questionnaire(s) configured for this lead.</div>
                                         {engagementHint ? (
                                             <div className={`mt-1 ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>{engagementHint}</div>
                                         ) : null}
@@ -7761,55 +7848,92 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <button
                                             type="button"
                                             disabled={engagementBusy || !formData.id}
-                                            onClick={() => openEngagementPrefillModal(false)}
+                                            onClick={() => openEngagementPrefillModal(false, null)}
                                             className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
                                                 isDark ? 'bg-primary-600 text-white hover:bg-primary-500' : 'bg-primary-600 text-white hover:bg-primary-700'
                                             } disabled:opacity-50`}
                                         >
-                                            {formData.customerEngagementLinkActive ? 'New link' : 'Generate link'}
+                                            New questionnaire
                                         </button>
                                         <button
                                             type="button"
-                                            disabled={engagementBusy || !formData.id}
-                                            onClick={() => openEngagementPrefillModal(true)}
-                                            className={`text-xs px-3 py-1.5 rounded-lg border ${
-                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
-                                            } disabled:opacity-50`}
-                                        >
-                                            New link + clear submission
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={engagementBusy}
+                                            disabled={engagementBusy || !engagementLinkUrl}
                                             onClick={handleEngagementCopy}
                                             className={`text-xs px-3 py-1.5 rounded-lg border ${
                                                 isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
                                             }`}
                                         >
-                                            Copy link
+                                            Copy latest link
                                         </button>
-                                        <button
-                                            type="button"
-                                            disabled={engagementBusy || !formData.customerEngagementLinkActive}
-                                            onClick={handleEngagementRevoke}
-                                            className={`text-xs px-3 py-1.5 rounded-lg ${
-                                                isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'
-                                            } disabled:opacity-50`}
-                                        >
-                                            Revoke link
-                                        </button>
-                                        {formData.customerEngagementResponses &&
-                                        typeof formData.customerEngagementResponses === 'object' ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowEngagementResponsesModal(true)}
-                                                className={`text-xs px-3 py-1.5 rounded-lg border ${
-                                                    isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'
-                                                }`}
+                                    </div>
+                                    <div className="mt-3 space-y-2">
+                                        {getEngagementQuestionnaires().length === 0 ? (
+                                            <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No questionnaires yet.</div>
+                                        ) : getEngagementQuestionnaires().map((q) => (
+                                            <div
+                                                key={q.id}
+                                                className={`rounded-lg border p-3 ${isDark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50/70'}`}
                                             >
-                                                View responses
-                                            </button>
-                                        ) : null}
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <div>
+                                                        <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{q.name || 'Customer engagement questionnaire'}</div>
+                                                        <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                            {q.tokenCreatedAt ? `Link created ${new Date(q.tokenCreatedAt).toLocaleString('en-ZA')}` : 'No link yet'}
+                                                            {q.submittedAt ? ` · Submitted ${new Date(q.submittedAt).toLocaleString('en-ZA')}` : ''}
+                                                            {q.revokedAt ? ' · Revoked' : ''}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            disabled={engagementBusy}
+                                                            onClick={() => openEngagementPrefillModal(false, q)}
+                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
+                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                            }`}
+                                                        >
+                                                            Edit + new link
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={engagementBusy}
+                                                            onClick={() => openEngagementPrefillModal(true, q)}
+                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
+                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                            }`}
+                                                        >
+                                                            New round
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={!q.responses}
+                                                            onClick={() => {
+                                                                setSelectedEngagementQuestionnaireId(q.id || '');
+                                                                setShowEngagementResponsesModal(true);
+                                                            }}
+                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
+                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                            } disabled:opacity-50`}
+                                                        >
+                                                            View report
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={engagementBusy || !q.linkActive || !!q.revokedAt}
+                                                            onClick={() => {
+                                                                setSelectedEngagementQuestionnaireId(q.id || '');
+                                                                handleEngagementRevoke();
+                                                            }}
+                                                            className={`text-[11px] px-2.5 py-1 rounded ${
+                                                                isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'
+                                                            } disabled:opacity-50`}
+                                                        >
+                                                            Revoke
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                     {engagementLinkUrl ? (
                                         <p
@@ -8233,8 +8357,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             <div>
                                 <h2 className="text-lg font-semibold">Review & pre-fill questionnaire</h2>
                                 <p className={`mt-1 text-xs leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    These defaults are stored on the lead and appear when your contact opens the link. They can edit everything
-                                    before submitting.
+                                    Name the questionnaire, add/edit custom fields, then set defaults before generating the share link.
                                 </p>
                             </div>
                             <button
@@ -8251,6 +8374,104 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 <div className="py-12 text-center text-sm text-gray-500">Loading form…</div>
                             ) : (
                                 <div className="space-y-6">
+                                    <div>
+                                        <label className={`mb-1 block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                            Questionnaire name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className={`w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                            value={engagementQuestionnaireName}
+                                            onChange={(e) => setEngagementQuestionnaireName(e.target.value)}
+                                            placeholder="e.g. Opencast Mine Q2 Site Visit"
+                                        />
+                                    </div>
+                                    <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <h4 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Custom fields</h4>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setEngagementCustomFieldsDraft((prev) => [
+                                                        ...prev,
+                                                        { id: `custom.new_${Date.now()}`, label: '', type: 'text', required: false, placeholder: '', hint: '', maxLength: 400 }
+                                                    ])
+                                                }
+                                                className={`text-[11px] px-2 py-1 rounded border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-white'}`}
+                                            >
+                                                Add field
+                                            </button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {engagementCustomFieldsDraft.length === 0 ? (
+                                                <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No custom fields yet.</div>
+                                            ) : engagementCustomFieldsDraft.map((cf, idx) => (
+                                                <div key={cf.id || idx} className={`rounded border p-2 ${isDark ? 'border-gray-700 bg-gray-800/60' : 'border-gray-200 bg-white'}`}>
+                                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                                        <input
+                                                            type="text"
+                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                            value={cf.label || ''}
+                                                            onChange={(e) =>
+                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, label: e.target.value } : row))
+                                                            }
+                                                            placeholder="Field label"
+                                                        />
+                                                        <select
+                                                            value={cf.type || 'text'}
+                                                            onChange={(e) =>
+                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, type: e.target.value } : row))
+                                                            }
+                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                        >
+                                                            <option value="text">Text</option>
+                                                            <option value="textarea">Textarea</option>
+                                                            <option value="date">Date</option>
+                                                        </select>
+                                                        <label className="inline-flex items-center gap-2 text-xs">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={cf.required === true}
+                                                                onChange={(e) =>
+                                                                    setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, required: e.target.checked } : row))
+                                                                }
+                                                            />
+                                                            Required
+                                                        </label>
+                                                    </div>
+                                                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                        <input
+                                                            type="text"
+                                                            className={`rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                            value={cf.placeholder || ''}
+                                                            onChange={(e) =>
+                                                                setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, placeholder: e.target.value } : row))
+                                                            }
+                                                            placeholder="Placeholder (optional)"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="text"
+                                                                className={`flex-1 rounded border px-2 py-1.5 text-xs ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                                                value={cf.hint || ''}
+                                                                onChange={(e) =>
+                                                                    setEngagementCustomFieldsDraft((prev) => prev.map((row, i) => i === idx ? { ...row, hint: e.target.value } : row))
+                                                                }
+                                                                placeholder="Hint (optional)"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEngagementCustomFieldsDraft((prev) => prev.filter((_, i) => i !== idx))}
+                                                                className={`text-[11px] px-2 py-1 rounded ${isDark ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-red-50'}`}
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                     {(engagementFormDef?.sections || []).map((sec) => (
                                         <div key={sec.id}>
                                             <h3 className={`mb-2 text-xs font-bold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -8406,13 +8627,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             {engagementReportLoading ? (
                                 <div className="py-16 text-center text-sm text-gray-500">Loading report…</div>
                             ) : engagementReportFormDef &&
-                              formData.customerEngagementResponses &&
+                              (
+                                (getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId)?.responses) ||
+                                formData.customerEngagementResponses
+                              ) &&
                               typeof window.CustomerEngagementReportView === 'function' ? (
                                 React.createElement(window.CustomerEngagementReportView, {
                                     formDef: engagementReportFormDef,
-                                    responses: formData.customerEngagementResponses,
+                                    responses:
+                                        getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId)?.responses ||
+                                        formData.customerEngagementResponses,
                                     branding: engagementReportBranding,
-                                    submittedAt: formData.customerEngagementSubmittedAt
+                                    submittedAt:
+                                        getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId)?.submittedAt ||
+                                        formData.customerEngagementSubmittedAt
                                 })
                             ) : (
                                 <p className="text-sm text-gray-500">Could not load report. Try closing and opening again.</p>

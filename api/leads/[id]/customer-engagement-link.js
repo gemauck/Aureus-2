@@ -7,12 +7,44 @@ import { withLogging } from '../../_lib/logger.js'
 import { isAdminRole } from '../../_lib/authRoles.js'
 import { generateCustomerEngagementToken, hashCustomerEngagementToken } from '../../_lib/customerEngagementToken.js'
 import { getAppUrl } from '../../_lib/getAppUrl.js'
-import { sanitizeCustomerEngagementPrefill } from '../../_lib/customerEngagementSchema.js'
+import {
+  sanitizeCustomerEngagementPrefill,
+  sanitizeCustomerEngagementCustomFields,
+  getCustomerEngagementFormDefinition
+} from '../../_lib/customerEngagementSchema.js'
+
+function buildQuestionnaireId() {
+  return `ceq-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function normalizeQuestionnaires(raw) {
+  return Array.isArray(raw) ? raw.filter((q) => q && typeof q === 'object') : []
+}
+
+function summarizeQuestionnaire(q) {
+  return {
+    id: q.id,
+    name: q.name || 'Customer engagement questionnaire',
+    linkActive: !!q.tokenHash && !q.revokedAt,
+    tokenCreatedAt: q.tokenCreatedAt || null,
+    submittedAt: q.submittedAt || null,
+    revokedAt: q.revokedAt || null
+  }
+}
 
 /**
- * POST — create or rotate token; DELETE — revoke link
+ * POST — create or rotate token; DELETE — revoke link(s)
  * /api/leads/:id/customer-engagement-link
- * POST body: { clearSubmission?: boolean, prefill?: object | null } — prefill rotates with the link; null clears stored prefill
+ * POST body:
+ *   {
+ *     clearSubmission?: boolean,
+ *     questionnaireId?: string,
+ *     questionnaireName?: string,
+ *     customFields?: array,
+ *     prefill?: object | null
+ *   }
+ * DELETE body/query:
+ *   { questionnaireId?: string } (if omitted, revoke all)
  */
 async function handler(req, res) {
   try {
@@ -33,22 +65,58 @@ async function handler(req, res) {
 
     const lead = await prisma.client.findFirst({
       where: { id, type: 'lead' },
-      select: { id: true, name: true }
+      select: {
+        id: true,
+        name: true,
+        customerEngagementQuestionnaires: true,
+        customerEngagementPrefill: true
+      }
     })
     if (!lead) {
       return notFound(res)
     }
 
     if (req.method === 'DELETE') {
+      const body = req.body && typeof req.body === 'object' ? req.body : {}
+      const questionnaireId = String(body.questionnaireId || req.query?.questionnaireId || '').trim()
+      const nowIso = new Date().toISOString()
+      const current = normalizeQuestionnaires(lead.customerEngagementQuestionnaires)
+      const next =
+        questionnaireId.length > 0
+          ? current.map((q) =>
+              q.id === questionnaireId
+                ? {
+                    ...q,
+                    tokenHash: null,
+                    tokenCreatedAt: null,
+                    revokedAt: nowIso,
+                    updatedAt: nowIso
+                  }
+                : q
+            )
+          : current.map((q) => ({
+              ...q,
+              tokenHash: null,
+              tokenCreatedAt: null,
+              revokedAt: nowIso,
+              updatedAt: nowIso
+            }))
+
       await prisma.client.update({
         where: { id },
         data: {
           customerEngagementTokenHash: null,
           customerEngagementTokenCreatedAt: null,
-          customerEngagementRevokedAt: new Date()
+          customerEngagementRevokedAt: new Date(),
+          customerEngagementQuestionnaires: next.length > 0 ? next : Prisma.DbNull
         }
       })
-      return ok(res, { revoked: true })
+      return ok(res, {
+        revoked: true,
+        revokedAll: questionnaireId.length === 0,
+        questionnaireId: questionnaireId || null,
+        questionnaires: next.map(summarizeQuestionnaire)
+      })
     }
 
     if (req.method !== 'POST') {
@@ -57,41 +125,104 @@ async function handler(req, res) {
 
     const body = req.body && typeof req.body === 'object' ? req.body : {}
     const clearSubmission = body.clearSubmission === true
+    const questionnaireId = String(body.questionnaireId || '').trim()
+    const questionnaireNameRaw = String(body.questionnaireName || '').trim()
+    const customFields = sanitizeCustomerEngagementCustomFields(body.customFields)
 
     const rawToken = generateCustomerEngagementToken()
     const tokenHash = hashCustomerEngagementToken(rawToken)
     const now = new Date()
+    const nowIso = now.toISOString()
+    const current = normalizeQuestionnaires(lead.customerEngagementQuestionnaires)
+    let index = questionnaireId
+      ? current.findIndex((q) => String(q.id || '').trim() === questionnaireId)
+      : -1
 
-    const data = {
-      customerEngagementTokenHash: tokenHash,
-      customerEngagementTokenCreatedAt: now,
-      customerEngagementRevokedAt: null,
-      ...(clearSubmission
-        ? {
-            customerEngagementSubmittedAt: null,
-            customerEngagementResponses: null
-          }
-        : {})
+    let baseFormDef = getCustomerEngagementFormDefinition(customFields)
+    if (index >= 0 && customFields.length === 0) {
+      const existingCustom = sanitizeCustomerEngagementCustomFields(current[index].customFields)
+      baseFormDef = getCustomerEngagementFormDefinition(existingCustom)
+    }
+    let sanitizedPrefill = null
+    if (Object.prototype.hasOwnProperty.call(body, 'prefill')) {
+      sanitizedPrefill = sanitizeCustomerEngagementPrefill(body.prefill, baseFormDef)
+    } else if (index >= 0) {
+      sanitizedPrefill = sanitizeCustomerEngagementPrefill(current[index].prefill, baseFormDef)
+    } else {
+      sanitizedPrefill = sanitizeCustomerEngagementPrefill(lead.customerEngagementPrefill, baseFormDef)
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, 'prefill')) {
-      const sanitized = sanitizeCustomerEngagementPrefill(body.prefill)
-      data.customerEngagementPrefill = sanitized === null ? Prisma.DbNull : sanitized
+    let record
+    if (index >= 0) {
+      const prev = current[index]
+      record = {
+        ...prev,
+        id: prev.id,
+        name: questionnaireNameRaw || prev.name || 'Customer engagement questionnaire',
+        customFields:
+          customFields.length > 0
+            ? customFields
+            : sanitizeCustomerEngagementCustomFields(prev.customFields),
+        prefill: sanitizedPrefill,
+        tokenHash,
+        tokenCreatedAt: nowIso,
+        revokedAt: null,
+        updatedAt: nowIso,
+        ...(clearSubmission
+          ? {
+              submittedAt: null,
+              responses: null
+            }
+          : {})
+      }
+      current[index] = record
+    } else {
+      record = {
+        id: buildQuestionnaireId(),
+        name: questionnaireNameRaw || 'Customer engagement questionnaire',
+        customFields,
+        prefill: sanitizedPrefill,
+        tokenHash,
+        tokenCreatedAt: nowIso,
+        revokedAt: null,
+        submittedAt: null,
+        responses: null,
+        createdAt: nowIso,
+        updatedAt: nowIso
+      }
+      current.unshift(record)
+      index = 0
     }
 
     await prisma.client.update({
       where: { id },
-      data
+      data: {
+        customerEngagementTokenHash: tokenHash,
+        customerEngagementTokenCreatedAt: now,
+        customerEngagementRevokedAt: null,
+        ...(clearSubmission
+          ? {
+              customerEngagementSubmittedAt: null,
+              customerEngagementResponses: null
+            }
+          : {}),
+        customerEngagementPrefill:
+          sanitizedPrefill === null ? Prisma.DbNull : sanitizedPrefill,
+        customerEngagementQuestionnaires: current
+      }
     })
 
     const base = getAppUrl().replace(/\/$/, '')
-    const url = `${base}/customer-engagement?token=${encodeURIComponent(rawToken)}`
+    const url = `${base}/customer-engagement?token=${encodeURIComponent(rawToken)}&q=${encodeURIComponent(record.id)}`
 
     return ok(res, {
       url,
       tokenCreatedAt: now.toISOString(),
       leadName: lead.name,
-      clearedSubmission: clearSubmission
+      clearedSubmission: clearSubmission,
+      questionnaireId: record.id,
+      questionnaireName: record.name,
+      questionnaires: current.map(summarizeQuestionnaire)
     })
   } catch (e) {
     console.error('customer-engagement-link:', e)

@@ -207,6 +207,7 @@ model Client {
   customerEngagementSubmittedAt   DateTime?
   customerEngagementResponses     Json?
   customerEngagementPrefill       Json?
+  customerEngagementQuestionnaires Json?
   customerEngagementRevokedAt     DateTime?
   owner             User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   externalAgent     ExternalAgent?  @relation(fields: [externalAgentId], references: [id])

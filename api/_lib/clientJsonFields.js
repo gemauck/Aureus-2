@@ -373,6 +373,28 @@ export function parseClientJsonFields(client) {
       delete parsed.customerEngagementTokenHash
     }
 
+    if (Array.isArray(parsed.customerEngagementQuestionnaires)) {
+      const rows = parsed.customerEngagementQuestionnaires
+        .filter((q) => q && typeof q === 'object')
+        .map((q) => {
+          const row = { ...q }
+          row.linkActive = !!row.tokenHash && !row.revokedAt
+          delete row.tokenHash
+          return row
+        })
+      parsed.customerEngagementQuestionnaires = rows
+      if (rows.length > 0) {
+        const active = rows.find((q) => q.linkActive) || null
+        if (active) {
+          parsed.customerEngagementLinkActive = true
+          parsed.customerEngagementTokenCreatedAt = active.tokenCreatedAt || parsed.customerEngagementTokenCreatedAt
+          parsed.customerEngagementSubmittedAt = active.submittedAt || parsed.customerEngagementSubmittedAt
+          parsed.customerEngagementResponses = active.responses || parsed.customerEngagementResponses
+          parsed.customerEngagementPrefill = active.prefill || parsed.customerEngagementPrefill
+        }
+      }
+    }
+
     return parsed
   } catch (error) {
     console.error(`❌ Error parsing client ${client?.id}:`, error.message)

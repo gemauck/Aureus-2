@@ -1231,6 +1231,15 @@ const DatabaseAPI = {
         if (Object.prototype.hasOwnProperty.call(options, 'prefill')) {
             payload.prefill = options.prefill;
         }
+        if (options.questionnaireName) {
+            payload.questionnaireName = options.questionnaireName;
+        }
+        if (options.questionnaireId) {
+            payload.questionnaireId = options.questionnaireId;
+        }
+        if (Object.prototype.hasOwnProperty.call(options, 'customFields')) {
+            payload.customFields = options.customFields;
+        }
         const response = await this.makeRequest(`/leads/${encodeURIComponent(leadId)}/customer-engagement-link`, {
             method: 'POST',
             body: JSON.stringify(payload)
@@ -1240,9 +1249,11 @@ const DatabaseAPI = {
         return response;
     },
 
-    async revokeCustomerEngagementLink(leadId) {
+    async revokeCustomerEngagementLink(leadId, questionnaireId) {
+        const payload = questionnaireId ? { questionnaireId } : undefined;
         const response = await this.makeRequest(`/leads/${encodeURIComponent(leadId)}/customer-engagement-link`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            ...(payload ? { body: JSON.stringify(payload) } : {})
         });
         this.clearCache(`/leads/${leadId}`);
         this.clearCache('/leads');

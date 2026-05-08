@@ -106,6 +106,7 @@ function SectionBanner({ index, total, title }) {
 const CustomerEngagementPublic = () => {
     const params = useMemo(() => new URLSearchParams(window.location.search), []);
     const token = (params.get('token') || '').trim();
+    const questionnaireId = (params.get('q') || params.get('questionnaireId') || '').trim();
 
     const [phase, setPhase] = useState(token ? 'loading' : 'missing');
     const [error, setError] = useState('');
@@ -140,8 +141,10 @@ const CustomerEngagementPublic = () => {
         (async () => {
             try {
                 await loadBranding();
+                const query = new URLSearchParams({ token });
+                if (questionnaireId) query.set('q', questionnaireId);
                 const data = await fetchJson(
-                    `${apiOrigin()}/api/public/customer-engagement?token=${encodeURIComponent(token)}`
+                    `${apiOrigin()}/api/public/customer-engagement?${query.toString()}`
                 );
                 if (cancelled) return;
                 setFormDef(data.form);
@@ -163,7 +166,7 @@ const CustomerEngagementPublic = () => {
         return () => {
             cancelled = true;
         };
-    }, [token, loadBranding]);
+    }, [token, questionnaireId, loadBranding]);
 
     const setField = (id, value) => {
         setResponses((prev) => ({ ...prev, [id]: value }));
@@ -203,7 +206,7 @@ const CustomerEngagementPublic = () => {
         try {
             await fetchJson(`${apiOrigin()}/api/public/customer-engagement`, {
                 method: 'POST',
-                body: JSON.stringify({ token, responses })
+                body: JSON.stringify({ token, questionnaireId, responses })
             });
             setSubmitted(true);
             setSubmittedAt(new Date().toISOString());

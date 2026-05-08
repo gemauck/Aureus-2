@@ -7,7 +7,8 @@ import {
   CUSTOMER_ENGAGEMENT_SCHEMA_VERSION,
   getCustomerEngagementFormDefinition,
   validateCustomerEngagementResponses,
-  buildInitialResponsesForPublic
+  buildInitialResponsesForPublic,
+  sanitizeCustomerEngagementCustomFields
 } from '../_lib/customerEngagementSchema.js'
 
 function allowPublicCustomerEngagement() {
@@ -26,11 +27,27 @@ function parseToken(req) {
   }
 }
 
-async function findLeadByRawToken(rawToken) {
+function parseQuestionnaireId(req) {
+  const q = req.query || {}
+  if (q.q && typeof q.q === 'string') return q.q.trim()
+  if (q.questionnaireId && typeof q.questionnaireId === 'string') return q.questionnaireId.trim()
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`)
+    return (url.searchParams.get('q') || url.searchParams.get('questionnaireId') || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function normalizeQuestionnaires(raw) {
+  return Array.isArray(raw) ? raw.filter((q) => q && typeof q === 'object') : []
+}
+
+async function findLeadByRawToken(rawToken, questionnaireId) {
   if (!rawToken || rawToken.length < 20) return null
   const hash = hashCustomerEngagementToken(rawToken)
   if (!hash) return null
-  return prisma.client.findFirst({
+  const legacy = await prisma.client.findFirst({
     where: {
       type: 'lead',
       customerEngagementTokenHash: hash
@@ -42,10 +59,49 @@ async function findLeadByRawToken(rawToken) {
       customerEngagementSubmittedAt: true,
       customerEngagementResponses: true,
       customerEngagementPrefill: true,
+      customerEngagementQuestionnaires: true,
       activityLogJsonb: true,
       activityLog: true
     }
   })
+  if (legacy) {
+    return {
+      lead: legacy,
+      mode: 'legacy',
+      questionnaire:
+        questionnaireId &&
+        normalizeQuestionnaires(legacy.customerEngagementQuestionnaires).find((q) => q.id === questionnaireId)
+    }
+  }
+
+  const leads = await prisma.client.findMany({
+    where: {
+      type: 'lead',
+      customerEngagementQuestionnaires: { not: null }
+    },
+    select: {
+      id: true,
+      name: true,
+      customerEngagementRevokedAt: true,
+      customerEngagementSubmittedAt: true,
+      customerEngagementResponses: true,
+      customerEngagementPrefill: true,
+      customerEngagementQuestionnaires: true,
+      activityLogJsonb: true,
+      activityLog: true
+    }
+  })
+  for (const lead of leads) {
+    const qrows = normalizeQuestionnaires(lead.customerEngagementQuestionnaires)
+    const row = qrows.find(
+      (q) =>
+        q &&
+        q.tokenHash === hash &&
+        (!questionnaireId || String(q.id || '').trim() === questionnaireId)
+    )
+    if (row) return { lead, mode: 'questionnaire', questionnaire: row }
+  }
+  return null
 }
 
 function getActivityLogArray(client) {
@@ -72,27 +128,62 @@ async function handler(req, res) {
     }
 
     const token = parseToken(req)
-    const formDef = getCustomerEngagementFormDefinition()
+    const questionnaireId = parseQuestionnaireId(req)
 
     if (req.method === 'GET') {
       if (!token) {
         return badRequest(res, 'token query parameter required')
       }
-      const lead = await findLeadByRawToken(token)
-      if (!lead || lead.customerEngagementRevokedAt) {
+      const match = await findLeadByRawToken(token, questionnaireId)
+      const lead = match?.lead
+      if (!match || !lead || lead.customerEngagementRevokedAt) {
         return notFound(res, 'This link is invalid or has expired.')
       }
-      const submitted = !!lead.customerEngagementSubmittedAt
-      const initialResponses = buildInitialResponsesForPublic(lead.customerEngagementPrefill, lead.name)
+      if (
+        match.mode === 'questionnaire' &&
+        (match.questionnaire?.revokedAt || !match.questionnaire?.tokenHash)
+      ) {
+        return notFound(res, 'This link is invalid or has expired.')
+      }
+      const customFields =
+        match.mode === 'questionnaire'
+          ? sanitizeCustomerEngagementCustomFields(match.questionnaire?.customFields)
+          : []
+      const formDef = getCustomerEngagementFormDefinition(customFields)
+      const submitted =
+        match.mode === 'questionnaire'
+          ? !!match.questionnaire?.submittedAt
+          : !!lead.customerEngagementSubmittedAt
+      const initialResponses = buildInitialResponsesForPublic(
+        match.mode === 'questionnaire'
+          ? match.questionnaire?.prefill
+          : lead.customerEngagementPrefill,
+        lead.name,
+        formDef
+      )
       return ok(res, {
         schemaVersion: CUSTOMER_ENGAGEMENT_SCHEMA_VERSION,
         form: formDef,
         initialResponses,
         submitted,
-        submittedAt: lead.customerEngagementSubmittedAt
-          ? lead.customerEngagementSubmittedAt.toISOString()
-          : null,
-        responses: submitted ? lead.customerEngagementResponses : null
+        questionnaireId:
+          match.mode === 'questionnaire' ? (match.questionnaire?.id || null) : null,
+        questionnaireName:
+          match.mode === 'questionnaire'
+            ? (match.questionnaire?.name || 'Customer engagement questionnaire')
+            : null,
+        submittedAt:
+          match.mode === 'questionnaire'
+            ? match.questionnaire?.submittedAt || null
+            : lead.customerEngagementSubmittedAt
+              ? lead.customerEngagementSubmittedAt.toISOString()
+              : null,
+        responses:
+          submitted
+            ? (match.mode === 'questionnaire'
+                ? (match.questionnaire?.responses || null)
+                : lead.customerEngagementResponses)
+            : null
       })
     }
 
@@ -102,15 +193,25 @@ async function handler(req, res) {
       if (!raw) {
         return badRequest(res, 'token required')
       }
-      const lead = await findLeadByRawToken(raw)
-      if (!lead || lead.customerEngagementRevokedAt) {
+      const match = await findLeadByRawToken(raw, questionnaireId)
+      const lead = match?.lead
+      if (!match || !lead || lead.customerEngagementRevokedAt) {
         return notFound(res, 'This link is invalid or has expired.')
       }
-      if (lead.customerEngagementSubmittedAt) {
+      const customFields =
+        match.mode === 'questionnaire'
+          ? sanitizeCustomerEngagementCustomFields(match.questionnaire?.customFields)
+          : []
+      const formDef = getCustomerEngagementFormDefinition(customFields)
+      if (match.mode === 'questionnaire') {
+        if (match.questionnaire?.submittedAt) {
+          return badRequest(res, 'This questionnaire has already been submitted.')
+        }
+      } else if (lead.customerEngagementSubmittedAt) {
         return badRequest(res, 'This questionnaire has already been submitted.')
       }
       const responses = body.responses
-      const validation = validateCustomerEngagementResponses(responses)
+      const validation = validateCustomerEngagementResponses(responses, formDef)
       if (!validation.ok) {
         return badRequest(res, validation.errors.join('; '))
       }
@@ -129,15 +230,36 @@ async function handler(req, res) {
         meta: { source: 'customer_engagement_public' }
       })
 
-      await prisma.client.update({
-        where: { id: lead.id },
-        data: {
-          customerEngagementResponses: responses,
-          customerEngagementSubmittedAt: now,
-          activityLog: JSON.stringify(log),
-          activityLogJsonb: log
-        }
-      })
+      if (match.mode === 'questionnaire') {
+        const rows = normalizeQuestionnaires(lead.customerEngagementQuestionnaires).map((q) =>
+          q.id === match.questionnaire.id
+            ? {
+                ...q,
+                responses,
+                submittedAt: now.toISOString(),
+                updatedAt: now.toISOString()
+              }
+            : q
+        )
+        await prisma.client.update({
+          where: { id: lead.id },
+          data: {
+            customerEngagementQuestionnaires: rows,
+            activityLog: JSON.stringify(log),
+            activityLogJsonb: log
+          }
+        })
+      } else {
+        await prisma.client.update({
+          where: { id: lead.id },
+          data: {
+            customerEngagementResponses: responses,
+            customerEngagementSubmittedAt: now,
+            activityLog: JSON.stringify(log),
+            activityLogJsonb: log
+          }
+        })
+      }
 
       return ok(res, { success: true, submittedAt: now.toISOString() })
     }
