@@ -56,6 +56,8 @@ function defaultLeadProposalWorkflow() {
     return {
         currentStep: 1,
         engagementQuestionnaireId: '',
+        manualEngagementMandateLink: '',
+        manualEngagementMandateUploadedName: '',
         departmentalComments: '',
         circulationDepartments: defaultCirculationDepartmentsUi(),
         signOffBy: '',
@@ -82,6 +84,8 @@ function normalizeLeadProposalWorkflowUi(raw) {
                 ? raw.submittedToClientAt.trim()
                 : null,
         submissionNotes: String(raw.submissionNotes || ''),
+        manualEngagementMandateLink: String(raw.manualEngagementMandateLink || '').trim(),
+        manualEngagementMandateUploadedName: String(raw.manualEngagementMandateUploadedName || '').trim(),
         workingDraftUploadedName: String(raw.workingDraftUploadedName || '').trim()
     };
 }
@@ -117,6 +121,7 @@ function classifyProposalWorkingDocument(url) {
         const isUpload =
             path.includes('/uploads/') ||
             path.includes('/lead-proposals/') ||
+            path.includes('/lead-engagement-mandates/') ||
             (sameOrigin && path.includes('upload'));
         const isCloud =
             host.includes('drive.google.com') ||
@@ -621,6 +626,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [leadProposalWizardEditIndex, setLeadProposalWizardEditIndex] = useState(null);
     const [leadProposalWizardSaving, setLeadProposalWizardSaving] = useState(false);
     const [leadProposalWizardUploadBusy, setLeadProposalWizardUploadBusy] = useState(false);
+    const [leadProposalMandateUploadBusy, setLeadProposalMandateUploadBusy] = useState(false);
     const [leadProposalWizardHint, setLeadProposalWizardHint] = useState('');
     const [leadProposalWizardCreatingQ, setLeadProposalWizardCreatingQ] = useState(false);
     /** Users list for Step 3 circulation “responsible person” selects */
@@ -2261,6 +2267,60 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setLeadProposalWizardHint(e.message || 'Upload failed.');
         } finally {
             setLeadProposalWizardUploadBusy(false);
+        }
+    };
+
+    const uploadLeadProposalManualMandateFile = async (file) => {
+        if (!file) return;
+        setLeadProposalMandateUploadBusy(true);
+        setLeadProposalWizardHint('');
+        try {
+            const reader = new FileReader();
+            const dataUrl = await new Promise((resolve, reject) => {
+                reader.onload = (ev) => resolve(ev.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            const token = window.storage?.getToken?.();
+            const res = await fetch(`${window.location.origin}/api/files`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                    folder: 'lead-engagement-mandates',
+                    name: file.name,
+                    dataUrl
+                })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(json.error?.message || json.message || `Upload failed (${res.status})`);
+            }
+            const fileUrl = json.data?.url || json.url;
+            if (!fileUrl) throw new Error('No file URL returned');
+            const abs = fileUrl.startsWith('http')
+                ? fileUrl
+                : `${window.location.origin.replace(/\/$/, '')}${fileUrl.startsWith('/') ? '' : '/'}${fileUrl}`;
+            setLeadProposalWizardDraft((prev) => {
+                if (!prev) return prev;
+                const wf = normalizeLeadProposalWorkflowUi(prev.workflow);
+                return {
+                    ...prev,
+                    workflow: {
+                        ...wf,
+                        manualEngagementMandateLink: abs,
+                        manualEngagementMandateUploadedName: file.name
+                    }
+                };
+            });
+            setLeadProposalWizardHint('Manual mandate file attached.');
+            setTimeout(() => setLeadProposalWizardHint(''), 4000);
+        } catch (e) {
+            setLeadProposalWizardHint(e.message || 'Upload failed.');
+        } finally {
+            setLeadProposalMandateUploadBusy(false);
         }
     };
 
@@ -8556,6 +8616,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             const linkedQ = w.engagementQuestionnaireId
                                                 ? qn.find((q) => String(q.id || '') === String(w.engagementQuestionnaireId))
                                                 : null;
+                                            const submissionVersionsLinked = linkedQ
+                                                ? getEngagementSubmissionVersions(linkedQ)
+                                                : [];
+                                            const canReviewLinkedQuestionnaireReport =
+                                                !!linkedQ &&
+                                                (submissionVersionsLinked.some((v) => v.responses || v.submittedAt) ||
+                                                    !!(linkedQ.submittedAt || linkedQ.responses));
                                             return (
                                                 <div
                                                     key={proposal.id || proposalIndex}
@@ -8574,6 +8641,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                         ? `Questionnaire: ${linkedQ.name || linkedQ.id}`
                                                                         : 'Step 1: link a customer engagement questionnaire'}
                                                                     {proposal.workingDocumentLink ? ' · Draft link on file' : ''}
+                                                                    {String(w.manualEngagementMandateLink || '').trim()
+                                                                        ? ' · Manual mandate on file'
+                                                                        : ''}
                                                                 </div>
                                                             </div>
                                                             <div className="flex flex-wrap gap-1.5 shrink-0">
@@ -8589,6 +8659,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     <i className="fas fa-stream mr-1" aria-hidden />
                                                                     Process
                                                                 </button>
+                                                                {canReviewLinkedQuestionnaireReport && linkedQ?.id ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            void handleOpenEngagementReport(String(linkedQ.id))
+                                                                        }
+                                                                        className={`text-xs px-3 py-1.5 rounded-lg font-medium border ${
+                                                                            isDark
+                                                                                ? 'border-primary-400 text-primary-200 hover:bg-gray-800'
+                                                                                : 'border-primary-500 text-primary-800 hover:bg-primary-50'
+                                                                        }`}
+                                                                        title="Open the submitted questionnaire report"
+                                                                    >
+                                                                        <i className="fas fa-file-alt mr-1" aria-hidden />
+                                                                        Review submitted report
+                                                                    </button>
+                                                                ) : null}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleRemoveLeadProposal(proposalIndex)}
@@ -9072,13 +9159,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         !!selectedQ &&
                                         (submissionVersionsForQ.some((v) => v.responses || v.submittedAt) ||
                                             !!(selectedQ.submittedAt || selectedQ.responses));
+                                    const mandateLinkRaw = String(w.manualEngagementMandateLink || '').trim();
+                                    const mandateCls = classifyProposalWorkingDocument(mandateLinkRaw);
+                                    const mandateDisplayName =
+                                        w.manualEngagementMandateUploadedName ||
+                                        (mandateCls.kind === 'upload' ? proposalWorkingDocBasename(mandateLinkRaw) : '');
+                                    const mandateIconMeta = proposalDocIconMeta(
+                                        w.manualEngagementMandateUploadedName || mandateDisplayName || mandateLinkRaw
+                                    );
+                                    const mandateAbsOpen = toAbsoluteProposalDocUrl(mandateLinkRaw);
+                                    const mandateShowUploadCard = Boolean(mandateLinkRaw && mandateCls.kind === 'upload');
+                                    const mandateShowCloudCard = Boolean(
+                                        mandateLinkRaw && (mandateCls.kind === 'cloud' || mandateCls.kind === 'link')
+                                    );
+                                    const mandateHideUrlInField = mandateShowUploadCard || mandateShowCloudCard;
                                     return (
                                         <div className={stepPanelCls}>
                                             <h3 className={wizStepTitleCls}>
                                                 Step 1 — Customer engagement mandate
                                             </h3>
                                             <p className={wizDescCls}>
-                                                Each proposal uses its own questionnaire. A new one is created automatically when you add a proposal — you do not pick from other questionnaires. Multiple proposals means multiple questionnaires on this lead.
+                                                Each proposal uses its own questionnaire. A new one is created automatically when you add a proposal — you do not pick from other questionnaires. Multiple proposals means multiple questionnaires on this lead. If the mandate was completed offline, attach the Word or PDF file below (optional — you can use this instead of or alongside the online questionnaire).
                                             </p>
                                             {creatingQ ? (
                                                 <div className={`flex items-center justify-center gap-2 py-10 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
@@ -9088,14 +9189,49 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             ) : null}
                                             {!creatingQ && qid && selectedQ ? (
                                                 <>
-                                                    <div className={`rounded-lg border px-3 py-2.5 mb-3 ${isDark ? 'border-gray-600 bg-gray-900/60' : 'border-gray-200 bg-white'}`}>
-                                                        <div className={`text-[11px] uppercase tracking-wide font-semibold ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                                            This proposal&apos;s questionnaire
+                                                    {canViewSubmissionReport ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void handleOpenEngagementReport(String(selectedQ.id || ''))}
+                                                            className={`mb-3 w-full rounded-lg border px-3 py-2.5 text-left transition ring-offset-2 ring-offset-transparent hover:ring-2 hover:ring-primary-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+                                                                isDark ? 'border-gray-600 bg-gray-900/60' : 'border-gray-200 bg-white'
+                                                            }`}
+                                                            title="Open the submitted questionnaire report"
+                                                        >
+                                                            <div
+                                                                className={`text-[11px] uppercase tracking-wide font-semibold ${isDark ? 'text-gray-500' : 'text-gray-500'}`}
+                                                            >
+                                                                This proposal&apos;s questionnaire
+                                                            </div>
+                                                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                                <span
+                                                                    className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                                >
+                                                                    {selectedQ.name || 'Customer engagement questionnaire'}
+                                                                </span>
+                                                                <span
+                                                                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'bg-primary-900/80 text-primary-200' : 'bg-primary-100 text-primary-800'}`}
+                                                                >
+                                                                    Report submitted — click to review
+                                                                </span>
+                                                            </div>
+                                                        </button>
+                                                    ) : (
+                                                        <div
+                                                            className={`mb-3 rounded-lg border px-3 py-2.5 ${isDark ? 'border-gray-600 bg-gray-900/60' : 'border-gray-200 bg-white'}`}
+                                                        >
+                                                            <div
+                                                                className={`text-[11px] uppercase tracking-wide font-semibold ${isDark ? 'text-gray-500' : 'text-gray-500'}`}
+                                                            >
+                                                                This proposal&apos;s questionnaire
+                                                            </div>
+                                                            <div
+                                                                className={`mt-1 text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                            >
+                                                                {selectedQ.name || 'Customer engagement questionnaire'}
+                                                            </div>
                                                         </div>
-                                                        <div className={`mt-1 text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                            {selectedQ.name || 'Customer engagement questionnaire'}
-                                                        </div>
-                                                    </div>
+                                                    )}
                                                     <div className="flex flex-wrap gap-2">
                                                         <button
                                                             type="button"
@@ -9113,7 +9249,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 onClick={() => void handleOpenEngagementReport(String(selectedQ.id || ''))}
                                                                 className={`text-xs font-semibold px-4 py-2.5 rounded-lg border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'}`}
                                                             >
-                                                                View submission report
+                                                                Review submitted report
                                                             </button>
                                                         ) : null}
                                                     </div>
@@ -9212,6 +9348,176 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     >
                                                         Try creating again
                                                     </button>
+                                                </div>
+                                            ) : null}
+                                            {!creatingQ ? (
+                                                <div
+                                                    className={`mt-8 border-t pt-6 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}
+                                                >
+                                                    <h4
+                                                        className={`text-base md:text-lg font-bold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                    >
+                                                        Manual mandate document (Word / PDF)
+                                                    </h4>
+                                                    <p className={`text-sm md:text-base mb-4 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                        Upload a filled mandate from Word or attach a cloud link. Saved with this proposal when you use{' '}
+                                                        <strong className="font-semibold">Save &amp; close</strong>.
+                                                    </p>
+
+                                                    {mandateShowUploadCard ? (
+                                                        <div
+                                                            className={`mb-6 flex flex-wrap items-center gap-5 rounded-xl border p-5 sm:p-6 ${isDark ? 'border-gray-600 bg-gray-900/70' : 'border-gray-200 bg-white'}`}
+                                                        >
+                                                            <div
+                                                                className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl ${mandateIconMeta.bg}`}
+                                                                aria-hidden
+                                                            >
+                                                                <i className={`fas ${mandateIconMeta.icon} text-3xl ${mandateIconMeta.color}`} />
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <div
+                                                                    className={`truncate text-base font-semibold md:text-lg ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                                    title={mandateDisplayName || undefined}
+                                                                >
+                                                                    {mandateDisplayName || proposalWorkingDocBasename(mandateLinkRaw)}
+                                                                </div>
+                                                                <p className={`mt-1 text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                                                                    Uploaded mandate (stored on your server)
+                                                                </p>
+                                                                <div className="mt-3 flex flex-wrap items-center gap-4">
+                                                                    <a
+                                                                        href={mandateAbsOpen}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className={`inline-flex items-center gap-2 text-base font-semibold ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-700 hover:text-primary-800'}`}
+                                                                    >
+                                                                        <i className="fas fa-external-link-alt text-sm" aria-hidden />
+                                                                        Open file
+                                                                    </a>
+                                                                    <button
+                                                                        type="button"
+                                                                        className={`text-sm font-semibold underline ${isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-900'}`}
+                                                                        onClick={() =>
+                                                                            setLeadProposalWizardDraft((p) => {
+                                                                                if (!p) return p;
+                                                                                const wf = normalizeLeadProposalWorkflowUi(p.workflow);
+                                                                                return {
+                                                                                    ...p,
+                                                                                    workflow: {
+                                                                                        ...wf,
+                                                                                        manualEngagementMandateLink: '',
+                                                                                        manualEngagementMandateUploadedName: ''
+                                                                                    }
+                                                                                };
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        Remove file
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ) : null}
+
+                                                    {mandateShowCloudCard ? (
+                                                        <div
+                                                            className={`mb-6 rounded-xl border p-5 sm:p-6 ${isDark ? 'border-gray-600 bg-gray-900/70' : 'border-gray-200 bg-white'}`}
+                                                        >
+                                                            <div
+                                                                className={`mb-2 text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-500'}`}
+                                                            >
+                                                                Mandate link (cloud / SharePoint / etc.)
+                                                            </div>
+                                                            <a
+                                                                href={mandateAbsOpen}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className={`inline-flex flex-wrap items-center gap-2 break-all text-base font-medium underline md:text-lg ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-700 hover:text-primary-800'}`}
+                                                            >
+                                                                <i className="fas fa-link shrink-0" aria-hidden />
+                                                                {mandateCls.kind === 'cloud' || mandateCls.kind === 'link'
+                                                                    ? shortCloudLinkLabel(mandateAbsOpen)
+                                                                    : mandateLinkRaw}
+                                                            </a>
+                                                            <p className={`mt-2 text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                                                                Opens in a new tab
+                                                            </p>
+                                                            <button
+                                                                type="button"
+                                                                className={`mt-3 text-sm font-semibold underline ${isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-900'}`}
+                                                                onClick={() =>
+                                                                    setLeadProposalWizardDraft((p) => {
+                                                                        if (!p) return p;
+                                                                        const wf = normalizeLeadProposalWorkflowUi(p.workflow);
+                                                                        return {
+                                                                            ...p,
+                                                                            workflow: {
+                                                                                ...wf,
+                                                                                manualEngagementMandateLink: '',
+                                                                                manualEngagementMandateUploadedName: ''
+                                                                            }
+                                                                        };
+                                                                    })
+                                                                }
+                                                            >
+                                                                Clear link
+                                                            </button>
+                                                        </div>
+                                                    ) : null}
+
+                                                    <label className={labelCls}>
+                                                        {mandateShowUploadCard
+                                                            ? 'Replace with a cloud link'
+                                                            : mandateShowCloudCard
+                                                              ? 'Replace link'
+                                                              : 'Link to mandate document'}
+                                                    </label>
+                                                    <input
+                                                        type="url"
+                                                        value={mandateHideUrlInField ? '' : mandateLinkRaw}
+                                                        onChange={(e) => {
+                                                            const v = e.target.value;
+                                                            setLeadProposalWizardDraft((p) => {
+                                                                if (!p) return p;
+                                                                const wf = normalizeLeadProposalWorkflowUi(p.workflow);
+                                                                return {
+                                                                    ...p,
+                                                                    workflow: {
+                                                                        ...wf,
+                                                                        manualEngagementMandateLink: v,
+                                                                        manualEngagementMandateUploadedName: ''
+                                                                    }
+                                                                };
+                                                            });
+                                                        }}
+                                                        className={inputCls}
+                                                        placeholder={
+                                                            mandateShowUploadCard
+                                                                ? 'Paste SharePoint, Google Drive, or other https link…'
+                                                                : mandateShowCloudCard
+                                                                  ? 'Paste a different https link…'
+                                                                  : 'https://…'
+                                                        }
+                                                    />
+
+                                                    <label className={`${labelCls} mt-6`}>Upload mandate file</label>
+                                                    <input
+                                                        type="file"
+                                                        accept=".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
+                                                        disabled={leadProposalMandateUploadBusy}
+                                                        onChange={(e) => {
+                                                            const f = e.target.files?.[0];
+                                                            e.target.value = '';
+                                                            if (f) void uploadLeadProposalManualMandateFile(f);
+                                                        }}
+                                                        className={`text-base w-full ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
+                                                    />
+                                                    {leadProposalMandateUploadBusy ? (
+                                                        <p className="mt-3 text-base text-primary-600">
+                                                            <i className="fas fa-spinner fa-spin mr-2" aria-hidden />
+                                                            Uploading…
+                                                        </p>
+                                                    ) : null}
                                                 </div>
                                             ) : null}
                                         </div>
@@ -9644,7 +9950,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 className={`text-[11px] font-semibold px-2 py-1 rounded border ${isDark ? 'border-primary-500 text-primary-300 hover:bg-gray-800' : 'border-primary-500 text-primary-700 hover:bg-white'}`}
                                                                 onClick={() => void handleOpenEngagementReport(String(selectedRow.id))}
                                                             >
-                                                                View latest report
+                                                                Review submitted report
                                                             </button>
                                                         ) : null}
                                                     </div>
@@ -9677,7 +9983,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                                 void handleOpenEngagementReport(String(selectedRow.id), v.version)
                                                                             }
                                                                         >
-                                                                            View report
+                                                                            Review
                                                                         </button>
                                                                     ) : null}
                                                                 </div>

@@ -21,6 +21,9 @@ function defaultCirculationDepartments() {
 const DEFAULT_WORKFLOW = Object.freeze({
   currentStep: 1,
   engagementQuestionnaireId: '',
+  /** Optional: mandate completed offline (upload URL + original filename stored with proposal workflow). */
+  manualEngagementMandateLink: '',
+  manualEngagementMandateUploadedName: '',
   departmentalComments: '',
   circulationDepartments: defaultCirculationDepartments(),
   signOffBy: '',
@@ -61,6 +64,8 @@ export function sanitizeLeadProposalWorkflow(raw) {
   return {
     currentStep: step,
     engagementQuestionnaireId: String(w.engagementQuestionnaireId || '').trim(),
+    manualEngagementMandateLink: String(w.manualEngagementMandateLink || '').trim(),
+    manualEngagementMandateUploadedName: String(w.manualEngagementMandateUploadedName || '').trim(),
     departmentalComments: String(w.departmentalComments || ''),
     circulationDepartments,
     signOffBy: String(w.signOffBy || '').trim(),
