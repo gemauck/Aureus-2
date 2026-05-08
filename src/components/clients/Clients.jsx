@@ -4852,9 +4852,16 @@ const Clients = React.memo(() => {
             return;
         }
         
-        // Get selectedLead: prefer list, fallback to ref (full-page lead view may use ref)
-        const selectedLead = (editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null)
-            || (editingLeadId && selectedLeadRef.current?.id === editingLeadId ? selectedLeadRef.current : null);
+        // Get selectedLead: prefer list, fallback to ref (full-page lead view may use ref). Match ids as strings.
+        const selectedLead =
+            (editingLeadId && Array.isArray(leads)
+                ? leads.find((l) => l != null && String(l.id) === String(editingLeadId))
+                : null) ||
+            (editingLeadId &&
+            selectedLeadRef.current != null &&
+            String(selectedLeadRef.current.id) === String(editingLeadId)
+                ? selectedLeadRef.current
+                : null);
         
         try {
             const token = window.storage?.getToken?.();
@@ -9533,9 +9540,19 @@ const Clients = React.memo(() => {
     const LeadDetailView = () => {
         // Use ClientDetailModal for leads too - unified UI
         const ClientDetailModalComponent = useEnsureGlobalComponent('ClientDetailModal');
-        // Prefer leads list over ref so table edits (engagement stage, company group, etc.) update the detail immediately
-        const selectedLead = (editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null) ||
-            selectedLeadRef.current;
+        // Prefer leads list over ref so table edits (engagement stage, company group, etc.) update the detail immediately.
+        // Use String(id) matching — API/list ids may be string while editingLeadId may differ in type; strict === fails and caused null client flashes / remount churn.
+        const selectedLeadFromList =
+            editingLeadId && Array.isArray(leads)
+                ? leads.find((l) => l != null && String(l.id) === String(editingLeadId))
+                : null;
+        const selectedLeadFromRef =
+            selectedLeadRef.current != null &&
+            editingLeadId != null &&
+            String(selectedLeadRef.current.id) === String(editingLeadId)
+                ? selectedLeadRef.current
+                : null;
+        const selectedLead = selectedLeadFromList || selectedLeadFromRef;
         
         return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -9567,7 +9584,6 @@ const Clients = React.memo(() => {
             <div className="p-6">
                 {ClientDetailModalComponent ? (
                     <ClientDetailModalComponent
-                        key={editingLeadId || 'new-lead'}
                         client={selectedLead} // Use 'client' prop (ClientDetailModal handles both)
                         entityType="lead" // Tell modal it's a lead
                         onSave={handleSaveLead}

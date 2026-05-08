@@ -549,8 +549,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [leadProposalWizardHint, setLeadProposalWizardHint] = useState('');
     const [leadProposalWizardCreatingQ, setLeadProposalWizardCreatingQ] = useState(false);
     const leadProposalWizardSessionDraftIdRef = useRef(null);
-    const closeLeadProposalWizardRef = useRef(() => {});
-    const leadProposalWizardSavingRef = useRef(false);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -1924,25 +1922,35 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             workflow: defaultLeadProposalWorkflow()
         });
         setShowLeadProposalWizard(true);
-        setLeadProposalWizardCreatingQ(true);
-        void (async () => {
-            try {
-                const qid = await createFreshQuestionnaireForProposal('');
-                setLeadProposalWizardDraft((prev) => {
-                    if (!prev || prev.id !== leadProposalWizardSessionDraftIdRef.current) return prev;
-                    const w = normalizeLeadProposalWorkflowUi(prev.workflow);
-                    return {
-                        ...prev,
-                        workflow: { ...w, engagementQuestionnaireId: qid }
-                    };
-                });
-                setSelectedEngagementQuestionnaireId(qid);
-            } catch (e) {
-                setLeadProposalWizardHint(e.message || 'Could not create questionnaire. Try again or close and reopen.');
-            } finally {
-                setLeadProposalWizardCreatingQ(false);
-            }
-        })();
+        const runQuestionnaireBootstrap = () => {
+            setLeadProposalWizardCreatingQ(true);
+            void (async () => {
+                try {
+                    const qid = await createFreshQuestionnaireForProposal('');
+                    setLeadProposalWizardDraft((prev) => {
+                        if (!prev || prev.id !== leadProposalWizardSessionDraftIdRef.current) return prev;
+                        const w = normalizeLeadProposalWorkflowUi(prev.workflow);
+                        return {
+                            ...prev,
+                            workflow: { ...w, engagementQuestionnaireId: qid }
+                        };
+                    });
+                    setSelectedEngagementQuestionnaireId(qid);
+                } catch (e) {
+                    setLeadProposalWizardHint(e.message || 'Could not create questionnaire. Try again or close and reopen.');
+                } finally {
+                    setLeadProposalWizardCreatingQ(false);
+                }
+            })();
+        };
+        // Defer until after paint so the wizard mounts first; immediate POST clears /leads cache and can race parent list refresh + remount.
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(runQuestionnaireBootstrap);
+            });
+        } else {
+            setTimeout(runQuestionnaireBootstrap, 0);
+        }
     };
 
     const openLeadProposalWizardEdit = (index) => {
@@ -1969,22 +1977,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setLeadProposalWizardHint('');
         setLeadProposalWizardCreatingQ(false);
     };
-
-    closeLeadProposalWizardRef.current = closeLeadProposalWizard;
-    leadProposalWizardSavingRef.current = leadProposalWizardSaving;
-
-    useEffect(() => {
-        if (!showLeadProposalWizard) return;
-        const onDocKeyDown = (e) => {
-            if (e.key !== 'Escape') return;
-            if (leadProposalWizardSavingRef.current) return;
-            e.preventDefault();
-            e.stopPropagation();
-            closeLeadProposalWizardRef.current();
-        };
-        document.addEventListener('keydown', onDocKeyDown, true);
-        return () => document.removeEventListener('keydown', onDocKeyDown, true);
-    }, [showLeadProposalWizard]);
 
     const updateLeadProposalWizardWorkflow = (partial) => {
         setLeadProposalWizardDraft((prev) => {
