@@ -178,10 +178,12 @@ async function applyFinalProductBuildableUnits(items = []) {
     const components = parseBomComponents(bom.components)
     const buildableUnits = computeBuildableUnitsFromComponents(components, availableBySku)
     if (buildableUnits == null) return item
+    const currentQuantity = parseFiniteNumber(item?.quantity, 0)
+    const displayQuantity = Math.max(currentQuantity, buildableUnits)
 
     return {
       ...item,
-      quantity: buildableUnits,
+      quantity: displayQuantity,
       buildableUnits
     }
   })
