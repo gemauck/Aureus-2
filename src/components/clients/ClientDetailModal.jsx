@@ -152,6 +152,30 @@ function buildEngagementFormWithCustomFields(baseForm, customFields) {
     return form;
 }
 
+/** Human-readable lines for stored prefill (what was embedded for the respondent). */
+function resolveEngagementPrefillLines(formDef, prefill) {
+    if (!formDef?.sections || !prefill || typeof prefill !== 'object') return [];
+    const idToLabel = {};
+    for (const sec of formDef.sections) {
+        for (const f of sec.fields || []) {
+            idToLabel[f.id] = f.label || f.id;
+        }
+    }
+    return Object.entries(prefill).map(([k, raw]) => {
+        let display = '';
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+            const parts = [];
+            for (const [optId, on] of Object.entries(raw)) {
+                if (on) parts.push(String(optId).replace(/_/g, ' '));
+            }
+            display = parts.join(', ');
+        } else if (raw != null && raw !== '') {
+            display = String(raw);
+        }
+        return { label: idToLabel[k] || k, value: display };
+    });
+}
+
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, onRevertToLead, initialSiteId, onInitialSiteOpened }) => {
     // entityType: 'client' or 'lead' - determines terminology and behavior
     const isLead = entityType === 'lead';
@@ -454,6 +478,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementCustomFieldsDraft, setEngagementCustomFieldsDraft] = useState([]);
     const [selectedEngagementQuestionnaireId, setSelectedEngagementQuestionnaireId] = useState('');
     const [engagementShareLink, setEngagementShareLink] = useState('');
+    /** True when the opened questionnaire already had an active public link — saves preserve the token unless user regenerates. */
+    const [engagementOpenedWithActiveLink, setEngagementOpenedWithActiveLink] = useState(false);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -565,7 +591,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const openEngagementPrefillModal = async (clearSubmission, questionnaireRow = null) => {
         if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
         const hasSubmission = questionnaireRow ? !!questionnaireRow.submittedAt : !!formData.customerEngagementSubmittedAt;
-        const hasActiveLink = questionnaireRow ? !!questionnaireRow.linkActive : !!formData.customerEngagementLinkActive;
         if (
             clearSubmission &&
             hasSubmission &&
@@ -573,13 +598,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         ) {
             return;
         }
-        if (
-            !clearSubmission &&
-            hasActiveLink &&
-            !window.confirm('Create a new link? Anyone with the old link will no longer be able to use it.')
-        ) {
-            return;
-        }
+        setEngagementOpenedWithActiveLink(!!questionnaireRow?.linkActive);
         setEngagementClearSubmission(clearSubmission);
         setShowEngagementPrefillModal(true);
         setEngagementPrefillLoading(true);
@@ -608,23 +627,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
-    const commitEngagementLinkFromModal = async ({ copyToClipboard = true } = {}) => {
+    const commitEngagementLinkFromModal = async ({ copyToClipboard = true, rotateToken = true } = {}) => {
         if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) return;
         setEngagementBusy(true);
         setEngagementHint('');
         let generatedUrl = '';
+        const preserveToken = rotateToken === false;
         try {
             const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, {
-                clearSubmission: engagementClearSubmission,
+                clearSubmission: preserveToken ? false : engagementClearSubmission,
+                preserveToken,
                 prefill: engagementPrefillDraft,
                 questionnaireName: engagementQuestionnaireName,
                 questionnaireId: selectedEngagementQuestionnaireId || undefined,
                 customFields: sanitizeEngagementCustomFields(engagementCustomFieldsDraft)
             });
             const payload = res?.data ?? res;
+            if (payload?.preservedToken) {
+                setEngagementHint(
+                    copyToClipboard
+                        ? 'Questionnaire saved. The existing share link is unchanged (use Regenerate to issue a new URL).'
+                        : 'Questionnaire saved. The existing share link is unchanged.'
+                );
+            }
             if (payload?.url) {
                 generatedUrl = payload.url;
                 setEngagementShareLink(payload.url);
+                setEngagementOpenedWithActiveLink(true);
                 if (payload?.questionnaireId) {
                     setSelectedEngagementQuestionnaireId(String(payload.questionnaireId));
                 }
@@ -635,7 +664,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     } catch {
                         setEngagementHint('Questionnaire saved. Share link is ready.');
                     }
-                } else {
+                } else if (!payload?.preservedToken) {
                     setEngagementHint('Questionnaire saved. Share link is ready.');
                 }
             }
@@ -657,7 +686,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             : lead.activityLog || prev.activityLog
                 }));
             }
-            if (!generatedUrl) {
+            if (!generatedUrl && !payload?.preservedToken) {
                 setEngagementHint(
                     engagementClearSubmission
                         ? 'New link created. Previous submission was cleared.'
@@ -677,7 +706,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const handleCopyEngagementLinkFromModal = async () => {
         let url = String(engagementShareLink || '').trim();
         if (!url) {
-            url = await commitEngagementLinkFromModal({ copyToClipboard: false });
+            if (engagementOpenedWithActiveLink) {
+                setEngagementHint(
+                    'The share URL is not stored after it is created. Use “Regenerate share link” to copy a new link (this invalidates the previous one).'
+                );
+                setTimeout(() => setEngagementHint(''), 6500);
+                return;
+            }
+            url = await commitEngagementLinkFromModal({ copyToClipboard: false, rotateToken: true });
         }
         if (!url) return;
         try {
@@ -692,7 +728,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const handleEmailEngagementLinkFromModal = async () => {
         let url = String(engagementShareLink || '').trim();
         if (!url) {
-            url = await commitEngagementLinkFromModal({ copyToClipboard: false });
+            if (engagementOpenedWithActiveLink) {
+                setEngagementHint(
+                    'Issue a fresh link with “Regenerate share link”, then email it (existing URL is still active but cannot be retrieved here).'
+                );
+                setTimeout(() => setEngagementHint(''), 6500);
+                return;
+            }
+            url = await commitEngagementLinkFromModal({ copyToClipboard: false, rotateToken: true });
         }
         if (!url) return;
         const subject = encodeURIComponent(`Customer engagement questionnaire: ${engagementQuestionnaireName || 'Site visit'}`);
@@ -700,6 +743,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             `Hi,\n\nPlease complete the customer engagement questionnaire using the link below:\n\n${url}\n\nThank you.`
         );
         window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
+    };
+
+    const regenerateEngagementShareLink = async () => {
+        const rows = getEngagementQuestionnaires();
+        const row = selectedEngagementQuestionnaireId
+            ? rows.find((q) => String(q.id) === String(selectedEngagementQuestionnaireId))
+            : null;
+        const hasTokenOutThere = !!(row?.linkActive || engagementOpenedWithActiveLink);
+        if (
+            hasTokenOutThere &&
+            !window.confirm(
+                'Regenerate the share link for this questionnaire? Anyone with the previous link will no longer be able to use it.'
+            )
+        ) {
+            return;
+        }
+        await commitEngagementLinkFromModal({ copyToClipboard: false, rotateToken: true });
     };
 
     useEffect(() => {
@@ -862,9 +922,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const r2 = await window.DatabaseAPI.getLead(formData.id);
             const lead = r2?.data?.lead || r2?.lead;
             let canOpen = false;
+            let selectedRow = null;
             if (lead) {
                 const rows = normalizeEngagementQuestionnaires(lead.customerEngagementQuestionnaires);
-                const selectedRow = rows.find((q) => String(q.id || '') === String(questionnaireId || ''));
+                selectedRow = rows.find((q) => String(q.id || '') === String(questionnaireId || ''));
                 canOpen = !!(
                     selectedRow?.responses ||
                     selectedRow?.submittedAt ||
@@ -878,8 +939,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     customerEngagementQuestionnaires: lead.customerEngagementQuestionnaires
                 }));
             }
-            if (!canOpen) {
-                setEngagementHint('No submitted report found for this questionnaire yet.');
+            const prefillSnapshot = selectedRow?.prefill && typeof selectedRow.prefill === 'object' && !Array.isArray(selectedRow.prefill)
+                ? selectedRow.prefill
+                : null;
+            const hasPrefillPreview = !!(prefillSnapshot && Object.keys(prefillSnapshot).length > 0);
+            if (!canOpen && !hasPrefillPreview) {
+                setEngagementHint('No submission or prefill snapshot for this questionnaire yet.');
                 setTimeout(() => setEngagementHint(''), 4000);
                 return;
             }
@@ -8565,14 +8630,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <span className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Link ready</span>
                                             ) : null}
                                         </div>
+                                        {selectedEngagementQuestionnaireId && engagementOpenedWithActiveLink && !engagementShareLink ? (
+                                            <p className={`mt-2 text-[11px] leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                A share link is already active for this questionnaire. Saving preserves it. Use regenerate to mint a new URL (old links stop working).
+                                            </p>
+                                        ) : null}
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             <button
                                                 type="button"
-                                                disabled={engagementBusy}
-                                                onClick={() => commitEngagementLinkFromModal({ copyToClipboard: false })}
+                                                disabled={
+                                                    engagementBusy ||
+                                                    !String(selectedEngagementQuestionnaireId || '').trim()
+                                                }
+                                                onClick={() => regenerateEngagementShareLink()}
+                                                title={
+                                                    !String(selectedEngagementQuestionnaireId || '').trim()
+                                                        ? 'Save the questionnaire first to create a link.'
+                                                        : undefined
+                                                }
                                                 className={`text-[11px] px-2.5 py-1 rounded border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'} disabled:opacity-50`}
                                             >
-                                                {engagementBusy ? 'Saving…' : 'Generate / resend link'}
+                                                {engagementBusy ? 'Saving…' : 'Regenerate share link'}
                                             </button>
                                             <button
                                                 type="button"
@@ -8806,10 +8884,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     !engagementFormDef ||
                                     !String(engagementQuestionnaireName || '').trim()
                                 }
-                                onClick={() => commitEngagementLinkFromModal({ copyToClipboard: true })}
+                                onClick={() =>
+                                    commitEngagementLinkFromModal({
+                                        copyToClipboard:
+                                            !(Boolean(String(selectedEngagementQuestionnaireId || '').trim()) && engagementOpenedWithActiveLink),
+                                        rotateToken: !(
+                                            Boolean(String(selectedEngagementQuestionnaireId || '').trim()) && engagementOpenedWithActiveLink
+                                        )
+                                    })
+                                }
                                 className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
                             >
-                                {engagementBusy ? 'Saving…' : 'Save + copy link'}
+                                {engagementBusy
+                                    ? 'Saving…'
+                                    : Boolean(String(selectedEngagementQuestionnaireId || '').trim()) && engagementOpenedWithActiveLink
+                                      ? 'Save changes'
+                                      : 'Save + copy link'}
                             </button>
                         </div>
                     </div>
@@ -8861,6 +8951,45 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         branding: engagementReportBranding,
                                         submittedAt: reportSubmittedAt
                                     });
+                                }
+                                const rawPrefill =
+                                    selectedRow?.prefill && typeof selectedRow.prefill === 'object' && !Array.isArray(selectedRow.prefill)
+                                        ? selectedRow.prefill
+                                        : null;
+                                if (engagementReportFormDef && rawPrefill && Object.keys(rawPrefill).length > 0) {
+                                    const lines = resolveEngagementPrefillLines(engagementReportFormDef, rawPrefill).filter(
+                                        (l) => l.value && String(l.value).trim()
+                                    );
+                                    return (
+                                        <div className="space-y-3">
+                                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                No submission on file yet. This is the{' '}
+                                                <span className="font-medium">prefill snapshot</span> stored with the questionnaire (fields
+                                                the recipient sees filled when they open the link).
+                                            </p>
+                                            <div
+                                                className={`rounded-lg border p-4 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}
+                                            >
+                                                <h3 className={`mb-3 text-xs font-bold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                    Prefill snapshot
+                                                </h3>
+                                                {lines.length === 0 ? (
+                                                    <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                        (No non-empty prefill values.)
+                                                    </p>
+                                                ) : (
+                                                    <dl className="space-y-2 text-sm">
+                                                        {lines.map((l) => (
+                                                            <div key={l.label}>
+                                                                <dt className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{l.label}</dt>
+                                                                <dd className={`mt-0.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{l.value}</dd>
+                                                            </div>
+                                                        ))}
+                                                    </dl>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
                                 }
                                 return <p className="text-sm text-gray-500">Could not load report. Try closing and opening again.</p>;
                             })()}

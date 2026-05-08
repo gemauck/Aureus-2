@@ -36,6 +36,31 @@ function summarizeQuestionnaire(q) {
   }
 }
 
+/** Sync top-level legacy engagement columns from questionnaire rows so multi-questionnaire leads stay consistent. */
+function legacyEngagementColumnsFromQuestionnaires(rows) {
+  const list = normalizeQuestionnaires(rows)
+  const active = list.find((q) => q && q.tokenHash && !q.revokedAt)
+  if (!active) {
+    return {
+      customerEngagementTokenHash: null,
+      customerEngagementTokenCreatedAt: null,
+      customerEngagementRevokedAt: new Date(),
+      customerEngagementSubmittedAt: null,
+      customerEngagementResponses: null,
+      customerEngagementPrefill: Prisma.DbNull
+    }
+  }
+  return {
+    customerEngagementTokenHash: active.tokenHash,
+    customerEngagementTokenCreatedAt:
+      active.tokenCreatedAt != null ? new Date(active.tokenCreatedAt) : new Date(),
+    customerEngagementRevokedAt: null,
+    customerEngagementSubmittedAt: active.submittedAt ? new Date(active.submittedAt) : null,
+    customerEngagementResponses: active.responses ?? null,
+    customerEngagementPrefill: active.prefill == null ? Prisma.DbNull : active.prefill
+  }
+}
+
 /**
  * POST — create or rotate token; DELETE — revoke link(s)
  * /api/leads/:id/customer-engagement-link
@@ -45,7 +70,8 @@ function summarizeQuestionnaire(q) {
  *     questionnaireId?: string,
  *     questionnaireName?: string,
  *     customFields?: array,
- *     prefill?: object | null
+ *     prefill?: object | null,
+ *     preserveToken?: boolean — update name/prefill/custom fields only; keep existing token and submissions
  *   }
  * DELETE body/query:
  *   { questionnaireId?: string, remove?: boolean } (remove=true deletes questionnaire row)
@@ -112,12 +138,11 @@ async function handler(req, res) {
               updatedAt: nowIso
             }))
 
+      const legacy = legacyEngagementColumnsFromQuestionnaires(next)
       await prisma.client.update({
         where: { id },
         data: {
-          customerEngagementTokenHash: null,
-          customerEngagementTokenCreatedAt: null,
-          customerEngagementRevokedAt: new Date(),
+          ...legacy,
           customerEngagementQuestionnaires: next.length > 0 ? next : Prisma.DbNull
         }
       })
@@ -138,9 +163,8 @@ async function handler(req, res) {
     const questionnaireId = String(body.questionnaireId || '').trim()
     const questionnaireNameRaw = String(body.questionnaireName || '').trim()
     const customFields = sanitizeCustomerEngagementCustomFields(body.customFields)
+    const preserveToken = body.preserveToken === true
 
-    const rawToken = generateCustomerEngagementToken()
-    const tokenHash = hashCustomerEngagementToken(rawToken)
     const now = new Date()
     const nowIso = now.toISOString()
     const current = normalizeQuestionnaires(lead.customerEngagementQuestionnaires)
@@ -166,6 +190,46 @@ async function handler(req, res) {
       sanitizedPrefill = sanitizeCustomerEngagementPrefill(lead.customerEngagementPrefill, baseFormDef)
     }
 
+    if (preserveToken && index >= 0) {
+      const prev = current[index]
+      const prevLive = !!(prev.tokenHash && !prev.revokedAt)
+      if (prevLive) {
+        const recordPreserve = {
+          ...prev,
+          id: prev.id,
+          name: questionnaireNameRaw || prev.name || 'Customer engagement questionnaire',
+          customFields:
+            customFields.length > 0
+              ? customFields
+              : sanitizeCustomerEngagementCustomFields(prev.customFields),
+          prefill: sanitizedPrefill,
+          updatedAt: nowIso
+        }
+        current[index] = recordPreserve
+        await prisma.client.update({
+          where: { id },
+          data: {
+            customerEngagementQuestionnaires: current,
+            customerEngagementPrefill:
+              sanitizedPrefill === null ? Prisma.DbNull : sanitizedPrefill
+          }
+        })
+        return ok(res, {
+          url: null,
+          preservedToken: true,
+          tokenCreatedAt: prev.tokenCreatedAt || null,
+          clearedSubmission: false,
+          questionnaireId: recordPreserve.id,
+          questionnaireName: recordPreserve.name,
+          questionnaires: current.map(summarizeQuestionnaire)
+        })
+      }
+    }
+
+    const rawToken = generateCustomerEngagementToken()
+    const tokenHash = hashCustomerEngagementToken(rawToken)
+
+    let isNewQuestionnaireRow = false
     let record
     if (index >= 0) {
       const prev = current[index]
@@ -182,9 +246,10 @@ async function handler(req, res) {
         tokenCreatedAt: nowIso,
         revokedAt: null,
         updatedAt: nowIso,
-        // Generating a fresh link always opens a fresh response round.
+        // Fresh token starts a new response round for this questionnaire.
         submittedAt: null,
-        responses: null
+        responses: null,
+        submissions: []
       }
       current[index] = record
     } else {
@@ -198,11 +263,13 @@ async function handler(req, res) {
         revokedAt: null,
         submittedAt: null,
         responses: null,
+        submissions: [],
         createdAt: nowIso,
         updatedAt: nowIso
       }
       current.unshift(record)
       index = 0
+      isNewQuestionnaireRow = true
     }
 
     await prisma.client.update({
@@ -227,7 +294,7 @@ async function handler(req, res) {
       url,
       tokenCreatedAt: now.toISOString(),
       leadName: lead.name,
-      clearedSubmission: true,
+      clearedSubmission: !isNewQuestionnaireRow,
       questionnaireId: record.id,
       questionnaireName: record.name,
       questionnaires: current.map(summarizeQuestionnaire)

@@ -1228,6 +1228,9 @@ const DatabaseAPI = {
 
     async createCustomerEngagementLink(leadId, options = {}) {
         const payload = { clearSubmission: options.clearSubmission === true };
+        if (options.preserveToken === true) {
+            payload.preserveToken = true;
+        }
         if (Object.prototype.hasOwnProperty.call(options, 'prefill')) {
             payload.prefill = options.prefill;
         }

@@ -140,13 +140,14 @@ async function handler(req, res) {
       }
       const match = await findLeadByRawToken(token, questionnaireId)
       const lead = match?.lead
-      if (!match || !lead || lead.customerEngagementRevokedAt) {
+      if (!match || !lead) {
         return notFound(res, 'This link is invalid or has expired.')
       }
-      if (
-        match.mode === 'questionnaire' &&
-        (match.questionnaire?.revokedAt || !match.questionnaire?.tokenHash)
-      ) {
+      if (match.mode === 'questionnaire') {
+        if (!match.questionnaire?.tokenHash || match.questionnaire.revokedAt) {
+          return notFound(res, 'This link is invalid or has expired.')
+        }
+      } else if (lead.customerEngagementRevokedAt) {
         return notFound(res, 'This link is invalid or has expired.')
       }
       const customFields =
@@ -199,7 +200,14 @@ async function handler(req, res) {
       }
       const match = await findLeadByRawToken(raw, questionnaireId)
       const lead = match?.lead
-      if (!match || !lead || lead.customerEngagementRevokedAt) {
+      if (!match || !lead) {
+        return notFound(res, 'This link is invalid or has expired.')
+      }
+      if (match.mode === 'questionnaire') {
+        if (!match.questionnaire?.tokenHash || match.questionnaire.revokedAt) {
+          return notFound(res, 'This link is invalid or has expired.')
+        }
+      } else if (lead.customerEngagementRevokedAt) {
         return notFound(res, 'This link is invalid or has expired.')
       }
       const customFields =
