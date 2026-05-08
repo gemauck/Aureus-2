@@ -44,6 +44,87 @@ function normalizeLeadProposalWorkflowUi(raw) {
     };
 }
 
+function proposalWorkingDocBasename(url) {
+    try {
+        const p = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'https://placeholder.local');
+        const seg = p.pathname.split('/').filter(Boolean);
+        return decodeURIComponent(seg[seg.length - 1] || '').replace(/\+/g, ' ') || 'Document';
+    } catch {
+        return 'Document';
+    }
+}
+
+function toAbsoluteProposalDocUrl(url) {
+    const u = String(url || '').trim();
+    if (!u) return '';
+    if (/^https?:\/\//i.test(u)) return u;
+    const origin = typeof window !== 'undefined' ? window.location.origin.replace(/\/$/, '') : '';
+    return `${origin}${u.startsWith('/') ? '' : '/'}${u}`;
+}
+
+/** Distinguish uploaded server files vs cloud document URLs */
+function classifyProposalWorkingDocument(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return { kind: 'empty', url: '' };
+    try {
+        const abs = toAbsoluteProposalDocUrl(raw);
+        const parsed = new URL(abs);
+        const path = parsed.pathname.toLowerCase();
+        const host = parsed.hostname.toLowerCase();
+        const sameOrigin = typeof window !== 'undefined' && parsed.origin === window.location.origin;
+        const isUpload =
+            path.includes('/uploads/') ||
+            path.includes('/lead-proposals/') ||
+            (sameOrigin && path.includes('upload'));
+        const isCloud =
+            host.includes('drive.google.com') ||
+            host.includes('docs.google.com') ||
+            (host.includes('google.com') && path.includes('/document')) ||
+            host.includes('dropbox.com') ||
+            host.includes('sharepoint.com') ||
+            host.includes('onedrive.') ||
+            host.includes('box.com') ||
+            host.includes('notion.so');
+        if (isUpload) return { kind: 'upload', url: abs };
+        if (isCloud) return { kind: 'cloud', url: abs };
+        if (/^https?:\/\//i.test(raw)) return { kind: 'cloud', url: abs };
+        return { kind: 'link', url: abs };
+    } catch {
+        return { kind: 'link', url: raw };
+    }
+}
+
+function proposalDocIconMeta(filenameOrUrl) {
+    const name = String(filenameOrUrl || '').toLowerCase();
+    const ext = name.includes('.') ? name.split('.').pop() : '';
+    if (['xlsx', 'xls', 'csv'].includes(ext)) {
+        return { icon: 'fa-file-excel', color: 'text-emerald-600', bg: 'bg-emerald-500/15' };
+    }
+    if (ext === 'pdf') return { icon: 'fa-file-pdf', color: 'text-red-600', bg: 'bg-red-500/15' };
+    if (['doc', 'docx'].includes(ext)) {
+        return { icon: 'fa-file-word', color: 'text-blue-600', bg: 'bg-blue-500/15' };
+    }
+    if (['ppt', 'pptx'].includes(ext)) {
+        return { icon: 'fa-file-powerpoint', color: 'text-orange-600', bg: 'bg-orange-500/15' };
+    }
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+        return { icon: 'fa-file-image', color: 'text-purple-600', bg: 'bg-purple-500/15' };
+    }
+    return { icon: 'fa-file-alt', color: 'text-gray-600', bg: 'bg-gray-500/15' };
+}
+
+function shortCloudLinkLabel(url) {
+    try {
+        const u = new URL(url);
+        const h = u.hostname.replace(/^www\./, '');
+        const tail = u.pathname + u.search;
+        const short = tail.length > 36 ? `${tail.slice(0, 34)}…` : tail;
+        return `${h}${short === '/' ? '' : short}`;
+    } catch {
+        return String(url).slice(0, 72);
+    }
+}
+
 // Module-level tracking to prevent duplicate loads across remounts
 // This persists even if the component remounts
 const clientInitialLoadTracker = new Map(); // Map<clientId, Promise>
@@ -466,6 +547,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [leadProposalWizardSaving, setLeadProposalWizardSaving] = useState(false);
     const [leadProposalWizardUploadBusy, setLeadProposalWizardUploadBusy] = useState(false);
     const [leadProposalWizardHint, setLeadProposalWizardHint] = useState('');
+    const [leadProposalWizardCreatingQ, setLeadProposalWizardCreatingQ] = useState(false);
+    const leadProposalWizardSessionDraftIdRef = useRef(null);
     const initialLoadPromiseRef = useRef(null); // Track the Promise.all for initial load
     const initialDataLoadedForClientIdRef = useRef(null); // Track which client we've done initial load for
     const kycRefetchDoneForClientIdRef = useRef(null); // When we refetched KYC for this client (avoid loop)
@@ -1775,12 +1858,60 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setLeadProposals(list);
     };
 
+    const mergeLeadEngagementAfterQuestionnaireMutation = async () => {
+        if (!formData?.id || !window.DatabaseAPI?.getLead) return;
+        const r2 = await window.DatabaseAPI.getLead(formData.id);
+        const lead = r2?.data?.lead || r2?.lead;
+        if (!lead) return;
+        setFormData((prev) => {
+            const next = {
+                ...prev,
+                customerEngagementLinkActive: lead.customerEngagementLinkActive,
+                customerEngagementTokenCreatedAt: lead.customerEngagementTokenCreatedAt,
+                customerEngagementSubmittedAt: lead.customerEngagementSubmittedAt,
+                customerEngagementResponses: lead.customerEngagementResponses,
+                customerEngagementRevokedAt: lead.customerEngagementRevokedAt,
+                customerEngagementPrefill: lead.customerEngagementPrefill,
+                customerEngagementQuestionnaires: lead.customerEngagementQuestionnaires,
+                activityLog:
+                    typeof lead.activityLog === 'string'
+                        ? JSON.parse(lead.activityLog || '[]')
+                        : lead.activityLog || prev.activityLog
+            };
+            formDataRef.current = next;
+            return next;
+        });
+    };
+
+    /** Creates a new questionnaire row on the lead (never reuses an existing one). */
+    const createFreshQuestionnaireForProposal = async (titleHint) => {
+        if (!formData?.id || !window.DatabaseAPI?.createCustomerEngagementLink) {
+            throw new Error('Cannot create questionnaire');
+        }
+        const trimmed = String(titleHint || '').trim();
+        const questionnaireName = trimmed
+            ? `${trimmed} — customer engagement`
+            : `Customer engagement — ${new Date().toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' })}`;
+        const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, {
+            questionnaireName,
+            clearSubmission: false
+        });
+        const payload = res?.data ?? res;
+        const qid = payload?.questionnaireId;
+        if (!qid) throw new Error('No questionnaire id returned');
+        await mergeLeadEngagementAfterQuestionnaireMutation();
+        return String(qid);
+    };
+
     const openLeadProposalWizardCreate = () => {
+        if (!formData?.id) return;
         setLeadProposalWizardEditIndex(null);
         setLeadProposalWizardStep(1);
         setLeadProposalWizardHint('');
+        const draftId = `lp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        leadProposalWizardSessionDraftIdRef.current = draftId;
         setLeadProposalWizardDraft({
-            id: `lp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            id: draftId,
             title: '',
             amount: 0,
             status: 'Draft',
@@ -1791,6 +1922,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             workflow: defaultLeadProposalWorkflow()
         });
         setShowLeadProposalWizard(true);
+        setLeadProposalWizardCreatingQ(true);
+        void (async () => {
+            try {
+                const qid = await createFreshQuestionnaireForProposal('');
+                setLeadProposalWizardDraft((prev) => {
+                    if (!prev || prev.id !== leadProposalWizardSessionDraftIdRef.current) return prev;
+                    const w = normalizeLeadProposalWorkflowUi(prev.workflow);
+                    return {
+                        ...prev,
+                        workflow: { ...w, engagementQuestionnaireId: qid }
+                    };
+                });
+                setSelectedEngagementQuestionnaireId(qid);
+            } catch (e) {
+                setLeadProposalWizardHint(e.message || 'Could not create questionnaire. Try again or close and reopen.');
+            } finally {
+                setLeadProposalWizardCreatingQ(false);
+            }
+        })();
     };
 
     const openLeadProposalWizardEdit = (index) => {
@@ -1809,11 +1959,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const closeLeadProposalWizard = () => {
         if (leadProposalWizardSaving) return;
+        leadProposalWizardSessionDraftIdRef.current = null;
         setShowLeadProposalWizard(false);
         setLeadProposalWizardDraft(null);
         setLeadProposalWizardEditIndex(null);
         setLeadProposalWizardStep(1);
         setLeadProposalWizardHint('');
+        setLeadProposalWizardCreatingQ(false);
     };
 
     const updateLeadProposalWizardWorkflow = (partial) => {
@@ -1904,7 +2056,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     workflow: { ...w, workingDraftUploadedName: file.name }
                 };
             });
-            setLeadProposalWizardHint('File uploaded — link filled in below.');
+            setLeadProposalWizardHint('File uploaded — shown above as a document.');
             setTimeout(() => setLeadProposalWizardHint(''), 4000);
         } catch (e) {
             setLeadProposalWizardHint(e.message || 'Upload failed.');
@@ -8626,7 +8778,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     onClick={() => !leadProposalWizardSaving && closeLeadProposalWizard()}
                 >
                     <div
-                        className={`flex max-h-[96vh] w-full max-w-screen-2xl flex-col rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                        className={`flex max-h-[98vh] w-full max-w-[min(1920px,99vw)] flex-col rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                         onClick={(e) => e.stopPropagation()}
                         role="dialog"
                         aria-modal="true"
@@ -8635,10 +8787,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         <div className={`shrink-0 border-b px-6 py-5 sm:px-8 sm:py-6 ${isDark ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gradient-to-r from-primary-50/80 to-white'}`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                    <h2 id="lead-proposal-wizard-title" className="text-xl font-bold tracking-tight">
+                                    <h2 id="lead-proposal-wizard-title" className="text-2xl md:text-3xl font-bold tracking-tight">
                                         {leadProposalWizardEditIndex != null ? 'Edit proposal process' : 'Add proposal'}
                                     </h2>
-                                    <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    <p className={`mt-2 text-sm md:text-base leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                         Work through the four standard stages. You can save anytime — data syncs with this lead.
                                     </p>
                                 </div>
@@ -8652,7 +8804,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 </button>
                             </div>
                             <div className="mt-3">
-                                <label className={`block text-[11px] font-semibold uppercase tracking-wide mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                <label className={`block text-xs md:text-sm font-semibold uppercase tracking-wide mb-1.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                     Proposal title
                                 </label>
                                 <input
@@ -8661,7 +8813,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     onChange={(e) =>
                                         setLeadProposalWizardDraft((p) => (p ? { ...p, title: e.target.value } : p))
                                     }
-                                    className={`w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                    className={`w-full rounded-lg border px-4 py-3 text-base md:text-lg ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
                                     placeholder="e.g. Opencast fuel management — Q3 proposal"
                                 />
                             </div>
@@ -8673,7 +8825,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             key={s.step}
                                             type="button"
                                             onClick={() => goLeadProposalWizardStep(s.step)}
-                                            className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                                            className={`rounded-full px-4 py-2.5 text-sm md:text-base font-semibold transition ${
                                                 active
                                                     ? isDark
                                                         ? 'bg-primary-600 text-white'
@@ -8694,7 +8846,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
                             {leadProposalWizardHint ? (
                                 <div
-                                    className={`mb-3 rounded-lg border px-3 py-2 text-xs ${isDark ? 'border-amber-700/50 bg-amber-900/20 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
+                                    className={`mb-4 rounded-lg border px-4 py-3 text-sm md:text-base ${isDark ? 'border-amber-700/50 bg-amber-900/20 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
                                 >
                                     {leadProposalWizardHint}
                                 </div>
@@ -8703,101 +8855,307 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 const d = leadProposalWizardDraft;
                                 const w = normalizeLeadProposalWorkflowUi(d.workflow);
                                 const qn = getEngagementQuestionnaires();
-                                const selectedQ = w.engagementQuestionnaireId
-                                    ? qn.find((q) => String(q.id || '') === String(w.engagementQuestionnaireId))
-                                    : null;
-                                const stepPanelCls = `rounded-xl border p-5 sm:p-6 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50/80'}`;
-                                const labelCls = `block text-xs font-semibold mb-1.5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
-                                const inputCls = `w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`;
+                                const stepPanelCls = `rounded-xl border p-6 sm:p-8 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50/80'} text-base`;
+                                const wizStepTitleCls = `text-lg md:text-xl font-bold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`;
+                                const wizDescCls = `text-sm md:text-base mb-5 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`;
+                                const labelCls = `block text-sm md:text-base font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
+                                const inputCls = `w-full rounded-lg border px-4 py-3 text-base md:text-lg ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`;
 
                                 if (leadProposalWizardStep === 1) {
+                                    const isProposalEdit = leadProposalWizardEditIndex != null;
+                                    const qid = String(w.engagementQuestionnaireId || '').trim();
+                                    const creatingQ = leadProposalWizardCreatingQ;
+                                    const selectedQ = qid
+                                        ? qn.find((q) => String(q.id || '') === qid)
+                                        : null;
                                     return (
                                         <div className={stepPanelCls}>
-                                            <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                            <h3 className={wizStepTitleCls}>
                                                 Step 1 — Customer engagement mandate
                                             </h3>
-                                            <p className={`text-xs mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                Link this proposal to a questionnaire for this lead. New questionnaires are started here only — use <strong className="font-medium">New questionnaire</strong> or pick an existing one. The editor opens on top of this dialog.
+                                            <p className={wizDescCls}>
+                                                Each proposal uses its own questionnaire. A new one is created automatically when you add a proposal — you do not pick from other questionnaires. Multiple proposals means multiple questionnaires on this lead.
                                             </p>
-                                            <label className={labelCls}>Questionnaire</label>
-                                            <select
-                                                value={w.engagementQuestionnaireId || ''}
-                                                onChange={(e) =>
-                                                    updateLeadProposalWizardWorkflow({
-                                                        engagementQuestionnaireId: e.target.value
-                                                    })
-                                                }
-                                                className={inputCls}
-                                            >
-                                                <option value="">Select a questionnaire…</option>
-                                                {qn.map((q) => (
-                                                    <option key={q.id || q.name} value={q.id || ''}>
-                                                        {q.name || 'Untitled'} {q.linkActive ? '(active link)' : ''}{q.submittedAt ? ' · submitted' : ''}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => openEngagementPrefillModal(false, null)}
-                                                    className={`text-xs font-semibold px-3 py-2 rounded-lg ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white border border-gray-300 hover:bg-gray-50'}`}
-                                                >
-                                                    <i className="fas fa-plus-circle mr-1" />
-                                                    New questionnaire
-                                                </button>
-                                                {selectedQ ? (
+                                            {creatingQ ? (
+                                                <div className={`flex items-center justify-center gap-2 py-10 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                                    <i className="fas fa-spinner fa-spin" aria-hidden />
+                                                    Creating customer engagement questionnaire…
+                                                </div>
+                                            ) : null}
+                                            {!creatingQ && qid && selectedQ ? (
+                                                <>
+                                                    <div className={`rounded-lg border px-3 py-2.5 mb-3 ${isDark ? 'border-gray-600 bg-gray-900/60' : 'border-gray-200 bg-white'}`}>
+                                                        <div className={`text-[11px] uppercase tracking-wide font-semibold ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                            This proposal&apos;s questionnaire
+                                                        </div>
+                                                        <div className={`mt-1 text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                            {selectedQ.name || 'Customer engagement questionnaire'}
+                                                        </div>
+                                                    </div>
                                                     <button
                                                         type="button"
                                                         onClick={() => {
                                                             setSelectedEngagementQuestionnaireId(selectedQ.id || '');
                                                             openEngagementPrefillModal(false, selectedQ);
                                                         }}
-                                                        className={`text-xs font-semibold px-3 py-2 rounded-lg ${isDark ? 'bg-primary-700 hover:bg-primary-600' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                        className={`text-xs font-semibold px-4 py-2.5 rounded-lg ${isDark ? 'bg-primary-700 hover:bg-primary-600' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
                                                     >
                                                         Open questionnaire editor
                                                     </button>
-                                                ) : null}
-                                            </div>
-                                            {selectedQ ? (
-                                                <p className={`mt-3 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-                                                    Linked to <strong className="font-medium">{selectedQ.name || selectedQ.id}</strong>.
-                                                    {selectedQ.submittedAt
-                                                        ? ' Submission received.'
-                                                        : selectedQ.linkActive
-                                                          ? ' Share link is active.'
-                                                          : ' Generate a link from the questionnaire editor when ready.'}
-                                                </p>
+                                                    <p className={`mt-3 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                                                        {selectedQ.submittedAt
+                                                            ? 'Submission received.'
+                                                            : selectedQ.linkActive
+                                                              ? 'Share link is active — open the editor to copy or regenerate.'
+                                                              : 'Open the editor to generate and share the link.'}
+                                                    </p>
+                                                </>
+                                            ) : null}
+                                            {!creatingQ && qid && !selectedQ ? (
+                                                <div className="space-y-2">
+                                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                        Questionnaire <span className="font-mono text-[11px]">{qid}</span> is linked; refresh if the list hasn&apos;t updated yet.
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedEngagementQuestionnaireId(qid);
+                                                            openEngagementPrefillModal(false, { id: qid, name: '' });
+                                                        }}
+                                                        className={`text-xs font-semibold px-4 py-2.5 rounded-lg ${isDark ? 'bg-primary-700 hover:bg-primary-600' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                    >
+                                                        Open questionnaire editor
+                                                    </button>
+                                                </div>
+                                            ) : null}
+                                            {!creatingQ && !qid && isProposalEdit ? (
+                                                <button
+                                                    type="button"
+                                                    disabled={leadProposalWizardCreatingQ}
+                                                    onClick={() => {
+                                                        void (async () => {
+                                                            setLeadProposalWizardCreatingQ(true);
+                                                            setLeadProposalWizardHint('');
+                                                            try {
+                                                                const newId = await createFreshQuestionnaireForProposal(
+                                                                    d.title || ''
+                                                                );
+                                                                updateLeadProposalWizardWorkflow({
+                                                                    engagementQuestionnaireId: newId
+                                                                });
+                                                                setSelectedEngagementQuestionnaireId(newId);
+                                                            } catch (err) {
+                                                                setLeadProposalWizardHint(
+                                                                    err.message || 'Could not create questionnaire.'
+                                                                );
+                                                            } finally {
+                                                                setLeadProposalWizardCreatingQ(false);
+                                                            }
+                                                        })();
+                                                    }}
+                                                    className={`text-xs font-semibold px-4 py-2.5 rounded-lg ${isDark ? 'bg-primary-700 hover:bg-primary-600 text-white' : 'bg-primary-600 hover:bg-primary-700 text-white'}`}
+                                                >
+                                                    Create engagement questionnaire for this proposal
+                                                </button>
+                                            ) : null}
+                                            {!creatingQ && !qid && !isProposalEdit ? (
+                                                <div className={`rounded-lg border px-3 py-3 text-xs ${isDark ? 'border-amber-800/60 bg-amber-950/30 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+                                                    <p className="font-medium mb-2">Questionnaire wasn&apos;t created.</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            leadProposalWizardSessionDraftIdRef.current = d.id || null;
+                                                            void (async () => {
+                                                                setLeadProposalWizardCreatingQ(true);
+                                                                setLeadProposalWizardHint('');
+                                                                try {
+                                                                    const newId = await createFreshQuestionnaireForProposal(
+                                                                        d.title || ''
+                                                                    );
+                                                                    setLeadProposalWizardDraft((prev) => {
+                                                                        if (!prev || prev.id !== d.id) return prev;
+                                                                        const wf = normalizeLeadProposalWorkflowUi(prev.workflow);
+                                                                        return {
+                                                                            ...prev,
+                                                                            workflow: {
+                                                                                ...wf,
+                                                                                engagementQuestionnaireId: newId
+                                                                            }
+                                                                        };
+                                                                    });
+                                                                    setSelectedEngagementQuestionnaireId(newId);
+                                                                } catch (err) {
+                                                                    setLeadProposalWizardHint(
+                                                                        err.message || 'Could not create questionnaire.'
+                                                                    );
+                                                                } finally {
+                                                                    setLeadProposalWizardCreatingQ(false);
+                                                                }
+                                                            })();
+                                                        }}
+                                                        className={`font-semibold underline ${isDark ? 'text-amber-100' : 'text-amber-900'}`}
+                                                    >
+                                                        Try creating again
+                                                    </button>
+                                                </div>
                                             ) : null}
                                         </div>
                                     );
                                 }
                                 if (leadProposalWizardStep === 2) {
+                                    const linkRaw = String(d.workingDocumentLink || '').trim();
+                                    const cls = classifyProposalWorkingDocument(linkRaw);
+                                    const displayName =
+                                        w.workingDraftUploadedName ||
+                                        (cls.kind === 'upload' ? proposalWorkingDocBasename(linkRaw) : '');
+                                    const iconMeta = proposalDocIconMeta(w.workingDraftUploadedName || displayName || linkRaw);
+                                    const absOpen = toAbsoluteProposalDocUrl(linkRaw);
+                                    const showUploadCard = Boolean(linkRaw && cls.kind === 'upload');
+                                    const showCloudCard = Boolean(
+                                        linkRaw && (cls.kind === 'cloud' || cls.kind === 'link')
+                                    );
+                                    const hideUrlInField = showUploadCard || showCloudCard;
                                     return (
                                         <div className={stepPanelCls}>
-                                            <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                Step 2 — Proposal drafting
-                                            </h3>
-                                            <p className={`text-xs mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <h3 className={wizStepTitleCls}>Step 2 — Proposal drafting</h3>
+                                            <p className={wizDescCls}>
                                                 Paste a link to the working draft (SharePoint, Google Docs, etc.) or upload a file — the URL is stored on the proposal.
                                             </p>
-                                            <label className={labelCls}>Working document URL</label>
+
+                                            {showUploadCard ? (
+                                                <div
+                                                    className={`mb-6 flex flex-wrap items-center gap-5 rounded-xl border p-5 sm:p-6 ${isDark ? 'border-gray-600 bg-gray-900/70' : 'border-gray-200 bg-white'}`}
+                                                >
+                                                    <div
+                                                        className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl ${iconMeta.bg}`}
+                                                        aria-hidden
+                                                    >
+                                                        <i className={`fas ${iconMeta.icon} text-3xl ${iconMeta.color}`} />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div
+                                                            className={`truncate text-base font-semibold md:text-lg ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                                            title={displayName || undefined}
+                                                        >
+                                                            {displayName || proposalWorkingDocBasename(linkRaw)}
+                                                        </div>
+                                                        <p className={`mt-1 text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                                                            Uploaded file (stored on your server)
+                                                        </p>
+                                                        <div className="mt-3 flex flex-wrap items-center gap-4">
+                                                            <a
+                                                                href={absOpen}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className={`inline-flex items-center gap-2 text-base font-semibold ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-700 hover:text-primary-800'}`}
+                                                            >
+                                                                <i className="fas fa-external-link-alt text-sm" aria-hidden />
+                                                                Open file
+                                                            </a>
+                                                            <button
+                                                                type="button"
+                                                                className={`text-sm font-semibold underline ${isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-900'}`}
+                                                                onClick={() =>
+                                                                    setLeadProposalWizardDraft((p) => {
+                                                                        if (!p) return p;
+                                                                        const wf = normalizeLeadProposalWorkflowUi(p.workflow);
+                                                                        return {
+                                                                            ...p,
+                                                                            workingDocumentLink: '',
+                                                                            workflow: {
+                                                                                ...wf,
+                                                                                workingDraftUploadedName: ''
+                                                                            }
+                                                                        };
+                                                                    })
+                                                                }
+                                                            >
+                                                                Remove file
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : null}
+
+                                            {showCloudCard ? (
+                                                <div
+                                                    className={`mb-6 rounded-xl border p-5 sm:p-6 ${isDark ? 'border-gray-600 bg-gray-900/70' : 'border-gray-200 bg-white'}`}
+                                                >
+                                                    <div
+                                                        className={`mb-2 text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-500'}`}
+                                                    >
+                                                        Cloud / external link
+                                                    </div>
+                                                    <a
+                                                        href={absOpen}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className={`inline-flex flex-wrap items-center gap-2 break-all text-base font-medium underline md:text-lg ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-700 hover:text-primary-800'}`}
+                                                    >
+                                                        <i className="fas fa-link shrink-0" aria-hidden />
+                                                        {cls.kind === 'cloud' || cls.kind === 'link'
+                                                            ? shortCloudLinkLabel(absOpen)
+                                                            : linkRaw}
+                                                    </a>
+                                                    <p className={`mt-2 text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                                                        Opens in a new tab
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        className={`mt-3 text-sm font-semibold underline ${isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-900'}`}
+                                                        onClick={() =>
+                                                            setLeadProposalWizardDraft((p) => {
+                                                                if (!p) return p;
+                                                                const wf = normalizeLeadProposalWorkflowUi(p.workflow);
+                                                                return {
+                                                                    ...p,
+                                                                    workingDocumentLink: '',
+                                                                    workflow: {
+                                                                        ...wf,
+                                                                        workingDraftUploadedName: ''
+                                                                    }
+                                                                };
+                                                            })
+                                                        }
+                                                    >
+                                                        Clear link
+                                                    </button>
+                                                </div>
+                                            ) : null}
+
+                                            <label className={labelCls}>
+                                                {showUploadCard
+                                                    ? 'Replace with a cloud link'
+                                                    : showCloudCard
+                                                      ? 'Replace link'
+                                                      : 'Working document link'}
+                                            </label>
                                             <input
                                                 type="url"
-                                                value={d.workingDocumentLink || ''}
-                                                onChange={(e) =>
-                                                    setLeadProposalWizardDraft((p) =>
-                                                        p ? { ...p, workingDocumentLink: e.target.value } : p
-                                                    )
-                                                }
+                                                value={hideUrlInField ? '' : d.workingDocumentLink || ''}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    setLeadProposalWizardDraft((p) => {
+                                                        if (!p) return p;
+                                                        const wf = normalizeLeadProposalWorkflowUi(p.workflow);
+                                                        return {
+                                                            ...p,
+                                                            workingDocumentLink: v,
+                                                            workflow: { ...wf, workingDraftUploadedName: '' }
+                                                        };
+                                                    });
+                                                }}
                                                 className={inputCls}
-                                                placeholder="https://…"
+                                                placeholder={
+                                                    showUploadCard
+                                                        ? 'Paste Google Drive, SharePoint, or other https link…'
+                                                        : showCloudCard
+                                                          ? 'Paste a different https link…'
+                                                          : 'https://…'
+                                                }
                                             />
-                                            {w.workingDraftUploadedName ? (
-                                                <p className={`mt-2 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-                                                    Last upload: <span className="font-medium">{w.workingDraftUploadedName}</span>
-                                                </p>
-                                            ) : null}
-                                            <label className={`${labelCls} mt-4`}>Upload file</label>
+
+                                            <label className={`${labelCls} mt-6`}>Upload file</label>
                                             <input
                                                 type="file"
                                                 disabled={leadProposalWizardUploadBusy}
@@ -8806,11 +9164,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     e.target.value = '';
                                                     if (f) void uploadLeadProposalWorkingFile(f);
                                                 }}
-                                                className={`text-xs w-full ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
+                                                className={`text-base w-full ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
                                             />
                                             {leadProposalWizardUploadBusy ? (
-                                                <p className="mt-2 text-xs text-primary-600">
-                                                    <i className="fas fa-spinner fa-spin mr-1" />
+                                                <p className="mt-3 text-base text-primary-600">
+                                                    <i className="fas fa-spinner fa-spin mr-2" aria-hidden />
                                                     Uploading…
                                                 </p>
                                             ) : null}
@@ -8820,10 +9178,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 if (leadProposalWizardStep === 3) {
                                     return (
                                         <div className={stepPanelCls}>
-                                            <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                            <h3 className={wizStepTitleCls}>
                                                 Step 3 — Circulation for comment, pricing and approval
                                             </h3>
-                                            <p className={`text-xs mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <p className={wizDescCls}>
                                                 Capture departmental comments and feedback for the record. This is internal to your team.
                                             </p>
                                             <label className={labelCls}>Departmental comments</label>
@@ -8843,10 +9201,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 }
                                 return (
                                     <div className={stepPanelCls}>
-                                        <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                            Step 4 — Submission to client
-                                        </h3>
-                                        <p className={`text-xs mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        <h3 className={wizStepTitleCls}>Step 4 — Submission to client</h3>
+                                        <p className={wizDescCls}>
                                             Sign off and record when the proposal was sent to the client.
                                         </p>
                                         <label className={labelCls}>Signed off by</label>
@@ -8895,7 +9251,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 setLeadProposalWizardHint('Submission timestamp recorded. Click Save & close to persist.');
                                                 setTimeout(() => setLeadProposalWizardHint(''), 5000);
                                             }}
-                                            className={`text-sm font-semibold px-4 py-2 rounded-lg ${isDark ? 'bg-emerald-700 hover:bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                                            className={`text-base font-semibold px-5 py-3 rounded-lg ${isDark ? 'bg-emerald-700 hover:bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
                                         >
                                             <i className="fas fa-paper-plane mr-2" />
                                             {w.submittedToClientAt ? 'Update sent timestamp' : 'Record sent to client now'}
@@ -8905,31 +9261,35 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             })()}
                         </div>
 
-                        <div className={`shrink-0 flex flex-wrap items-center justify-between gap-2 border-t px-6 py-4 sm:px-8 ${isDark ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
-                            <div className="flex flex-wrap gap-2">
+                        <div className={`shrink-0 flex flex-wrap items-center justify-between gap-3 border-t px-6 py-5 sm:px-8 ${isDark ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+                            <div className="flex flex-wrap gap-3">
                                 <button
                                     type="button"
                                     disabled={leadProposalWizardSaving || leadProposalWizardStep <= 1}
                                     onClick={() => goLeadProposalWizardStep(leadProposalWizardStep - 1)}
-                                    className={`rounded-lg px-4 py-2 text-sm font-medium ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-white border border-gray-300 hover:bg-gray-50'} disabled:opacity-40`}
+                                    className={`rounded-lg px-5 py-3 text-base font-medium ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-white border border-gray-300 hover:bg-gray-50'} disabled:opacity-40`}
                                 >
                                     Back
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={leadProposalWizardSaving || leadProposalWizardStep >= 4}
+                                    disabled={
+                                        leadProposalWizardSaving ||
+                                        leadProposalWizardStep >= 4 ||
+                                        (leadProposalWizardStep === 1 && leadProposalWizardCreatingQ)
+                                    }
                                     onClick={() => goLeadProposalWizardStep(leadProposalWizardStep + 1)}
-                                    className={`rounded-lg px-4 py-2 text-sm font-medium ${isDark ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-900 text-white hover:bg-gray-800'} disabled:opacity-40`}
+                                    className={`rounded-lg px-5 py-3 text-base font-medium ${isDark ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-900 text-white hover:bg-gray-800'} disabled:opacity-40`}
                                 >
                                     Next
                                 </button>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-3">
                                 <button
                                     type="button"
                                     disabled={leadProposalWizardSaving}
                                     onClick={() => !leadProposalWizardSaving && closeLeadProposalWizard()}
-                                    className={`rounded-lg px-4 py-2 text-sm ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                                    className={`rounded-lg px-5 py-3 text-base ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-200'}`}
                                 >
                                     Cancel
                                 </button>
@@ -8937,7 +9297,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     type="button"
                                     disabled={leadProposalWizardSaving || !String(leadProposalWizardDraft.title || '').trim()}
                                     onClick={() => void saveLeadProposalWizard()}
-                                    className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 shadow-sm"
+                                    className="rounded-lg bg-primary-600 px-6 py-3 text-base font-semibold text-white hover:bg-primary-700 disabled:opacity-50 shadow-sm"
                                 >
                                     {leadProposalWizardSaving ? (
                                         <>
