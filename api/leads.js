@@ -13,6 +13,7 @@ import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValida
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
 import { isAdminRole } from './_lib/authRoles.js'
 import { notifyClientCreationStakeholders } from './_lib/notifyClientCreationStakeholders.js'
+import { workflowJsonForPrisma } from './_lib/leadProposalWorkflow.js'
 
 /** Return null for empty engagementStage/aidaStatus so Pipeline can show "—" for blank */
 function blankStagesForLead(parsed) {
@@ -1208,7 +1209,11 @@ async function handler(req, res) {
                 expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
                 notes: proposal.notes || ''
               }
-              
+              const wj = workflowJsonForPrisma(proposal)
+              if (wj !== undefined) {
+                proposalData.workflowJson = wj
+              }
+
               if (proposal.id) {
                 try {
                   await prisma.clientProposal.create({

@@ -426,6 +426,8 @@ model ClientProposal {
   amount              Float?    @default(0)
   status              String?   @default("Pending")
   workingDocumentLink String?   @default("")
+  /// Lead proposal workflow: steps 1–4 (questionnaire, drafting, circulation, client submission)
+  workflowJson        Json?
   createdDate         DateTime?
   expiryDate          DateTime?
   notes               String    @default("")

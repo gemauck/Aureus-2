@@ -1,6 +1,8 @@
 // Shared utilities for Client JSON field handling
 // Phase 2: Dual-read/write support (JSONB + String fallback)
 
+import { sanitizeLeadProposalWorkflow } from './leadProposalWorkflow.js'
+
 const DEFAULT_BILLING_TERMS = {
   paymentTerms: 'Net 30',
   billingFrequency: 'Monthly',
@@ -223,7 +225,8 @@ export function parseClientJsonFields(client) {
         workingDocumentLink: proposal.workingDocumentLink || '',
         createdDate: proposal.createdDate ? new Date(proposal.createdDate).toISOString() : null,
         expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate).toISOString() : null,
-        notes: proposal.notes || ''
+        notes: proposal.notes || '',
+        workflow: sanitizeLeadProposalWorkflow(proposal.workflowJson)
       }))
     } else {
       // Fallback: Try JSONB field, then String field

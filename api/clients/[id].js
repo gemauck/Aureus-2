@@ -10,6 +10,7 @@ import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_KYC } fro
 import { notifyCommentParticipants } from '../_lib/notifyCommentParticipants.js'
 import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 import { isAdminRole } from '../_lib/authRoles.js'
+import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
 
 async function handler(req, res) {
   try {
@@ -143,7 +144,7 @@ async function handler(req, res) {
           
           // Phase 6: Fetch proposals from normalized table
           const proposalsResult = await prisma.$queryRaw`
-            SELECT id, "clientId", title, amount, status, "workingDocumentLink", "createdDate", "expiryDate", notes, "createdAt"
+            SELECT id, "clientId", title, amount, status, "workingDocumentLink", "workflowJson", "createdDate", "expiryDate", notes, "createdAt"
             FROM "ClientProposal"
             WHERE "clientId" = ${id}
             ORDER BY "createdDate" DESC
@@ -233,6 +234,7 @@ async function handler(req, res) {
           amount: p.amount,
           status: p.status,
           workingDocumentLink: p.workingDocumentLink,
+          workflowJson: p.workflowJson,
           createdDate: p.createdDate,
           expiryDate: p.expiryDate,
           notes: p.notes,
@@ -929,7 +931,11 @@ async function handler(req, res) {
                 expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
                 notes: proposal.notes || ''
               }
-              
+              const wj = workflowJsonForPrisma(proposal)
+              if (wj !== undefined) {
+                proposalData.workflowJson = wj
+              }
+
               if (proposal.id && existingProposalIds.has(proposal.id)) {
                 await prisma.clientProposal.update({
                   where: { id: proposal.id },

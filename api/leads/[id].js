@@ -10,6 +10,7 @@ import { parseClientJsonFields, prepareJsonFieldsForDualWrite } from '../_lib/cl
 import { isAdminRole } from '../_lib/authRoles.js'
 import { notifyClientCreationStakeholders } from '../_lib/notifyClientCreationStakeholders.js'
 import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
+import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
 
 async function handler(req, res) {
   try {
@@ -190,7 +191,7 @@ async function handler(req, res) {
                 lead.clientContracts = contractsResult || []
                 
                 const proposalsResult = await prisma.$queryRaw`
-                  SELECT id, "clientId", title, amount, status, "workingDocumentLink", "createdDate", "expiryDate", notes, "createdAt"
+                  SELECT id, "clientId", title, amount, status, "workingDocumentLink", "workflowJson", "createdDate", "expiryDate", notes, "createdAt"
                   FROM "ClientProposal"
                   WHERE "clientId" = ${id}
                   ORDER BY "createdDate" DESC
@@ -970,6 +971,10 @@ async function handler(req, res) {
                 createdDate: proposal.createdDate ? new Date(proposal.createdDate) : null,
                 expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
                 notes: proposal.notes || ''
+              }
+              const wj = workflowJsonForPrisma(proposal)
+              if (wj !== undefined) {
+                proposalData.workflowJson = wj
               }
               
               if (proposal.id && existingProposalIds.has(proposal.id)) {

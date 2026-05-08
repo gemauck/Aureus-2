@@ -8,6 +8,7 @@ import { withLogging } from './_lib/logger.js'
 import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
 import { notifyClientCreationStakeholders } from './_lib/notifyClientCreationStakeholders.js'
+import { workflowJsonForPrisma } from './_lib/leadProposalWorkflow.js'
 
 // Phase 2: JSON field parsing and dual-write utilities moved to shared module
 // See: api/_lib/clientJsonFields.js
@@ -1206,7 +1207,11 @@ async function handler(req, res) {
                 expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
                 notes: proposal.notes || ''
               }
-              
+              const wj = workflowJsonForPrisma(proposal)
+              if (wj !== undefined) {
+                proposalData.workflowJson = wj
+              }
+
               if (proposal.id) {
                 try {
                   await prisma.clientProposal.create({
@@ -1686,6 +1691,10 @@ async function handler(req, res) {
                 createdDate: proposal.createdDate ? new Date(proposal.createdDate) : null,
                 expiryDate: proposal.expiryDate ? new Date(proposal.expiryDate) : null,
                 notes: proposal.notes || ''
+              }
+              const wj = workflowJsonForPrisma(proposal)
+              if (wj !== undefined) {
+                proposalData.workflowJson = wj
               }
               if (proposal.id && existingProposalIds.has(proposal.id)) {
                 await prisma.clientProposal.update({
