@@ -156,6 +156,7 @@ async function applyFinalProductBuildableUnits(items = []) {
     select: {
       productSku: true,
       components: true,
+      totalMaterialCost: true,
       updatedAt: true
     },
     orderBy: { updatedAt: 'desc' }
@@ -176,8 +177,24 @@ async function applyFinalProductBuildableUnits(items = []) {
     if (!bom) return item
 
     const components = parseBomComponents(bom.components)
+    const bomTotalMaterialCost = parseFiniteNumber(bom.totalMaterialCost, 0)
+    const computedBomUnitCost = components.reduce((sum, component) => {
+      const qty = parseFiniteNumber(component?.quantity, 0)
+      const unitCost = parseFiniteNumber(component?.unitCost, 0)
+      if (qty <= 0 || unitCost < 0) return sum
+      return sum + (qty * unitCost)
+    }, 0)
+    const bomUnitCost = bomTotalMaterialCost > 0 ? bomTotalMaterialCost : computedBomUnitCost
+    const hasBomUnitCost = bomUnitCost > 0
+
     const buildableUnits = computeBuildableUnitsFromComponents(components, availableBySku)
-    if (buildableUnits == null) return item
+    if (buildableUnits == null) {
+      if (!hasBomUnitCost) return item
+      return {
+        ...item,
+        unitCost: bomUnitCost
+      }
+    }
     const currentQuantity = parseFiniteNumber(item?.quantity, 0)
     const displayQuantity = Math.max(currentQuantity, buildableUnits)
     const reorderPoint = parseFiniteNumber(item?.reorderPoint, 0)
@@ -186,6 +203,7 @@ async function applyFinalProductBuildableUnits(items = []) {
     return {
       ...item,
       quantity: displayQuantity,
+      ...(hasBomUnitCost ? { unitCost: bomUnitCost } : {}),
       buildableUnits,
       status: displayStatus
     }
