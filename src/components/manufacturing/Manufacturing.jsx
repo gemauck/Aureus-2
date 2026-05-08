@@ -375,6 +375,7 @@ try {
   const [isEditingInventoryItem, setIsEditingInventoryItem] = useState(false); // Edit mode in detail view
   const [inventoryItemQrBlobUrl, setInventoryItemQrBlobUrl] = useState(null);
   const [inventoryItemQrLoading, setInventoryItemQrLoading] = useState(false);
+  const [detailLedgerRefreshNonce, setDetailLedgerRefreshNonce] = useState(0);
   const [bomComponents, setBomComponents] = useState([]);
   const [openBomComponentSelectIndex, setOpenBomComponentSelectIndex] = useState(null);
   const [bomComponentSearchTerm, setBomComponentSearchTerm] = useState('');
@@ -6460,6 +6461,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         const updatedMovements = movements.filter(movement => movement.id !== movementId);
         setMovements(updatedMovements);
         safeSetItem('manufacturing_movements', JSON.stringify(updatedMovements));
+        setDetailLedgerRefreshNonce((n) => n + 1);
+        await reloadInventoryForLocation({ forceRefresh: true });
         
       } catch (error) {
         console.error('❌ Error deleting stock movement:', error);
@@ -6796,6 +6799,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         }));
         setMovements(processedMovements);
         safeSetItem('manufacturing_movements', JSON.stringify(processedMovements));
+        setDetailLedgerRefreshNonce((n) => n + 1);
         
         // Refresh inventory
         try {
@@ -12697,7 +12701,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       return () => {
         cancelled = true;
       };
-    }, [item?.sku]);
+    }, [item?.sku, detailLedgerRefreshNonce]);
 
     const itemMovementsForDetail = useMemo(() => {
       if (!item?.sku) return [];
