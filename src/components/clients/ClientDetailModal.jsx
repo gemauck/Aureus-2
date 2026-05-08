@@ -282,6 +282,37 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         return Array.from(mapByKey.values());
     };
+
+    /** mergeUniqueById is for contacts (name/email); proposals must merge by id with local winning so workingDocumentLink / workflow survive hydration. */
+    const mergeLeadProposalsPreferringLocal = (fromApi, prevLocal) => {
+        const api = Array.isArray(fromApi) ? fromApi : [];
+        const prev = Array.isArray(prevLocal) ? prevLocal : [];
+        const prevById = new Map();
+        for (const p of prev) {
+            if (p && p.id != null && String(p.id).trim() !== '') {
+                prevById.set(String(p.id), p);
+            }
+        }
+        const seenApiIds = new Set();
+        const out = api.map((row) => {
+            const id = row?.id != null ? String(row.id) : '';
+            if (id) seenApiIds.add(id);
+            const loc = id ? prevById.get(id) : null;
+            if (!loc) return row;
+            const wfA = row.workflow && typeof row.workflow === 'object' && !Array.isArray(row.workflow) ? row.workflow : {};
+            const wfB = loc.workflow && typeof loc.workflow === 'object' && !Array.isArray(loc.workflow) ? loc.workflow : {};
+            return {
+                ...row,
+                ...loc,
+                workflow: Object.keys(wfB).length ? { ...wfA, ...wfB } : (loc.workflow !== undefined ? loc.workflow : row.workflow)
+            };
+        });
+        for (const p of prev) {
+            const id = p?.id != null ? String(p.id) : '';
+            if (id && !seenApiIds.has(id)) out.push(p);
+        }
+        return out;
+    };
     
     const [formData, setFormData] = useState(() => {
         // Parse JSON strings to arrays/objects if needed
@@ -531,6 +562,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [engagementReportBranding, setEngagementReportBranding] = useState(null);
     const [engagementReportFormDef, setEngagementReportFormDef] = useState(null);
     const [engagementReportLoading, setEngagementReportLoading] = useState(false);
+    /** When set, report modal shows this submission version (1-based); null = latest version or legacy row fields. */
+    const [engagementReportVersionNumber, setEngagementReportVersionNumber] = useState(null);
     const [engagementInternalNote, setEngagementInternalNote] = useState('');
     const [engagementNoteSaving, setEngagementNoteSaving] = useState(false);
     const [engagementQuestionnaireName, setEngagementQuestionnaireName] = useState('');
@@ -658,6 +691,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             });
         }
         return out;
+    };
+
+    const getEngagementReportResponsesAndMeta = (selectedRow, leadFormData, versionNumber) => {
+        const versions = getEngagementSubmissionVersions(selectedRow);
+        if (versions.length > 0) {
+            let pick = null;
+            if (versionNumber != null && versionNumber !== '' && !Number.isNaN(Number(versionNumber))) {
+                pick = versions.find((x) => x.version === Number(versionNumber)) || null;
+            }
+            if (!pick) pick = versions[versions.length - 1];
+            return {
+                responses: pick?.responses ?? null,
+                submittedAt: pick?.submittedAt ?? null
+            };
+        }
+        return {
+            responses: selectedRow?.responses ?? leadFormData?.customerEngagementResponses ?? null,
+            submittedAt: selectedRow?.submittedAt ?? leadFormData?.customerEngagementSubmittedAt ?? null
+        };
     };
 
     const openEngagementPrefillModal = async (clearSubmission, questionnaireRow = null) => {
@@ -873,7 +925,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const bJson = await bRes.json();
                 const fJson = await fRes.json();
                 if (cancelled) return;
-                const selectedRow = getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId) || null;
+                const selectedRow =
+                    getEngagementQuestionnaires().find(
+                        (q) => String(q.id || '') === String(selectedEngagementQuestionnaireId || '')
+                    ) || null;
                 const form = buildEngagementFormWithCustomFields(fJson?.data?.form ?? null, selectedRow?.customFields);
                 setEngagementReportBranding(bJson?.data ?? bJson);
                 setEngagementReportFormDef(form ?? null);
@@ -890,6 +945,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             cancelled = true;
         };
     }, [showEngagementResponsesModal, selectedEngagementQuestionnaireId]);
+
+    useEffect(() => {
+        if (!showEngagementResponsesModal) setEngagementReportVersionNumber(null);
+    }, [showEngagementResponsesModal]);
 
     const appendEngagementInternalNote = async () => {
         const text = engagementInternalNote.trim();
@@ -982,10 +1041,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
-    const handleOpenEngagementReport = async (questionnaireId) => {
+    const handleOpenEngagementReport = async (questionnaireId, versionOpt = null) => {
         if (!questionnaireId) return;
+        const versionNum =
+            versionOpt != null && versionOpt !== '' && !Number.isNaN(Number(versionOpt)) ? Number(versionOpt) : null;
         setSelectedEngagementQuestionnaireId(questionnaireId);
         if (!formData?.id || !window.DatabaseAPI?.getLead) {
+            setEngagementReportVersionNumber(versionNum);
             setShowEngagementResponsesModal(true);
             return;
         }
@@ -998,9 +1060,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             if (lead) {
                 const rows = normalizeEngagementQuestionnaires(lead.customerEngagementQuestionnaires);
                 selectedRow = rows.find((q) => String(q.id || '') === String(questionnaireId || ''));
+                const versionRows = selectedRow ? getEngagementSubmissionVersions(selectedRow) : [];
+                const hasVersionedSubmission = versionRows.some((v) => v.responses || v.submittedAt);
                 canOpen = !!(
                     selectedRow?.responses ||
                     selectedRow?.submittedAt ||
+                    hasVersionedSubmission ||
                     lead.customerEngagementResponses ||
                     lead.customerEngagementSubmittedAt
                 );
@@ -1020,6 +1085,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setTimeout(() => setEngagementHint(''), 4000);
                 return;
             }
+            setEngagementReportVersionNumber(versionNum);
             setShowEngagementResponsesModal(true);
         } catch (e) {
             setEngagementHint(e.message || 'Could not load report');
@@ -1649,7 +1715,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     contacts: finalContacts,
                     sites: finalSites,
                     opportunities: finalOpportunities,
-                    kyc: mergedKyc
+                    kyc: mergedKyc,
+                    proposals: mergeLeadProposalsPreferringLocal(parsedClient.proposals, currentFormData.proposals)
                 };
                 
                 // CRITICAL: Always update formData immediately when API data arrives
@@ -3083,7 +3150,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         const mergedComments = mergeUniqueById(parsedClient.comments || [], prevFormData?.comments || []);
                         const mergedFollowUps = mergeUniqueById(parsedClient.followUps || [], prevFormData?.followUps || []);
                         const mergedContracts = mergeUniqueById(parsedClient.contracts || [], prevFormData?.contracts || []);
-                        const mergedProposals = mergeUniqueById(parsedClient.proposals || [], prevFormData?.proposals || []);
+                        const mergedProposals = mergeLeadProposalsPreferringLocal(
+                            parsedClient.proposals || [],
+                            prevFormData?.proposals || []
+                        );
                         
                         // CRITICAL FIX: Services are simple string arrays, not objects with IDs
                         // If user has edited services, preserve their current selection
@@ -8878,6 +8948,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     const selectedQ = qid
                                         ? qn.find((q) => String(q.id || '') === qid)
                                         : null;
+                                    const submissionVersionsForQ = selectedQ ? getEngagementSubmissionVersions(selectedQ) : [];
+                                    const canViewSubmissionReport =
+                                        !!selectedQ &&
+                                        (submissionVersionsForQ.some((v) => v.responses || v.submittedAt) ||
+                                            !!(selectedQ.submittedAt || selectedQ.responses));
                                     return (
                                         <div className={stepPanelCls}>
                                             <h3 className={wizStepTitleCls}>
@@ -8902,16 +8977,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             {selectedQ.name || 'Customer engagement questionnaire'}
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setSelectedEngagementQuestionnaireId(selectedQ.id || '');
-                                                            openEngagementPrefillModal(false, selectedQ);
-                                                        }}
-                                                        className={`text-xs font-semibold px-4 py-2.5 rounded-lg ${isDark ? 'bg-primary-700 hover:bg-primary-600' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
-                                                    >
-                                                        Open questionnaire editor
-                                                    </button>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedEngagementQuestionnaireId(selectedQ.id || '');
+                                                                openEngagementPrefillModal(false, selectedQ);
+                                                            }}
+                                                            className={`text-xs font-semibold px-4 py-2.5 rounded-lg ${isDark ? 'bg-primary-700 hover:bg-primary-600' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                        >
+                                                            Open questionnaire editor
+                                                        </button>
+                                                        {canViewSubmissionReport ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void handleOpenEngagementReport(String(selectedQ.id || ''))}
+                                                                className={`text-xs font-semibold px-4 py-2.5 rounded-lg border ${isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-gray-50'}`}
+                                                            >
+                                                                View submission report
+                                                            </button>
+                                                        ) : null}
+                                                    </div>
                                                     <p className={`mt-3 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
                                                         {selectedQ.submittedAt
                                                             ? 'Submission received.'
@@ -9391,9 +9477,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <h4 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                         Submission versions
                                                     </h4>
-                                                    <span className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                        {versions.length} submitted
-                                                    </span>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                            {versions.length} submitted
+                                                        </span>
+                                                        {versions.length > 0 && selectedRow?.id ? (
+                                                            <button
+                                                                type="button"
+                                                                className={`text-[11px] font-semibold px-2 py-1 rounded border ${isDark ? 'border-primary-500 text-primary-300 hover:bg-gray-800' : 'border-primary-500 text-primary-700 hover:bg-white'}`}
+                                                                onClick={() => void handleOpenEngagementReport(String(selectedRow.id))}
+                                                            >
+                                                                View latest report
+                                                            </button>
+                                                        ) : null}
+                                                    </div>
                                                 </div>
                                                 {versions.length === 0 ? (
                                                     <p className={`mt-2 text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
@@ -9405,9 +9502,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             .slice()
                                                             .reverse()
                                                             .map((v) => (
-                                                                <div key={v.id} className={`flex items-center justify-between rounded border px-2.5 py-1.5 text-xs ${isDark ? 'border-gray-700 bg-gray-800/60 text-gray-300' : 'border-gray-200 bg-white text-gray-700'}`}>
-                                                                    <span>Version {v.version}</span>
-                                                                    <span>{v.submittedAt ? new Date(v.submittedAt).toLocaleString('en-ZA') : 'Unknown date'}</span>
+                                                                <div
+                                                                    key={v.id}
+                                                                    className={`flex flex-wrap items-center justify-between gap-2 rounded border px-2.5 py-1.5 text-xs ${isDark ? 'border-gray-700 bg-gray-800/60 text-gray-300' : 'border-gray-200 bg-white text-gray-700'}`}
+                                                                >
+                                                                    <span>
+                                                                        Version {v.version}
+                                                                        <span className={`ml-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                                            {v.submittedAt ? new Date(v.submittedAt).toLocaleString('en-ZA') : 'Unknown date'}
+                                                                        </span>
+                                                                    </span>
+                                                                    {(v.responses || v.submittedAt) && selectedRow?.id ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            className={`shrink-0 rounded px-2 py-1 text-[11px] font-semibold ${isDark ? 'bg-primary-700 text-white hover:bg-primary-600' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                                            onClick={() =>
+                                                                                void handleOpenEngagementReport(String(selectedRow.id), v.version)
+                                                                            }
+                                                                        >
+                                                                            View report
+                                                                        </button>
+                                                                    ) : null}
                                                                 </div>
                                                             ))}
                                                     </div>
@@ -9720,7 +9835,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className={`no-print flex items-center justify-between border-b px-6 py-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                            <h2 className="text-lg font-semibold">Questionnaire report</h2>
+                            <div>
+                                <h2 className="text-lg font-semibold">Questionnaire report</h2>
+                                {engagementReportVersionNumber != null ? (
+                                    <p className={`mt-0.5 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        Submission version {engagementReportVersionNumber}
+                                    </p>
+                                ) : null}
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => {
@@ -9738,9 +9860,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 <div className="py-16 text-center text-sm text-gray-500">Loading report…</div>
                             ) : (() => {
                                 const selectedRow =
-                                    getEngagementQuestionnaires().find((q) => q.id === selectedEngagementQuestionnaireId) || null;
-                                const reportResponses = selectedRow?.responses || formData.customerEngagementResponses;
-                                const reportSubmittedAt = selectedRow?.submittedAt || formData.customerEngagementSubmittedAt;
+                                    getEngagementQuestionnaires().find(
+                                        (q) => String(q.id || '') === String(selectedEngagementQuestionnaireId || '')
+                                    ) || null;
+                                const { responses: reportResponses, submittedAt: reportSubmittedAt } =
+                                    getEngagementReportResponsesAndMeta(selectedRow, formData, engagementReportVersionNumber);
                                 if (
                                     engagementReportFormDef &&
                                     reportResponses &&
