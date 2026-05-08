@@ -44,7 +44,7 @@
   - ✅ Forward balance calculation
   - ✅ Backward balance calculation (newest first)
   - ✅ Balance after each movement
-  - ✅ Closing balance verification
+  - ✅ Final on-hand verification (after all movements)
   - ✅ Negative balance handling
 
 #### ✅ Added Movement Sorting Tests

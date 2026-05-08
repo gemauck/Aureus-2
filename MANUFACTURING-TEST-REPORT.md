@@ -177,7 +177,7 @@
 3. Verify all balances
 
 **Expected Results**:
-- ✅ Closing balance = 130
+- ✅ **Current on hand** (ledger footer) = 130
 - ✅ All intermediate balances are correct
 - ✅ Balance after each movement matches expected value
 - ✅ Movements displayed newest-first
@@ -190,7 +190,7 @@
   3. Consumption -25 → Balance: 125 ✅
   4. Receipt +50 → Balance: 150 ✅
   5. Initial Balance +100 → Balance: 100 ✅
-- Closing Balance: 130 ✅
+- Current on hand (ledger footer): 130 ✅
 
 ---
 

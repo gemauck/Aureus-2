@@ -936,7 +936,7 @@ function testStockBalanceCalculations() {
   
   // Test: Closing balance matches final balance
   const closingBalance = balances[balances.length - 1].balance;
-  assert(closingBalance === 135, 'Stock Balance - Closing Balance', 
+  assert(closingBalance === 135, 'Stock Balance - Final on-hand after all movements', 
     `Expected 135, got ${closingBalance}`);
   
   // Test: Negative balance handling

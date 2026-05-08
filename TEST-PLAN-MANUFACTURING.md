@@ -156,7 +156,7 @@
 #### Stock Ledger Display
 - [ ] Verify: Movements displayed newest-first
 - [ ] Verify: Balances calculated correctly
-- [ ] Verify: Closing balance matches current quantity
+- [ ] Verify: **Current on hand** footer row matches Stock Information total (not the last data row when sorted newest-first)
 - [ ] Verify: In/Out columns display correctly
 - [ ] Verify: Movement types are formatted correctly
 

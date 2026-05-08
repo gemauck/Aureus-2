@@ -101,9 +101,7 @@ reversedMovements.forEach((mov, idx) => {
 });
 
 console.log('\n📊 Summary:');
-console.log('  The backward calculation should show:');
-console.log('    1. +10 adjustment → Balance: 100 ✅');
-console.log('    2. +100 initial → Balance: 90 ✅');
-console.log('    3. -6 consumption → Balance: 94 ❌ (currently showing -10)');
-console.log('    4. -4 consumption → Balance: 80 ❌ (currently showing -4)');
+console.log('  In the ERP inventory detail, movements are shown newest-first.');
+console.log('  Each row\'s Balance column is on-hand after that event in chronological time.');
+console.log('  The footer row "Current on hand" matches Stock Information (derived opening reconciles to that total).');
 

@@ -13089,6 +13089,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               {detailLocations.length >= 1 && (
                 <div className="mt-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">All locations</h3>
+                  {detailLocations.length > 1 && (
+                    <p className="text-xs text-gray-500 mb-2">
+                      Quantities are <span className="font-medium text-gray-600">per location</span>. Zeros mean no stock at that site; totals in Stock Information combine every site.
+                    </p>
+                  )}
                   <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
                     <thead className="bg-gray-50">
                       <tr>
@@ -13644,8 +13649,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               opening = balanceAfter;
               return { movement, qty, openingBalance, balanceAfter };
             });
-            const ledgerClosingBalance = opening;
-            const mismatch = Math.abs(ledgerClosingBalance - currentQuantity) > 0.001;
+            const reconciledOnHandQty = opening;
+            const mismatch = Math.abs(reconciledOnHandQty - currentQuantity) > 0.001;
 
             // Display newest-first
             const displayRows = [...rowsCalculated].reverse();
@@ -13665,10 +13670,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </div>
                 ) : (
                   <>
-                  <p className="text-xs text-gray-500 mb-2">Opening + In − Out = Balance (each row shows balance after that movement; opening is derived from current stock and shown movement history)</p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Movements are listed <span className="font-medium text-gray-600">newest first</span>. Each row&apos;s Balance is on-hand{' '}
+                    <span className="font-medium text-gray-600">after that event in time</span> (the last row in the table is the{' '}
+                    <span className="font-medium text-gray-600">oldest</span> movement shown, not necessarily today&apos;s total). Opening + In − Out = Balance;
+                    the first row&apos;s Opening is derived so the running total reconciles to current stock.
+                  </p>
                   {mismatch && (
                     <p className="text-xs text-amber-600 mb-2">
-                      Item quantity ({currentQuantity.toFixed(2)} {item.unit}) differs from ledger total ({ledgerClosingBalance.toFixed(2)} {item.unit}). Consider reconciling or re-running the stock count fix.
+                      Item quantity ({currentQuantity.toFixed(2)} {item.unit}) differs from reconciled on-hand ({reconciledOnHandQty.toFixed(2)} {item.unit}). Consider reconciling or re-running the stock count fix.
                     </p>
                   )}
                   <table className="w-full">
@@ -13677,10 +13687,20 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Date</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500" title="Balance before this movement">Opening</th>
+                        <th
+                          className="px-3 py-2 text-right text-xs font-medium text-gray-500"
+                          title="On-hand immediately before this movement (chronological order; first row uses a derived opening)"
+                        >
+                          Opening
+                        </th>
                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">In</th>
                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Out</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500" title="Balance after this movement">Balance</th>
+                        <th
+                          className="px-3 py-2 text-right text-xs font-medium text-gray-500"
+                          title="On-hand after this movement (chronological order — table is sorted newest first)"
+                        >
+                          Balance
+                        </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
                       </tr>
                     </thead>
@@ -13701,7 +13721,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                             <td className="px-3 py-2 text-sm text-gray-700">
                               {getMovementDescription(movement)}
                             </td>
-                            <td className="px-3 py-2 text-sm text-right text-gray-600 font-medium" title="Balance before this movement">
+                            <td className="px-3 py-2 text-sm text-right text-gray-600 font-medium" title="On-hand immediately before this movement (chronological)">
                               {openingBalance.toFixed(2)} {item.unit}
                             </td>
                             <td className="px-3 py-2 text-sm text-right">
@@ -13718,9 +13738,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                 <span className="text-gray-400">-</span>
                               )}
                             </td>
-                            <td className={`px-3 py-2 text-sm text-right font-semibold ${
+                            <td
+                              className={`px-3 py-2 text-sm text-right font-semibold ${
                               balanceAfter < 0 ? 'text-red-600' : balanceAfter === 0 ? 'text-orange-600' : 'text-gray-900'
-                            }`}>
+                            }`}
+                              title="On-hand after this movement (chronological); table rows are newest-first"
+                            >
                               {balanceAfter.toFixed(2)} {item.unit}
                             </td>
                             <td className="px-3 py-2 text-sm text-gray-600">
@@ -13729,15 +13752,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           </tr>
                         );
                       })}
-                      {/* Closing Balance Row */}
+                      {/* Matches item quantity; not the same as the last table row when rows are newest-first */}
                       <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
                         <td className="px-3 py-2 text-sm text-gray-700" colSpan="6">
-                          <span className="text-gray-900">Closing Balance (from ledger)</span>
+                          <span className="text-gray-900">Current on hand</span>
+                          <span className="block text-xs font-normal text-gray-500 mt-0.5">
+                            Matches Stock Information above (reconciled from movements + current quantity)
+                          </span>
                         </td>
                         <td className={`px-3 py-2 text-sm text-right font-bold ${
-                          ledgerClosingBalance < 0 ? 'text-red-600' : ledgerClosingBalance === 0 ? 'text-orange-600' : 'text-blue-600'
+                          reconciledOnHandQty < 0 ? 'text-red-600' : reconciledOnHandQty === 0 ? 'text-orange-600' : 'text-blue-600'
                         }`}>
-                          {ledgerClosingBalance.toFixed(2)} {item.unit}
+                          {reconciledOnHandQty.toFixed(2)} {item.unit}
                         </td>
                         <td className="px-3 py-2 text-sm text-gray-700">-</td>
                       </tr>
