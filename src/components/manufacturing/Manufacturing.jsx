@@ -13157,6 +13157,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             {/* Stock Information */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock Information</h2>
+              <p className="text-xs text-gray-500 mb-3">
+                <span className="font-medium text-gray-600">Total</span> and <span className="font-medium text-gray-600">Available</span> are the live on-hand figures.
+                {item.type === 'final_product' ? (
+                  <> <span className="font-medium text-gray-600">In Production</span> and <span className="font-medium text-gray-600">Completed</span> are manufacturing buckets; </>
+                ) : null}
+                <span className="font-medium text-gray-600">Allocated</span> is reserved for orders/workflows.
+                <span className="text-gray-500"> Zeros in those rows simply mean nothing is tied up there yet.</span>
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Total Quantity</p>
@@ -13545,6 +13553,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Value</p>
                   <p className={`text-lg font-bold mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatCurrency(catalogLineTotalValue || 0)}</p>
                   <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Quantity × unit cost</p>
+                  {(!item.unitCost || Number(item.unitCost) <= 0) && (displayQuantity > 0) && (
+                    <p className={`text-xs mt-2 ${isDark ? 'text-amber-300/90' : 'text-amber-700'}`}>
+                      No unit cost on this item — set <span className="font-medium">Unit cost</span> under Edit Item to show value here.
+                    </p>
+                  )}
                 </div>
                 <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                   Stock status indicators are hidden on this detail view to avoid inconsistent interim states.
@@ -13642,6 +13655,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             const currentQuantity = selectedDetailLocationId
               ? (parseFloat(selectedLocationInfo?.quantity) || 0)
               : displayQuantity;
+            /** If you started at 0 and only these movements happened, on-hand would be this (ignores synthetic opening). */
+            const onHandIfOnlyTheseMovementsFromZero = movementNetChange;
+            const impliedOpeningBeforeOldestMovement = currentQuantity - movementNetChange;
+            const movementsMatchRecordedFromZero =
+              rowsWithBalances.length === 0 ||
+              Math.abs(onHandIfOnlyTheseMovementsFromZero - currentQuantity) <= 0.001;
             let opening = currentQuantity - movementNetChange;
             const rowsCalculated = rowsWithBalances.map(({ movement, qty }) => {
               const openingBalance = opening;
@@ -13650,7 +13669,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               return { movement, qty, openingBalance, balanceAfter };
             });
             const reconciledOnHandQty = opening;
-            const mismatch = Math.abs(reconciledOnHandQty - currentQuantity) > 0.001;
 
             // Display newest-first
             const displayRows = [...rowsCalculated].reverse();
@@ -13676,10 +13694,67 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <span className="font-medium text-gray-600">oldest</span> movement shown, not necessarily today&apos;s total). Opening + In − Out = Balance;
                     the first row&apos;s Opening is derived so the running total reconciles to current stock.
                   </p>
-                  {mismatch && (
-                    <p className="text-xs text-amber-600 mb-2">
-                      Item quantity ({currentQuantity.toFixed(2)} {item.unit}) differs from reconciled on-hand ({reconciledOnHandQty.toFixed(2)} {item.unit}). Consider reconciling or re-running the stock count fix.
+                  {!selectedDetailLocationId && detailLocations.length > 1 && (
+                    <p className="text-xs text-gray-500 mb-2">
+                      <span className="font-medium text-gray-600">All locations (combined):</span> each line still names the{' '}
+                      <span className="font-medium text-gray-600">site where that movement was recorded</span> (for example a stock take will name the counted warehouse).
+                      Other locations can show 0 on hand while totals above include stock elsewhere. Use the Location control to filter this ledger to one site.
                     </p>
+                  )}
+                  <div
+                    className={`text-xs mb-2 px-2.5 py-2 rounded-md border ${
+                      movementsMatchRecordedFromZero
+                        ? 'bg-gray-50 text-gray-700 border-gray-200'
+                        : 'bg-amber-50 text-amber-950 border-amber-200'
+                    }`}
+                  >
+                    <span className="font-semibold text-gray-800">Reconciliation check: </span>
+                    <span className="font-medium">Net of movements in this list</span> (as signed In/Out){' '}
+                    ={' '}
+                    <span className="font-mono tabular-nums">
+                      {movementNetChange >= 0 ? '+' : ''}
+                      {movementNetChange.toFixed(2)} {item.unit}
+                    </span>
+                    {' · '}
+                    <span className="font-medium">Recorded on-hand</span> (catalog / LocationInventory){' '}
+                    ={' '}
+                    <span className="font-mono tabular-nums">{currentQuantity.toFixed(2)} {item.unit}</span>
+                    {movementsMatchRecordedFromZero ? (
+                      <span className="text-gray-600"> — these match (treating this list as full history from zero).</span>
+                    ) : (
+                      <span className="text-amber-900">
+                        {' '}
+                        — mismatch: the table below still ends at <strong>recorded</strong> on-hand because Opening on each row is back-filled.
+                      </span>
+                    )}
+                  </div>
+                  {!movementsMatchRecordedFromZero && rowsWithBalances.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 mb-3 text-xs text-amber-950">
+                      <p className="font-semibold text-amber-900 mb-1">Movement total vs recorded on-hand</p>
+                      {Math.abs(movementNetChange) <= 0.001 ? (
+                        <p className="text-amber-900 leading-relaxed">
+                          The movements in this list <strong>net to zero</strong>, but{' '}
+                          <strong>recorded on-hand is still {currentQuantity.toFixed(2)} {item.unit}</strong>.
+                          The running Balance column is forced to match recorded stock by inventing an opening balance before the oldest row — so the numbers can look consistent even though{' '}
+                          <strong>these lines alone would leave 0 {item.unit}</strong> if you started from empty stock.
+                        </p>
+                      ) : (
+                        <p className="text-amber-900 leading-relaxed">
+                          <strong>Net of movements in this view:</strong>{' '}
+                          {movementNetChange >= 0 ? '+' : ''}{movementNetChange.toFixed(2)} {item.unit}.{' '}
+                          <strong>Recorded on-hand:</strong> {currentQuantity.toFixed(2)} {item.unit}.
+                          {' '}Roughly <strong>{impliedOpeningBeforeOldestMovement.toFixed(2)} {item.unit}</strong> would need to have existed before the <em>oldest</em> movement listed (or history is incomplete / filtered).
+                        </p>
+                      )}
+                      {Math.abs(movementNetChange) <= 0.001 && currentQuantity > 0.001 && (
+                        <p className="text-amber-900 leading-relaxed mt-2 border-t border-amber-200 pt-2">
+                          <strong>If on-hand should be zero:</strong> post an <strong>adjustment of −{currentQuantity.toFixed(2)} {item.unit}</strong> at the location that holds this stock (or a <strong>stock take</strong> with counted quantity <strong>0</strong> there).
+                          <span className="block mt-1 text-amber-800">
+                            If stock is real, older movements may be missing from this list, or quantity may sit at another warehouse — check <strong>All locations</strong> and filters.
+                          </span>
+                        </p>
+                      )}
+                    </div>
                   )}
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
@@ -13757,7 +13832,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         <td className="px-3 py-2 text-sm text-gray-700" colSpan="6">
                           <span className="text-gray-900">Current on hand</span>
                           <span className="block text-xs font-normal text-gray-500 mt-0.5">
-                            Matches Stock Information above (reconciled from movements + current quantity)
+                            {movementsMatchRecordedFromZero
+                              ? 'Matches Stock Information (same as net of movements in this list, from a zero start).'
+                              : 'Matches Stock Information / LocationInventory — not the same as “net of movements” when the reconciliation check above shows a mismatch.'}
                           </span>
                         </td>
                         <td className={`px-3 py-2 text-sm text-right font-bold ${
