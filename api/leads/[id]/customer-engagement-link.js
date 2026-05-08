@@ -18,7 +18,11 @@ function buildQuestionnaireId() {
 }
 
 function normalizeQuestionnaires(raw) {
-  return Array.isArray(raw) ? raw.filter((q) => q && typeof q === 'object') : []
+  const rows = Array.isArray(raw) ? raw.filter((q) => q && typeof q === 'object') : []
+  return rows.map((q) => ({
+    ...q,
+    id: String(q.id || '').trim() || buildQuestionnaireId()
+  }))
 }
 
 function summarizeQuestionnaire(q) {
@@ -144,6 +148,10 @@ async function handler(req, res) {
     let index = questionnaireId
       ? current.findIndex((q) => String(q.id || '').trim() === questionnaireId)
       : -1
+    if (index < 0 && questionnaireNameRaw) {
+      const byName = questionnaireNameRaw.trim().toLowerCase()
+      index = current.findIndex((q) => String(q.name || '').trim().toLowerCase() === byName)
+    }
 
     let baseFormDef = getCustomerEngagementFormDefinition(customFields)
     if (index >= 0 && customFields.length === 0) {

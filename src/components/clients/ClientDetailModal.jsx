@@ -809,6 +809,35 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
         setTimeout(() => setEngagementHint(''), 2500);
     };
+
+    const handleEngagementCopyForQuestionnaire = async (q) => {
+        if (!formData?.id || !q || !window.DatabaseAPI?.createCustomerEngagementLink) return;
+        setEngagementBusy(true);
+        setEngagementHint('');
+        try {
+            const res = await window.DatabaseAPI.createCustomerEngagementLink(formData.id, {
+                questionnaireId: q.id,
+                questionnaireName: q.name,
+                customFields: q.customFields || [],
+                prefill: q.prefill || {},
+                clearSubmission: false
+            });
+            const payload = res?.data ?? res;
+            const url = payload?.url;
+            if (!url) throw new Error('No link generated');
+            setEngagementLinkUrl(url);
+            if (q.id) {
+                setEngagementLinkUrlsById((prev) => ({ ...(prev || {}), [q.id]: url }));
+            }
+            await navigator.clipboard.writeText(url);
+            setEngagementHint('Link generated and copied to clipboard');
+        } catch (e) {
+            setEngagementHint(e.message || 'Could not generate/copy link');
+        } finally {
+            setEngagementBusy(false);
+            setTimeout(() => setEngagementHint(''), 3500);
+        }
+    };
     
     // Track last processed client data to detect changes
     const lastClientDataRef = useRef({ followUps: null, notes: null, comments: null, kyc: null, id: null });
@@ -7935,7 +7964,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     <button
                                                                         key={q.id}
                                                                         type="button"
-                                                                        onClick={() => setSelectedEngagementQuestionnaireId(q.id || '')}
+                                                                        onClick={() => {
+                                                                            setSelectedEngagementQuestionnaireId(q.id || '');
+                                                                            openEngagementPrefillModal(false, q);
+                                                                        }}
                                                                         className={`w-full px-3 py-2 text-left transition ${
                                                                             selectedId === q.id
                                                                                 ? (isDark ? 'bg-primary-900/30' : 'bg-primary-50')
@@ -7988,23 +8020,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     </button>
                                                                     <button
                                                                         type="button"
-                                                                        disabled={!engagementLinkUrlsById?.[selected.id]}
-                                                                        onClick={async () => {
-                                                                            const url = engagementLinkUrlsById?.[selected.id];
-                                                                            if (!url) return;
-                                                                            try {
-                                                                                await navigator.clipboard.writeText(url);
-                                                                                setEngagementHint('Copied to clipboard');
-                                                                            } catch {
-                                                                                setEngagementHint('Copy failed — select and copy manually');
-                                                                            }
-                                                                            setTimeout(() => setEngagementHint(''), 2500);
-                                                                        }}
+                                                                        disabled={engagementBusy}
+                                                                        onClick={() => handleEngagementCopyForQuestionnaire(selected)}
                                                                         className={`text-[11px] px-2.5 py-1 rounded border ${
                                                                             isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
                                                                         } disabled:opacity-50`}
                                                                     >
-                                                                        Copy link
+                                                                        Generate + copy link
                                                                     </button>
                                                                     <button
                                                                         type="button"
