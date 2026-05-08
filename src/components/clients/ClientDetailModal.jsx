@@ -12,60 +12,6 @@ const LEAD_PROPOSAL_PROCESS_STEPS = [
     { step: 4, label: 'Submission to Client' },
 ];
 
-const LeadProposalProcessFlow = ({ isDark }) => {
-    const borderCls = isDark ? 'border-gray-600' : 'border-gray-200';
-    const panelCls = isDark ? 'bg-gray-800/60' : 'bg-white';
-    const kickerCls = isDark ? 'text-gray-300' : 'text-gray-600';
-    const labelCls = isDark ? 'text-gray-100' : 'text-gray-900';
-    const connectorCls = isDark ? 'bg-gray-600' : 'bg-primary-200';
-    const chevronCls = isDark ? 'text-gray-500' : 'text-primary-500';
-
-    return (
-        <div className={`rounded-lg border p-4 ${borderCls} ${panelCls}`} role="region" aria-label="Standard proposal process">
-            <div className={`flex items-center gap-2 mb-3 ${kickerCls}`}>
-                <i className="fas fa-route text-primary-600 text-sm" aria-hidden />
-                <span className="text-xs font-semibold uppercase tracking-wide">Standard proposal process</span>
-            </div>
-
-            <div className="hidden md:flex items-start w-full">
-                {LEAD_PROPOSAL_PROCESS_STEPS.map((s, i) => (
-                    <React.Fragment key={s.step}>
-                        <div className="flex min-w-0 flex-1 flex-col items-center text-center px-1">
-                            <div
-                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-sm"
-                                aria-hidden
-                            >
-                                {s.step}
-                            </div>
-                            <p className={`mt-2 text-xs lg:text-sm font-medium leading-snug ${labelCls}`}>{s.label}</p>
-                        </div>
-                        {i < LEAD_PROPOSAL_PROCESS_STEPS.length - 1 && (
-                            <div className="flex flex-shrink-0 items-center self-start pt-[1.125rem] px-0.5" aria-hidden>
-                                <div className={`h-0.5 w-4 lg:w-8 ${connectorCls}`} />
-                                <i className={`fas fa-chevron-right text-[9px] ${chevronCls} -ml-px`} />
-                            </div>
-                        )}
-                    </React.Fragment>
-                ))}
-            </div>
-
-            <ol className="md:hidden space-y-3 list-none m-0 p-0">
-                {LEAD_PROPOSAL_PROCESS_STEPS.map(s => (
-                    <li key={s.step} className={`flex gap-3 rounded-lg border p-3 ${isDark ? 'border-gray-600 bg-gray-800/80' : 'border-gray-100 bg-gray-50/80'}`}>
-                        <div
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-semibold text-white"
-                            aria-hidden
-                        >
-                            {s.step}
-                        </div>
-                        <p className={`text-sm font-medium leading-snug pt-1 ${labelCls}`}>{s.label}</p>
-                    </li>
-                ))}
-            </ol>
-        </div>
-    );
-};
-
 function defaultLeadProposalWorkflow() {
     return {
         currentStep: 1,
@@ -97,100 +43,6 @@ function normalizeLeadProposalWorkflowUi(raw) {
         workingDraftUploadedName: String(raw.workingDraftUploadedName || '').trim()
     };
 }
-
-/** @returns {boolean[]} step 1–4 completion flags */
-function computeLeadProposalStepCompletion(proposal, questionnaires) {
-    const w = normalizeLeadProposalWorkflowUi(proposal?.workflow);
-    const qList = Array.isArray(questionnaires) ? questionnaires : [];
-    const q = w.engagementQuestionnaireId
-        ? qList.find((x) => String(x.id || '') === String(w.engagementQuestionnaireId))
-        : null;
-    const step1Done = !!(q && w.engagementQuestionnaireId);
-    const link = String(proposal?.workingDocumentLink || '').trim();
-    const step2Done = !!(link || w.workingDraftUploadedName.trim());
-    const step3Done = w.departmentalComments.trim().length > 0;
-    const step4Done = !!(w.submittedToClientAt && String(w.submittedToClientAt).trim());
-    return [step1Done, step2Done, step3Done, step4Done];
-}
-
-const LeadProposalProcessFlowMini = ({ isDark, stepDone, activeStep }) => {
-    const done = Array.isArray(stepDone) ? stepDone : [false, false, false, false];
-    const active = Math.min(4, Math.max(1, Number(activeStep) || 1));
-    const connectorCls = isDark ? 'bg-gray-600' : 'bg-primary-200';
-    const chevronCls = isDark ? 'text-gray-600' : 'text-primary-400';
-
-    return (
-        <div className="w-full" role="list" aria-label="Proposal progress">
-            <div className="hidden sm:flex items-start w-full gap-0">
-                {LEAD_PROPOSAL_PROCESS_STEPS.map((s, i) => {
-                    const completed = !!done[i];
-                    const isCurrent = !completed && active === s.step;
-                    const circleCls = completed
-                        ? 'bg-emerald-600 text-white ring-2 ring-emerald-500/40'
-                        : isCurrent
-                          ? 'bg-primary-600 text-white shadow-md'
-                          : isDark
-                            ? 'bg-gray-700 text-gray-400 ring-1 ring-gray-600'
-                            : 'bg-gray-100 text-gray-500 ring-1 ring-gray-200';
-                    return (
-                        <React.Fragment key={s.step}>
-                            <div className="flex min-w-0 flex-1 flex-col items-center text-center px-0.5">
-                                <div
-                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${circleCls}`}
-                                    role="listitem"
-                                    aria-label={`Step ${s.step}${completed ? ' completed' : isCurrent ? ' current' : ''}`}
-                                >
-                                    {completed ? <i className="fas fa-check text-[10px]" aria-hidden /> : s.step}
-                                </div>
-                                <p
-                                    className={`mt-1.5 text-[10px] font-medium leading-tight line-clamp-2 ${
-                                        isDark ? 'text-gray-300' : 'text-gray-700'
-                                    }`}
-                                >
-                                    {s.label}
-                                </p>
-                            </div>
-                            {i < LEAD_PROPOSAL_PROCESS_STEPS.length - 1 && (
-                                <div className="flex flex-shrink-0 items-center self-start pt-3 px-0" aria-hidden>
-                                    <div className={`h-0.5 w-2 sm:w-4 ${connectorCls}`} />
-                                    <i className={`fas fa-chevron-right text-[7px] ${chevronCls} -ml-px`} />
-                                </div>
-                            )}
-                        </React.Fragment>
-                    );
-                })}
-            </div>
-            <ol className="sm:hidden space-y-2 list-none m-0 p-0">
-                {LEAD_PROPOSAL_PROCESS_STEPS.map((s, i) => {
-                    const completed = !!done[i];
-                    return (
-                        <li
-                            key={s.step}
-                            className={`flex gap-2 rounded-md border px-2 py-1.5 ${
-                                isDark ? 'border-gray-600 bg-gray-800/80' : 'border-gray-100 bg-gray-50/90'
-                            }`}
-                        >
-                            <div
-                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                                    completed
-                                        ? 'bg-emerald-600 text-white'
-                                        : isDark
-                                          ? 'bg-gray-700 text-gray-400'
-                                          : 'bg-white text-gray-600 ring-1 ring-gray-200'
-                                }`}
-                            >
-                                {completed ? <i className="fas fa-check text-[9px]" /> : s.step}
-                            </div>
-                            <p className={`text-[11px] font-medium leading-snug pt-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                                {s.label}
-                            </p>
-                        </li>
-                    );
-                })}
-            </ol>
-        </div>
-    );
-};
 
 // Module-level tracking to prevent duplicate loads across remounts
 // This persists even if the component remounts
@@ -8304,126 +8156,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             <div className="space-y-4">
                                 <div className={`rounded-lg p-4 ${isDark ? 'bg-gray-700/50 border border-gray-600' : 'bg-primary-50 border border-primary-100'}`}>
                                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                        Track proposal records for this lead. Changes save with the rest of the lead (auto-save after edits). The standard proposal process is shown below for reference.
+                                        Manage proposals for this lead. Use <strong className="font-medium">Add proposal</strong> to run the full workflow — including creating or linking a customer engagement questionnaire (questionnaires are not created from this tab directly).
                                     </p>
                                 </div>
-                                <div className={`rounded-lg border p-4 ${isDark ? 'border-gray-600 bg-gray-800/50' : 'border-gray-200 bg-white'}`}>
-                                    <h4 className={`text-sm font-semibold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                        Customer engagement questionnaire
-                                    </h4>
-                                    <p className={`text-xs mb-3 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        Send a polished site-visit questionnaire (Abcotronics letterhead) — recipients open the link without logging in.
-                                    </p>
-                                    <div className={`text-xs mb-3 space-y-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        <div>{getEngagementQuestionnaires().length} questionnaire(s) configured for this lead.</div>
-                                        {engagementHint ? (
-                                            <div className={`mt-1 ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>{engagementHint}</div>
-                                        ) : null}
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        <button
-                                            type="button"
-                                            disabled={engagementBusy || !formData.id}
-                                            onClick={() => openEngagementPrefillModal(false, null)}
-                                            className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
-                                                isDark ? 'bg-primary-600 text-white hover:bg-primary-500' : 'bg-primary-600 text-white hover:bg-primary-700'
-                                            } disabled:opacity-50`}
-                                        >
-                                            New questionnaire
-                                        </button>
-                                    </div>
-                                    <div className="mt-3 space-y-2">
-                                        {(() => {
-                                            const questionnaires = getEngagementQuestionnaires();
-                                            return (
-                                                <>
-                                                    {questionnaires.length === 0 ? (
-                                                        <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                                            No questionnaires yet.
-                                                        </div>
-                                                    ) : (
-                                                        <div className={`rounded-xl border overflow-hidden ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                                                            <div className={`px-3 py-2 text-[11px] uppercase tracking-wide font-semibold ${isDark ? 'bg-gray-900/50 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
-                                                                Questionnaires
-                                                            </div>
-                                                            <div className={`${isDark ? 'bg-gray-900/20' : 'bg-white'} divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-100'}`}>
-                                                                {questionnaires.map((q) => {
-                                                                    const statusBits = [];
-                                                                    if (q.submittedAt) statusBits.push('Submitted');
-                                                                    if (q.linkActive) statusBits.push('Active link');
-                                                                    return (
-                                                                        <div
-                                                                            key={q.id}
-                                                                            className={`px-3 py-2 transition ${isDark ? 'hover:bg-gray-800/60' : 'hover:bg-gray-50'}`}
-                                                                        >
-                                                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => {
-                                                                                        setSelectedEngagementQuestionnaireId(q.id || '');
-                                                                                        openEngagementPrefillModal(false, q);
-                                                                                    }}
-                                                                                    className={`text-left ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
-                                                                                >
-                                                                                    <div className="text-sm font-semibold">
-                                                                                        {q.name || 'Customer engagement questionnaire'}
-                                                                                    </div>
-                                                                                    <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                                                        {[
-                                                                                            q.tokenCreatedAt
-                                                                                                ? `Updated ${new Date(q.tokenCreatedAt).toLocaleString('en-ZA')}`
-                                                                                                : 'No link generated yet',
-                                                                                            statusBits.length ? statusBits.join(' • ') : null
-                                                                                        ]
-                                                                                            .filter(Boolean)
-                                                                                            .join(' • ')}
-                                                                                    </div>
-                                                                                </button>
-                                                                                <div className="flex items-center gap-1.5 text-[11px]">
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        disabled={engagementBusy}
-                                                                                        onClick={() => openEngagementPrefillModal(false, q)}
-                                                                                        className={`px-2.5 py-1 rounded border ${
-                                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                                                        }`}
-                                                                                    >
-                                                                                        Open
-                                                                                    </button>
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        disabled={engagementBusy}
-                                                                                        onClick={() => handleOpenEngagementReport(q.id || '')}
-                                                                                        className={`px-2.5 py-1 rounded border ${
-                                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                                                        } disabled:opacity-50`}
-                                                                                    >
-                                                                                        Report
-                                                                                    </button>
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        disabled={engagementBusy}
-                                                                                        onClick={() => handleEngagementDelete(q.id || '')}
-                                                                                        className={`px-2.5 py-1 rounded ${
-                                                                                            isDark ? 'text-red-300 hover:bg-gray-700' : 'text-red-700 hover:bg-red-50'
-                                                                                        } disabled:opacity-50`}
-                                                                                    >
-                                                                                        Delete
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </>
-                                            );
-                                        })()}
-                                    </div>
-                                </div>
-                                <LeadProposalProcessFlow isDark={isDark} />
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
                                     <button
@@ -8441,13 +8176,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     </button>
                                 </div>
                                 <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    Each proposal tracks the four standard stages. Use <strong className="font-medium">Add proposal</strong> for the guided flow; quick edits below stay available.
+                                    Quick edits below save with the lead. Open <strong className="font-medium">Process</strong> on a proposal for the guided steps (questionnaire, draft link, circulation, client submission).
                                 </p>
                                 {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
                                     <div className={`text-center py-12 rounded-lg border border-dashed ${isDark ? 'border-gray-600 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
                                         <i className="fas fa-clipboard-list text-4xl mb-3 opacity-60"></i>
                                         <p className="text-sm">No proposals yet</p>
-                                        <p className="text-xs mt-1 mb-4">Start with Add proposal to run through customer engagement, drafting, circulation, and client submission.</p>
+                                        <p className="text-xs mt-1 mb-4">Add a proposal to create questionnaires and run drafting, circulation, and client submission in one place.</p>
                                         <button
                                             type="button"
                                             disabled={!formData.id}
@@ -8463,7 +8198,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             const inputCls = `w-full px-3 py-2 text-sm rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400' : 'border border-gray-300'}`;
                                             const labelCls = `block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
                                             const qn = getEngagementQuestionnaires();
-                                            const stepDone = computeLeadProposalStepCompletion(proposal, qn);
                                             const w = normalizeLeadProposalWorkflowUi(proposal.workflow);
                                             const linkedQ = w.engagementQuestionnaireId
                                                 ? qn.find((q) => String(q.id || '') === String(w.engagementQuestionnaireId))
@@ -8509,13 +8243,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     Remove
                                                                 </button>
                                                             </div>
-                                                        </div>
-                                                        <div className="mt-3">
-                                                            <LeadProposalProcessFlowMini
-                                                                isDark={isDark}
-                                                                stepDone={stepDone}
-                                                                activeStep={w.currentStep}
-                                                            />
                                                         </div>
                                                     </div>
                                                     <div className={`p-4 grid gap-3 ${isFullPage ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
@@ -8895,11 +8622,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
             {showLeadProposalWizard && leadProposalWizardDraft ? (
                 <div
-                    className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/55 p-4"
+                    className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/55 p-4 sm:p-6"
                     onClick={() => !leadProposalWizardSaving && closeLeadProposalWizard()}
                 >
                     <div
-                        className={`flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
+                        className={`flex max-h-[96vh] w-full max-w-screen-2xl flex-col rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                         onClick={(e) => e.stopPropagation()}
                         role="dialog"
                         aria-modal="true"
@@ -8990,7 +8717,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 Step 1 — Customer engagement mandate
                                             </h3>
                                             <p className={`text-xs mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                Link this proposal to a customer engagement questionnaire for this lead. Create one first if needed — it opens on top of this dialog.
+                                                Link this proposal to a questionnaire for this lead. New questionnaires are started here only — use <strong className="font-medium">New questionnaire</strong> or pick an existing one. The editor opens on top of this dialog.
                                             </p>
                                             <label className={labelCls}>Questionnaire</label>
                                             <select
