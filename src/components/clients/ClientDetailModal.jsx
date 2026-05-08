@@ -7914,88 +7914,128 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         </button>
                                     </div>
                                     <div className="mt-3 space-y-2">
-                                        {getEngagementQuestionnaires().length === 0 ? (
-                                            <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No questionnaires yet.</div>
-                                        ) : getEngagementQuestionnaires().map((q) => (
-                                            <div
-                                                key={q.id}
-                                                className={`rounded-lg border p-3 ${isDark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50/70'}`}
-                                            >
-                                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                                    <div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                openEngagementPrefillModal(false, q);
-                                                            }}
-                                                            className={`text-left text-sm font-semibold underline-offset-2 hover:underline ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
-                                                        >
-                                                            {q.name || 'Customer engagement questionnaire'}
-                                                        </button>
-                                                        <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                                            {q.tokenCreatedAt ? `Link created ${new Date(q.tokenCreatedAt).toLocaleString('en-ZA')}` : 'No link yet'}
-                                                            {q.submittedAt ? ` · Submitted ${new Date(q.submittedAt).toLocaleString('en-ZA')}` : ''}
-                                                            {q.revokedAt ? ' · Revoked' : ''}
+                                        {(() => {
+                                            const questionnaires = getEngagementQuestionnaires();
+                                            const selectedId =
+                                                selectedEngagementQuestionnaireId || (questionnaires[0]?.id || '');
+                                            const selected = questionnaires.find((q) => q.id === selectedId) || null;
+                                            return (
+                                                <>
+                                                    {questionnaires.length === 0 ? (
+                                                        <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                            No questionnaires yet.
                                                         </div>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        <button
-                                                            type="button"
-                                                            disabled={!engagementLinkUrlsById?.[q.id]}
-                                                            onClick={async () => {
-                                                                const url = engagementLinkUrlsById?.[q.id];
-                                                                if (!url) return;
-                                                                try {
-                                                                    await navigator.clipboard.writeText(url);
-                                                                    setEngagementHint('Copied to clipboard');
-                                                                } catch {
-                                                                    setEngagementHint('Copy failed — select and copy manually');
-                                                                }
-                                                                setTimeout(() => setEngagementHint(''), 2500);
-                                                            }}
-                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
-                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                            } disabled:opacity-50`}
-                                                        >
-                                                            Copy link
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            disabled={engagementBusy}
-                                                            onClick={() => openEngagementPrefillModal(false, q)}
-                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
-                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                            }`}
-                                                        >
-                                                            Edit / new link
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            disabled={engagementBusy || !q.responses}
-                                                            className={`text-[11px] px-2.5 py-1 rounded border ${
-                                                                isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
-                                                            } disabled:opacity-50`}
-                                                            onClick={() => {
-                                                                setSelectedEngagementQuestionnaireId(q.id || '');
-                                                                setShowEngagementResponsesModal(true);
-                                                            }}
-                                                        >
-                                                            View report
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            disabled={engagementBusy}
-                                                            onClick={() => handleEngagementDelete(q.id || '')}
-                                                            className={`text-[11px] px-2.5 py-1 rounded ${
-                                                                isDark ? 'text-red-300 hover:bg-gray-700' : 'text-red-700 hover:bg-red-50'
-                                                            } disabled:opacity-50`}
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
+                                                    ) : (
+                                                        <div className={`rounded-xl border overflow-hidden ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                                            <div className={`px-3 py-2 text-[11px] uppercase tracking-wide font-semibold ${isDark ? 'bg-gray-900/50 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+                                                                Questionnaires
+                                                            </div>
+                                                            <div className={`${isDark ? 'bg-gray-900/20' : 'bg-white'} divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-100'}`}>
+                                                                {questionnaires.map((q) => (
+                                                                    <button
+                                                                        key={q.id}
+                                                                        type="button"
+                                                                        onClick={() => setSelectedEngagementQuestionnaireId(q.id || '')}
+                                                                        className={`w-full px-3 py-2 text-left transition ${
+                                                                            selectedId === q.id
+                                                                                ? (isDark ? 'bg-primary-900/30' : 'bg-primary-50')
+                                                                                : (isDark ? 'hover:bg-gray-800/60' : 'hover:bg-gray-50')
+                                                                        }`}
+                                                                    >
+                                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                            <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                                {q.name || 'Customer engagement questionnaire'}
+                                                                            </div>
+                                                                            <div className="flex items-center gap-1">
+                                                                                {q.submittedAt ? (
+                                                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>Submitted</span>
+                                                                                ) : null}
+                                                                                {q.linkActive ? (
+                                                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDark ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>Active link</span>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className={`mt-0.5 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                                            {q.tokenCreatedAt ? `Updated ${new Date(q.tokenCreatedAt).toLocaleString('en-ZA')}` : 'No link generated yet'}
+                                                                        </div>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {selected ? (
+                                                        <div className={`rounded-xl border p-3 ${isDark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50/70'}`}>
+                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                <div>
+                                                                    <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                        {selected.name || 'Customer engagement questionnaire'}
+                                                                    </div>
+                                                                    <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                                        Click “Open & edit” to manage this questionnaire.
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={engagementBusy}
+                                                                        onClick={() => openEngagementPrefillModal(false, selected)}
+                                                                        className={`text-[11px] px-2.5 py-1 rounded border ${
+                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                                        }`}
+                                                                    >
+                                                                        Open & edit
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={!engagementLinkUrlsById?.[selected.id]}
+                                                                        onClick={async () => {
+                                                                            const url = engagementLinkUrlsById?.[selected.id];
+                                                                            if (!url) return;
+                                                                            try {
+                                                                                await navigator.clipboard.writeText(url);
+                                                                                setEngagementHint('Copied to clipboard');
+                                                                            } catch {
+                                                                                setEngagementHint('Copy failed — select and copy manually');
+                                                                            }
+                                                                            setTimeout(() => setEngagementHint(''), 2500);
+                                                                        }}
+                                                                        className={`text-[11px] px-2.5 py-1 rounded border ${
+                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                                        } disabled:opacity-50`}
+                                                                    >
+                                                                        Copy link
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={engagementBusy || !selected.responses}
+                                                                        className={`text-[11px] px-2.5 py-1 rounded border ${
+                                                                            isDark ? 'border-gray-500 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-800 hover:bg-white'
+                                                                        } disabled:opacity-50`}
+                                                                        onClick={() => {
+                                                                            setSelectedEngagementQuestionnaireId(selected.id || '');
+                                                                            setShowEngagementResponsesModal(true);
+                                                                        }}
+                                                                    >
+                                                                        View report
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={engagementBusy}
+                                                                        onClick={() => handleEngagementDelete(selected.id || '')}
+                                                                        className={`text-[11px] px-2.5 py-1 rounded ${
+                                                                            isDark ? 'text-red-300 hover:bg-gray-700' : 'text-red-700 hover:bg-red-50'
+                                                                        } disabled:opacity-50`}
+                                                                    >
+                                                                        Delete
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ) : null}
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                     {engagementLinkUrl ? (
                                         <p
