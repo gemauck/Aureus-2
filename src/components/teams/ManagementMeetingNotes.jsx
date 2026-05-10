@@ -1410,15 +1410,47 @@ const ManagementMeetingNotes = () => {
             return;
         }
         const scroller = meetingNotesHorizontalScrollRef.current;
-        const refs = weekCardRefs.current || {};
-        const node = refs[weekId];
-        if (!scroller || !node) {
+        if (!scroller) {
+            return;
+        }
+
+        const escapeWeekAttr = (id) =>
+            typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(String(id)) : String(id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+        const resolveColumnEl = (id) => {
+            if (!id) {
+                return null;
+            }
+            const refs = weekCardRefs.current || {};
+            if (refs[id]) {
+                return refs[id];
+            }
+            try {
+                const escaped = escapeWeekAttr(id);
+                return scroller.querySelector(`[data-management-meeting-week="${escaped}"]`);
+            } catch (e) {
+                return null;
+            }
+        };
+
+        let node = resolveColumnEl(weekId);
+        if (!node) {
+            const idx = weeks.findIndex((week, index) => {
+                const identifier = getWeekIdentifier(week) || `week-${index}`;
+                return identifier === weekId;
+            });
+            if (idx >= 0) {
+                const canon = getWeekIdentifier(weeks[idx]) || `week-${idx}`;
+                node = resolveColumnEl(canon);
+            }
+        }
+        if (!node) {
             return;
         }
 
         const firstWeek = weeks[0];
         const firstId = getWeekIdentifier(firstWeek) || 'week-0';
-        const anchor = refs[firstId];
+        const anchor = resolveColumnEl(firstId);
 
         try {
             if (anchor && node !== anchor) {
@@ -1426,9 +1458,18 @@ const ManagementMeetingNotes = () => {
                 scroller.scrollTo({ left: Math.max(0, Math.round(targetLeft)), behavior: 'smooth' });
                 return;
             }
+            if (!anchor) {
+                node.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+                return;
+            }
             scroller.scrollTo({ left: 0, behavior: 'smooth' });
         } catch (error) {
             console.warn('ManagementMeetingNotes: Failed to scroll to week', weekId, error);
+            try {
+                node.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+            } catch (e2) {
+                /* ignore */
+            }
         }
     }, [weeks]);
 
@@ -1605,15 +1646,50 @@ const ManagementMeetingNotes = () => {
         if (isBrowserNavigationReload()) {
             return;
         }
-        let innerRaf = 0;
-        const outerRaf = requestAnimationFrame(() => {
-            innerRaf = requestAnimationFrame(() => {
+        let cancelled = false;
+        let chainRaf = 0;
+        let attempts = 0;
+        const maxAttempts = 48;
+
+        const columnReady = () => {
+            const scroller = meetingNotesHorizontalScrollRef.current;
+            if (!scroller) {
+                return false;
+            }
+            const refs = weekCardRefs.current || {};
+            if (refs[selectedWeek]) {
+                return true;
+            }
+            try {
+                const esc =
+                    typeof CSS !== 'undefined' && CSS.escape
+                        ? CSS.escape(String(selectedWeek))
+                        : String(selectedWeek).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                return Boolean(scroller.querySelector(`[data-management-meeting-week="${esc}"]`));
+            } catch (e) {
+                return false;
+            }
+        };
+
+        const tick = () => {
+            if (cancelled) {
+                return;
+            }
+            if (columnReady() || attempts >= maxAttempts) {
                 scrollToWeekId(selectedWeek);
-            });
+                return;
+            }
+            attempts += 1;
+            chainRaf = requestAnimationFrame(tick);
+        };
+
+        const outerRaf = requestAnimationFrame(() => {
+            chainRaf = requestAnimationFrame(tick);
         });
         return () => {
+            cancelled = true;
             cancelAnimationFrame(outerRaf);
-            cancelAnimationFrame(innerRaf);
+            cancelAnimationFrame(chainRaf);
         };
     }, [selectedWeek, scrollToWeekId, weeksNavSignature]);
 
@@ -5175,12 +5251,15 @@ const ManagementMeetingNotes = () => {
                                 return (
                                     <div
                                         key={`general-minutes-${gmIdentifier}`}
+                                        data-management-meeting-week={gmIdentifier}
                                         ref={(node) => {
                                             if (!weekCardRefs.current) {
                                                 weekCardRefs.current = {};
                                             }
                                             if (node) {
                                                 weekCardRefs.current[gmIdentifier] = node;
+                                            } else {
+                                                delete weekCardRefs.current[gmIdentifier];
                                             }
                                         }}
                                         style={{
