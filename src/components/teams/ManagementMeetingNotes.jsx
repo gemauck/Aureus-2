@@ -601,6 +601,7 @@ const ManagementMeetingNotes = () => {
     
     // Attachment states
     const [uploadingAttachments, setUploadingAttachments] = useState({}); // { [departmentNotesId]: true/false }
+    const [uploadingGeneralMinutesAttachments, setUploadingGeneralMinutesAttachments] = useState({}); // { [weeklyNotesId]: boolean }
     const [attachmentInputs, setAttachmentInputs] = useState({}); // { [departmentNotesId]: FileList }
     
     // State for tracking editing status and temporary values for each field
@@ -1348,9 +1349,10 @@ const ManagementMeetingNotes = () => {
     const stickyMonthlyGoalsHeaderCol = isDark
         ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
         : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
+    /** Higher z-index than week columns so horizontal scroll slides weeks under this column (no bleed-through). */
     const stickyMonthlyGoalsBodyCol = isDark
-        ? 'sticky left-0 z-[15] bg-slate-800 shadow-[6px_0_14px_-6px_rgba(0,0,0,0.4)]'
-        : 'sticky left-0 z-[15] bg-white shadow-[6px_0_14px_-6px_rgba(0,0,0,0.1)]';
+        ? 'sticky left-0 z-[26] bg-slate-800 shadow-[8px_0_20px_-4px_rgba(0,0,0,0.55)]'
+        : 'sticky left-0 z-[26] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
 
     const scrollToWeekId = useCallback((weekId) => {
         if (!weekId) {
@@ -3053,7 +3055,15 @@ const ManagementMeetingNotes = () => {
                     const mergedWeeks = (remote.weeklyNotes || []).map((rw) => {
                         if (lockedId && rw.id === lockedId) {
                             const lw = prevWeekMap.get(rw.id);
-                            return lw ? { ...rw, generalMinutes: lw.generalMinutes ?? '' } : rw;
+                            if (!lw) return rw;
+                            return {
+                                ...rw,
+                                generalMinutes: lw.generalMinutes ?? rw.generalMinutes ?? '',
+                                generalMinutesAttachments:
+                                    lw.generalMinutesAttachments !== undefined && lw.generalMinutesAttachments !== null
+                                        ? lw.generalMinutesAttachments
+                                        : rw.generalMinutesAttachments
+                            };
                         }
                         return rw;
                     });
@@ -3205,6 +3215,106 @@ const ManagementMeetingNotes = () => {
         } finally {
             setUploadingAttachments(prev => ({ ...prev, [departmentNotesId]: false }));
             setAttachmentInputs(prev => ({ ...prev, [departmentNotesId]: null }));
+        }
+    };
+
+    const handleGeneralMinutesAttachmentUpload = async (weeklyNotesId, files) => {
+        if (!weeklyNotesId || !files || files.length === 0) return;
+
+        setUploadingGeneralMinutesAttachments((prev) => ({ ...prev, [weeklyNotesId]: true }));
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                throw new Error('Not authenticated');
+            }
+
+            const uploadedAttachments = [];
+
+            for (const file of Array.from(files)) {
+                const reader = new FileReader();
+                const dataUrl = await new Promise((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                const response = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        name: file.name,
+                        dataUrl,
+                        folder: 'meeting-notes-general'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to upload ${file.name}`);
+                }
+
+                const result = await response.json();
+                uploadedAttachments.push({
+                    name: file.name,
+                    url: result.data?.url || result.url,
+                    size: file.size,
+                    mimeType: file.type,
+                    uploadedAt: new Date().toISOString()
+                });
+            }
+
+            const weekData = currentMonthlyNotes?.weeklyNotes?.find((w) => w.id === weeklyNotesId);
+            let currentAttachments = [];
+            try {
+                const raw = weekData?.generalMinutesAttachments;
+                if (raw) {
+                    currentAttachments = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                }
+            } catch (e) {
+                console.warn('Error parsing general minutes attachments:', e);
+            }
+
+            const updatedAttachments = [...(Array.isArray(currentAttachments) ? currentAttachments : []), ...uploadedAttachments];
+            const json = JSON.stringify(updatedAttachments);
+            const monthlyId = currentMonthlyNotes?.id || null;
+
+            await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, { generalMinutesAttachments: json });
+            updateWeeklyNotesLocal(weeklyNotesId, { generalMinutesAttachments: json }, monthlyId);
+        } catch (error) {
+            console.error('Error uploading general minutes attachments:', error);
+            alert(`Failed to upload files: ${error.message}`);
+        } finally {
+            setUploadingGeneralMinutesAttachments((prev) => ({ ...prev, [weeklyNotesId]: false }));
+        }
+    };
+
+    const handleDeleteGeneralMinutesAttachment = async (weeklyNotesId, attachmentIndex) => {
+        const weekData = currentMonthlyNotes?.weeklyNotes?.find((w) => w.id === weeklyNotesId);
+        if (!weekData) return;
+
+        let currentAttachments = [];
+        try {
+            const raw = weekData.generalMinutesAttachments;
+            if (raw) {
+                currentAttachments = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            }
+        } catch (e) {
+            console.warn('Error parsing general minutes attachments:', e);
+        }
+
+        const updatedAttachments = currentAttachments.filter((_, index) => index !== attachmentIndex);
+        const json = JSON.stringify(updatedAttachments);
+        const monthlyId = currentMonthlyNotes?.id || null;
+
+        try {
+            await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, { generalMinutesAttachments: json });
+            updateWeeklyNotesLocal(weeklyNotesId, { generalMinutesAttachments: json }, monthlyId);
+        } catch (error) {
+            console.error('Error removing general minutes attachment:', error);
+            alert(`Failed to remove attachment: ${error.message}`);
         }
     };
     
@@ -4959,8 +5069,8 @@ const ManagementMeetingNotes = () => {
                                     gridRow: 1,
                                     gridColumn: `${getMonthlyGoalsGridColumn()}`
                                 }}
-                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center self-start w-full min-w-0 min-h-[8rem] ${stickyMonthlyGoalsBodyCol} ${
-                                    isDark ? 'border-slate-600' : 'border-slate-300 bg-slate-50'
+                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center self-start w-full min-w-0 min-h-[8rem] isolate ${stickyMonthlyGoalsBodyCol} ${
+                                    isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-slate-50'
                                 }`}
                             >
                                 <p className={`text-xs font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Monthly goals</p>
@@ -4988,7 +5098,7 @@ const ManagementMeetingNotes = () => {
                                             gridRow: 1,
                                             gridColumn: `${getWeekGridColumn(gmWeekIndex)}`
                                         }}
-                                        className={`rounded-xl border-2 p-4 flex flex-col self-start w-full min-w-0 transition-all duration-200 ${
+                                        className={`relative z-0 rounded-xl border-2 p-4 flex flex-col self-start w-full min-w-0 transition-all duration-200 ${
                                             gmSelected
                                                 ? isDark
                                                     ? 'border-primary-500/80 bg-slate-800/90 shadow-lg shadow-primary-900/30'
@@ -5065,6 +5175,110 @@ const ManagementMeetingNotes = () => {
                                             ) : (
                                                 <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Save the week to add minutes.</p>
                                             )}
+                                            {week?.id ? (
+                                                <div
+                                                    className={`mt-3 pt-2 border-t border-dashed ${isDark ? 'border-slate-600/50' : 'border-gray-200'}`}
+                                                >
+                                                    <label
+                                                        className={`block text-[10px] font-semibold uppercase tracking-wide mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
+                                                    >
+                                                        Attachments
+                                                    </label>
+                                                    {(() => {
+                                                        let gmAttachments = [];
+                                                        try {
+                                                            const raw = week.generalMinutesAttachments;
+                                                            if (raw) {
+                                                                gmAttachments =
+                                                                    typeof raw === 'string' ? JSON.parse(raw) : raw;
+                                                            }
+                                                        } catch (e) {
+                                                            console.warn('Error parsing general minutes attachments:', e);
+                                                        }
+                                                        return Array.isArray(gmAttachments) && gmAttachments.length > 0 ? (
+                                                            <div className="space-y-1 mb-2">
+                                                                {gmAttachments.map((attachment, index) => (
+                                                                    <div
+                                                                        key={`${attachment.url}-${index}`}
+                                                                        className={`flex items-center justify-between p-2 rounded ${
+                                                                            isDark
+                                                                                ? 'bg-slate-700/80 border border-slate-600'
+                                                                                : 'bg-gray-50 border border-gray-200'
+                                                                        }`}
+                                                                    >
+                                                                        <a
+                                                                            href={attachment.url}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className={`flex items-center gap-2 flex-1 min-w-0 text-xs ${
+                                                                                isDark
+                                                                                    ? 'text-primary-400 hover:text-primary-300'
+                                                                                    : 'text-primary-600 hover:text-primary-700'
+                                                                            }`}
+                                                                        >
+                                                                            <i className="fas fa-file shrink-0"></i>
+                                                                            <span className="truncate">{attachment.name}</span>
+                                                                            {attachment.size != null ? (
+                                                                                <span
+                                                                                    className={`text-xs shrink-0 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}
+                                                                                >
+                                                                                    ({(attachment.size / 1024).toFixed(1)} KB)
+                                                                                </span>
+                                                                            ) : null}
+                                                                        </a>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                handleDeleteGeneralMinutesAttachment(week.id, index);
+                                                                            }}
+                                                                            className={`p-1 rounded transition ml-2 shrink-0 ${
+                                                                                isDark
+                                                                                    ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30'
+                                                                                    : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                                                                            }`}
+                                                                            title="Remove attachment"
+                                                                        >
+                                                                            <i className="fas fa-trash text-xs"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : null;
+                                                    })()}
+                                                    <div
+                                                        className={`border border-dashed rounded-lg p-2 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50'}`}
+                                                    >
+                                                        <input
+                                                            type="file"
+                                                            id={`general-minutes-attachment-${week.id}`}
+                                                            multiple
+                                                            onChange={(e) => {
+                                                                if (e.target.files && e.target.files.length > 0) {
+                                                                    handleGeneralMinutesAttachmentUpload(week.id, e.target.files);
+                                                                }
+                                                                e.target.value = '';
+                                                            }}
+                                                            className="hidden"
+                                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt,.csv"
+                                                        />
+                                                        <label
+                                                            htmlFor={`general-minutes-attachment-${week.id}`}
+                                                            className={`cursor-pointer flex items-center gap-2 text-xs ${isDark ? 'text-slate-300 hover:text-slate-200' : 'text-gray-700 hover:text-gray-900'}`}
+                                                        >
+                                                            <i
+                                                                className={`fas ${uploadingGeneralMinutesAttachments[week.id] ? 'fa-spinner fa-spin' : 'fa-paperclip'}`}
+                                                            ></i>
+                                                            <span>
+                                                                {uploadingGeneralMinutesAttachments[week.id]
+                                                                    ? 'Uploading...'
+                                                                    : 'Attach files'}
+                                                            </span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            ) : null}
                                         </div>
                                     </div>
                                 );
@@ -5130,7 +5344,7 @@ const ManagementMeetingNotes = () => {
                                             return (
                                                 <div
                                                     key={`${dept.id}-${identifier}`}
-                                                    className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
+                                                    className={`relative z-0 rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
                                                         !deptNote 
                                                             ? `border-dashed opacity-60 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50/50'}`
                                                             : `${isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'}`

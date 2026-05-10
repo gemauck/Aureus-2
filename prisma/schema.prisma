@@ -2524,6 +2524,8 @@ model WeeklyMeetingNotes {
   weekStart       DateTime
   weekEnd         DateTime?
   generalMinutes  String              @default("")
+  /// JSON array: { name, url, size?, mimeType?, uploadedAt? }[]
+  generalMinutesAttachments String     @default("[]")
   ownerId         String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt

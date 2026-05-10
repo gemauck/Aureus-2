@@ -632,7 +632,7 @@ async function handler(req, res) {
   // Update weekly meeting notes (general minutes, optional week range)
   if (req.method === 'PUT' && action === 'weekly') {
     try {
-      const { id, generalMinutes, weekStart, weekEnd } = req.body || {}
+      const { id, generalMinutes, generalMinutesAttachments, weekStart, weekEnd } = req.body || {}
 
       if (!id) {
         return badRequest(res, 'id is required')
@@ -641,6 +641,15 @@ async function handler(req, res) {
       const updateData = {}
       if (generalMinutes !== undefined) {
         updateData.generalMinutes = typeof generalMinutes === 'string' ? generalMinutes : ''
+      }
+      if (generalMinutesAttachments !== undefined) {
+        if (typeof generalMinutesAttachments === 'string') {
+          updateData.generalMinutesAttachments = generalMinutesAttachments
+        } else if (Array.isArray(generalMinutesAttachments)) {
+          updateData.generalMinutesAttachments = JSON.stringify(generalMinutesAttachments)
+        } else {
+          updateData.generalMinutesAttachments = '[]'
+        }
       }
       if (weekStart !== undefined) {
         updateData.weekStart = new Date(weekStart)
