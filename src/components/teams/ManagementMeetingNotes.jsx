@@ -561,10 +561,29 @@ const ManagementMeetingNotes = () => {
     useEffect(() => {
         const bump = () => setDeepLinkNonce((n) => n + 1);
         window.addEventListener('hashchange', bump);
+        window.addEventListener('popstate', bump);
         return () => {
             window.removeEventListener('hashchange', bump);
+            window.removeEventListener('popstate', bump);
         };
     }, []);
+
+    // Hydrate month/week from the merged URL before paint so the pushState effect below does not run with null state and rewrite history (must stay before that effect).
+    useLayoutEffect(() => {
+        try {
+            const p = getMeetingNotesRouteSearchParams();
+            const m = normalizeMonthKeyInput(p.get('month'));
+            const w = p.get('week');
+            if (m) {
+                setSelectedMonth((prev) => (prev !== m ? m : prev));
+            }
+            if (w) {
+                setSelectedWeek((prev) => (prev !== w ? w : prev));
+            }
+        } catch (e) {
+            /* ignore */
+        }
+    }, [deepLinkNonce]);
 
     // Update URL when month or week changes (merge with existing URL so first paint does not strip ?month=/?week= before state hydrates)
     useEffect(() => {
@@ -681,12 +700,12 @@ const ManagementMeetingNotes = () => {
     const weekCardRefs = useRef({});
     /** One horizontal scroller for header row + body grid so columns stay aligned. */
     const meetingNotesHorizontalScrollRef = useRef(null);
-    /** After a full page reload, skip one automatic scroll-to-selected-week (in-app navigation still scrolls). */
-    const skipAutoScrollToWeekOnceRef = useRef(false);
+    /** After a full page reload (F5), block automatic horizontal scroll-to-week from effects for this mount. Direct Focus/week-chip calls to scrollToWeekId still run. (Do not use a one-shot skip — weeks load async and the scroll effect would run again after weeksNavSignature appears.) */
+    const blockAutoHorizontalScrollAfterReloadRef = useRef(false);
 
     useLayoutEffect(() => {
         if (isBrowserNavigationReload()) {
-            skipAutoScrollToWeekOnceRef.current = true;
+            blockAutoHorizontalScrollAfterReloadRef.current = true;
         }
     }, []);
     
@@ -1602,8 +1621,7 @@ const ManagementMeetingNotes = () => {
         if (!selectedWeek || !weeksNavSignature) {
             return;
         }
-        if (skipAutoScrollToWeekOnceRef.current) {
-            skipAutoScrollToWeekOnceRef.current = false;
+        if (blockAutoHorizontalScrollAfterReloadRef.current) {
             return;
         }
         let innerRaf = 0;

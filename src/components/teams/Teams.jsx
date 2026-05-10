@@ -230,13 +230,24 @@ const Teams = () => {
     }
     const isDark = themeResult?.isDark || false;
     
-    // Query params from search or from hash (#/teams/id?tab=discussions&discussion=id)
+    // Query params: merge hash (#/teams/...?...) with pathname ?search (same as ManagementMeetingNotes / RouteState — hash wins on duplicate keys).
     const getSearchParams = () => {
+        const merged = new URLSearchParams();
         const hash = window.location.hash || '';
         if (hash.indexOf('?') !== -1) {
-            return new URLSearchParams(hash.slice(hash.indexOf('?') + 1));
+            new URLSearchParams(hash.slice(hash.indexOf('?') + 1)).forEach((value, key) => {
+                merged.set(key, value);
+            });
         }
-        return new URLSearchParams(window.location.search);
+        const search = window.location.search || '';
+        if (search.length > 1) {
+            new URLSearchParams(search.slice(1)).forEach((value, key) => {
+                if (!merged.has(key)) {
+                    merged.set(key, value);
+                }
+            });
+        }
+        return merged;
     };
 
     // Initialize activeTab from URL or default to 'overview'
@@ -371,13 +382,20 @@ const Teams = () => {
             isInitialMount.current = false;
         }
         
-        const url = new URL(window.location);
-        
+        const url = new URL(window.location.href);
+        const existing = getSearchParams();
+        const preserveMonth = existing.get('month');
+        const preserveWeek = existing.get('week');
+
         if (selectedTeam?.id === 'management' && activeTab === 'meeting-notes') {
             url.searchParams.set('tab', 'meeting-notes');
             url.searchParams.set('team', 'management');
-            // Preserve month and week params for meeting-notes
-            // (month and week are managed by ManagementMeetingNotes component)
+            if (preserveMonth) {
+                url.searchParams.set('month', preserveMonth);
+            }
+            if (preserveWeek) {
+                url.searchParams.set('week', preserveWeek);
+            }
         } else if (activeTab !== 'overview') {
             url.searchParams.set('tab', activeTab);
             if (selectedTeam?.id) {
