@@ -1315,7 +1315,7 @@ const ManagementMeetingNotes = () => {
     const stickyMonthlyGoalsHeaderCol = isDark
         ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
         : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
-    /** Higher z-index than week columns so horizontal scroll slides weeks under this column (no bleed-through). */
+    /** Higher z-index than week columns so horizontal scroll slides weeks under this column (no bleed-through). Fully opaque backgrounds — no /opacity or translucent slate. */
     const stickyMonthlyGoalsBodyCol = isDark
         ? 'sticky left-0 z-[26] bg-slate-800 shadow-[8px_0_20px_-4px_rgba(0,0,0,0.55)]'
         : 'sticky left-0 z-[26] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
@@ -4918,7 +4918,7 @@ const ManagementMeetingNotes = () => {
                         className="overflow-x-auto pb-2 space-y-4"
                     >
                         <div
-                            className={`sticky top-4 z-30 -mx-0.5 px-0.5 py-1 ${isDark ? 'bg-slate-900/90' : 'bg-slate-50/95'} backdrop-blur-sm`}
+                            className={`sticky top-4 z-30 -mx-0.5 px-0.5 py-1 ${isDark ? 'bg-slate-900' : 'bg-white'}`}
                         >
                             <div 
                                 className="inline-grid gap-4"
@@ -5051,8 +5051,8 @@ const ManagementMeetingNotes = () => {
                                     gridRow: 1,
                                     gridColumn: `${getMonthlyGoalsGridColumn()}`
                                 }}
-                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center self-start w-full min-w-0 min-h-[8rem] isolate ${stickyMonthlyGoalsBodyCol} ${
-                                    isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-slate-50'
+                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center self-stretch min-h-[8rem] h-full w-full min-w-0 overflow-hidden relative z-[27] isolate ${stickyMonthlyGoalsBodyCol} ${
+                                    isDark ? 'border-slate-600' : 'border-slate-300'
                                 }`}
                             >
                                 <p className={`text-xs font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Monthly goals</p>
