@@ -1343,7 +1343,14 @@ const ManagementMeetingNotes = () => {
     const getWeekGridColumn = (weekIndex) => weekIndex + 2;
     const getMonthlyGoalsGridColumn = () => 1;
 
-    const meetingNotesGridColumnWidth = 'minmax(580px, 640px)';
+    /** Match pre–monthly-goals-column grid (before widen commit): same width for all columns */
+    const meetingNotesGridColumnWidth = 'minmax(520px, 560px)';
+    const stickyMonthlyGoalsHeaderCol = isDark
+        ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
+        : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
+    const stickyMonthlyGoalsBodyCol = isDark
+        ? 'sticky left-0 z-[15] bg-slate-800 shadow-[6px_0_14px_-6px_rgba(0,0,0,0.4)]'
+        : 'sticky left-0 z-[15] bg-white shadow-[6px_0_14px_-6px_rgba(0,0,0,0.1)]';
 
     const scrollToWeekId = useCallback((weekId) => {
         if (!weekId) {
@@ -4833,10 +4840,10 @@ const ManagementMeetingNotes = () => {
                                         gridRow: '1',
                                         gridColumn: `${getMonthlyGoalsGridColumn()}`
                                     }}
-                                    className={`rounded-xl border-2 p-5 transition-all duration-300 ${
+                                    className={`rounded-xl border-2 p-5 transition-all duration-300 ${stickyMonthlyGoalsHeaderCol} ${
                                         isDark
-                                            ? 'border-slate-600 bg-slate-800/80'
-                                            : 'border-slate-300 bg-white'
+                                            ? 'border-slate-600'
+                                            : 'border-slate-300'
                                     }`}
                                 >
                                     <div className="flex items-start justify-between gap-3 mb-2">
@@ -4952,8 +4959,8 @@ const ManagementMeetingNotes = () => {
                                     gridRow: 1,
                                     gridColumn: `${getMonthlyGoalsGridColumn()}`
                                 }}
-                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center ${
-                                    isDark ? 'border-slate-600 bg-slate-800/50' : 'border-slate-300 bg-slate-50/90'
+                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center ${stickyMonthlyGoalsBodyCol} ${
+                                    isDark ? 'border-slate-600' : 'border-slate-300 bg-slate-50'
                                 }`}
                             >
                                 <p className={`text-xs font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Monthly goals</p>
@@ -5067,8 +5074,8 @@ const ManagementMeetingNotes = () => {
                                     <React.Fragment key={`dept-row-${dept.id}`}>
                                         <div
                                             key={`${dept.id}-monthly-goals`}
-                                            className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
-                                                isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'
+                                            className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${stickyMonthlyGoalsBodyCol} ${
+                                                isDark ? 'border-slate-700 hover:border-slate-600' : 'border-gray-300 hover:border-gray-400'
                                             }`}
                                             style={{
                                                 minHeight: '200px',
