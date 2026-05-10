@@ -1,27 +1,17 @@
 // Get dependencies from window
 const { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } = React;
 
-/** Full document reload (F5) vs opening/following a link (navigate). Used to skip auto horizontal scroll on refresh. */
+/** Full document reload (F5) vs navigate. Only Navigation Timing 2 — legacy performance.navigation often mis-reports and blocked auto-scroll on normal loads. */
 function isBrowserNavigationReload() {
     if (typeof window === 'undefined' || typeof performance === 'undefined') {
         return false;
     }
     try {
         const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
-        if (nav && nav.type === 'reload') {
-            return true;
-        }
+        return Boolean(nav && nav.type === 'reload');
     } catch (e) {
-        /* ignore */
+        return false;
     }
-    try {
-        if (performance.navigation && performance.navigation.type === 1) {
-            return true;
-        }
-    } catch (e) {
-        /* ignore */
-    }
-    return false;
 }
 
 const ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
@@ -700,15 +690,6 @@ const ManagementMeetingNotes = () => {
     const weekCardRefs = useRef({});
     /** One horizontal scroller for header row + body grid so columns stay aligned. */
     const meetingNotesHorizontalScrollRef = useRef(null);
-    /** After a full page reload (F5), block automatic horizontal scroll-to-week from effects for this mount. Direct Focus/week-chip calls to scrollToWeekId still run. (Do not use a one-shot skip — weeks load async and the scroll effect would run again after weeksNavSignature appears.) */
-    const blockAutoHorizontalScrollAfterReloadRef = useRef(false);
-
-    useLayoutEffect(() => {
-        if (isBrowserNavigationReload()) {
-            blockAutoHorizontalScrollAfterReloadRef.current = true;
-        }
-    }, []);
-    
     // Ref to store scroll position that needs to be preserved after state updates
     const preservedScrollPosition = useRef(null);
     
@@ -1621,7 +1602,7 @@ const ManagementMeetingNotes = () => {
         if (!selectedWeek || !weeksNavSignature) {
             return;
         }
-        if (blockAutoHorizontalScrollAfterReloadRef.current) {
+        if (isBrowserNavigationReload()) {
             return;
         }
         let innerRaf = 0;
