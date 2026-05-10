@@ -1272,6 +1272,14 @@ const ManagementMeetingNotes = () => {
         return week.weekKey || week.id || '';
     };
 
+    /** Stable id list for scroll anchoring — avoids re-scrolling when weeks array reference changes but ids do not. */
+    const weeksNavSignature = useMemo(() => {
+        if (!Array.isArray(weeks) || weeks.length === 0) {
+            return '';
+        }
+        return weeks.map((week, index) => getWeekIdentifier(week) || `week-${index}`).join('|');
+    }, [weeks]);
+
     const selectedWeekObj = useMemo(() => {
         if (!Array.isArray(weeks) || weeks.length === 0 || !selectedWeek) {
             return null;
@@ -1321,23 +1329,31 @@ const ManagementMeetingNotes = () => {
         : 'sticky left-0 z-[26] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
 
     const scrollToWeekId = useCallback((weekId) => {
-        if (!weekId) {
+        if (!weekId || !Array.isArray(weeks) || weeks.length === 0) {
             return;
         }
+        const scroller = meetingNotesHorizontalScrollRef.current;
         const refs = weekCardRefs.current || {};
         const node = refs[weekId];
-        if (node && typeof node.scrollIntoView === 'function') {
-            try {
-                node.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'nearest',
-                    inline: 'center'
-                });
-            } catch (error) {
-                console.warn('ManagementMeetingNotes: Failed to scroll to week', weekId, error);
-            }
+        if (!scroller || !node) {
+            return;
         }
-    }, []);
+
+        const firstWeek = weeks[0];
+        const firstId = getWeekIdentifier(firstWeek) || 'week-0';
+        const anchor = refs[firstId];
+
+        try {
+            if (anchor && node !== anchor) {
+                const targetLeft = node.offsetLeft - anchor.offsetLeft;
+                scroller.scrollTo({ left: Math.max(0, Math.round(targetLeft)), behavior: 'smooth' });
+                return;
+            }
+            scroller.scrollTo({ left: 0, behavior: 'smooth' });
+        } catch (error) {
+            console.warn('ManagementMeetingNotes: Failed to scroll to week', weekId, error);
+        }
+    }, [weeks]);
 
     const selectedWeekIndex = useMemo(() => {
         if (!Array.isArray(weeks) || weeks.length === 0) {
@@ -1502,13 +1518,20 @@ const ManagementMeetingNotes = () => {
     }, [weeks, selectedWeek]);
 
     useEffect(() => {
-        if (!selectedWeek) {
+        if (!selectedWeek || !weeksNavSignature) {
             return;
         }
-        // Only scroll when selectedWeek changes, not when weeks array reference changes
-        // This prevents unwanted scroll jumps when data updates (auto-saves, etc.)
-        scrollToWeekId(selectedWeek);
-    }, [selectedWeek, scrollToWeekId]);
+        let innerRaf = 0;
+        const outerRaf = requestAnimationFrame(() => {
+            innerRaf = requestAnimationFrame(() => {
+                scrollToWeekId(selectedWeek);
+            });
+        });
+        return () => {
+            cancelAnimationFrame(outerRaf);
+            cancelAnimationFrame(innerRaf);
+        };
+    }, [selectedWeek, scrollToWeekId, weeksNavSignature]);
 
     // Expose functions for parent components (no tracking - always returns false)
     const managementMeetingNotesRef = useRef({
