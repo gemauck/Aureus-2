@@ -626,9 +626,8 @@ const ManagementMeetingNotes = () => {
     const savedCursorPositions = useRef({}); // { [fieldKey]: { start: number, end: number, element: HTMLElement } }
 
     const weekCardRefs = useRef({});
-    const headerScrollRef = useRef(null);
-    const bodyScrollRef = useRef(null);
-    const isSyncingHorizontalScroll = useRef(false);
+    /** One horizontal scroller for header row + body grid so columns stay aligned. */
+    const meetingNotesHorizontalScrollRef = useRef(null);
     
     // Ref to store scroll position that needs to be preserved after state updates
     const preservedScrollPosition = useRef(null);
@@ -1203,39 +1202,6 @@ const ManagementMeetingNotes = () => {
         
         return sorted;
     }, [currentMonthlyNotes]);
-
-    useEffect(() => {
-        const headerScroller = headerScrollRef.current;
-        const bodyScroller = bodyScrollRef.current;
-
-        if (!headerScroller || !bodyScroller) {
-            return undefined;
-        }
-
-        const syncScroll = (source, target) => {
-            if (isSyncingHorizontalScroll.current) {
-                return;
-            }
-
-            isSyncingHorizontalScroll.current = true;
-            target.scrollLeft = source.scrollLeft;
-
-            requestAnimationFrame(() => {
-                isSyncingHorizontalScroll.current = false;
-            });
-        };
-
-        const handleHeaderScroll = () => syncScroll(headerScroller, bodyScroller);
-        const handleBodyScroll = () => syncScroll(bodyScroller, headerScroller);
-
-        headerScroller.addEventListener('scroll', handleHeaderScroll, { passive: true });
-        bodyScroller.addEventListener('scroll', handleBodyScroll, { passive: true });
-
-        return () => {
-            headerScroller.removeEventListener('scroll', handleHeaderScroll);
-            bodyScroller.removeEventListener('scroll', handleBodyScroll);
-        };
-    }, [weeks.length, selectedMonth]);
 
     const monthlyGoalsRef = useRef({});
     const monthlyGoalsByDepartment = useMemo(
@@ -4934,8 +4900,13 @@ const ManagementMeetingNotes = () => {
                         )}
                     </div>
 
-                    <div className="sticky top-4 z-30">
-                        <div ref={headerScrollRef} className="overflow-x-auto pb-2">
+                    <div
+                        ref={meetingNotesHorizontalScrollRef}
+                        className="overflow-x-auto pb-2 space-y-4"
+                    >
+                        <div
+                            className={`sticky top-4 z-30 -mx-0.5 px-0.5 py-1 ${isDark ? 'bg-slate-900/90' : 'bg-slate-50/95'} backdrop-blur-sm`}
+                        >
                             <div 
                                 className="inline-grid gap-4"
                                 style={{
@@ -5050,10 +5021,8 @@ const ManagementMeetingNotes = () => {
                                 })}
                             </div>
                         </div>
-                    </div>
 
-                    <div ref={bodyScrollRef} className="overflow-x-auto pb-2">
-                        {/* Grid layout: General minutes row, then departments as rows, weeks as columns */}
+                        {/* Grid layout: General minutes row, then departments as rows, weeks as columns (same horizontal scroll as headers) */}
                         <div 
                             className="inline-grid gap-4"
                             style={{
