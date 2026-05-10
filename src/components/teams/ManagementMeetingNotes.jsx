@@ -611,7 +611,6 @@ const ManagementMeetingNotes = () => {
     // 'idle' = no changes, 'saving' = currently saving, 'saved' = recently saved, 'error' = save failed
     const [autoSaveStatus, setAutoSaveStatus] = useState({}); // { [departmentNotesId]: 'idle' | 'saving' | 'saved' | 'error' }
     const [presenceViewers, setPresenceViewers] = useState([]);
-    const [generalMinutesSaveStatus, setGeneralMinutesSaveStatus] = useState({}); // [weeklyNotesId]: status
     
     // Refs for auto-save debouncing
     const autoSaveTimers = useRef({}); // { [departmentNotesId]: timeoutId }
@@ -2969,30 +2968,11 @@ const ManagementMeetingNotes = () => {
                 return;
             }
             try {
-                setGeneralMinutesSaveStatus((prev) => ({ ...prev, [weeklyNotesId]: 'saving' }));
                 await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, { generalMinutes: hash });
                 lastSavedGeneralMinutesHash.current[weeklyNotesId] = hash;
                 updateWeeklyNotesLocal(weeklyNotesId, { generalMinutes: hash }, monthlyId);
-                setGeneralMinutesSaveStatus((prev) => ({ ...prev, [weeklyNotesId]: 'saved' }));
-                setTimeout(() => {
-                    setGeneralMinutesSaveStatus((prev) => {
-                        const next = { ...prev };
-                        if (next[weeklyNotesId] === 'saved') {
-                            delete next[weeklyNotesId];
-                        }
-                        return next;
-                    });
-                }, 2000);
             } catch (error) {
                 console.error('Error saving weekly general minutes:', error);
-                setGeneralMinutesSaveStatus((prev) => ({ ...prev, [weeklyNotesId]: 'error' }));
-                setTimeout(() => {
-                    setGeneralMinutesSaveStatus((prev) => {
-                        const next = { ...prev };
-                        delete next[weeklyNotesId];
-                        return next;
-                    });
-                }, 3000);
             }
         },
         [currentMonthlyNotes, updateWeeklyNotesLocal]
@@ -4765,108 +4745,6 @@ const ManagementMeetingNotes = () => {
             {/* Weekly Notes Section */}
             {selectedMonth && currentMonthlyNotes && weeks.length > 0 && (
                 <div className="space-y-5">
-                    {weekForGeneralMinutes?.id && (
-                        <div
-                            className={`rounded-xl border-2 p-5 ${
-                                isDark
-                                    ? 'border-slate-600 bg-slate-800/80 shadow-lg'
-                                    : 'border-slate-200 bg-white shadow-md'
-                            }`}
-                        >
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
-                                <div>
-                                    <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                        Week general minutes
-                                    </p>
-                                    <h3 className={`text-base font-bold flex items-center gap-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                        <i className="fas fa-users text-primary-600"></i>
-                                        {formatWeek(weekForGeneralMinutes.weekKey, weekForGeneralMinutes.weekStart)}
-                                    </h3>
-                                    <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                        Shared notes for this week. Saves automatically; updates appear for everyone within a few seconds.
-                                    </p>
-                                </div>
-                                <div className="flex flex-col items-start sm:items-end gap-2 shrink-0">
-                                    <span className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                                        On this page
-                                    </span>
-                                    <div className="flex flex-wrap items-center justify-end gap-2">
-                                        {presenceViewers.length === 0 ? (
-                                            <span className={`text-xs italic ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Just you</span>
-                                        ) : (
-                                            <div className="flex -space-x-2 flex-row-reverse">
-                                                {presenceViewers.map((v) => (
-                                                    <span
-                                                        key={v.userId}
-                                                        title={v.name || v.email || 'User'}
-                                                        className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-[10px] font-semibold ring-2 overflow-hidden ${
-                                                            isDark ? 'ring-slate-800 bg-primary-700 text-white' : 'ring-white bg-primary-600 text-white'
-                                                        }`}
-                                                    >
-                                                        {v.avatar ? (
-                                                            <img src={v.avatar} alt="" className="h-full w-full object-cover" />
-                                                        ) : (
-                                                            (v.name || v.email || '?')
-                                                                .split(/\s+/)
-                                                                .map((p) => p[0])
-                                                                .join('')
-                                                                .slice(0, 2)
-                                                                .toUpperCase()
-                                                        )}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {generalMinutesSaveStatus[weekForGeneralMinutes.id] === 'saving' && (
-                                        <span className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Saving…</span>
-                                    )}
-                                    {generalMinutesSaveStatus[weekForGeneralMinutes.id] === 'saved' && (
-                                        <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>Saved</span>
-                                    )}
-                                    {generalMinutesSaveStatus[weekForGeneralMinutes.id] === 'error' && (
-                                        <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>Save failed — retry by editing</span>
-                                    )}
-                                </div>
-                            </div>
-                            {window.RichTextEditor ? (
-                                <div
-                                    onFocusCapture={() => {
-                                        generalMinutesEditingWeekIdRef.current = weekForGeneralMinutes.id;
-                                    }}
-                                >
-                                    <window.RichTextEditor
-                                        key={`weekly-general-minutes-${weekForGeneralMinutes.id}`}
-                                        value={weekForGeneralMinutes.generalMinutes || ''}
-                                        onChange={(html) => handleGeneralMinutesChange(weekForGeneralMinutes.id, html)}
-                                        onBlur={(html) => {
-                                            generalMinutesEditingWeekIdRef.current = null;
-                                            handleGeneralMinutesBlur(weekForGeneralMinutes.id, html);
-                                        }}
-                                        placeholder="Weekly meeting minutes — agenda, decisions, and discussion points for the whole team."
-                                        rows={8}
-                                        isDark={isDark}
-                                    />
-                                </div>
-                            ) : (
-                                <textarea
-                                    value={weekForGeneralMinutes.generalMinutes || ''}
-                                    onChange={(e) => handleGeneralMinutesChange(weekForGeneralMinutes.id, e.target.value)}
-                                    onBlur={(e) => {
-                                        generalMinutesEditingWeekIdRef.current = null;
-                                        handleGeneralMinutesBlur(weekForGeneralMinutes.id, e.target.value);
-                                    }}
-                                    onFocus={() => {
-                                        generalMinutesEditingWeekIdRef.current = weekForGeneralMinutes.id;
-                                    }}
-                                    placeholder="Weekly meeting minutes..."
-                                    className={`w-full min-h-[160px] p-3 text-sm border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                                    rows={8}
-                                />
-                            )}
-                        </div>
-                    )}
-
                     <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/60 border-slate-700 shadow-md' : 'bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200 shadow-sm'}`}>
                         <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
                             <div>
@@ -4929,6 +4807,38 @@ const ManagementMeetingNotes = () => {
                         </div>
                     </div>
 
+                    <div className={`flex flex-wrap items-center justify-end gap-2 px-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                        <span className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                            On this page
+                        </span>
+                        {presenceViewers.length === 0 ? (
+                            <span className={`text-xs italic ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Just you</span>
+                        ) : (
+                            <div className="flex -space-x-2 flex-row-reverse">
+                                {presenceViewers.map((v) => (
+                                    <span
+                                        key={v.userId}
+                                        title={v.name || v.email || 'User'}
+                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-semibold ring-2 overflow-hidden ${
+                                            isDark ? 'ring-slate-800 bg-primary-700 text-white' : 'ring-white bg-primary-600 text-white'
+                                        }`}
+                                    >
+                                        {v.avatar ? (
+                                            <img src={v.avatar} alt="" className="h-full w-full object-cover" />
+                                        ) : (
+                                            (v.name || v.email || '?')
+                                                .split(/\s+/)
+                                                .map((p) => p[0])
+                                                .join('')
+                                                .slice(0, 2)
+                                                .toUpperCase()
+                                        )}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <div className="sticky top-4 z-30">
                         <div ref={headerScrollRef} className="overflow-x-auto pb-2">
                             <div 
@@ -4950,14 +4860,6 @@ const ManagementMeetingNotes = () => {
                                     return (
                                         <div
                                             key={`header-${identifier}`}
-                                            ref={(node) => {
-                                                if (!weekCardRefs.current) {
-                                                    weekCardRefs.current = {};
-                                                }
-                                                if (node && index === 0) {
-                                                    weekCardRefs.current[identifier] = node;
-                                                }
-                                            }}
                                             style={{
                                                 gridRow: '1',
                                                 gridColumn: `${getWeekGridColumn(index)}`
@@ -5057,16 +4959,129 @@ const ManagementMeetingNotes = () => {
                     </div>
 
                     <div ref={bodyScrollRef} className="overflow-x-auto pb-2">
-                        {/* Grid layout: Departments as rows, Weeks as columns for perfect alignment */}
+                        {/* Grid layout: General minutes row, then departments as rows, weeks as columns */}
                         <div 
                             className="inline-grid gap-4"
                             style={{
                                 gridTemplateColumns: `repeat(${weeks.length + 1}, minmax(520px, 560px))`,
-                                gridTemplateRows: `repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
+                                gridTemplateRows: `minmax(260px, auto) repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
                                 alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with Management
                                 gridAutoFlow: 'row' // Ensure items flow row by row
                             }}
                         >
+                            {weeks.map((week, gmWeekIndex) => {
+                                const rawGmId = getWeekIdentifier(week);
+                                const gmIdentifier = rawGmId || `week-${gmWeekIndex}`;
+                                const gmSelected = gmIdentifier === selectedWeek;
+                                return (
+                                    <div
+                                        key={`general-minutes-${gmIdentifier}`}
+                                        ref={(node) => {
+                                            if (!weekCardRefs.current) {
+                                                weekCardRefs.current = {};
+                                            }
+                                            if (node) {
+                                                weekCardRefs.current[gmIdentifier] = node;
+                                            }
+                                        }}
+                                        style={{
+                                            gridRow: 1,
+                                            gridColumn: `${getWeekGridColumn(gmWeekIndex)}`
+                                        }}
+                                        className={`rounded-xl border-2 p-4 flex flex-col h-full transition-all duration-200 ${
+                                            gmSelected
+                                                ? isDark
+                                                    ? 'border-primary-500/80 bg-slate-800/90 shadow-lg shadow-primary-900/30'
+                                                    : 'border-primary-400 bg-white shadow-md shadow-primary-100/60'
+                                                : isDark
+                                                  ? 'border-slate-700 bg-slate-800/80 hover:border-slate-600'
+                                                  : 'border-gray-300 bg-white hover:border-gray-400'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                            <div>
+                                                <p className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                    General minutes
+                                                </p>
+                                                <p className={`text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                                                    {formatWeek(week.weekKey, week.weekStart)}
+                                                </p>
+                                            </div>
+                                            {!gmSelected && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setSelectedWeek(gmIdentifier);
+                                                        scrollToWeekId(gmIdentifier);
+                                                    }}
+                                                    className={`text-[10px] px-2 py-1 rounded-lg font-medium shrink-0 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                >
+                                                    Focus
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="flex-grow min-h-0 flex flex-col">
+                                            {week?.id && window.RichTextEditor ? (
+                                                <div
+                                                    className="flex-grow min-h-0"
+                                                    onFocusCapture={() => {
+                                                        generalMinutesEditingWeekIdRef.current = week.id;
+                                                    }}
+                                                >
+                                                    <window.RichTextEditor
+                                                        key={`weekly-gm-col-${week.id}`}
+                                                        value={week.generalMinutes || ''}
+                                                        onChange={(html) => handleGeneralMinutesChange(week.id, html)}
+                                                        onBlur={(html) => {
+                                                            generalMinutesEditingWeekIdRef.current = null;
+                                                            handleGeneralMinutesBlur(week.id, html);
+                                                        }}
+                                                        placeholder="Weekly minutes — agenda, decisions, shared notes for this week."
+                                                        rows={6}
+                                                        compact
+                                                        isDark={isDark}
+                                                    />
+                                                </div>
+                                            ) : week?.id ? (
+                                                <textarea
+                                                    value={week.generalMinutes || ''}
+                                                    onChange={(e) => handleGeneralMinutesChange(week.id, e.target.value)}
+                                                    onBlur={(e) => {
+                                                        generalMinutesEditingWeekIdRef.current = null;
+                                                        handleGeneralMinutesBlur(week.id, e.target.value);
+                                                    }}
+                                                    onFocus={() => {
+                                                        generalMinutesEditingWeekIdRef.current = week.id;
+                                                    }}
+                                                    placeholder="Weekly minutes..."
+                                                    className={`w-full flex-grow min-h-[140px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                    rows={6}
+                                                />
+                                            ) : (
+                                                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Save the week to add minutes.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div
+                                key="general-minutes-monthly-placeholder"
+                                style={{
+                                    gridRow: 1,
+                                    gridColumn: `${getMonthlyGoalsGridColumn(weeks.length)}`
+                                }}
+                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center ${
+                                    isDark ? 'border-slate-600 bg-slate-800/50' : 'border-slate-300 bg-slate-50/90'
+                                }`}
+                            >
+                                <p className={`text-xs font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Monthly goals</p>
+                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                    Department monthly targets fill the right-hand column in each row below.
+                                </p>
+                            </div>
+
                             {/* Department rows - each department spans all weeks */}
                             {DEPARTMENTS.map((dept, deptIndex) => {
                                 const deptMonthlyGoal = monthlyGoalsByDepartment?.[dept.id] || '';
@@ -5089,7 +5104,7 @@ const ManagementMeetingNotes = () => {
                                                     }`}
                                                     style={{ 
                                                         minHeight: '200px',
-                                                        gridRow: `${deptIndex + 1}`,
+                                                        gridRow: `${deptIndex + 2}`,
                                                         gridColumn: `${getWeekGridColumn(weekIndex)}`
                                                     }}
                                                 >
@@ -5580,7 +5595,7 @@ const ManagementMeetingNotes = () => {
                                     }`}
                                     style={{ 
                                         minHeight: '200px',
-                                        gridRow: `${deptIndex + 1}`,
+                                        gridRow: `${deptIndex + 2}`,
                                         gridColumn: `${getMonthlyGoalsGridColumn(weeks.length)}`
                                     }}
                                 >
