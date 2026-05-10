@@ -266,13 +266,25 @@ const deriveWeekDetails = (value) => {
     return { weekStart, weekEnd, weekKey, monthKey };
 };
 
-/** Query params from hash (#/teams/management?…) or document search (legacy). */
+/** Query params: merge hash (#/teams/management?…) with pathname ?search so /teams/management?month=… is not lost when the hash has no query (same idea as document collection URL sync). Hash wins on duplicate keys. */
 function getMeetingNotesRouteSearchParams() {
-    const hash = window.location.hash || '';
+    const merged = new URLSearchParams();
+    const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
     if (hash.indexOf('?') !== -1) {
-        return new URLSearchParams(hash.slice(hash.indexOf('?') + 1));
+        const q = hash.slice(hash.indexOf('?') + 1);
+        new URLSearchParams(q).forEach((value, key) => {
+            merged.set(key, value);
+        });
     }
-    return new URLSearchParams(window.location.search || '');
+    const search = typeof window !== 'undefined' ? window.location.search || '' : '';
+    if (search.length > 1) {
+        new URLSearchParams(search.slice(1)).forEach((value, key) => {
+            if (!merged.has(key)) {
+                merged.set(key, value);
+            }
+        });
+    }
+    return merged;
 }
 
 function buildMeetingNotesClientDeepLink({ selectedMonth, selectedWeek, commentContext }) {
@@ -541,6 +553,8 @@ const ManagementMeetingNotes = () => {
     
     const [selectedMonth, setSelectedMonth] = useState(getMonthFromURL());
     const [selectedWeek, setSelectedWeek] = useState(getWeekFromURL());
+    const selectedMonthRef = useRef(selectedMonth);
+    selectedMonthRef.current = selectedMonth;
     const [selectedDepartment, setSelectedDepartment] = useState(null);
     const [deepLinkNonce, setDeepLinkNonce] = useState(0);
 
@@ -552,28 +566,40 @@ const ManagementMeetingNotes = () => {
         };
     }, []);
 
-    // Update URL when month or week changes
+    // Update URL when month or week changes (merge with existing URL so first paint does not strip ?month=/?week= before state hydrates)
     useEffect(() => {
+        const locParams = getMeetingNotesRouteSearchParams();
+        const urlMonthRaw = locParams.get('month');
+        const urlWeekRaw = locParams.get('week');
+        const urlMonthNorm = urlMonthRaw ? normalizeMonthKeyInput(urlMonthRaw) : null;
+
+        const monthForUrl = selectedMonth || urlMonthNorm || '';
+        const weekForUrl = selectedWeek || urlWeekRaw || '';
+
         const sp = new URLSearchParams();
         sp.set('tab', 'meeting-notes');
         sp.set('team', 'management');
-        if (selectedMonth) sp.set('month', selectedMonth);
-        if (selectedWeek) sp.set('week', selectedWeek);
+        if (monthForUrl) sp.set('month', monthForUrl);
+        if (weekForUrl) sp.set('week', weekForUrl);
         const qs = sp.toString();
         const hash = window.location.hash || '';
         if (hash.startsWith('#/teams')) {
             const newHash = `#/teams/management?${qs}`;
             const next = `${window.location.pathname}${window.location.search || ''}${newHash}`;
-            window.history.pushState({ month: selectedMonth, week: selectedWeek, tab: 'meeting-notes' }, '', next);
+            window.history.pushState(
+                { month: monthForUrl || selectedMonth, week: weekForUrl || selectedWeek, tab: 'meeting-notes' },
+                '',
+                next
+            );
         } else {
             const url = new URL(window.location.href);
-            if (selectedMonth) {
-                url.searchParams.set('month', selectedMonth);
+            if (monthForUrl) {
+                url.searchParams.set('month', monthForUrl);
             } else {
                 url.searchParams.delete('month');
             }
-            if (selectedWeek) {
-                url.searchParams.set('week', selectedWeek);
+            if (weekForUrl) {
+                url.searchParams.set('week', weekForUrl);
             } else {
                 url.searchParams.delete('week');
             }
@@ -583,7 +609,11 @@ const ManagementMeetingNotes = () => {
             if (url.searchParams.get('team') !== 'management') {
                 url.searchParams.set('team', 'management');
             }
-            window.history.pushState({ month: selectedMonth, week: selectedWeek, tab: 'meeting-notes' }, '', url);
+            window.history.pushState(
+                { month: monthForUrl || selectedMonth, week: weekForUrl || selectedWeek, tab: 'meeting-notes' },
+                '',
+                url
+            );
         }
     }, [selectedMonth, selectedWeek]);
     
@@ -765,10 +795,20 @@ const ManagementMeetingNotes = () => {
                 return;
             }
 
-            const nextMonthKey =
-                preferredMonthKey && notes.some((note) => note?.monthKey === preferredMonthKey)
-                    ? preferredMonthKey
-                    : notes[0].monthKey;
+            const urlMonthCandidate = normalizeMonthKeyInput(getMeetingNotesRouteSearchParams().get('month'));
+            const nextMonthKey = (() => {
+                if (preferredMonthKey && notes.some((note) => note?.monthKey === preferredMonthKey)) {
+                    return preferredMonthKey;
+                }
+                if (urlMonthCandidate && notes.some((note) => note?.monthKey === urlMonthCandidate)) {
+                    return urlMonthCandidate;
+                }
+                const fromState = selectedMonthRef.current;
+                if (fromState && notes.some((note) => note?.monthKey === fromState)) {
+                    return fromState;
+                }
+                return notes[0].monthKey;
+            })();
 
             setSelectedMonth(nextMonthKey);
             const nextMonth = notes.find((note) => note?.monthKey === nextMonthKey) || null;
@@ -985,7 +1025,10 @@ const ManagementMeetingNotes = () => {
                 }
             }
             
-            // No (valid) month in URL - use the current month
+            // No (valid) month in URL — default to calendar month on fresh navigation only (reload keeps state / empty; avoids snapping to "now" after F5).
+            if (isBrowserNavigationReload()) {
+                return;
+            }
             const now = new Date();
             const monthKey = getMonthKeyFromDate(now);
             if (monthKey) {
@@ -993,6 +1036,9 @@ const ManagementMeetingNotes = () => {
             }
         } catch (error) {
             console.warn('ManagementMeetingNotes: failed to initialize month, falling back to current month', error);
+            if (isBrowserNavigationReload()) {
+                return;
+            }
             const now = new Date();
             const monthKey = getMonthKeyFromDate(now);
             if (monthKey) {
@@ -1501,6 +1547,10 @@ const ManagementMeetingNotes = () => {
             return identifier === selectedWeek;
         });
         if (hasSelectedWeek && selectedWeek) {
+            return;
+        }
+
+        if (isBrowserNavigationReload()) {
             return;
         }
 
