@@ -1,5 +1,28 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo, useCallback, useRef } = React;
+const { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } = React;
+
+/** Full document reload (F5) vs opening/following a link (navigate). Used to skip auto horizontal scroll on refresh. */
+function isBrowserNavigationReload() {
+    if (typeof window === 'undefined' || typeof performance === 'undefined') {
+        return false;
+    }
+    try {
+        const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+        if (nav && nav.type === 'reload') {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    try {
+        if (performance.navigation && performance.navigation.type === 1) {
+            return true;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    return false;
+}
 
 const ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
 const ADMIN_PERMISSION_KEYS = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
@@ -628,6 +651,14 @@ const ManagementMeetingNotes = () => {
     const weekCardRefs = useRef({});
     /** One horizontal scroller for header row + body grid so columns stay aligned. */
     const meetingNotesHorizontalScrollRef = useRef(null);
+    /** After a full page reload, skip one automatic scroll-to-selected-week (in-app navigation still scrolls). */
+    const skipAutoScrollToWeekOnceRef = useRef(false);
+
+    useLayoutEffect(() => {
+        if (isBrowserNavigationReload()) {
+            skipAutoScrollToWeekOnceRef.current = true;
+        }
+    }, []);
     
     // Ref to store scroll position that needs to be preserved after state updates
     const preservedScrollPosition = useRef(null);
@@ -1519,6 +1550,10 @@ const ManagementMeetingNotes = () => {
 
     useEffect(() => {
         if (!selectedWeek || !weeksNavSignature) {
+            return;
+        }
+        if (skipAutoScrollToWeekOnceRef.current) {
+            skipAutoScrollToWeekOnceRef.current = false;
             return;
         }
         let innerRaf = 0;
