@@ -78,14 +78,16 @@ const logClientsDebug = (...args) => {
 const buildClientsDetailSearch = (options = {}) => {
     const tab = options.initialTab || 'overview';
     const siteId = options.initialSiteId;
+    const proposalId = options.initialProposalId;
     if (siteId) {
         const s = new URLSearchParams({ tab: 'sites' });
         s.set('siteId', String(siteId));
         return s.toString();
     }
-    if (tab && tab !== 'overview') {
-        return new URLSearchParams({ tab: String(tab) }).toString();
-    }
+    const params = new URLSearchParams();
+    if (tab && tab !== 'overview') params.set('tab', String(tab));
+    if (proposalId) params.set('proposalId', String(proposalId));
+    if (params.toString()) return params.toString();
     return '';
 };
 
@@ -1131,6 +1133,7 @@ const Clients = React.memo(() => {
     const [currentTab, setCurrentTab] = useState('overview');
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
     const [openSiteIdForLead, setOpenSiteIdForLead] = useState(null);
+    const [openProposalIdForLead, setOpenProposalIdForLead] = useState(null);
     const [openSiteIdForClient, setOpenSiteIdForClient] = useState(null);
     const [entityNotFoundId, setEntityNotFoundId] = useState(null); // When URL points to a lead/client that no longer exists (404)
     const editingClientIdRef = useRef(null);
@@ -1772,6 +1775,9 @@ const Clients = React.memo(() => {
         }
         setCurrentLeadTab(options.initialTab || 'overview');
         if (options.initialSiteId !== undefined) setOpenSiteIdForLead(options.initialSiteId || null);
+        setOpenProposalIdForLead(
+            options.initialProposalId !== undefined ? options.initialProposalId || null : null
+        );
         setViewMode('lead-detail');
     }, [stopSync]);
 
@@ -1811,9 +1817,11 @@ const Clients = React.memo(() => {
             setCurrentLeadTab(tab);
             if (!editingLeadId || viewMode !== 'lead-detail') return;
             const segments = [String(editingLeadId)];
+            if (tab !== 'proposals') setOpenProposalIdForLead(null);
             const searchStr = buildClientsDetailSearch({
                 initialTab: tab,
-                initialSiteId: tab === 'sites' ? openSiteIdForLead || undefined : undefined
+                initialSiteId: tab === 'sites' ? openSiteIdForLead || undefined : undefined,
+                initialProposalId: tab === 'proposals' ? openProposalIdForLead || undefined : undefined
             });
             if (!window.RouteState) return;
             if (searchStr) {
@@ -1833,7 +1841,7 @@ const Clients = React.memo(() => {
                 });
             }
         },
-        [editingLeadId, viewMode, openSiteIdForLead]
+        [editingLeadId, viewMode, openSiteIdForLead, openProposalIdForLead]
     );
 
     const handleOpenLeadToSite = useCallback((lead, site) => {
@@ -1963,6 +1971,36 @@ const Clients = React.memo(() => {
             // CRITICAL: Don't reset detail views if they were opened programmatically (via handleOpenClient/handleOpenLead)
             // Only reset if the viewMode is invalid or if we're navigating away from a detail view via URL
             if (!route.segments || route.segments.length === 0) {
+                // Legacy hash links from older emails/notifications: #/clients?lead=<id>&tab=proposals
+                // Hash pathname is only "clients", so no segment carries the id — normalize to #/clients/<id>?...
+                const legacyLeadId =
+                    typeof route.search?.get === 'function'
+                        ? String(route.search.get('lead') || '').trim()
+                        : '';
+                if (legacyLeadId && window.RouteState?.navigate) {
+                    // Keep root query (e.g. ?v= cache bust) while replacing legacy hash params
+                    const params = new URLSearchParams(
+                        typeof window !== 'undefined' ? window.location.search || '' : ''
+                    );
+                    params.delete('lead');
+                    const tab = route.search.get('tab');
+                    const proposalId = route.search.get('proposalId');
+                    const siteId = route.search.get('siteId');
+                    if (tab) params.set('tab', tab);
+                    if (proposalId) params.set('proposalId', proposalId);
+                    if (siteId) params.set('siteId', siteId);
+                    const searchStr = params.toString();
+                    window.RouteState.navigate({
+                        page: 'clients',
+                        segments: [legacyLeadId],
+                        search: searchStr,
+                        preserveSearch: false,
+                        preserveHash: false,
+                        replace: true
+                    });
+                    return;
+                }
+
                 setEntityNotFoundId(null); // Clear not-found state when navigating to list
                 const validListViews = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'];
                 const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
@@ -2131,13 +2169,23 @@ const Clients = React.memo(() => {
                     const openToSite = tabFromUrl === 'sites' || siteIdFromUrl;
                     handleOpenClient(entity, openToSite ? { initialTab: tabFromUrl || 'sites', initialSiteId: siteIdFromUrl || undefined } : (tabFromUrl ? { initialTab: tabFromUrl } : {}));
                 } else if (entityType === 'lead') {
-                    const tabFromUrl = route.search?.get('tab');
+                    const proposalIdFromUrl = route.search?.get('proposalId');
+                    const tabFromUrl =
+                        route.search?.get('tab') || (proposalIdFromUrl ? 'proposals' : null);
                     const siteIdFromUrl = route.search?.get('siteId');
                     if (tabFromUrl) setCurrentLeadTab(tabFromUrl);
                     else if (!alreadyViewingThisLead) setCurrentLeadTab('overview');
                     if (siteIdFromUrl) setOpenSiteIdForLead(siteIdFromUrl);
                     const openToSite = tabFromUrl === 'sites' || siteIdFromUrl;
-                    handleOpenLead(entity, openToSite ? { initialTab: tabFromUrl || 'sites', initialSiteId: siteIdFromUrl || undefined } : (tabFromUrl ? { initialTab: tabFromUrl } : {}));
+                    const leadOpenOpts = openToSite
+                        ? { initialTab: tabFromUrl || 'sites', initialSiteId: siteIdFromUrl || undefined }
+                        : tabFromUrl
+                          ? {
+                                initialTab: tabFromUrl,
+                                ...(proposalIdFromUrl ? { initialProposalId: proposalIdFromUrl } : {})
+                            }
+                          : {};
+                    handleOpenLead(entity, leadOpenOpts);
                 }
                 
                 // Handle tab/section/comment from query params
@@ -9666,6 +9714,7 @@ const Clients = React.memo(() => {
                         onPauseSync={handlePauseSync}
                         initialSiteId={openSiteIdForLead}
                         onInitialSiteOpened={() => setOpenSiteIdForLead(null)}
+                        initialProposalId={openProposalIdForLead}
                     />
                 ) : (
                     <div className="text-center py-8 text-gray-500">

@@ -59,7 +59,10 @@ export async function notifyLeadProposalCirculationChanges({
       if (!nextId || nextId === prevId) continue
 
       const label = CIRCULATION_DEPT_LABELS[key] || key
-      const link = `#/clients?lead=${encodeURIComponent(lid)}&tab=proposals`
+      // Path-based hash so RouteState gets segments[0]=leadId (query-only #/clients?lead=… has no segment).
+      const link =
+        `#/clients/${encodeURIComponent(lid)}` +
+        `?tab=proposals&proposalId=${encodeURIComponent(pid)}`
       try {
         await createNotificationForUser(
           nextId,

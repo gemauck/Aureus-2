@@ -282,7 +282,7 @@ function resolveEngagementPrefillLines(formDef, prefill) {
     });
 }
 
-const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, onRevertToLead, initialSiteId, onInitialSiteOpened }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity, entityType = 'client', onConvertToClient, onRevertToLead, initialSiteId, onInitialSiteOpened, initialProposalId }) => {
     // entityType: 'client' or 'lead' - determines terminology and behavior
     const isLead = entityType === 'lead';
     const entityLabel = isLead ? 'Lead' : 'Client';
@@ -440,7 +440,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
     const canManageLeadClientConversion = isAdmin;
     const canViewContracts = isAdmin;
-    const canViewLeadProposals = isLead && isAdmin;
+    const currentUserId = String(user?.sub ?? user?.id ?? '').trim();
+    /** True when this user is responsible for any circulation department on any proposal on this lead. */
+    const isCirculationAssigneeOnLead =
+        isLead &&
+        !!currentUserId &&
+        Array.isArray(formData.proposals) &&
+        formData.proposals.some((p) => {
+            const cd = p?.workflow?.circulationDepartments;
+            if (!cd || typeof cd !== 'object') return false;
+            return Object.values(cd).some(
+                (row) => row && String(row.responsibleUserId || '').trim() === currentUserId
+            );
+        });
+    /** Email / notification deep links include proposalId before proposals may be hydrated. */
+    const hasLeadProposalDeepLink = isLead && String(initialProposalId || '').trim() !== '';
+    const canViewLeadProposals =
+        isLead && (isAdmin || isCirculationAssigneeOnLead || hasLeadProposalDeepLink);
+    /** Create/remove proposals — keep restricted to admins; assignees only review circulation. */
+    const canManageLeadProposals = isAdmin;
     
     // Now initialize other state and refs AFTER formData
     const [activeTab, setActiveTab] = useState(() => {
@@ -1439,7 +1457,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setActiveTab(nextTab);
             lastInitialTabRef.current = nextTab;
         }
-    }, [initialTab, isAdmin, isLead]);
+    }, [initialTab, canViewContracts, canViewLeadProposals]);
     
     // Load external agents function
     const loadExternalAgents = useCallback(async () => {
@@ -2069,6 +2087,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     };
 
     const openLeadProposalWizardCreate = () => {
+        if (!canManageLeadProposals) return;
         if (!formData?.id) return;
         setLeadProposalWizardEditIndex(null);
         setLeadProposalWizardStep(1);
@@ -4868,6 +4887,29 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // 3. Open the actual site (edit form). Don't clear initialSiteId here – clear only when user clicks "Back to list".
         handleEditSite(site);
     }, [initialSiteId, formData?.sites, optimisticSites, activeTab]);
+
+    const openedInitialProposalIdRef = useRef(null);
+    useEffect(() => {
+        if (client?.id != null) openedInitialProposalIdRef.current = null;
+    }, [client?.id]);
+    useEffect(() => {
+        if (!initialProposalId || !isLead || !canViewLeadProposals) return;
+        const pid = String(initialProposalId).trim();
+        if (!pid) return;
+        if (activeTabRef.current !== 'proposals') {
+            if (typeof onTabChange === 'function') onTabChange('proposals');
+            setActiveTab('proposals');
+            activeTabRef.current = 'proposals';
+            return;
+        }
+        if (activeTab !== 'proposals') return;
+        const list = Array.isArray(formData?.proposals) ? formData.proposals : [];
+        const idx = list.findIndex((p) => p && String(p.id || '').trim() === pid);
+        if (idx === -1) return;
+        if (openedInitialProposalIdRef.current === pid) return;
+        openedInitialProposalIdRef.current = pid;
+        openLeadProposalWizardEdit(idx);
+    }, [initialProposalId, isLead, canViewLeadProposals, formData?.proposals, activeTab, client?.id]);
 
     const handleUpdateSite = () => {
         // Build site payload with API-expected fields
@@ -8563,29 +8605,39 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             </div>
                         )}
 
-                        {/* Proposals (leads, admins only) — lightweight list; extend later as needed */}
+                        {/* Proposals — admins manage; circulation assignees can open workflows (e.g. from email deep links) */}
                         {activeTab === 'proposals' && canViewLeadProposals && (
                             <div className="space-y-4">
                                 <div className={`rounded-lg p-4 ${isDark ? 'bg-gray-700/50 border border-gray-600' : 'bg-primary-50 border border-primary-100'}`}>
                                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                        Manage proposals for this lead. Use <strong className="font-medium">Add proposal</strong> to run the full workflow — including creating or linking a customer engagement questionnaire (questionnaires are not created from this tab directly).
+                                        {canManageLeadProposals ? (
+                                            <>
+                                                Manage proposals for this lead. Use <strong className="font-medium">Add proposal</strong> to run the full workflow — including creating or linking a customer engagement questionnaire (questionnaires are not created from this tab directly).
+                                            </>
+                                        ) : (
+                                            <>
+                                                Open your assigned proposal from the list below to review circulation comments and complete your step. Adding or removing proposals is limited to administrators.
+                                            </>
+                                        )}
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
-                                    <button
-                                        type="button"
-                                        disabled={!formData.id}
-                                        onClick={openLeadProposalWizardCreate}
-                                        className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${
-                                            isDark
-                                                ? 'bg-primary-600 text-white hover:bg-primary-500 disabled:opacity-50'
-                                                : 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50'
-                                        }`}
-                                    >
-                                        <i className="fas fa-plus text-xs" aria-hidden />
-                                        Add proposal
-                                    </button>
+                                    {canManageLeadProposals ? (
+                                        <button
+                                            type="button"
+                                            disabled={!formData.id}
+                                            onClick={openLeadProposalWizardCreate}
+                                            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                                                isDark
+                                                    ? 'bg-primary-600 text-white hover:bg-primary-500 disabled:opacity-50'
+                                                    : 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50'
+                                            }`}
+                                        >
+                                            <i className="fas fa-plus text-xs" aria-hidden />
+                                            Add proposal
+                                        </button>
+                                    ) : null}
                                 </div>
                                 <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                     Click a proposal to open the guided workflow (questionnaire, draft link, circulation, client submission). Use <strong className="font-medium">Update</strong> at the bottom of this screen to save lead changes.
@@ -8595,14 +8647,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <i className="fas fa-clipboard-list text-4xl mb-3 opacity-60"></i>
                                         <p className="text-sm">No proposals yet</p>
                                         <p className="text-xs mt-1 mb-4">Add a proposal to create questionnaires and run drafting, circulation, and client submission in one place.</p>
-                                        <button
-                                            type="button"
-                                            disabled={!formData.id}
-                                            onClick={openLeadProposalWizardCreate}
-                                            className={`text-sm font-medium px-4 py-2 rounded-lg ${isDark ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-900 text-white hover:bg-gray-800'} disabled:opacity-50`}
-                                        >
-                                            Add proposal
-                                        </button>
+                                        {canManageLeadProposals ? (
+                                            <button
+                                                type="button"
+                                                disabled={!formData.id}
+                                                onClick={openLeadProposalWizardCreate}
+                                                className={`text-sm font-medium px-4 py-2 rounded-lg ${isDark ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-900 text-white hover:bg-gray-800'} disabled:opacity-50`}
+                                            >
+                                                Add proposal
+                                            </button>
+                                        ) : null}
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
@@ -8673,6 +8727,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     Review report
                                                                 </button>
                                                             ) : null}
+                                                            {canManageLeadProposals ? (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleRemoveLeadProposal(proposalIndex)}
@@ -8680,6 +8735,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             >
                                                                 Remove
                                                             </button>
+                                                            ) : null}
                                                         </div>
                                                     </div>
                                                 </div>

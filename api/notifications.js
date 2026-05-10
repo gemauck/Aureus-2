@@ -261,7 +261,10 @@ export async function createNotificationForUser(targetUserId, type, title, messa
                     const cid = metadataObj.clientId || metadataObj.leadId;
                     const c = await prisma.client.findUnique({ where: { id: cid }, select: { name: true } });
                     if (c) clientName = c.name || null;
-                    commentLink = link || `#/clients/${cid}`;
+                    commentLink =
+                        (validLink && String(validLink).trim()) ||
+                        link ||
+                        `#/clients/${cid}`;
                 } else if (metadataObj.ticketId) {
                     commentLink = link || `#/helpdesk/${metadataObj.ticketId}`;
                     if (metadataObj.commentId && commentLink && !String(commentLink).includes('commentId=')) {
@@ -390,7 +393,8 @@ export async function createNotificationForUser(targetUserId, type, title, messa
             }
             let commentLinkLabel = null;
             if (type === 'system' && metadataObj && (metadataObj.clientId || metadataObj.leadId)) {
-                commentLinkLabel = 'View client';
+                commentLinkLabel =
+                    metadataObj.source === 'lead_proposal_circulation' ? 'View proposal' : 'View client';
                 const ctx = (clientName || projectName || taskTitle)
                     ? `<div style="background:#e7f3ff;border-left:4px solid #007bff;padding:15px;margin-bottom:20px;border-radius:4px;"><h3 style="color:#333;margin:0 0 10px;font-size:16px;">📋 Context</h3>`
                         + (clientName ? `<p style="color:#555;margin:5px 0;"><strong>Client:</strong> ${escapeHtml(clientName)}</p>` : '')
