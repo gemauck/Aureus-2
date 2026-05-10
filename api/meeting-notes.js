@@ -7,6 +7,7 @@ import { withLogging } from './_lib/logger.js'
 import { isConnectionError, logDatabaseError } from './_lib/dbErrorHandler.js'
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js'
 import { resolveMeetingNotesLinkContext, buildMeetingNotesAppLink } from './_lib/meetingNotesDeepLink.js'
+import { touchMeetingNotesPresence, getMeetingNotesPresence } from './_lib/meetingNotesPresence.js'
 
 // Department definitions
 const DEPARTMENTS = [
@@ -71,14 +72,14 @@ function isAdminUser(user) {
 }
 
 async function handler(req, res) {
+  let user = req.user
   try {
     // Fetch full user data from database to get permissions
-    let user = req.user
     if (req.user?.sub) {
       try {
         const dbUser = await prisma.user.findUnique({
           where: { id: req.user.sub },
-          select: { id: true, email: true, role: true, permissions: true, name: true }
+          select: { id: true, email: true, role: true, permissions: true, name: true, avatar: true }
         })
         if (dbUser) {
           user = dbUser
@@ -110,8 +111,44 @@ async function handler(req, res) {
   const rawActionParam = req.query?.action ?? req.body?.action ?? ''
   const action = typeof rawActionParam === 'string' ? rawActionParam.trim().toLowerCase() : ''
 
+  // Live viewers for a meeting-notes "room" (month + week scope); in-memory per server process
+  if (action === 'presence') {
+    if (req.method === 'GET') {
+      try {
+        const roomKey = req.query?.roomKey
+        if (!roomKey || typeof roomKey !== 'string') {
+          return badRequest(res, 'roomKey is required')
+        }
+        const viewers = getMeetingNotesPresence(roomKey.trim())
+        return ok(res, { viewers })
+      } catch (error) {
+        console.error('Error reading meeting notes presence:', error)
+        return serverError(res, 'Failed to read presence')
+      }
+    }
+    if (req.method === 'POST') {
+      try {
+        const rawKey = req.body?.roomKey ?? req.query?.roomKey
+        const roomKey = typeof rawKey === 'string' ? rawKey.trim() : ''
+        if (!roomKey) {
+          return badRequest(res, 'roomKey is required')
+        }
+        touchMeetingNotesPresence(roomKey, {
+          id: user?.id || user?.sub,
+          name: user?.name,
+          email: user?.email,
+          avatar: user?.avatar
+        })
+        return ok(res, { ok: true })
+      } catch (error) {
+        console.error('Error touching meeting notes presence:', error)
+        return serverError(res, 'Failed to update presence')
+      }
+    }
+  }
+
   // Get all monthly meeting notes
-  if (req.method === 'GET' && !req.query.monthKey && !req.query.id) {
+  if (req.method === 'GET' && !req.query.monthKey && !req.query.id && action !== 'presence') {
     try {
       console.log('📋 Fetching all monthly meeting notes...')
       const monthlyNotes = await prisma.monthlyMeetingNotes.findMany({
@@ -589,6 +626,88 @@ async function handler(req, res) {
         return badRequest(res, 'Weekly notes for this week already exist')
       }
       return serverError(res, 'Failed to create weekly notes')
+    }
+  }
+
+  // Update weekly meeting notes (general minutes, optional week range)
+  if (req.method === 'PUT' && action === 'weekly') {
+    try {
+      const { id, generalMinutes, weekStart, weekEnd } = req.body || {}
+
+      if (!id) {
+        return badRequest(res, 'id is required')
+      }
+
+      const updateData = {}
+      if (generalMinutes !== undefined) {
+        updateData.generalMinutes = typeof generalMinutes === 'string' ? generalMinutes : ''
+      }
+      if (weekStart !== undefined) {
+        updateData.weekStart = new Date(weekStart)
+      }
+      if (weekEnd !== undefined) {
+        updateData.weekEnd = weekEnd ? new Date(weekEnd) : null
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return badRequest(res, 'No fields provided for update')
+      }
+
+      const weeklyNotes = await prisma.weeklyMeetingNotes.update({
+        where: { id },
+        data: updateData,
+        include: {
+          departmentNotes: {
+            include: {
+              comments: {
+                include: {
+                  author: {
+                    select: { id: true, name: true, email: true }
+                  }
+                },
+                orderBy: { createdAt: 'asc' }
+              },
+              actionItems: {
+                include: {
+                  assignedUser: {
+                    select: { id: true, name: true, email: true }
+                  },
+                  comments: {
+                    include: {
+                      author: {
+                        select: { id: true, name: true, email: true }
+                      }
+                    },
+                    orderBy: { createdAt: 'asc' }
+                  }
+                },
+                orderBy: { createdAt: 'asc' }
+              }
+            }
+          },
+          actionItems: {
+            include: {
+              assignedUser: {
+                select: { id: true, name: true, email: true }
+              },
+              comments: {
+                include: {
+                  author: {
+                    select: { id: true, name: true, email: true }
+                  }
+                },
+                orderBy: { createdAt: 'asc' }
+              }
+            },
+            orderBy: { createdAt: 'asc' }
+          }
+        }
+      })
+
+      return ok(res, { weeklyNotes })
+    } catch (error) {
+      console.error('Error updating weekly meeting notes:', error)
+      return serverError(res, 'Failed to update weekly meeting notes')
     }
   }
 

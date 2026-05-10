@@ -2612,10 +2612,47 @@ const DatabaseAPI = {
     },
 
     // MEETING NOTES OPERATIONS
-    async getMeetingNotes(monthKey = null) {
-        const url = monthKey ? `/meeting-notes?monthKey=${monthKey}` : '/meeting-notes';
+    async getMeetingNotes(monthKey = null, options = {}) {
+        const params = new URLSearchParams();
+        if (monthKey) {
+            params.set('monthKey', monthKey);
+        }
+        if (options.bustCache) {
+            params.set('_t', String(Date.now()));
+        }
+        const qs = params.toString();
+        const url = qs ? `/meeting-notes?${qs}` : '/meeting-notes';
         const response = await this.makeRequest(url);
         return response;
+    },
+
+    async updateWeeklyNotes(id, data) {
+        if (!id) {
+            throw new Error('id is required to update weekly meeting notes');
+        }
+        const response = await this.makeRequest('/meeting-notes?action=weekly', {
+            method: 'PUT',
+            body: JSON.stringify({ id, ...data })
+        });
+        return response;
+    },
+
+    async heartbeatMeetingNotesPresence(roomKey) {
+        if (!roomKey) {
+            throw new Error('roomKey is required');
+        }
+        return await this.makeRequest('/meeting-notes?action=presence', {
+            method: 'POST',
+            body: JSON.stringify({ roomKey })
+        });
+    },
+
+    async getMeetingNotesPresence(roomKey) {
+        if (!roomKey) {
+            throw new Error('roomKey is required');
+        }
+        const q = encodeURIComponent(roomKey);
+        return await this.makeRequest(`/meeting-notes?action=presence&roomKey=${q}&_t=${Date.now()}`);
     },
 
     async createMonthlyNotes(monthKey, monthlyGoals = '') {

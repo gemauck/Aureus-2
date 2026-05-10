@@ -610,11 +610,17 @@ const ManagementMeetingNotes = () => {
     // Auto-save state - tracks save status per department for visual feedback
     // 'idle' = no changes, 'saving' = currently saving, 'saved' = recently saved, 'error' = save failed
     const [autoSaveStatus, setAutoSaveStatus] = useState({}); // { [departmentNotesId]: 'idle' | 'saving' | 'saved' | 'error' }
+    const [presenceViewers, setPresenceViewers] = useState([]);
+    const [generalMinutesSaveStatus, setGeneralMinutesSaveStatus] = useState({}); // [weeklyNotesId]: status
     
     // Refs for auto-save debouncing
     const autoSaveTimers = useRef({}); // { [departmentNotesId]: timeoutId }
     const AUTO_SAVE_DELAY = 1000; // 1 second delay after last keystroke (Google Docs style)
     const savedStatusTimers = useRef({}); // { [departmentNotesId]: timeoutId } - for clearing "Saved" status
+    const generalMinutesTimers = useRef({});
+    const generalMinutesEditingWeekIdRef = useRef(null);
+    const generalMinutesValuesRef = useRef({});
+    const lastSavedGeneralMinutesHash = useRef({});
     
     // Refs for cursor position preservation
     const savedCursorPositions = useRef({}); // { [fieldKey]: { start: number, end: number, element: HTMLElement } }
@@ -908,6 +914,31 @@ const ManagementMeetingNotes = () => {
         },
         []
     );
+
+    const updateWeeklyNotesLocal = useCallback((weeklyNotesId, partial, monthlyId) => {
+        const applyUpdate = (note) => {
+            if (!note) {
+                return note;
+            }
+            const weeklyNotes = Array.isArray(note.weeklyNotes)
+                ? note.weeklyNotes.map((week) =>
+                      week?.id === weeklyNotesId ? { ...week, ...partial } : week
+                  )
+                : note.weeklyNotes;
+            return { ...note, weeklyNotes };
+        };
+
+        setCurrentMonthlyNotes((prev) => (prev ? applyUpdate(prev) : prev));
+
+        if (monthlyId) {
+            setMonthlyNotesList((prev) => {
+                if (!Array.isArray(prev)) {
+                    return prev;
+                }
+                return prev.map((n) => (n?.id === monthlyId ? applyUpdate(n) : n));
+            });
+        }
+    }, []);
 
     // Initialize selected month:
     // - Respect an explicit month in the URL (for shared links / navigation)
@@ -1275,6 +1306,40 @@ const ManagementMeetingNotes = () => {
         return week.weekKey || week.id || '';
     };
 
+    const selectedWeekObj = useMemo(() => {
+        if (!Array.isArray(weeks) || weeks.length === 0 || !selectedWeek) {
+            return null;
+        }
+        return (
+            weeks.find((week, index) => {
+                const identifier = getWeekIdentifier(week) || `week-${index}`;
+                return identifier === selectedWeek;
+            }) || null
+        );
+    }, [weeks, selectedWeek]);
+
+    /** Week whose general minutes are shown (falls back to first week when needed) */
+    const weekForGeneralMinutes = selectedWeekObj ?? (weeks.length ? weeks[0] : null);
+
+    const meetingNotesRoomKey = useMemo(() => {
+        if (!selectedMonth || !weekForGeneralMinutes?.id) {
+            return null;
+        }
+        return `management-meeting-notes:${selectedMonth}:${weekForGeneralMinutes.id}`;
+    }, [selectedMonth, weekForGeneralMinutes]);
+
+    useEffect(() => {
+        const id = weekForGeneralMinutes?.id;
+        if (!id) {
+            return;
+        }
+        if (generalMinutesEditingWeekIdRef.current === id) {
+            return;
+        }
+        const gm = weekForGeneralMinutes?.generalMinutes ?? '';
+        lastSavedGeneralMinutesHash.current[id] = gm;
+    }, [weekForGeneralMinutes?.id, weekForGeneralMinutes?.generalMinutes]);
+
     const getWeekGridColumn = (weekIndex) => weekIndex + 1;
     const getMonthlyGoalsGridColumn = (weekCount) => weekCount + 1;
 
@@ -1478,6 +1543,7 @@ const ManagementMeetingNotes = () => {
             // Clear all pending auto-save timers
             Object.values(autoSaveTimers.current).forEach(timer => clearTimeout(timer));
             Object.values(savedStatusTimers.current).forEach(timer => clearTimeout(timer));
+            Object.values(generalMinutesTimers.current).forEach(timer => clearTimeout(timer));
         };
     }, []);
 
@@ -2886,6 +2952,178 @@ const ManagementMeetingNotes = () => {
         // Trigger immediate save on blur
         triggerAutoSave(departmentNotesId);
     };
+
+    const triggerGeneralMinutesSave = useCallback(
+        async (weeklyNotesId) => {
+            if (!weeklyNotesId || !window.DatabaseAPI || typeof window.DatabaseAPI.updateWeeklyNotes !== 'function') {
+                return;
+            }
+            const monthlyId = currentMonthlyNotes?.id || null;
+            const weekData = currentMonthlyNotes?.weeklyNotes?.find((w) => w.id === weeklyNotesId);
+            const html =
+                generalMinutesValuesRef.current[weeklyNotesId] !== undefined
+                    ? generalMinutesValuesRef.current[weeklyNotesId]
+                    : weekData?.generalMinutes ?? '';
+            const hash = typeof html === 'string' ? html : '';
+            if (lastSavedGeneralMinutesHash.current[weeklyNotesId] === hash) {
+                return;
+            }
+            try {
+                setGeneralMinutesSaveStatus((prev) => ({ ...prev, [weeklyNotesId]: 'saving' }));
+                await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, { generalMinutes: hash });
+                lastSavedGeneralMinutesHash.current[weeklyNotesId] = hash;
+                updateWeeklyNotesLocal(weeklyNotesId, { generalMinutes: hash }, monthlyId);
+                setGeneralMinutesSaveStatus((prev) => ({ ...prev, [weeklyNotesId]: 'saved' }));
+                setTimeout(() => {
+                    setGeneralMinutesSaveStatus((prev) => {
+                        const next = { ...prev };
+                        if (next[weeklyNotesId] === 'saved') {
+                            delete next[weeklyNotesId];
+                        }
+                        return next;
+                    });
+                }, 2000);
+            } catch (error) {
+                console.error('Error saving weekly general minutes:', error);
+                setGeneralMinutesSaveStatus((prev) => ({ ...prev, [weeklyNotesId]: 'error' }));
+                setTimeout(() => {
+                    setGeneralMinutesSaveStatus((prev) => {
+                        const next = { ...prev };
+                        delete next[weeklyNotesId];
+                        return next;
+                    });
+                }, 3000);
+            }
+        },
+        [currentMonthlyNotes, updateWeeklyNotesLocal]
+    );
+
+    const scheduleGeneralMinutesSave = useCallback(
+        (weeklyNotesId) => {
+            if (!weeklyNotesId) {
+                return;
+            }
+            if (generalMinutesTimers.current[weeklyNotesId]) {
+                clearTimeout(generalMinutesTimers.current[weeklyNotesId]);
+            }
+            generalMinutesTimers.current[weeklyNotesId] = setTimeout(() => {
+                void triggerGeneralMinutesSave(weeklyNotesId);
+                delete generalMinutesTimers.current[weeklyNotesId];
+            }, AUTO_SAVE_DELAY);
+        },
+        [triggerGeneralMinutesSave]
+    );
+
+    const handleGeneralMinutesChange = (weeklyNotesId, html) => {
+        if (!weeklyNotesId) {
+            return;
+        }
+        generalMinutesValuesRef.current[weeklyNotesId] = html;
+        scheduleGeneralMinutesSave(weeklyNotesId);
+    };
+
+    const handleGeneralMinutesBlur = (weeklyNotesId, html) => {
+        if (!weeklyNotesId) {
+            return;
+        }
+        generalMinutesValuesRef.current[weeklyNotesId] = html;
+        if (generalMinutesTimers.current[weeklyNotesId]) {
+            clearTimeout(generalMinutesTimers.current[weeklyNotesId]);
+            delete generalMinutesTimers.current[weeklyNotesId];
+        }
+        void triggerGeneralMinutesSave(weeklyNotesId);
+    };
+
+    // Live sync: poll month payload so other admins see general minutes (and related week data) without refresh
+    useEffect(() => {
+        if (!isAdminUser || !selectedMonth) {
+            return undefined;
+        }
+        let cancelled = false;
+
+        const tick = async () => {
+            if (cancelled || document.hidden) {
+                return;
+            }
+            if (!window.DatabaseAPI?.getMeetingNotes) {
+                return;
+            }
+            try {
+                const res = await window.DatabaseAPI.getMeetingNotes(selectedMonth, { bustCache: true });
+                const remote = res?.data?.monthlyNotes || res?.monthlyNotes;
+                if (!remote || cancelled) {
+                    return;
+                }
+                const lockedId = generalMinutesEditingWeekIdRef.current;
+                const mergeWeeks = (prevNote) => {
+                    if (!prevNote || prevNote.id !== remote.id) {
+                        return prevNote;
+                    }
+                    const prevWeekMap = new Map((prevNote.weeklyNotes || []).map((w) => [w.id, w]));
+                    const mergedWeeks = (remote.weeklyNotes || []).map((rw) => {
+                        if (lockedId && rw.id === lockedId) {
+                            const lw = prevWeekMap.get(rw.id);
+                            return lw ? { ...rw, generalMinutes: lw.generalMinutes ?? '' } : rw;
+                        }
+                        return rw;
+                    });
+                    return { ...prevNote, weeklyNotes: mergedWeeks };
+                };
+                setCurrentMonthlyNotes((prev) => mergeWeeks(prev));
+                setMonthlyNotesList((prevList) => {
+                    if (!Array.isArray(prevList)) {
+                        return prevList;
+                    }
+                    return prevList.map((note) => (note?.monthKey === selectedMonth ? mergeWeeks(note) : note));
+                });
+            } catch (e) {
+                // silent — polling is best-effort
+            }
+        };
+
+        const id = setInterval(tick, 3000);
+        void tick();
+        return () => {
+            cancelled = true;
+            clearInterval(id);
+        };
+    }, [isAdminUser, selectedMonth]);
+
+    // Presence: who else is on this week’s meeting notes room (same server process)
+    useEffect(() => {
+        if (!isAdminUser || !meetingNotesRoomKey || !window.DatabaseAPI?.heartbeatMeetingNotesPresence) {
+            return undefined;
+        }
+        const pulse = () => {
+            void window.DatabaseAPI.heartbeatMeetingNotesPresence(meetingNotesRoomKey).catch(() => {});
+        };
+        pulse();
+        const iv = setInterval(pulse, 15000);
+        return () => clearInterval(iv);
+    }, [isAdminUser, meetingNotesRoomKey]);
+
+    useEffect(() => {
+        if (!isAdminUser || !meetingNotesRoomKey || !window.DatabaseAPI?.getMeetingNotesPresence) {
+            setPresenceViewers([]);
+            return undefined;
+        }
+        const load = async () => {
+            try {
+                const res = await window.DatabaseAPI.getMeetingNotesPresence(meetingNotesRoomKey);
+                const viewers = res?.data?.viewers ?? res?.viewers ?? [];
+                setPresenceViewers(Array.isArray(viewers) ? viewers : []);
+            } catch (e) {
+                setPresenceViewers([]);
+            }
+        };
+        void load();
+        const iv = setInterval(() => {
+            if (!document.hidden) {
+                void load();
+            }
+        }, 5000);
+        return () => clearInterval(iv);
+    }, [isAdminUser, meetingNotesRoomKey]);
     
     // Handle file upload for attachments
     const handleAttachmentUpload = async (departmentNotesId, files) => {
@@ -4527,6 +4765,108 @@ const ManagementMeetingNotes = () => {
             {/* Weekly Notes Section */}
             {selectedMonth && currentMonthlyNotes && weeks.length > 0 && (
                 <div className="space-y-5">
+                    {weekForGeneralMinutes?.id && (
+                        <div
+                            className={`rounded-xl border-2 p-5 ${
+                                isDark
+                                    ? 'border-slate-600 bg-slate-800/80 shadow-lg'
+                                    : 'border-slate-200 bg-white shadow-md'
+                            }`}
+                        >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+                                <div>
+                                    <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                        Week general minutes
+                                    </p>
+                                    <h3 className={`text-base font-bold flex items-center gap-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                        <i className="fas fa-users text-primary-600"></i>
+                                        {formatWeek(weekForGeneralMinutes.weekKey, weekForGeneralMinutes.weekStart)}
+                                    </h3>
+                                    <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                        Shared notes for this week. Saves automatically; updates appear for everyone within a few seconds.
+                                    </p>
+                                </div>
+                                <div className="flex flex-col items-start sm:items-end gap-2 shrink-0">
+                                    <span className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                                        On this page
+                                    </span>
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        {presenceViewers.length === 0 ? (
+                                            <span className={`text-xs italic ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Just you</span>
+                                        ) : (
+                                            <div className="flex -space-x-2 flex-row-reverse">
+                                                {presenceViewers.map((v) => (
+                                                    <span
+                                                        key={v.userId}
+                                                        title={v.name || v.email || 'User'}
+                                                        className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-[10px] font-semibold ring-2 overflow-hidden ${
+                                                            isDark ? 'ring-slate-800 bg-primary-700 text-white' : 'ring-white bg-primary-600 text-white'
+                                                        }`}
+                                                    >
+                                                        {v.avatar ? (
+                                                            <img src={v.avatar} alt="" className="h-full w-full object-cover" />
+                                                        ) : (
+                                                            (v.name || v.email || '?')
+                                                                .split(/\s+/)
+                                                                .map((p) => p[0])
+                                                                .join('')
+                                                                .slice(0, 2)
+                                                                .toUpperCase()
+                                                        )}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {generalMinutesSaveStatus[weekForGeneralMinutes.id] === 'saving' && (
+                                        <span className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Saving…</span>
+                                    )}
+                                    {generalMinutesSaveStatus[weekForGeneralMinutes.id] === 'saved' && (
+                                        <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>Saved</span>
+                                    )}
+                                    {generalMinutesSaveStatus[weekForGeneralMinutes.id] === 'error' && (
+                                        <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>Save failed — retry by editing</span>
+                                    )}
+                                </div>
+                            </div>
+                            {window.RichTextEditor ? (
+                                <div
+                                    onFocusCapture={() => {
+                                        generalMinutesEditingWeekIdRef.current = weekForGeneralMinutes.id;
+                                    }}
+                                >
+                                    <window.RichTextEditor
+                                        key={`weekly-general-minutes-${weekForGeneralMinutes.id}`}
+                                        value={weekForGeneralMinutes.generalMinutes || ''}
+                                        onChange={(html) => handleGeneralMinutesChange(weekForGeneralMinutes.id, html)}
+                                        onBlur={(html) => {
+                                            generalMinutesEditingWeekIdRef.current = null;
+                                            handleGeneralMinutesBlur(weekForGeneralMinutes.id, html);
+                                        }}
+                                        placeholder="Weekly meeting minutes — agenda, decisions, and discussion points for the whole team."
+                                        rows={8}
+                                        isDark={isDark}
+                                    />
+                                </div>
+                            ) : (
+                                <textarea
+                                    value={weekForGeneralMinutes.generalMinutes || ''}
+                                    onChange={(e) => handleGeneralMinutesChange(weekForGeneralMinutes.id, e.target.value)}
+                                    onBlur={(e) => {
+                                        generalMinutesEditingWeekIdRef.current = null;
+                                        handleGeneralMinutesBlur(weekForGeneralMinutes.id, e.target.value);
+                                    }}
+                                    onFocus={() => {
+                                        generalMinutesEditingWeekIdRef.current = weekForGeneralMinutes.id;
+                                    }}
+                                    placeholder="Weekly meeting minutes..."
+                                    className={`w-full min-h-[160px] p-3 text-sm border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                    rows={8}
+                                />
+                            )}
+                        </div>
+                    )}
+
                     <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/60 border-slate-700 shadow-md' : 'bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200 shadow-sm'}`}>
                         <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
                             <div>
