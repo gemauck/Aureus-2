@@ -11,7 +11,7 @@ import { touchMeetingNotesPresence, getMeetingNotesPresence } from './_lib/meeti
 
 // Department definitions
 const DEPARTMENTS = [
-  { id: 'management', name: 'Management' },
+  { id: 'management', name: 'David Buttemer' },
   { id: 'compliance', name: 'Compliance' },
   { id: 'finance', name: 'Finance' },
   { id: 'technical', name: 'Technical' },
@@ -24,7 +24,7 @@ const DEPARTMENTS = [
 
 const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const ADMIN_PERMISSION_KEYS = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
-const FORBIDDEN_MESSAGE = 'Only administrators can access Management meeting notes.'
+const FORBIDDEN_MESSAGE = 'Only administrators can access David Buttemer meeting notes.'
 
 function normalizePermissions(permissions) {
   if (!permissions) return []
@@ -961,7 +961,7 @@ async function handler(req, res) {
           priorCommentAuthorIds: subscriberIds,
           priorCommentTexts,
           authorName,
-          contextTitle: 'Meeting notes (Management)',
+          contextTitle: 'Meeting notes (David Buttemer)',
           link: notifyLink,
           metadata: {
             source: 'meeting_notes',

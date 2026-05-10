@@ -12,7 +12,7 @@ const MANAGEMENT_TEAM_ID = 'management'
 const SUPER_ADMIN_ROLES = new Set(['superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const ADMIN_PERMISSION_KEYS = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
-const MANAGEMENT_FORBIDDEN_MESSAGE = 'Only administrators can access the Management team.'
+const MANAGEMENT_FORBIDDEN_MESSAGE = 'Only administrators can access the David Buttemer team.'
 
 const isManagementTeam = (team) => {
   if (!team) return false
@@ -523,7 +523,7 @@ async function handler(req, res) {
         }
 
         if (isManagementTeam(teamId)) {
-          return res.status(403).json({ error: 'Cannot delete the Management team' })
+          return res.status(403).json({ error: 'Cannot delete the David Buttemer team' })
         }
 
         const existingTeam = await prisma.team.findUnique({

@@ -40,7 +40,7 @@ const isAdminFromUser = (user) => {
 
 // Department definitions - matching API and Teams configuration
 const DEPARTMENTS = [
-    { id: 'management', name: 'Management', icon: 'fa-user-tie', color: 'blue' },
+    { id: 'management', name: 'David Buttemer', icon: 'fa-user-tie', color: 'blue' },
     { id: 'compliance', name: 'Compliance', icon: 'fa-shield-alt', color: 'red' },
     { id: 'finance', name: 'Finance', icon: 'fa-coins', color: 'yellow' },
     { id: 'technical', name: 'Technical', icon: 'fa-tools', color: 'primary' },
@@ -4118,7 +4118,7 @@ const ManagementMeetingNotes = () => {
                   commentContext.type === 'department' ? 'departmentNotesId' : 
                   'actionItemId']: commentContext.id
             };
-            // Deep link for email/in-app notifications (Teams → Management → meeting-notes)
+            // Deep link for email/in-app notifications (Teams → David Buttemer → meeting-notes)
             commentData.link = buildMeetingNotesClientDeepLink({
                 selectedMonth,
                 selectedWeek,
@@ -4439,7 +4439,7 @@ const ManagementMeetingNotes = () => {
                     <i className={`fas fa-lock text-4xl mb-3 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}></i>
                     <h2 className="text-sm font-semibold mb-2">Access Restricted</h2>
                     <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                        Only administrators can view the Management meeting notes.
+                        Only administrators can view the David Buttemer meeting notes.
                     </p>
                 </div>
             </div>
@@ -4470,7 +4470,7 @@ const ManagementMeetingNotes = () => {
                         <div className="flex items-center gap-3">
                             <h2 className={`text-xl font-bold mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                 <i className="fas fa-clipboard-list mr-2 text-primary-600"></i>
-                                Management Meeting Notes
+                                David Buttemer Meeting Notes
                             </h2>
                         </div>
                         <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
@@ -4948,8 +4948,8 @@ const ManagementMeetingNotes = () => {
                             className="inline-grid gap-4"
                             style={{
                                 gridTemplateColumns: `repeat(${weeks.length + 1}, ${meetingNotesGridColumnWidth})`,
-                                gridTemplateRows: `minmax(260px, auto) repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
-                                alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with Management
+                                gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
+                                alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with David Buttemer
                                 gridAutoFlow: 'row' // Ensure items flow row by row
                             }}
                         >
@@ -4959,7 +4959,7 @@ const ManagementMeetingNotes = () => {
                                     gridRow: 1,
                                     gridColumn: `${getMonthlyGoalsGridColumn()}`
                                 }}
-                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center ${stickyMonthlyGoalsBodyCol} ${
+                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center self-start w-full min-w-0 min-h-[8rem] ${stickyMonthlyGoalsBodyCol} ${
                                     isDark ? 'border-slate-600' : 'border-slate-300 bg-slate-50'
                                 }`}
                             >
@@ -4988,7 +4988,7 @@ const ManagementMeetingNotes = () => {
                                             gridRow: 1,
                                             gridColumn: `${getWeekGridColumn(gmWeekIndex)}`
                                         }}
-                                        className={`rounded-xl border-2 p-4 flex flex-col h-full transition-all duration-200 ${
+                                        className={`rounded-xl border-2 p-4 flex flex-col self-start w-full min-w-0 transition-all duration-200 ${
                                             gmSelected
                                                 ? isDark
                                                     ? 'border-primary-500/80 bg-slate-800/90 shadow-lg shadow-primary-900/30'
@@ -5022,10 +5022,10 @@ const ManagementMeetingNotes = () => {
                                                 </button>
                                             )}
                                         </div>
-                                        <div className="flex-grow min-h-0 flex flex-col">
+                                        <div className="flex flex-col min-w-0">
                                             {week?.id && window.RichTextEditor ? (
                                                 <div
-                                                    className="flex-grow min-h-0"
+                                                    className="min-w-0"
                                                     onFocusCapture={() => {
                                                         generalMinutesEditingWeekIdRef.current = week.id;
                                                     }}
@@ -5041,6 +5041,9 @@ const ManagementMeetingNotes = () => {
                                                         placeholder="Weekly minutes — agenda, decisions, shared notes for this week."
                                                         rows={6}
                                                         compact
+                                                        autoGrow
+                                                        maxEditorHeight="min(82vh, 900px)"
+                                                        tableTools
                                                         isDark={isDark}
                                                     />
                                                 </div>
@@ -5056,7 +5059,7 @@ const ManagementMeetingNotes = () => {
                                                         generalMinutesEditingWeekIdRef.current = week.id;
                                                     }}
                                                     placeholder="Weekly minutes..."
-                                                    className={`w-full flex-grow min-h-[140px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                    className={`w-full min-h-[6.75rem] max-h-[min(82vh,900px)] resize-y overflow-y-auto p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                                     rows={6}
                                                 />
                                             ) : (

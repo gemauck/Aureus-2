@@ -352,7 +352,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
             }
             if (!appendedWhereBlock && (metadataObj.source === 'meeting_notes' || metadataObj.type === 'week_created')) {
                 const deptId = metadataObj.departmentId != null ? String(metadataObj.departmentId).trim() : '';
-                const parts = ['Teams', 'Management', 'Meeting notes'];
+                const parts = ['Teams', 'David Buttemer', 'Meeting notes'];
                 if (metadataObj.monthKey) parts.push(String(metadataObj.monthKey));
                 if (metadataObj.weekKey) parts.push(String(metadataObj.weekKey));
                 if (deptId) parts.push(deptId);

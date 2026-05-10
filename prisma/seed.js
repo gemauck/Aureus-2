@@ -45,7 +45,7 @@ async function main() {
   const teamsData = [
     { 
       id: 'management', 
-      name: 'Management', 
+      name: 'David Buttemer', 
       icon: 'fa-user-tie', 
       color: 'blue',
       description: 'Executive leadership and strategic planning',

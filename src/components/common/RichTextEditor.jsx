@@ -2,6 +2,124 @@
 const { useState, useRef, useEffect, useLayoutEffect, useCallback } = React;
 
 /** Basic colours — shown in a popover from one toolbar button (avoids a busy inline row in dense grids). */
+/** --- Table helpers (contenteditable `<table>` — insert & structural edits) --- */
+function richEditorBuildTableHtml(rows, cols) {
+    const r = Math.min(20, Math.max(2, Number(rows) || 3));
+    const c = Math.min(20, Math.max(2, Number(cols) || 3));
+    let html = '<table><tbody>';
+    for (let i = 0; i < r; i++) {
+        html += '<tr>';
+        for (let j = 0; j < c; j++) {
+            html += '<td><br></td>';
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    return html;
+}
+
+function richEditorGetContainingCell(editorRoot, node) {
+    let el = node && node.nodeType === 3 ? node.parentElement : node;
+    while (el && el !== editorRoot) {
+        const tag = el.tagName;
+        if (tag === 'TD' || tag === 'TH') return el;
+        el = el.parentElement;
+    }
+    return null;
+}
+
+function richEditorGetTableContext(editorRoot) {
+    if (!editorRoot) return null;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const cell = richEditorGetContainingCell(editorRoot, sel.anchorNode);
+    if (!cell) return null;
+    const tr = cell.parentElement;
+    const table = cell.closest('table');
+    if (!table || !editorRoot.contains(table)) return null;
+    return { table, cell, tr, rowIndex: tr.rowIndex, colIndex: cell.cellIndex };
+}
+
+function richEditorTableCellsInOrder(table) {
+    const out = [];
+    for (let r = 0; r < table.rows.length; r++) {
+        const row = table.rows[r];
+        for (let c = 0; c < row.cells.length; c++) {
+            out.push(row.cells[c]);
+        }
+    }
+    return out;
+}
+
+function richEditorInsertTableAtCursor(html) {
+    try {
+        return document.execCommand('insertHTML', false, html);
+    } catch (_) {
+        return false;
+    }
+}
+
+function richEditorAddRow(ctx, where) {
+    const { table, tr } = ctx;
+    const idx = tr.rowIndex;
+    const n = tr.cells.length;
+    const insertAt = where === 'above' ? idx : idx + 1;
+    const newRow = table.insertRow(insertAt);
+    for (let i = 0; i < n; i++) {
+        const cell = newRow.insertCell();
+        cell.innerHTML = '<br>';
+    }
+}
+
+function richEditorAddColumn(ctx, side) {
+    const { table, cell } = ctx;
+    const ci = cell.cellIndex;
+    const insertBefore = side === 'left' ? ci : ci + 1;
+    for (let r = 0; r < table.rows.length; r++) {
+        const row = table.rows[r];
+        const newCell = row.insertCell(insertBefore);
+        newCell.innerHTML = '<br>';
+    }
+}
+
+function richEditorDeleteRow(ctx) {
+    const { table, tr } = ctx;
+    if (table.rows.length <= 1) {
+        table.remove();
+    } else {
+        table.deleteRow(tr.rowIndex);
+    }
+}
+
+function richEditorDeleteColumn(ctx) {
+    const { table, cell } = ctx;
+    const ci = cell.cellIndex;
+    for (let r = 0; r < table.rows.length; r++) {
+        const row = table.rows[r];
+        if (row.cells[ci]) {
+            row.deleteCell(ci);
+        }
+    }
+    // Drop empty table shells
+    if (table.rows.length === 0 || (table.rows[0] && table.rows[0].cells.length === 0)) {
+        table.remove();
+    }
+}
+
+function richEditorDeleteTable(ctx) {
+    ctx.table.remove();
+}
+
+function richEditorMoveCaretToCell(cell, collapseToEnd) {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(!collapseToEnd);
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+}
+
 const BASIC_TEXT_COLORS = [
     { color: '#000000', label: 'Black' },
     { color: '#6b7280', label: 'Gray' },
@@ -26,7 +144,13 @@ const RichTextEditor = ({
     id = null,
     name = null,
     /** Dense layout: small toolbar buttons, tighter padding (e.g. tracker grid cells). */
-    compact = false
+    compact = false,
+    /** With `compact`, grow editor height with content between min (`rows`) and `maxEditorHeight` instead of a fixed row box. */
+    autoGrow = false,
+    /** CSS length for max editor body height when `autoGrow` is true (caps at roughly one screen). */
+    maxEditorHeight = 'min(85vh, 900px)',
+    /** Insert table and edit rows/columns (toolbar popover + Tab between cells). */
+    tableTools = false
 }) => {
     const editorRef = useRef(null);
     // Use a ref to store the actual DOM value - this is the source of truth when focused
@@ -49,6 +173,13 @@ const RichTextEditor = ({
     const lastOutgoingHtmlRef = useRef(value || '');
     const [colorMenuOpen, setColorMenuOpen] = useState(false);
     const colorMenuWrapRef = useRef(null);
+    const [tableMenuOpen, setTableMenuOpen] = useState(false);
+    const tableMenuWrapRef = useRef(null);
+    const frozenTableContextRef = useRef(null);
+    const [tableInsertRows, setTableInsertRows] = useState(3);
+    const [tableInsertCols, setTableInsertCols] = useState(3);
+    /** While table menu is open, reflects cursor-in-table for edit actions (updates on selectionchange). */
+    const [tableMenuCtx, setTableMenuCtx] = useState(null);
     const savedRangeForColorRef = useRef(null);
 
     const saveSelectionForColor = useCallback(() => {
@@ -728,6 +859,45 @@ const RichTextEditor = ({
         };
     }, [colorMenuOpen]);
 
+    useEffect(() => {
+        if (!tableMenuOpen) return undefined;
+        const onDocMouseDown = (e) => {
+            if (tableMenuWrapRef.current && !tableMenuWrapRef.current.contains(e.target)) {
+                setTableMenuOpen(false);
+            }
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') setTableMenuOpen(false);
+        };
+        document.addEventListener('mousedown', onDocMouseDown, true);
+        document.addEventListener('keydown', onKey, true);
+        return () => {
+            document.removeEventListener('mousedown', onDocMouseDown, true);
+            document.removeEventListener('keydown', onKey, true);
+        };
+    }, [tableMenuOpen]);
+
+    useEffect(() => {
+        if (!tableMenuOpen) {
+            setTableMenuCtx(null);
+        }
+    }, [tableMenuOpen]);
+
+    useEffect(() => {
+        if (!tableTools || !tableMenuOpen || !editorRef.current) return undefined;
+        const refresh = () => {
+            if (!editorRef.current) return;
+            const ctx = richEditorGetTableContext(editorRef.current);
+            setTableMenuCtx(ctx);
+            if (ctx) {
+                frozenTableContextRef.current = ctx;
+            }
+        };
+        document.addEventListener('selectionchange', refresh);
+        refresh();
+        return () => document.removeEventListener('selectionchange', refresh);
+    }, [tableTools, tableMenuOpen]);
+
     /** Toolbar execCommand: notify parent immediately so value prop does not stomp colour. Typing: debounce. */
     const handleInput = (immediate = false) => {
         if (!editorRef.current) return;
@@ -775,6 +945,27 @@ const RichTextEditor = ({
             }
             window[timeoutKey] = null;
         }, 2000);
+    };
+
+    const applyTableOp = (fn) => {
+        if (!editorRef.current) return;
+        const ctx = richEditorGetTableContext(editorRef.current) || frozenTableContextRef.current;
+        if (!ctx) return;
+        editorRef.current.focus();
+        fn(ctx);
+        const next = richEditorGetTableContext(editorRef.current);
+        frozenTableContextRef.current = next;
+        setTableMenuCtx(next);
+        handleInput(true);
+    };
+
+    const insertTableGrid = (rows, cols) => {
+        if (!editorRef.current) return;
+        editorRef.current.focus();
+        const html = richEditorBuildTableHtml(rows, cols);
+        richEditorInsertTableAtCursor(html);
+        handleInput(true);
+        setTableMenuOpen(false);
     };
 
     const handleCommand = (command, value = null) => {
@@ -896,6 +1087,7 @@ const RichTextEditor = ({
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            setTableMenuOpen(false);
                             setColorMenuOpen((open) => !open);
                         }}
                         className={
@@ -957,6 +1149,274 @@ const RichTextEditor = ({
                 {getToolbarButton('fa-align-left', 'justifyLeft', 'Align Left')}
                 {getToolbarButton('fa-align-center', 'justifyCenter', 'Align Center')}
                 {getToolbarButton('fa-align-right', 'justifyRight', 'Align Right')}
+                {tableTools ? (
+                    <>
+                        {tbDivider}
+                        <div className="relative shrink-0" ref={tableMenuWrapRef}>
+                            <button
+                                type="button"
+                                title="Table — insert and edit"
+                                aria-label="Table — insert and edit"
+                                aria-expanded={tableMenuOpen}
+                                aria-haspopup="true"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    const ctx = editorRef.current ? richEditorGetTableContext(editorRef.current) : null;
+                                    frozenTableContextRef.current = ctx;
+                                    setTableMenuCtx(ctx);
+                                    setColorMenuOpen(false);
+                                    setTableMenuOpen((open) => !open);
+                                }}
+                                className={
+                                    compact
+                                        ? `p-0.5 rounded-sm leading-none hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${tableMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
+                                        : `p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${tableMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
+                                }
+                            >
+                                <i className={`fas fa-table ${compact ? 'text-[10px]' : 'text-sm'}`} />
+                            </button>
+                            {tableMenuOpen ? (
+                                <div
+                                    className={`absolute left-0 top-full z-[300] mt-0.5 w-[min(18rem,calc(100vw-1.5rem))] max-h-[min(70vh,24rem)] overflow-y-auto rounded-md border p-2 shadow-lg ${
+                                        isDark ? 'bg-slate-800 border-slate-600' : 'bg-white border-gray-200'
+                                    }`}
+                                    role="menu"
+                                    aria-label="Table tools"
+                                >
+                                    <div
+                                        className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
+                                    >
+                                        Insert grid
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                        {[
+                                            [3, 3],
+                                            [4, 4],
+                                            [2, 6]
+                                        ].map(([r, c]) => (
+                                            <button
+                                                key={`${r}x${c}`}
+                                                type="button"
+                                                role="menuitem"
+                                                title={`Insert ${r}×${c} table`}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    insertTableGrid(r, c);
+                                                }}
+                                                className={`rounded font-medium ${
+                                                    compact
+                                                        ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`
+                                                        : `px-2 py-1 text-xs ${isDark ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`
+                                                }`}
+                                            >
+                                                {r}×{c}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className={`flex items-center gap-1 mb-2 flex-wrap ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                                        <label className="sr-only" htmlFor="rte-table-rows">
+                                            Rows
+                                        </label>
+                                        <input
+                                            id="rte-table-rows"
+                                            type="number"
+                                            min={2}
+                                            max={20}
+                                            value={tableInsertRows}
+                                            onChange={(e) => setTableInsertRows(Number(e.target.value) || 2)}
+                                            className={`w-11 rounded border px-1 py-0.5 text-xs tabular-nums ${
+                                                isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-gray-300 bg-white'
+                                            }`}
+                                        />
+                                        <span className="text-xs">×</span>
+                                        <label className="sr-only" htmlFor="rte-table-cols">
+                                            Columns
+                                        </label>
+                                        <input
+                                            id="rte-table-cols"
+                                            type="number"
+                                            min={2}
+                                            max={20}
+                                            value={tableInsertCols}
+                                            onChange={(e) => setTableInsertCols(Number(e.target.value) || 2)}
+                                            className={`w-11 rounded border px-1 py-0.5 text-xs tabular-nums ${
+                                                isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-gray-300 bg-white'
+                                            }`}
+                                        />
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            title="Insert table with custom size"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                insertTableGrid(tableInsertRows, tableInsertCols);
+                                            }}
+                                            className={`ml-auto rounded font-medium ${
+                                                compact
+                                                    ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-primary-600 hover:bg-primary-500 text-white' : 'bg-primary-600 hover:bg-primary-500 text-white'}`
+                                                    : `px-2 py-1 text-xs ${isDark ? 'bg-primary-600 hover:bg-primary-500 text-white' : 'bg-primary-600 hover:bg-primary-500 text-white'}`
+                                            }`}
+                                        >
+                                            Insert
+                                        </button>
+                                    </div>
+                                    <div className={`border-t pt-2 ${isDark ? 'border-slate-600' : 'border-gray-200'}`}>
+                                        <div
+                                            className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
+                                        >
+                                            Current table
+                                        </div>
+                                        {tableMenuCtx ? (
+                                            <div className="grid grid-cols-2 gap-1">
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    title="Add row above"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        applyTableOp((x) => richEditorAddRow(x, 'above'));
+                                                    }}
+                                                    className={`text-left rounded ${
+                                                        compact
+                                                            ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                            : `px-2 py-1 text-xs ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-arrow-up mr-1 opacity-80" />
+                                                    Row above
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    title="Add row below"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        applyTableOp((x) => richEditorAddRow(x, 'below'));
+                                                    }}
+                                                    className={`text-left rounded ${
+                                                        compact
+                                                            ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                            : `px-2 py-1 text-xs ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-arrow-down mr-1 opacity-80" />
+                                                    Row below
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    title="Add column left"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        applyTableOp((x) => richEditorAddColumn(x, 'left'));
+                                                    }}
+                                                    className={`text-left rounded ${
+                                                        compact
+                                                            ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                            : `px-2 py-1 text-xs ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-arrow-left mr-1 opacity-80" />
+                                                    Col left
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    title="Add column right"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        applyTableOp((x) => richEditorAddColumn(x, 'right'));
+                                                    }}
+                                                    className={`text-left rounded ${
+                                                        compact
+                                                            ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                            : `px-2 py-1 text-xs ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-arrow-right mr-1 opacity-80" />
+                                                    Col right
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    title="Delete this row"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        applyTableOp(richEditorDeleteRow);
+                                                    }}
+                                                    className={`text-left rounded ${
+                                                        compact
+                                                            ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-red-900/40 hover:bg-red-900/60' : 'bg-red-50 hover:bg-red-100 text-red-900'}`
+                                                            : `px-2 py-1 text-xs ${isDark ? 'bg-red-900/40 hover:bg-red-900/60' : 'bg-red-50 hover:bg-red-100 text-red-900'}`
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-minus mr-1 opacity-80" />
+                                                    Delete row
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    title="Delete this column"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        applyTableOp(richEditorDeleteColumn);
+                                                    }}
+                                                    className={`text-left rounded ${
+                                                        compact
+                                                            ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-red-900/40 hover:bg-red-900/60' : 'bg-red-50 hover:bg-red-100 text-red-900'}`
+                                                            : `px-2 py-1 text-xs ${isDark ? 'bg-red-900/40 hover:bg-red-900/60' : 'bg-red-50 hover:bg-red-100 text-red-900'}`
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-grip-lines-vertical mr-1 opacity-80" />
+                                                    Delete column
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    title="Remove entire table"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        applyTableOp(richEditorDeleteTable);
+                                                    }}
+                                                    className={`col-span-2 text-left rounded ${
+                                                        compact
+                                                            ? `px-1.5 py-0.5 text-[10px] ${isDark ? 'bg-red-900/50 hover:bg-red-900/70' : 'bg-red-100 hover:bg-red-200 text-red-900'}`
+                                                            : `px-2 py-1 text-xs ${isDark ? 'bg-red-900/50 hover:bg-red-900/70' : 'bg-red-100 hover:bg-red-200 text-red-900'}`
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-trash-alt mr-1 opacity-80" />
+                                                    Delete entire table
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <p className={`text-[10px] leading-snug ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                Click in a table cell, then use the buttons above — or insert a new grid.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    </>
+                ) : null}
             </div>
 
             {/* Editor */}
@@ -1053,6 +1513,21 @@ const RichTextEditor = ({
                     }
                 }}
                 onKeyDown={(e) => {
+                    if (tableTools && e.key === 'Tab' && editorRef.current) {
+                        const ctx = richEditorGetTableContext(editorRef.current);
+                        if (ctx) {
+                            e.preventDefault();
+                            const cells = richEditorTableCellsInOrder(ctx.table);
+                            const idx = cells.indexOf(ctx.cell);
+                            if (idx === -1) return;
+                            const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
+                            if (nextIdx >= 0 && nextIdx < cells.length) {
+                                richEditorMoveCaretToCell(cells[nextIdx], false);
+                                editorRef.current.focus();
+                            }
+                            return;
+                        }
+                    }
                     // Prevent form submission on Enter (unless in a list)
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                         // Allow Ctrl/Cmd+Enter for line breaks
@@ -1085,13 +1560,31 @@ const RichTextEditor = ({
                     document.execCommand('insertText', false, text);
                 }}
                 className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} outline-none cursor-text ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
-                style={{ 
-                    minHeight: compact ? `${Math.max(rows, 2) * 1.125}rem` : `${rows * 1.5}rem`,
-                    height: compact ? `${Math.max(rows, 2) * 1.125}rem` : undefined,
-                    maxHeight: compact ? `${Math.max(rows, 2) * 1.125}rem` : '400px',
-                    overflowY: 'auto',
-                    cursor: 'text'
-                }}
+                style={
+                    compact && autoGrow
+                        ? {
+                              minHeight: `${Math.max(rows, 2) * 1.125}rem`,
+                              height: 'auto',
+                              maxHeight: maxEditorHeight,
+                              overflowY: 'auto',
+                              cursor: 'text'
+                          }
+                        : compact
+                          ? {
+                                minHeight: `${Math.max(rows, 2) * 1.125}rem`,
+                                height: `${Math.max(rows, 2) * 1.125}rem`,
+                                maxHeight: `${Math.max(rows, 2) * 1.125}rem`,
+                                overflowY: 'auto',
+                                cursor: 'text'
+                            }
+                          : {
+                                minHeight: `${rows * 1.5}rem`,
+                                height: undefined,
+                                maxHeight: autoGrow ? maxEditorHeight : '400px',
+                                overflowY: 'auto',
+                                cursor: 'text'
+                            }
+                }
                 data-placeholder={placeholder}
                 suppressContentEditableWarning
             />
@@ -1147,6 +1640,24 @@ const RichTextEditor = ({
                 }
                 [contenteditable] u {
                     text-decoration: underline;
+                }
+                [contenteditable] table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    max-width: 100%;
+                    margin: 0.5rem 0;
+                    table-layout: auto;
+                }
+                [contenteditable] td,
+                [contenteditable] th {
+                    border: 1px solid ${isDark ? '#475569' : '#d1d5db'};
+                    padding: 0.25rem 0.45rem;
+                    min-width: 2rem;
+                    vertical-align: top;
+                }
+                [contenteditable] th {
+                    font-weight: 600;
+                    background: ${isDark ? 'rgba(51, 65, 85, 0.45)' : '#f8fafc'};
                 }
             `}</style>
 

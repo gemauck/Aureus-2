@@ -680,7 +680,7 @@ const Teams = () => {
     const handleSelectTeam = useCallback((team) => {
         if (!isTeamAccessible(team.id)) {
             if (typeof window.alert === 'function') {
-                window.alert('Only administrators can access the Management team.');
+                window.alert('Only administrators can access the David Buttemer team.');
             }
             return;
         }
