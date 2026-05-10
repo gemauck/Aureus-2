@@ -4938,7 +4938,7 @@ const ManagementMeetingNotes = () => {
 
                     <div
                         ref={meetingNotesHorizontalScrollRef}
-                        className="overflow-x-auto pb-2 space-y-4"
+                        className="overflow-x-auto overflow-y-clip pb-2 space-y-4"
                     >
                         <div
                             className={`sticky top-4 z-30 -mx-0.5 px-0.5 py-1 ${isDark ? 'bg-slate-900' : 'bg-white'}`}
