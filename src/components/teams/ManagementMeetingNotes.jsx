@@ -1457,9 +1457,13 @@ const ManagementMeetingNotes = () => {
             return;
         }
 
-        // Fallback to current week (based on actual date) or first week
+        // Fallback: auto-navigate to the week containing today (Mon–Thu), or the *next* week in the
+        // grid on Fri–Sun (local time), when no explicit URL/week selection applies above.
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        const dow = today.getDay(); // 0 Sun … 6 Sat
+        const preferNextWeek = dow === 0 || dow === 5 || dow === 6;
+
         const matchedWeek =
             weeks.find((week) => {
                 if (!week) {
@@ -1480,9 +1484,18 @@ const ManagementMeetingNotes = () => {
                 return today >= startOfDay && today <= endOfDay;
             }) || null;
 
-        const fallbackWeek = matchedWeek || weeks[0];
-        const fallbackIndex = weeks.indexOf(fallbackWeek);
-        const fallbackId = getWeekId(fallbackWeek, fallbackIndex);
+        let targetWeek = matchedWeek || weeks[0];
+        let targetIndex = weeks.indexOf(targetWeek);
+
+        if (matchedWeek && preferNextWeek) {
+            const idx = weeks.indexOf(matchedWeek);
+            if (idx >= 0 && idx < weeks.length - 1) {
+                targetWeek = weeks[idx + 1];
+                targetIndex = idx + 1;
+            }
+        }
+
+        const fallbackId = getWeekId(targetWeek, targetIndex >= 0 ? targetIndex : 0);
         if (fallbackId && fallbackId !== selectedWeek) {
             setSelectedWeek(fallbackId);
         }
