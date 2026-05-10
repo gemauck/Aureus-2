@@ -4207,7 +4207,7 @@ const ManagementMeetingNotes = () => {
                   commentContext.type === 'department' ? 'departmentNotesId' : 
                   'actionItemId']: commentContext.id
             };
-            // Deep link for email/in-app notifications (Teams → David Buttemer → meeting-notes)
+            // Deep link for email/in-app notifications (Teams → management → meeting-notes)
             commentData.link = buildMeetingNotesClientDeepLink({
                 selectedMonth,
                 selectedWeek,
@@ -4528,7 +4528,7 @@ const ManagementMeetingNotes = () => {
                     <i className={`fas fa-lock text-4xl mb-3 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}></i>
                     <h2 className="text-sm font-semibold mb-2">Access Restricted</h2>
                     <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                        Only administrators can view the David Buttemer meeting notes.
+                        Only administrators can view the management meeting notes.
                     </p>
                 </div>
             </div>
@@ -4559,7 +4559,7 @@ const ManagementMeetingNotes = () => {
                         <div className="flex items-center gap-3">
                             <h2 className={`text-xl font-bold mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                 <i className="fas fa-clipboard-list mr-2 text-primary-600"></i>
-                                David Buttemer Meeting Notes
+                                Management Meeting Notes
                             </h2>
                         </div>
                         <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>

@@ -1,5 +1,5 @@
 /**
- * Deep links for David Buttemer Meeting Notes (Teams → management → meeting-notes).
+ * Deep links for Management Meeting Notes (Teams → management → meeting-notes).
  * Hash format: #/teams/management?tab=meeting-notes&team=management&month=&week=&…
  */
 
