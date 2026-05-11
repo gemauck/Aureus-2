@@ -5354,8 +5354,9 @@ const ManagementMeetingNotes = () => {
                     </div>
 
                     <div className="min-w-0 pb-2 space-y-4">
+                        {/* Offset matches MainLayout main#page-scroll: py-4 sm:p-6 so the bar sits flush under the app header when stuck */}
                         <div
-                            className={`sticky top-0 z-40 -mx-0.5 border-b px-0 py-0 shadow-sm backdrop-blur-md ${
+                            className={`sticky z-40 -top-4 sm:-top-6 -mx-0.5 border-b px-0 py-0 shadow-sm backdrop-blur-md ${
                                 isDark
                                     ? 'border-slate-800/80 bg-slate-900/95 supports-[backdrop-filter]:bg-slate-900/80'
                                     : 'border-slate-200/90 bg-white/95 supports-[backdrop-filter]:bg-white/85'
