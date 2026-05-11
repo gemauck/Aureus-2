@@ -5402,9 +5402,9 @@ const ManagementMeetingNotes = () => {
                                 ref={meetingNotesHeaderScrollRef}
                                 className="meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--header -mx-0.5 overflow-x-auto overflow-y-hidden"
                             >
-                            {/* Same column gap as body grid so scrollWidth matches and synced scrollLeft stays column-aligned */}
+                            {/* Same column gap as body grid; items-stretch + min-h keeps every date header the same height (no “staircase”). */}
                             <div
-                                className="inline-grid gap-4 sm:gap-5 py-1.5"
+                                className="inline-grid items-stretch gap-4 sm:gap-5 pb-1"
                                 style={{
                                     gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
                                     gridTemplateRows: 'auto'
@@ -5417,26 +5417,23 @@ const ManagementMeetingNotes = () => {
                                         gridRow: '1',
                                         gridColumn: `${getMonthlyGoalsGridColumn()}`
                                     }}
-                                    className={`rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
+                                    className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
                                         isDark
                                             ? 'border-slate-600/90 bg-slate-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
                                             : 'border-slate-200/90 bg-white shadow-sm'
                                     }`}
                                 >
-                                    <div className="flex items-center justify-between gap-2 min-h-0">
-                                        <div className="flex-1 min-w-0">
+                                    <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
                                             <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                                 Monthly goals
                                             </p>
-                                            <h3 className={`text-sm font-bold flex items-center gap-1.5 truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                            <h3 className={`text-sm font-bold leading-tight flex items-center gap-1.5 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                                 <i className={`fas fa-bullseye shrink-0 text-xs ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
-                                                <span className="truncate">Department focus</span>
+                                                <span className="line-clamp-2 break-words">Department focus</span>
                                             </h3>
                                         </div>
                                     </div>
-                                    <p className={`hidden text-[10px] leading-snug mt-1 line-clamp-1 md:block ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-                                        Month-level targets per department.
-                                    </p>
                                 </div>
 
                                 {/* Week headers row — columns 2+ */}
@@ -5454,7 +5451,7 @@ const ManagementMeetingNotes = () => {
                                                 gridRow: '1',
                                                 gridColumn: `${getWeekGridColumn(index)}`
                                             }}
-                                            className={`rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow,background-color] duration-200 ${
+                                            className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow,background-color] duration-200 ${
                                                 isActualCurrentWeek
                                                     ? isDark
                                                         ? 'border-primary-500/70 ring-1 ring-inset ring-primary-500/20 shadow-sm bg-slate-900/80'
@@ -5472,17 +5469,17 @@ const ManagementMeetingNotes = () => {
                                                                 : 'border-slate-200/90 bg-white hover:border-slate-300'
                                             }`}
                                         >
-                                            <div className="flex items-center justify-between gap-2 min-h-0">
-                                                <div className="flex-1 min-w-0">
+                                            <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
+                                                <div className="min-w-0 flex-1">
                                                     <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                                         Week
                                                     </p>
-                                                    <h3 className={`text-sm font-bold flex items-center gap-1.5 min-w-0 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                                        <i className={`fas fa-calendar-week shrink-0 text-xs ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
-                                                        <span className="truncate">{formatWeek(week.weekKey, week.weekStart)}</span>
+                                                    <h3 className={`text-sm font-bold leading-tight flex items-start gap-1.5 min-w-0 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                        <i className={`fas fa-calendar-week mt-0.5 shrink-0 text-xs ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
+                                                        <span className="line-clamp-2 min-w-0 break-words">{formatWeek(week.weekKey, week.weekStart)}</span>
                                                     </h3>
                                                 </div>
-                                                <div className="flex shrink-0 items-center">
+                                                <div className="flex shrink-0 items-center self-center">
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -5509,13 +5506,13 @@ const ManagementMeetingNotes = () => {
                             ref={meetingNotesHorizontalScrollRef}
                             className="meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--body overflow-x-auto sm:overflow-x-scroll touch-pan-x"
                         >
-                        <div 
-                            className="inline-grid gap-4 sm:gap-5"
+                        <div
+                            className="inline-grid items-stretch gap-4 sm:gap-5"
                             style={{
                                 gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
                                 gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
-                                alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with David Buttemer
-                                gridAutoFlow: 'row' // Ensure items flow row by row
+                                alignItems: 'stretch',
+                                gridAutoFlow: 'row'
                             }}
                         >
                             <div
@@ -5524,7 +5521,7 @@ const ManagementMeetingNotes = () => {
                                     gridRow: 1,
                                     gridColumn: `${getMonthlyGoalsGridColumn()}`
                                 }}
-                                className={`rounded-2xl border border-dashed p-5 flex flex-col justify-center self-stretch min-h-[8rem] h-full w-full min-w-0 overflow-hidden relative z-[27] isolate ${stickyMonthlyGoalsBodyCol} ${
+                                className={`relative z-[27] isolate flex h-full min-h-[8rem] w-full min-w-0 flex-col justify-start self-stretch overflow-hidden rounded-2xl border border-dashed p-4 sm:p-5 ${stickyMonthlyGoalsBodyCol} ${
                                     isDark
                                         ? 'border-slate-600/70 bg-slate-900/25 text-slate-400'
                                         : 'border-slate-300/90 bg-slate-50/50 text-slate-600'
@@ -5560,7 +5557,7 @@ const ManagementMeetingNotes = () => {
                                             gridRow: 1,
                                             gridColumn: `${getWeekGridColumn(gmWeekIndex)}`
                                         }}
-                                        className={`relative z-0 rounded-2xl border p-4 sm:p-5 flex flex-col self-start w-full min-w-0 overflow-hidden transition-[box-shadow,border-color,transform] duration-200 ${
+                                        className={`relative z-0 flex h-full min-h-0 w-full min-w-0 flex-col self-stretch overflow-hidden rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color,transform] duration-200 ${
                                             gmSelected
                                                 ? isDark
                                                     ? 'border-primary-500/60 bg-slate-900/60 shadow-lg shadow-black/30 ring-1 ring-primary-500/25'
@@ -5571,7 +5568,7 @@ const ManagementMeetingNotes = () => {
                                         }`}
                                     >
                                         <div
-                                            className={`mb-4 border-b border-dashed pb-3 ${
+                                            className={`mb-4 shrink-0 border-b border-dashed pb-3 ${
                                                 isDark ? 'border-slate-600/60' : 'border-slate-200/80'
                                             }`}
                                         >
@@ -5584,10 +5581,10 @@ const ManagementMeetingNotes = () => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="flex flex-col min-w-0">
+                                        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                             {week?.id && window.RichTextEditor ? (
                                                 <div
-                                                    className="min-w-0"
+                                                    className="min-h-0 min-w-0 flex-1"
                                                     onFocusCapture={() => {
                                                         generalMinutesEditingWeekIdRef.current = week.id;
                                                     }}
