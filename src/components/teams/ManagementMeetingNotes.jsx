@@ -1539,35 +1539,79 @@ const ManagementMeetingNotes = () => {
             if (week.id) return week.id;
             return `week-${index}`;
         };
-        
-        // Get current week keys for comparison
-        const currentWeekKeys = Array.isArray(weeks) && weeks.length > 0
-            ? weeks.map((week, index) => getWeekId(week, index)).filter(Boolean).sort().join(',')
-            : '';
-        
-        // Skip validation if weeks array content hasn't changed (only reference changed)
-        // This prevents unnecessary state updates when data refreshes but content is the same
-        if (previousWeekKeysRef.current === currentWeekKeys && selectedWeek) {
-            // Check if selectedWeek still exists in current weeks (quick validation)
-            const hasSelectedWeek = Array.isArray(weeks) && weeks.length > 0 && weeks.some((week, index) => {
-                const identifier = getWeekId(week, index);
-                return identifier === selectedWeek;
-            });
-            if (hasSelectedWeek) {
-                // Weeks content unchanged and selectedWeek is still valid, skip
-                return;
-            }
-        }
-        
-        // Update ref with current week keys
-        previousWeekKeysRef.current = currentWeekKeys;
-        
+
         if (!Array.isArray(weeks) || weeks.length === 0) {
             if (selectedWeek !== null) {
                 setSelectedWeek(null);
             }
             return;
         }
+
+        // Align with "today" before stable-week fast-path: a valid `week` in the URL (often from
+        // our own history sync) used to short-circuit before Fri–Sun → next week.
+        if (!isBrowserNavigationReload()) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dow = today.getDay();
+            const preferNextWeek = dow === 0 || dow === 5 || dow === 6;
+
+            const weekContainsToday = (week) => {
+                if (!week) {
+                    return false;
+                }
+                const start = week.weekStart ? new Date(week.weekStart) : null;
+                if (!start || Number.isNaN(start.getTime())) {
+                    return false;
+                }
+                const end = week.weekEnd ? new Date(week.weekEnd) : new Date(start);
+                if (Number.isNaN(end.getTime())) {
+                    return false;
+                }
+                const startOfDay = new Date(start);
+                startOfDay.setHours(0, 0, 0, 0);
+                const endOfDay = new Date(end);
+                endOfDay.setHours(23, 59, 59, 999);
+                return today >= startOfDay && today <= endOfDay;
+            };
+
+            const matchedWeekAlign = weeks.find((week) => weekContainsToday(week)) || null;
+
+            if (matchedWeekAlign) {
+                const idx = weeks.indexOf(matchedWeekAlign);
+                const matchedId = getWeekId(matchedWeekAlign, idx >= 0 ? idx : 0);
+
+                if (
+                    preferNextWeek &&
+                    selectedWeek === matchedId &&
+                    idx >= 0 &&
+                    idx < weeks.length - 1
+                ) {
+                    const nextId = getWeekId(weeks[idx + 1], idx + 1);
+                    if (nextId && nextId !== selectedWeek) {
+                        setSelectedWeek(nextId);
+                        return;
+                    }
+                }
+            }
+        }
+
+        const currentWeekKeys = weeks
+            .map((week, index) => getWeekId(week, index))
+            .filter(Boolean)
+            .sort()
+            .join(',');
+
+        if (previousWeekKeysRef.current === currentWeekKeys && selectedWeek) {
+            const hasSelectedWeekEarly = weeks.some((week, index) => {
+                const identifier = getWeekId(week, index);
+                return identifier === selectedWeek;
+            });
+            if (hasSelectedWeekEarly) {
+                return;
+            }
+        }
+
+        previousWeekKeysRef.current = currentWeekKeys;
 
         // Check if selectedWeek from URL exists in weeks
         const weekFromURL = getWeekFromURL();
