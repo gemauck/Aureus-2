@@ -1,7 +1,50 @@
 import {
-  normalizeInventoryItemRow,
-  inventoryRowTotalValueForQuantity
+  normalizeInventoryItemRow as normalizeInventoryItemRowRequire,
+  inventoryRowTotalValueForQuantity as inventoryRowTotalValueForQuantityRequire
 } from '../../utils/manufacturingInventoryValue.js';
+
+/**
+ * Non-bundled JSX compiles `import` to `require()`; index.html stubs `require` with `() => ({})`,
+ * so named imports are undefined in the browser unless the util script ran and exposed window.*.
+ * Prefer real imports when present, then window (script tag), then inline (last resort).
+ */
+function inventoryLineTotalValueInline(quantity, unitCost) {
+  return (Number(quantity) || 0) * (Number(unitCost) || 0);
+}
+
+function normalizeInventoryItemRowInline(item) {
+  if (!item || typeof item !== 'object') return item;
+  return {
+    ...item,
+    totalValue:
+      item.totalValue !== undefined && item.totalValue !== null
+        ? Number(item.totalValue) || 0
+        : inventoryLineTotalValueInline(item.quantity, item.unitCost)
+  };
+}
+
+function inventoryRowTotalValueForQuantityInline(item, quantityForValue) {
+  if (!item || typeof item !== 'object') return 0;
+  const q = Number(quantityForValue);
+  const rowQty = Number(item.quantity) || 0;
+  if (!Number.isFinite(q)) return Number(normalizeInventoryItemRowInline(item).totalValue) || 0;
+  if (Math.abs(q - rowQty) < 1e-6) return Number(normalizeInventoryItemRowInline(item).totalValue) || 0;
+  return inventoryLineTotalValueInline(q, item.unitCost);
+}
+
+const normalizeInventoryItemRow =
+  typeof normalizeInventoryItemRowRequire === 'function'
+    ? normalizeInventoryItemRowRequire
+    : typeof window !== 'undefined' && typeof window.normalizeInventoryItemRow === 'function'
+      ? (item) => window.normalizeInventoryItemRow(item)
+      : normalizeInventoryItemRowInline;
+
+const inventoryRowTotalValueForQuantity =
+  typeof inventoryRowTotalValueForQuantityRequire === 'function'
+    ? inventoryRowTotalValueForQuantityRequire
+    : typeof window !== 'undefined' && typeof window.inventoryRowTotalValueForQuantity === 'function'
+      ? (item, q) => window.inventoryRowTotalValueForQuantity(item, q)
+      : inventoryRowTotalValueForQuantityInline;
 
 // Use React from window
 

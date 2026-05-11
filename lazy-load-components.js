@@ -101,6 +101,8 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         
         // Manufacturing - MOVED from index.html to lazy loading for better performance
         './src/utils/manufacturingStockLocations.js',
+        // Must load before Manufacturing.jsx (stub browser `require` does not resolve ES imports)
+        './src/utils/manufacturingInventoryValue.js',
         './src/components/manufacturing/locations/StockLocations.jsx',
         './src/components/manufacturing/ManufacturingMovementsView.jsx',
         './src/components/manufacturing/StockCountView.jsx',

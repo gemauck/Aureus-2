@@ -81,7 +81,8 @@
         'utils/mentionHelper.js',
         'utils/dieselRefundEvidenceEvaluator.js',
         'utils/manufacturingStockLocations.js',
-        
+        'utils/manufacturingInventoryValue.js',
+
         // Hooks
         'hooks/usePersistence.js',
         
