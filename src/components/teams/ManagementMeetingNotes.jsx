@@ -2209,45 +2209,6 @@ const ManagementMeetingNotes = () => {
         }
     };
 
-    const handleDeleteMonth = async () => {
-        if (!currentMonthlyNotes) return;
-        if (!confirm('Are you sure you want to delete this month and all associated weekly notes, action items, comments, and allocations? This cannot be undone.')) {
-            return;
-        }
-
-        try {
-            setLoading(true);
-            await window.DatabaseAPI.deleteMonthlyNotes({ id: currentMonthlyNotes.id });
-            await reloadMonthlyNotes();
-        } catch (error) {
-            console.error('Error deleting monthly notes:', error);
-            if (typeof alert === 'function') {
-                console.error('Failed to delete monthly meeting notes.');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDeleteAllMonths = async () => {
-        if (!confirm('This will delete ALL meeting notes (months, weeks, action items, comments, and allocations). Are you absolutely sure?')) {
-            return;
-        }
-
-        try {
-            setLoading(true);
-            await window.DatabaseAPI.purgeMeetingNotes();
-            await reloadMonthlyNotes();
-        } catch (error) {
-            console.error('Error purging meeting notes:', error);
-            if (typeof alert === 'function') {
-                console.error('Failed to delete all meeting notes.');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleDeleteWeek = async (week) => {
         if (!week?.id) return;
         if (!confirm('Delete the selected week and all associated department notes, action items, and comments? This cannot be undone.')) {
@@ -4924,34 +4885,6 @@ const ManagementMeetingNotes = () => {
                             >
                                 <i className="fas fa-users mr-1.5"></i>
                                 Allocate Users
-                            </button>
-                        )}
-                        {currentMonthlyNotes && (
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleDeleteMonth();
-                                }}
-                                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm hover:shadow-md font-medium"
-                            >
-                                <i className="fas fa-trash mr-1.5"></i>
-                                Delete Month
-                            </button>
-                        )}
-                        {monthlyNotesList.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleDeleteAllMonths();
-                                }}
-                                className="px-4 py-2 text-sm bg-red-700 text-white rounded-lg hover:bg-red-800 transition shadow-sm hover:shadow-md font-medium"
-                            >
-                                <i className="fas fa-exclamation-triangle mr-1.5"></i>
-                                Delete All
                             </button>
                         )}
                     </div>
