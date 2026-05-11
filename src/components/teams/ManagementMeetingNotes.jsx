@@ -1673,17 +1673,33 @@ const ManagementMeetingNotes = () => {
         const firstId = getWeekIdentifier(firstWeek) || 'week-0';
         const anchor = resolveColumnEl(firstId);
 
+        const headScroller = meetingNotesHeaderScrollRef.current;
+        const applyLeft = (left, behavior) => {
+            const x = Math.max(0, Math.round(left));
+            if (behavior === 'smooth') {
+                scroller.scrollTo({ left: x, behavior: 'smooth' });
+                if (headScroller) {
+                    headScroller.scrollTo({ left: x, behavior: 'smooth' });
+                }
+            } else {
+                scroller.scrollLeft = x;
+                if (headScroller) {
+                    headScroller.scrollLeft = x;
+                }
+            }
+        };
+
         try {
             if (anchor && node !== anchor) {
                 const targetLeft = node.offsetLeft - anchor.offsetLeft;
-                scroller.scrollTo({ left: Math.max(0, Math.round(targetLeft)), behavior: 'smooth' });
+                applyLeft(targetLeft, 'smooth');
                 return;
             }
             if (!anchor) {
                 node.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
                 return;
             }
-            scroller.scrollTo({ left: 0, behavior: 'smooth' });
+            applyLeft(0, 'smooth');
         } catch (error) {
             console.warn('ManagementMeetingNotes: Failed to scroll to week', weekId, error);
             try {
@@ -1724,12 +1740,32 @@ const ManagementMeetingNotes = () => {
             }
             sync(head, body);
         };
-        head.scrollLeft = body.scrollLeft;
+        const alignFromBody = () => {
+            meetingNotesScrollSyncProgrammaticRef.current = true;
+            head.scrollLeft = body.scrollLeft;
+            requestAnimationFrame(() => {
+                meetingNotesScrollSyncProgrammaticRef.current = false;
+            });
+        };
+        alignFromBody();
         body.addEventListener('scroll', onBody, { passive: true });
         head.addEventListener('scroll', onHead, { passive: true });
+        const ro =
+            typeof ResizeObserver !== 'undefined'
+                ? new ResizeObserver(() => {
+                      alignFromBody();
+                  })
+                : null;
+        if (ro) {
+            ro.observe(body);
+            ro.observe(head);
+        }
         return () => {
             body.removeEventListener('scroll', onBody);
             head.removeEventListener('scroll', onHead);
+            if (ro) {
+                ro.disconnect();
+            }
         };
     }, [selectedMonth, weeksNavSignature]);
 
@@ -5366,8 +5402,9 @@ const ManagementMeetingNotes = () => {
                                 ref={meetingNotesHeaderScrollRef}
                                 className="meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--header -mx-0.5 overflow-x-auto overflow-y-hidden"
                             >
-                            <div 
-                                className="inline-grid gap-2 sm:gap-3 py-1.5 px-0.5"
+                            {/* Same column gap as body grid so scrollWidth matches and synced scrollLeft stays column-aligned */}
+                            <div
+                                className="inline-grid gap-4 sm:gap-5 py-1.5"
                                 style={{
                                     gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
                                     gridTemplateRows: 'auto'
