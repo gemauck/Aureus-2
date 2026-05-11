@@ -134,6 +134,22 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     vertical-align: middle;
 }
 
+/* Narrow SKU column: typical codes like SKU0409; ellipsis + title on cell for full value */
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-sku-col,
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td.inventory-desktop-sku-col {
+    width: 4.75rem;
+    max-width: 4.75rem;
+    min-width: 4.75rem;
+    box-sizing: border-box;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-sku-col .inventory-desktop-sku-filter {
+    max-width: 100%;
+    min-width: 0;
+}
+
 /* Top mirror scrollbar: keep horizontal bar usable without eating vertical space */
 .inventory-desktop-xscroll--top {
     max-height: 14px;

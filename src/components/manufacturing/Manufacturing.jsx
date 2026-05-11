@@ -4088,14 +4088,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <thead className="bg-gray-50 border-b border-gray-200">
                 {/* Header Row */}
                 <tr>
-                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
+                  <th className="inventory-desktop-sku-col px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('sku', e)}
-                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      className="flex items-center gap-0.5 hover:text-blue-600 transition-colors cursor-pointer w-full min-w-0 text-left font-medium bg-transparent border-0 p-0"
                       title="Click to sort"
                     >
-                      <span>SKU</span>
+                      <span className="truncate">SKU</span>
                       {getSortIcon('sku')}
                     </button>
                   </th>
@@ -4147,28 +4147,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('quantity')}
                     </button>
                   </th>
-                  <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
-                    <button 
-                      type="button"
-                      onClick={(e) => handleSort('allocated', e)}
-                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
-                      title="Click to sort"
-                    >
-                      <span>Allocated</span>
-                      {getSortIcon('allocated')}
-                    </button>
-                  </th>
-                  <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
-                    <button 
-                      type="button"
-                      onClick={(e) => handleSort('available', e)}
-                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
-                      title="Click to sort"
-                    >
-                      <span>Available</span>
-                      {getSortIcon('available')}
-                    </button>
-                  </th>
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4217,7 +4195,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </tr>
                 {/* Filter Row */}
                 <tr key="inventory-filter-row" className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-3 py-1.5">
+                  <th className="inventory-desktop-sku-col px-3 py-1.5">
                     <input
                       key="filter-sku-input"
                       ref={(el) => { if (el) filterInputRefs.current.sku = el; }}
@@ -4238,7 +4216,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         }, 100);
                       }}
                       onChange={(e) => handleColumnFilterChange('sku', e.target.value, e)}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="inventory-desktop-sku-filter w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
                   <th className="px-3 py-1.5"></th>
@@ -4387,8 +4365,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     />
                   </th>
                   <th className="px-3 py-1.5"></th>
-                  <th className="px-3 py-1.5"></th>
-                  <th className="px-3 py-1.5"></th>
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-location-input"
@@ -4454,7 +4430,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {paginatedInventory.map(item => {
-                  const availableQty = getAvailableInventoryQuantity(item);
                   const lineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
                   return (
                     <tr 
@@ -4462,7 +4437,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => setViewingInventoryItemDetail(item)}
                     >
-                    <td className="px-3 py-1.5 text-xs font-medium text-gray-900">{item.sku}</td>
+                    <td className="inventory-desktop-sku-col px-3 py-1.5 text-xs font-medium text-gray-900" title={item.sku || ''}>{item.sku}</td>
                     <td className="px-3 py-1.5">
                       {item.thumbnail ? (
                         <>
@@ -4557,16 +4532,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <div className="text-[11px] text-gray-500">{item.unit}</div>
                         </>
                       )}
-                    </td>
-                    <td className="px-3 py-1.5 text-right leading-tight">
-                      <div className="text-xs font-medium text-yellow-700">{(item.allocatedQuantity || 0)}</div>
-                      <div className="text-[11px] text-gray-500">{item.unit}</div>
-                    </td>
-                    <td className="px-3 py-1.5 text-right leading-tight">
-                      <div className={`text-xs font-semibold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                        {availableQty}
-                      </div>
-                      <div className="text-[11px] text-gray-500">{item.unit}</div>
                     </td>
                     <td className="px-3 py-1.5 text-xs text-gray-600">
                       {item.location ? item.location : <span className="text-gray-400">-</span>}
