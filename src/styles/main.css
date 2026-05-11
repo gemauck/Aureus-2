@@ -683,3 +683,64 @@ body.erp-app #root .flex.h-screen {
     padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
     padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
 }
+
+/* Management meeting notes — horizontal scroll: visible track on Windows/Edge; header strip hides duplicate bar */
+.meeting-notes-grid-h-scroll {
+    scrollbar-gutter: stable;
+    overscroll-behavior-x: contain;
+}
+
+.meeting-notes-grid-h-scroll--body {
+    /* `scroll` from sm up reserves a horizontal gutter so Win/Chromium users get a draggable bar, not overlay-only */
+    -ms-overflow-style: scrollbar;
+    scrollbar-width: auto;
+}
+
+.meeting-notes-grid-h-scroll--body::-webkit-scrollbar {
+    height: 12px;
+}
+
+.meeting-notes-grid-h-scroll--body::-webkit-scrollbar-thumb {
+    border-radius: 6px;
+    background-color: #94a3b8;
+}
+
+.meeting-notes-grid-h-scroll--body::-webkit-scrollbar-track {
+    background-color: rgba(148, 163, 184, 0.2);
+}
+
+html.dark .meeting-notes-grid-h-scroll--body::-webkit-scrollbar-thumb {
+    background-color: #64748b;
+}
+
+html.dark .meeting-notes-grid-h-scroll--body::-webkit-scrollbar-track {
+    background-color: rgba(30, 41, 59, 0.5);
+}
+
+.meeting-notes-grid-h-scroll--header {
+    scrollbar-width: none;
+}
+
+.meeting-notes-grid-h-scroll--header::-webkit-scrollbar {
+    display: none;
+}
+
+/* Week pill strip above the grid */
+.meeting-notes-week-nav-scroll {
+    scrollbar-gutter: stable;
+    -ms-overflow-style: scrollbar;
+    scrollbar-width: auto;
+}
+
+.meeting-notes-week-nav-scroll::-webkit-scrollbar {
+    height: 10px;
+}
+
+.meeting-notes-week-nav-scroll::-webkit-scrollbar-thumb {
+    border-radius: 6px;
+    background-color: #94a3b8;
+}
+
+html.dark .meeting-notes-week-nav-scroll::-webkit-scrollbar-thumb {
+    background-color: #64748b;
+}

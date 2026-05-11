@@ -866,8 +866,12 @@ const ManagementMeetingNotes = () => {
     const savedCursorPositions = useRef({}); // { [fieldKey]: { start: number, end: number, element: HTMLElement } }
 
     const weekCardRefs = useRef({});
-    /** One horizontal scroller for header row + body grid so columns stay aligned. */
+    /** Body grid horizontal scroller (week cells + `data-management-meeting-week` live here). */
     const meetingNotesHorizontalScrollRef = useRef(null);
+    /** Header row horizontal scroller — kept in sync with body so dates align while sticky stays viewport-bound. */
+    const meetingNotesHeaderScrollRef = useRef(null);
+    /** Avoid feedback when programmatically syncing header/body `scrollLeft`. */
+    const meetingNotesScrollSyncProgrammaticRef = useRef(false);
     // Ref to store scroll position that needs to be preserved after state updates
     const preservedScrollPosition = useRef(null);
     
@@ -1689,6 +1693,45 @@ const ManagementMeetingNotes = () => {
             }
         }
     }, [weeks]);
+
+    /** Keep header and body horizontal scroll aligned (split scrollers so `sticky top` dates work). */
+    useEffect(() => {
+        const body = meetingNotesHorizontalScrollRef.current;
+        const head = meetingNotesHeaderScrollRef.current;
+        if (!body || !head) {
+            return undefined;
+        }
+        const sync = (source, target) => {
+            const left = source.scrollLeft;
+            if (Math.abs(target.scrollLeft - left) < 0.5) {
+                return;
+            }
+            meetingNotesScrollSyncProgrammaticRef.current = true;
+            target.scrollLeft = left;
+            requestAnimationFrame(() => {
+                meetingNotesScrollSyncProgrammaticRef.current = false;
+            });
+        };
+        const onBody = () => {
+            if (meetingNotesScrollSyncProgrammaticRef.current) {
+                return;
+            }
+            sync(body, head);
+        };
+        const onHead = () => {
+            if (meetingNotesScrollSyncProgrammaticRef.current) {
+                return;
+            }
+            sync(head, body);
+        };
+        head.scrollLeft = body.scrollLeft;
+        body.addEventListener('scroll', onBody, { passive: true });
+        head.addEventListener('scroll', onHead, { passive: true });
+        return () => {
+            body.removeEventListener('scroll', onBody);
+            head.removeEventListener('scroll', onHead);
+        };
+    }, [selectedMonth, weeksNavSignature]);
 
     const selectedWeekIndex = useMemo(() => {
         if (!Array.isArray(weeks) || weeks.length === 0) {
@@ -5168,7 +5211,7 @@ const ManagementMeetingNotes = () => {
                                 </p>
                             </div>
                         </div>
-                        <div className="overflow-x-auto -mx-1">
+                        <div className="meeting-notes-week-nav-scroll overflow-x-auto -mx-1">
                             <div
                                 role="tablist"
                                 aria-label="Weeks in this month"
@@ -5310,10 +5353,7 @@ const ManagementMeetingNotes = () => {
                         </div>
                     </div>
 
-                    <div
-                        ref={meetingNotesHorizontalScrollRef}
-                        className="overflow-x-auto pb-2 space-y-4"
-                    >
+                    <div className="min-w-0 pb-2 space-y-4">
                         <div
                             className={`sticky top-4 z-40 -mx-0.5 border-b px-0.5 py-2 shadow-sm backdrop-blur-md ${
                                 isDark
@@ -5321,6 +5361,10 @@ const ManagementMeetingNotes = () => {
                                     : 'border-slate-200/90 bg-white/95 supports-[backdrop-filter]:bg-white/85'
                             }`}
                         >
+                            <div
+                                ref={meetingNotesHeaderScrollRef}
+                                className="meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--header -mx-0.5 overflow-x-auto overflow-y-hidden"
+                            >
                             <div 
                                 className="inline-grid gap-4 sm:gap-5"
                                 style={{
@@ -5419,9 +5463,14 @@ const ManagementMeetingNotes = () => {
                                     );
                                 })}
                             </div>
+                            </div>
                         </div>
 
-                        {/* Grid layout: General minutes row, then departments as rows, weeks as columns (same horizontal scroll as headers) */}
+                        {/* Grid layout: General minutes row, then departments as rows, weeks as columns (horizontal scroll synced with header row above) */}
+                        <div
+                            ref={meetingNotesHorizontalScrollRef}
+                            className="meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--body overflow-x-auto sm:overflow-x-scroll touch-pan-x"
+                        >
                         <div 
                             className="inline-grid gap-4 sm:gap-5"
                             style={{
@@ -6396,6 +6445,7 @@ const ManagementMeetingNotes = () => {
                             </React.Fragment>
                         );
                     })}
+                        </div>
                         </div>
                     </div>
                 </div>
