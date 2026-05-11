@@ -14,6 +14,124 @@ function isBrowserNavigationReload() {
     }
 }
 
+/** `navigation.type` stays `reload` for the whole document after F5 — only treat first paint as reload for UX. */
+function managementMeetingNotesParseLocalDay(value) {
+    if (value == null || value === '') {
+        return null;
+    }
+    if (value instanceof Date) {
+        const d = value;
+        if (Number.isNaN(d.getTime())) {
+            return null;
+        }
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+    const s = String(value);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) {
+        return null;
+    }
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function managementMeetingNotesWeekContainsLocalDay(week, day0) {
+    if (!week) {
+        return false;
+    }
+    const start = managementMeetingNotesParseLocalDay(week.weekStart || week.week_start);
+    if (!start) {
+        return false;
+    }
+    const endRaw = week.weekEnd || week.week_end || week.weekStart || week.week_start;
+    const end = managementMeetingNotesParseLocalDay(endRaw) || start;
+    const endOfDay = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999);
+    return day0 >= start && day0 <= endOfDay;
+}
+
+function managementMeetingNotesGetWeekIdForList(week, index) {
+    if (!week) {
+        return null;
+    }
+    if (week.weekKey) {
+        return week.weekKey;
+    }
+    if (week.id) {
+        return week.id;
+    }
+    return `week-${index}`;
+}
+
+function managementMeetingNotesFindWeekIndexInList(weeks, param) {
+    if (!Array.isArray(weeks) || weeks.length === 0 || param == null || param === '') {
+        return -1;
+    }
+    const s = String(param);
+    return weeks.findIndex((week, index) => {
+        if (!week) {
+            return false;
+        }
+        return (
+            s === managementMeetingNotesGetWeekIdForList(week, index) ||
+            s === String(week.weekKey || '') ||
+            s === String(week.week_key || '') ||
+            s === String(week.id || '')
+        );
+    });
+}
+
+/** Preferred column index for "today" (Fri–Sun → next week when possible); bracket when no row contains today. */
+function managementMeetingNotesPreferredWeekIndex(weeks) {
+    if (!Array.isArray(weeks) || weeks.length === 0) {
+        return 0;
+    }
+    const today = new Date();
+    const day0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const dow = today.getDay();
+    const preferNextWeek = dow === 0 || dow === 5 || dow === 6;
+
+    let matchedIdx = -1;
+    for (let i = 0; i < weeks.length; i++) {
+        if (managementMeetingNotesWeekContainsLocalDay(weeks[i], day0)) {
+            matchedIdx = i;
+            break;
+        }
+    }
+
+    let baseIdx;
+    if (matchedIdx >= 0) {
+        baseIdx = matchedIdx;
+    } else {
+        let pick = 0;
+        let sawAnyStart = false;
+        for (let i = 0; i < weeks.length; i++) {
+            const s = managementMeetingNotesParseLocalDay(weeks[i].weekStart || weeks[i].week_start);
+            if (!s) {
+                continue;
+            }
+            sawAnyStart = true;
+            if (s <= day0) {
+                pick = i;
+            }
+        }
+        const firstStart = managementMeetingNotesParseLocalDay(weeks[0].weekStart || weeks[0].week_start);
+        if (sawAnyStart && firstStart && firstStart > day0) {
+            baseIdx = 0;
+        } else {
+            baseIdx = pick;
+        }
+    }
+
+    let preferredIdx = baseIdx;
+    if (preferNextWeek && preferredIdx >= 0 && preferredIdx < weeks.length - 1) {
+        preferredIdx += 1;
+    }
+    return preferredIdx;
+}
+
 const ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
 const ADMIN_PERMISSION_KEYS = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
 
@@ -314,6 +432,8 @@ const ManagementMeetingNotes = () => {
     const authHook = window.useAuth || (() => ({ user: null }));
     const { user: currentUser } = authHook();
     const isAdminUser = useMemo(() => isAdminFromUser(currentUser), [currentUser]);
+    /** After F5, `performance.navigation.type` stays `reload` forever — capture once per mount. */
+    const initialPageWasNavigationReload = useMemo(() => isBrowserNavigationReload(), []);
 
     useEffect(() => {
         if (!isAdminUser) {
@@ -695,9 +815,8 @@ const ManagementMeetingNotes = () => {
     
     // Ref to track previous weeks array keys to avoid unnecessary validation
     const previousWeekKeysRef = useRef(null);
-    /** After one-shot auto-week for `selectedMonth`, skip until month changes (avoids fighting URL on every weeks refetch). */
-    const meetingNotesAutoWeekAppliedMonthRef = useRef(null);
-    const meetingNotesPrevMonthForAutoRef = useRef(undefined);
+    /** After auto-week for `month|weeksNavSignature`, skip until that signature changes. */
+    const meetingNotesAutoWeekAppliedSigRef = useRef('');
     
     // Effect to restore scroll position after explicit save operations
     // Only triggers when scrollRestoreTrigger changes (not on every data update)
@@ -1029,7 +1148,7 @@ const ManagementMeetingNotes = () => {
             }
             
             // No (valid) month in URL — default to calendar month on fresh navigation only (reload keeps state / empty; avoids snapping to "now" after F5).
-            if (isBrowserNavigationReload()) {
+            if (initialPageWasNavigationReload) {
                 return;
             }
             const now = new Date();
@@ -1039,7 +1158,7 @@ const ManagementMeetingNotes = () => {
             }
         } catch (error) {
             console.warn('ManagementMeetingNotes: failed to initialize month, falling back to current month', error);
-            if (isBrowserNavigationReload()) {
+            if (initialPageWasNavigationReload) {
                 return;
             }
             const now = new Date();
@@ -1360,16 +1479,34 @@ const ManagementMeetingNotes = () => {
         return weeks.map((week, index) => getWeekIdentifier(week) || `week-${index}`).join('|');
     }, [weeks]);
 
+    // Before URL pushState + week useEffect: snap week so stale `?week=` cannot overwrite in the same tick.
+    useLayoutEffect(() => {
+        if (!selectedMonth || !Array.isArray(weeks) || weeks.length === 0 || !weeksNavSignature) {
+            return;
+        }
+        const sig = `${selectedMonth}|${weeksNavSignature}`;
+        if (initialPageWasNavigationReload) {
+            meetingNotesAutoWeekAppliedSigRef.current = sig;
+            return;
+        }
+        if (meetingNotesAutoWeekAppliedSigRef.current === sig) {
+            return;
+        }
+        const preferredIdx = managementMeetingNotesPreferredWeekIndex(weeks);
+        const selectedIdx = managementMeetingNotesFindWeekIndexInList(weeks, selectedWeek);
+        const preferredId = managementMeetingNotesGetWeekIdForList(weeks[preferredIdx], preferredIdx);
+        if (preferredId != null && selectedIdx !== preferredIdx) {
+            setSelectedWeek(preferredId);
+        }
+        meetingNotesAutoWeekAppliedSigRef.current = sig;
+    }, [weeks, selectedMonth, weeksNavSignature, selectedWeek, initialPageWasNavigationReload]);
+
     const selectedWeekObj = useMemo(() => {
         if (!Array.isArray(weeks) || weeks.length === 0 || !selectedWeek) {
             return null;
         }
-        return (
-            weeks.find((week, index) => {
-                const identifier = getWeekIdentifier(week) || `week-${index}`;
-                return identifier === selectedWeek;
-            }) || null
-        );
+        const idx = managementMeetingNotesFindWeekIndexInList(weeks, selectedWeek);
+        return idx >= 0 ? weeks[idx] : null;
     }, [weeks, selectedWeek]);
 
     /** Week whose general minutes are shown (falls back to first week when needed) */
@@ -1535,23 +1672,7 @@ const ManagementMeetingNotes = () => {
     }, [weeks, currentWeekId]);
 
     useEffect(() => {
-        // Helper function to get week identifier
-        const getWeekId = (week, index) => {
-            if (!week) return null;
-            if (week.weekKey) return week.weekKey;
-            if (week.id) return week.id;
-            return `week-${index}`;
-        };
-
-        if (
-            meetingNotesPrevMonthForAutoRef.current !== undefined &&
-            meetingNotesPrevMonthForAutoRef.current !== selectedMonth
-        ) {
-            meetingNotesAutoWeekAppliedMonthRef.current = null;
-        }
-        if (selectedMonth) {
-            meetingNotesPrevMonthForAutoRef.current = selectedMonth;
-        }
+        const getWeekId = (week, index) => managementMeetingNotesGetWeekIdForList(week, index);
 
         if (!Array.isArray(weeks) || weeks.length === 0) {
             if (selectedWeek !== null) {
@@ -1560,97 +1681,11 @@ const ManagementMeetingNotes = () => {
             return;
         }
 
-        const findWeekIndexByParam = (param) => {
-            if (param == null || param === '') {
-                return -1;
-            }
-            const s = String(param);
-            return weeks.findIndex((week, index) => {
-                if (!week) {
-                    return false;
-                }
-                return (
-                    s === getWeekId(week, index) ||
-                    s === String(week.weekKey || '') ||
-                    s === String(week.week_key || '') ||
-                    s === String(week.id || '')
-                );
-            });
-        };
-
-        /** Local calendar day for `YYYY-MM-DD` / Date (avoids UTC-only strings shifting "today"). */
-        const parseLocalYmd = (value) => {
-            if (value == null || value === '') {
-                return null;
-            }
-            if (value instanceof Date) {
-                const d = value;
-                if (Number.isNaN(d.getTime())) {
-                    return null;
-                }
-                return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            }
-            const s = String(value);
-            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-            if (m) {
-                return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-            }
-            const d = new Date(s);
-            if (Number.isNaN(d.getTime())) {
-                return null;
-            }
-            return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-        };
-
-        const weekContainsTodayLocal = (week) => {
-            if (!week) {
-                return false;
-            }
-            const start = parseLocalYmd(week.weekStart || week.week_start);
-            if (!start) {
-                return false;
-            }
-            const end = parseLocalYmd(week.weekEnd || week.week_end) || start;
-            const endOfDay = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999);
-            const today = new Date();
-            const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            return today0 >= start && today0 <= endOfDay;
-        };
-
-        // Full reload: keep URL week; mark month so one-shot below does not override on data refetch.
-        if (isBrowserNavigationReload() && selectedMonth) {
-            meetingNotesAutoWeekAppliedMonthRef.current = selectedMonth;
+        if (!selectedMonth) {
+            return;
         }
 
-        // One-shot per month (SPA): snap to week containing today, or next column Fri–Sun. Uses
-        // column index so URL `week` can be `id` while getWeekId prefers weekKey (previously no bump).
-        if (
-            !isBrowserNavigationReload() &&
-            selectedMonth &&
-            meetingNotesAutoWeekAppliedMonthRef.current !== selectedMonth
-        ) {
-            const today = new Date();
-            const dow = today.getDay();
-            const preferNextWeek = dow === 0 || dow === 5 || dow === 6;
-
-            const matched = weeks.find((week) => weekContainsTodayLocal(week)) || null;
-            const selectedIdx = findWeekIndexByParam(selectedWeek);
-
-            if (matched) {
-                const matchedIdx = weeks.indexOf(matched);
-                const preferredIdx =
-                    preferNextWeek && matchedIdx >= 0 && matchedIdx < weeks.length - 1
-                        ? matchedIdx + 1
-                        : matchedIdx;
-                const preferredId = getWeekId(weeks[preferredIdx], preferredIdx);
-                if (preferredId && selectedIdx !== preferredIdx) {
-                    setSelectedWeek(preferredId);
-                    meetingNotesAutoWeekAppliedMonthRef.current = selectedMonth;
-                    return;
-                }
-            }
-            meetingNotesAutoWeekAppliedMonthRef.current = selectedMonth;
-        }
+        const findWeekIndexByParam = (param) => managementMeetingNotesFindWeekIndexInList(weeks, param);
 
         const currentWeekKeys = weeks
             .map((week, index) => getWeekId(week, index))
@@ -1666,7 +1701,6 @@ const ManagementMeetingNotes = () => {
 
         previousWeekKeysRef.current = currentWeekKeys;
 
-        // Check if selectedWeek from URL exists in weeks
         const weekFromURL = getWeekFromURL();
         if (weekFromURL) {
             const hasWeekFromURL = findWeekIndexByParam(weekFromURL) >= 0;
@@ -1676,45 +1710,26 @@ const ManagementMeetingNotes = () => {
             }
         }
 
-        // If selectedWeek exists and is valid, keep it
         if (selectedWeek && findWeekIndexByParam(selectedWeek) >= 0) {
             return;
         }
 
-        if (isBrowserNavigationReload()) {
+        if (initialPageWasNavigationReload) {
             return;
         }
 
-        // Fallback: auto-navigate to the week containing today (Mon–Thu), or the *next* week in the
-        // grid on Fri–Sun (local time), when no explicit URL/week selection applies above.
-        const today = new Date();
-        const dow = today.getDay(); // 0 Sun … 6 Sat
-        const preferNextWeek = dow === 0 || dow === 5 || dow === 6;
-
-        const matchedWeek = weeks.find((week) => weekContainsTodayLocal(week)) || null;
-
-        let targetWeek = matchedWeek || weeks[0];
-        let targetIndex = weeks.indexOf(targetWeek);
-
-        if (matchedWeek && preferNextWeek) {
-            const idx = weeks.indexOf(matchedWeek);
-            if (idx >= 0 && idx < weeks.length - 1) {
-                targetWeek = weeks[idx + 1];
-                targetIndex = idx + 1;
-            }
+        const preferredIdx = managementMeetingNotesPreferredWeekIndex(weeks);
+        const preferredId = getWeekId(weeks[preferredIdx], preferredIdx);
+        if (preferredId && preferredId !== selectedWeek) {
+            setSelectedWeek(preferredId);
         }
-
-        const fallbackId = getWeekId(targetWeek, targetIndex >= 0 ? targetIndex : 0);
-        if (fallbackId && fallbackId !== selectedWeek) {
-            setSelectedWeek(fallbackId);
-        }
-    }, [weeks, selectedWeek, selectedMonth]);
+    }, [weeks, selectedWeek, selectedMonth, weeksNavSignature]);
 
     useEffect(() => {
         if (!selectedWeek || !weeksNavSignature) {
             return;
         }
-        if (isBrowserNavigationReload()) {
+        if (initialPageWasNavigationReload) {
             return;
         }
         let cancelled = false;
