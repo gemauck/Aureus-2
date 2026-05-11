@@ -73,6 +73,29 @@ function parseFiniteNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback
 }
 
+/**
+ * One unit price per SKU: always the catalog (`InventoryItem`) row when it exists.
+ * `LocationInventory.unitCost` is kept in sync for legacy/exports but must not drive valuation.
+ * If there is no catalog row yet, fall back to the location row (orphan / legacy rows only).
+ */
+function inventoryCatalogUnitCostForSku(template, locationRecord) {
+  const hasCatalog = Boolean(template && template.id)
+  if (hasCatalog) {
+    return parseFiniteNumber(template.unitCost, 0)
+  }
+  return parseFiniteNumber(locationRecord?.unitCost, 0)
+}
+
+/** After catalog `unitCost` changes, mirror it onto every LocationInventory row for that SKU. */
+async function syncAllLocationInventoryUnitCostsToCatalogTx(tx, sku, catalogUnitCost) {
+  const s = String(sku || '').trim()
+  if (!s) return
+  await tx.locationInventory.updateMany({
+    where: { sku: s },
+    data: { unitCost: parseFiniteNumber(catalogUnitCost, 0) }
+  })
+}
+
 function parseNonNegativeFiniteNumber(value, fieldName) {
   const n = Number(value)
   if (!Number.isFinite(n) || n < 0) {
@@ -663,7 +686,7 @@ async function buildLocationInventoryResponse(locationId) {
     const template = metadataBySku.get(record.sku) || {}
     const quantity = record.quantity ?? 0
     const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
-    const unitCost = record.unitCost ?? template.unitCost ?? 0
+    const unitCost = inventoryCatalogUnitCostForSku(template, record)
     // Quantity is authoritative for stock state; stored/template status can be stale after transfers.
     const status = getStatusFromQuantity(quantity, reorderPoint)
 
@@ -749,7 +772,7 @@ async function buildAllLocationsInventoryResponse() {
     const template = templateBySku.get(sku) || {}
     const quantity = record.quantity ?? 0
     const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
-    const unitCost = record.unitCost ?? template.unitCost ?? 0
+    const unitCost = inventoryCatalogUnitCostForSku(template, record)
     const status = getStatusFromQuantity(quantity, reorderPoint)
 
     if (!bySku.has(sku)) {
@@ -781,7 +804,7 @@ async function buildAllLocationsInventoryResponse() {
       locationName: record.location?.name || '',
       locationCode: record.location?.code || '',
       quantity,
-      unitCost: record.unitCost ?? unitCost,
+      unitCost,
       status
     })
   }
@@ -826,7 +849,7 @@ async function buildAllLocationsInventoryResponse() {
 
 /**
  * Per stock location: total value and units on hand (for dashboard).
- * Valuation rules match LocationInventory rows + template unitCost fallback.
+ * Valuation uses catalog unit cost per SKU (not per-location stored cost).
  */
 async function buildInventoryLocationValueSummary() {
   // Keep summary valuation aligned with inventory list rows by applying the
@@ -1304,11 +1327,12 @@ async function handler(req, res) {
         const result = await prisma.$transaction(async (tx) => {
           // Helper to get or create per-location record
           async function upsertLocationSku(locationId) {
+            const catalogCost = master ? parseFiniteNumber(master.unitCost, 0) : parseFloat(body.unitCost) || 0
             return await tx.locationInventory.upsert({
               where: { locationId_sku: { locationId, sku: body.sku } },
               update: {
                 itemName: body.itemName,
-                unitCost: parseFloat(body.unitCost) || 0,
+                unitCost: catalogCost,
                 reorderPoint: parseFloat(body.reorderPoint) || 0
               },
               create: {
@@ -1316,7 +1340,7 @@ async function handler(req, res) {
                 sku: body.sku,
                 itemName: body.itemName,
                 quantity: 0,
-                unitCost: parseFloat(body.unitCost) || 0,
+                unitCost: catalogCost,
                 reorderPoint: parseFloat(body.reorderPoint) || 0,
                 status: 'in_stock'
               }
@@ -1375,7 +1399,12 @@ async function handler(req, res) {
             const newQtyTo = (toLi.quantity || 0) + qty
             await tx.locationInventory.update({ where: { id: toLi.id }, data: {
               quantity: newQtyTo,
-              unitCost: body.unitCost !== undefined ? parseFloat(body.unitCost) : toLi.unitCost,
+              unitCost: master
+                ? parseFiniteNumber(
+                    body.unitCost !== undefined ? parseFloat(body.unitCost) : master.unitCost,
+                    0
+                  )
+                : parseFloat(body.unitCost) || 0,
               lastRestocked: now,
               status: newQtyTo > toLi.reorderPoint ? 'in_stock' : (newQtyTo > 0 ? 'low_stock' : 'out_of_stock')
             }})
@@ -1464,6 +1493,11 @@ async function handler(req, res) {
                 status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
               }})
             }
+          }
+
+          const masterFinal = await findCanonicalInventoryItemBySkuTx(tx, body.sku)
+          if (masterFinal?.sku) {
+            await syncAllLocationInventoryUnitCostsToCatalogTx(tx, masterFinal.sku, masterFinal.unitCost)
           }
 
           // Create stock movement record
@@ -2313,7 +2347,7 @@ async function handler(req, res) {
             const t = templateBySku.get(rec.sku) || {}
             const qty = rec.quantity ?? 0
             const rp = rec.reorderPoint ?? t.reorderPoint ?? 0
-            const uc = rec.unitCost ?? t.unitCost ?? 0
+            const uc = inventoryCatalogUnitCostForSku(t, rec)
             const st = getStatusFromQuantity(qty, rp)
             const sp = firstSupplierPartFromJson(t.supplierPartNumbers || '[]')
             aoa.push([
@@ -3334,12 +3368,12 @@ async function handler(req, res) {
           }
         }
 
-        // After successful master update: align per-location unit cost with catalog (list vs detail).
-        if (body.unitCost !== undefined && existing.sku) {
+        // Single catalog unit cost per SKU: mirror onto every LocationInventory row (list/export parity).
+        if (item?.sku) {
           try {
             await prisma.locationInventory.updateMany({
-              where: { sku: existing.sku },
-              data: { unitCost: costForValue }
+              where: { sku: item.sku },
+              data: { unitCost: Number(item.unitCost) || 0 }
             })
           } catch (locErr) {
             console.warn('⚠️ locationInventory unitCost sync skipped:', locErr.message)

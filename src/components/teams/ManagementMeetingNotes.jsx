@@ -5310,10 +5310,14 @@ const ManagementMeetingNotes = () => {
 
                     <div
                         ref={meetingNotesHorizontalScrollRef}
-                        className="overflow-x-auto overflow-y-clip pb-2 space-y-4"
+                        className="overflow-x-auto pb-2 space-y-4"
                     >
                         <div
-                            className={`sticky top-4 z-30 -mx-0.5 px-0.5 py-1 ${isDark ? 'bg-slate-900' : 'bg-white'}`}
+                            className={`sticky top-4 z-40 -mx-0.5 border-b px-0.5 py-2 shadow-sm backdrop-blur-md ${
+                                isDark
+                                    ? 'border-slate-800/80 bg-slate-900/95 supports-[backdrop-filter]:bg-slate-900/80'
+                                    : 'border-slate-200/90 bg-white/95 supports-[backdrop-filter]:bg-white/85'
+                            }`}
                         >
                             <div 
                                 className="inline-grid gap-4 sm:gap-5"
@@ -5395,21 +5399,6 @@ const ManagementMeetingNotes = () => {
                                                     </h3>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    {!isSelected && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                setSelectedWeek(identifier);
-                                                                scrollToWeekId(identifier);
-                                                            }}
-                                                            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                        >
-                                                            <i className="fas fa-crosshairs mr-1"></i>
-                                                            Focus
-                                                        </button>
-                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -5493,7 +5482,7 @@ const ManagementMeetingNotes = () => {
                                         }`}
                                     >
                                         <div
-                                            className={`flex items-center justify-between gap-3 mb-4 pb-3 border-b border-dashed ${
+                                            className={`mb-4 border-b border-dashed pb-3 ${
                                                 isDark ? 'border-slate-600/60' : 'border-slate-200/80'
                                             }`}
                                         >
@@ -5505,24 +5494,6 @@ const ManagementMeetingNotes = () => {
                                                     {formatWeek(week.weekKey, week.weekStart)}
                                                 </p>
                                             </div>
-                                            {!gmSelected && (
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        setSelectedWeek(gmIdentifier);
-                                                        scrollToWeekId(gmIdentifier);
-                                                    }}
-                                                    className={`text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1.5 rounded-lg shrink-0 transition ${
-                                                        isDark
-                                                            ? 'bg-slate-800 text-slate-200 ring-1 ring-slate-600 hover:bg-slate-700'
-                                                            : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200'
-                                                    }`}
-                                                >
-                                                    Focus
-                                                </button>
-                                            )}
                                         </div>
                                         <div className="flex flex-col min-w-0">
                                             {week?.id && window.RichTextEditor ? (

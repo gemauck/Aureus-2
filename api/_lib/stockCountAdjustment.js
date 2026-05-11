@@ -250,12 +250,15 @@ export async function applyStockCountAdjustmentTx(tx, params) {
     })
   }
 
+  const catalogUnitCostForLi = Number(item?.unitCost)
+  const liUnitCost = Number.isFinite(catalogUnitCostForLi) ? catalogUnitCostForLi : 0
+
   await upsertLocationInventoryAdj(
     locationId,
     String(sku).trim(),
     String(itemName || sku).trim(),
     qty,
-    parseFloat(unitCost) || undefined,
+    liUnitCost,
     parseFloat(reorderPoint) || undefined
   )
 
