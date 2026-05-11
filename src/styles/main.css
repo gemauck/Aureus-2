@@ -127,6 +127,19 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     height: 10px;
 }
 
+/* Manufacturing > Inventory: compact desktop rows (padding utilities on cells are overridden here) */
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th,
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td {
+    padding: 0.25rem 0.5rem;
+    vertical-align: middle;
+}
+
+/* Top mirror scrollbar: keep horizontal bar usable without eating vertical space */
+.inventory-desktop-xscroll--top {
+    max-height: 14px;
+    min-height: 14px;
+}
+
 /* Keyboard focus — consistent blue ring without changing click behavior */
 body.erp-app :where(a, button, input, textarea, select, [tabindex]):focus-visible {
     outline: 2px solid var(--primary-500);

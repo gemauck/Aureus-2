@@ -5,6 +5,7 @@
 // doesn't crash before we can register a fallback component.
 const ReactGlobal = window.React || {};
 const { useState, useEffect, useCallback, useMemo, useRef, createElement, Fragment } = ReactGlobal;
+const useLayoutEffect = ReactGlobal.useLayoutEffect || useEffect;
 // Safely access useAuth - don't destructure if undefined
 const useAuth = window.useAuth || (() => {
   console.error('❌ Manufacturing: useAuth is not available');
@@ -440,7 +441,10 @@ try {
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
   const [inventoryListPage, setInventoryListPage] = useState(1);
+  const [inventoryTableHasHorizontalOverflow, setInventoryTableHasHorizontalOverflow] = useState(false);
   const inventoryTableScrollRef = useRef(null);
+  const inventoryTableScrollTopRef = useRef(null);
+  const inventoryTableScrollSpacerRef = useRef(null);
   const inventoryValueSummaryLastLoadedAtRef = useRef(0);
   const loadInventoryValueByLocationSummary = useCallback(async (options = {}) => {
     if (!window.DatabaseAPI?.getManufacturingInventoryLocationValueSummary) {
@@ -3420,7 +3424,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesLegacyPart = !columnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(columnFilters.legacyPart.toLowerCase()));
       const matchesManufacturingPart = !columnFilters.manufacturingPart || ((item.manufacturingPartNumber || '').toString().toLowerCase().includes(columnFilters.manufacturingPart.toLowerCase()));
       const matchesCategoryFilter = !columnFilters.category || category.toLowerCase().includes(columnFilters.category.toLowerCase());
-      const matchesBoxNumber = !columnFilters.boxNumber || (item.boxNumber || '').toString().toLowerCase().includes(columnFilters.boxNumber.toLowerCase());
       const matchesType = !columnFilters.type || (item.type || '').toString().toLowerCase().includes(columnFilters.type.toLowerCase());
       const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
       const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
@@ -3428,7 +3431,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesStockView = inventoryStockView === 'all' || metrics.status === inventoryStockView;
 
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart &&
-             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesBoxNumber && matchesType && matchesStatus && matchesLocation && matchesCatalogReview && matchesStockView;
+             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation && matchesCatalogReview && matchesStockView;
     });
 
     if (sortConfig.key) {
@@ -3540,11 +3543,66 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
   }, [filteredInventoryList.length, inventoryListPage]);
 
+  const syncInventoryHorizontalScrollChrome = useCallback(() => {
+    const main = inventoryTableScrollRef.current;
+    if (!main) return;
+    const hasOverflow = main.scrollWidth > main.clientWidth + 1;
+    setInventoryTableHasHorizontalOverflow((prev) => (prev === hasOverflow ? prev : hasOverflow));
+    const spacer = inventoryTableScrollSpacerRef.current;
+    if (spacer) {
+      spacer.style.width = `${main.scrollWidth}px`;
+    }
+    const top = inventoryTableScrollTopRef.current;
+    if (top) top.scrollLeft = main.scrollLeft;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (activeTab !== 'inventory') {
+      setInventoryTableHasHorizontalOverflow(false);
+      return undefined;
+    }
+    const main = inventoryTableScrollRef.current;
+    if (!main) return undefined;
+
+    syncInventoryHorizontalScrollChrome();
+
+    const onMainScroll = () => {
+      const t = inventoryTableScrollTopRef.current;
+      if (t) t.scrollLeft = main.scrollLeft;
+    };
+    main.addEventListener('scroll', onMainScroll, { passive: true });
+
+    const top = inventoryTableScrollTopRef.current;
+    const onTopScroll = top
+      ? () => {
+          const m = inventoryTableScrollRef.current;
+          if (m) m.scrollLeft = top.scrollLeft;
+        }
+      : null;
+    if (top && onTopScroll) top.addEventListener('scroll', onTopScroll, { passive: true });
+
+    const ro = new ResizeObserver(() => {
+      syncInventoryHorizontalScrollChrome();
+    });
+    ro.observe(main);
+    const tbl = main.querySelector('table');
+    if (tbl) ro.observe(tbl);
+
+    return () => {
+      ro.disconnect();
+      main.removeEventListener('scroll', onMainScroll);
+      if (top && onTopScroll) top.removeEventListener('scroll', onTopScroll);
+    };
+  }, [activeTab, filteredInventoryList, inventoryListPage, syncInventoryHorizontalScrollChrome, inventoryTableHasHorizontalOverflow]);
+
   useEffect(() => {
     if (activeTab !== 'inventory') return;
-    const el = inventoryTableScrollRef.current;
-    if (el) el.scrollLeft = 0;
-  }, [activeTab, inventoryListPage]);
+    const main = inventoryTableScrollRef.current;
+    const top = inventoryTableScrollTopRef.current;
+    if (main) main.scrollLeft = 0;
+    if (top) top.scrollLeft = 0;
+    syncInventoryHorizontalScrollChrome();
+  }, [activeTab, inventoryListPage, syncInventoryHorizontalScrollChrome]);
 
   const renderInventoryView = () => {
     // Get unique categories from inventory items
@@ -4003,17 +4061,30 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           )}
         </div>
 
-        {/* Desktop table: horizontal scroll only. With 20 rows/page the block is short, so the H-bar stays near the list; avoid max-height+overflow-auto or ~half the rows sit below an inner vertical scroll. */}
+        {/* Desktop table: synced top + bottom horizontal scrollbars so you need not scroll to the bottom to pan wide columns. */}
         <div
-          className={`table-responsive rounded-lg border ${
+          className={`inventory-desktop-table-wrap table-responsive rounded-lg border ${
             isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
           }`}
         >
+          {inventoryTableHasHorizontalOverflow && (
+            <div
+              ref={inventoryTableScrollTopRef}
+              className={`inventory-desktop-xscroll inventory-desktop-xscroll--top overflow-x-auto overflow-y-hidden shrink-0 ${
+                isDark ? 'border-b border-gray-800 bg-gray-900' : 'border-b border-gray-200 bg-gray-50'
+              }`}
+              aria-hidden
+            >
+              <div ref={inventoryTableScrollSpacerRef} className="h-px w-px" />
+            </div>
+          )}
           <div
             ref={inventoryTableScrollRef}
-            className="inventory-desktop-xscroll overflow-x-auto rounded-t-lg"
+            className={`inventory-desktop-xscroll overflow-x-auto ${
+              inventoryTableHasHorizontalOverflow ? 'rounded-b-lg' : 'rounded-t-lg'
+            }`}
           >
-            <table className="w-full min-w-max text-[12px]">
+            <table className="inventory-desktop-table w-full min-w-max text-[12px]">
               <thead className="bg-gray-50 border-b border-gray-200">
                 {/* Header Row */}
                 <tr>
@@ -4054,7 +4125,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('category')}
                     </button>
                   </th>
-                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Box Number</th>
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4294,30 +4364,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </th>
                   <th className="px-3 py-1.5">
                     <input
-                      key="filter-boxNumber-input"
-                      ref={(el) => { if (el) filterInputRefs.current.boxNumber = el; }}
-                      type="text"
-                      placeholder="Filter Box..."
-                      defaultValue={columnFilters.boxNumber || ''}
-                      onFocus={(e) => {
-                        isUserTypingRef.current = true;
-                        activeInputRef.current = e.target;
-                      }}
-                      onBlur={(e) => {
-                        handleColumnFilterChange('boxNumber', e.target.value, e);
-                        setTimeout(() => {
-                          if (document.activeElement !== activeInputRef.current) {
-                            isUserTypingRef.current = false;
-                            activeInputRef.current = null;
-                          }
-                        }, 100);
-                      }}
-                      onChange={(e) => handleColumnFilterChange('boxNumber', e.target.value, e)}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <input
                       key="filter-type-input"
                       ref={(el) => { if (el) filterInputRefs.current.type = el; }}
                       type="text"
@@ -4423,31 +4469,31 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <img 
                             src={item.thumbnail} 
                             alt={item.name} 
-                            className="w-10 h-10 object-cover rounded" 
+                            className="w-8 h-8 object-cover rounded" 
                             onError={(e) => {
                               console.error('Failed to load image for item:', item.name, item.thumbnail);
                               e.target.style.display = 'none';
                               e.target.nextSibling.style.display = 'flex';
                             }}
                           />
-                          <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 hidden">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                          <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center text-gray-400 hidden">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                               <path d="M2.25 6.75A2.25 2.25 0 014.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5A2.25 2.25 0 0119.5 19.5h-15A2.25 2.25 0 012.25 17.25V6.75zM6 7.5a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0zM3.75 16.5l4.69-4.69a1.125 1.125 0 011.59 0l3.44 3.44.53-.53a1.125 1.125 0 011.59 0l4.13 4.13H3.75z" />
                             </svg>
                           </div>
                         </>
                       ) : (
-                        <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                        <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                             <path d="M2.25 6.75A2.25 2.25 0 014.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5A2.25 2.25 0 0119.5 19.5h-15A2.25 2.25 0 012.25 17.25V6.75zM6 7.5a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0zM3.75 16.5l4.69-4.69a1.125 1.125 0 011.59 0l3.44 3.44.53-.53a1.125 1.125 0 011.59 0l4.13 4.13H3.75z" />
                           </svg>
                         </div>
                       )}
                     </td>
                     <td className="px-3 py-1.5">
-                      <div className="text-xs font-medium text-gray-900">{item.name}</div>
+                      <div className="text-xs font-medium text-gray-900 leading-snug">{item.name}</div>
                       {item.reorderPoint > 0 && (
-                        <div className="text-xs text-gray-500">Reorder: {item.reorderPoint} {item.unit}</div>
+                        <div className="text-[11px] text-gray-500 leading-tight">Reorder: {item.reorderPoint} {item.unit}</div>
                       )}
                     </td>
                     <td className="px-3 py-1.5 text-xs text-gray-600">
@@ -4460,7 +4506,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                             : [];
                           if (supplierParts.length === 0) return <span className="text-gray-400">-</span>;
                           return (
-                            <div className="space-y-1">
+                            <div className="space-y-0.5 leading-tight">
                               {supplierParts.map((sp, idx) => (
                                 <div key={idx} className="text-xs">
                                   <span className="font-medium">{sp.supplier}:</span> {sp.partNumber}
@@ -4484,7 +4530,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-1.5 text-xs text-gray-600 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</td>
-                    <td className="px-3 py-1.5 text-xs text-gray-600">{item.boxNumber || '—'}</td>
                     <td className="px-3 py-1.5 text-xs text-gray-600 capitalize">
                       {item.type === 'final_product'
                         ? 'Final Product'
@@ -4492,33 +4537,36 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           ? 'Component'
                           : (item.type || '').replace('_', ' ')}
                     </td>
-                    <td className="px-3 py-1.5 text-right">
+                    <td className="px-3 py-1.5 text-right leading-tight">
                       {item.type === 'final_product' ? (
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-gray-900">Total: {item.quantity || 0}</div>
-                          <div className="text-xs">
-                            <span className="text-orange-600">In-Prod: {(item.inProductionQuantity || 0)}</span>
-                            {' • '}
-                            <span className="text-green-600">Completed: {(item.completedQuantity || 0)}</span>
+                        <div className="text-[11px] leading-tight">
+                          <div className="font-semibold text-gray-900">
+                            {item.quantity || 0}
+                            <span className="font-normal text-gray-500"> total</span>
                           </div>
-                          <div className="text-xs text-gray-500">{item.unit}</div>
+                          <div className="text-[10px]">
+                            <span className="text-orange-600">In-Prod {(item.inProductionQuantity || 0)}</span>
+                            <span className="text-gray-400"> · </span>
+                            <span className="text-green-600">Done {(item.completedQuantity || 0)}</span>
+                          </div>
+                          <div className="text-[10px] text-gray-500">{item.unit}</div>
                         </div>
                       ) : (
                         <>
                           <div className={`text-xs font-semibold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
-                          <div className="text-xs text-gray-500">{item.unit}</div>
+                          <div className="text-[11px] text-gray-500">{item.unit}</div>
                         </>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-right">
+                    <td className="px-3 py-1.5 text-right leading-tight">
                       <div className="text-xs font-medium text-yellow-700">{(item.allocatedQuantity || 0)}</div>
-                      <div className="text-xs text-gray-500">{item.unit}</div>
+                      <div className="text-[11px] text-gray-500">{item.unit}</div>
                     </td>
-                    <td className="px-3 py-1.5 text-right">
+                    <td className="px-3 py-1.5 text-right leading-tight">
                       <div className={`text-xs font-semibold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>
                         {availableQty}
                       </div>
-                      <div className="text-xs text-gray-500">{item.unit}</div>
+                      <div className="text-[11px] text-gray-500">{item.unit}</div>
                     </td>
                     <td className="px-3 py-1.5 text-xs text-gray-600">
                       {item.location ? item.location : <span className="text-gray-400">-</span>}
@@ -4530,22 +4578,22 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {lineTotalValue > 0 ? formatCurrency(lineTotalValue) : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-1.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(item.status || '')}`}>
+                        <span className={`inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium capitalize leading-tight ${getStatusColor(item.status || '')}`}>
                           {(item.status || '').replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => { setSelectedItem(item); setModalType('view_item'); setShowModal(true); }}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                           title="View Details"
                         >
                           <i className="fas fa-eye"></i>
                         </button>
                         <button
                           onClick={() => openEditItemModal(item)}
-                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                          className="text-green-600 hover:text-green-800 text-xs font-medium"
                           title="Edit Item"
                         >
                           <i className="fas fa-edit"></i>
@@ -4553,7 +4601,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         {isAdmin && (
                           <button
                             onClick={() => handleDeleteItem(item)}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            className="text-red-600 hover:text-red-800 text-xs font-medium"
                             title="Delete Item"
                           >
                             <i className="fas fa-trash"></i>
