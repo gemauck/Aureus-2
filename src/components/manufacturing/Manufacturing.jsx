@@ -226,6 +226,19 @@ function sortManufacturingStockLocations(locations) {
   return Array.isArray(locations) ? [...locations] : [];
 }
 
+/** Sort key prefix for per-location quantity columns on the inventory desktop table. */
+const INVENTORY_SORT_LOC_QTY_PREFIX = '__locQty:';
+
+/** Quantity in one stock location from an aggregated inventory row (`locations[]`). */
+function inventoryQuantityAtLocationId(item, locationId) {
+  if (!item || !locationId) return 0;
+  const locs = Array.isArray(item.locations) ? item.locations : [];
+  const row = locs.find((l) => String(l.locationId) === String(locationId));
+  if (!row) return 0;
+  const n = parseFloat(row.quantity);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function defaultManufacturingStockLocation(locations) {
   const fn = window.manufacturingStockLocations?.getDefaultManufacturingStockLocation;
   if (fn) return fn(locations);
@@ -3535,6 +3548,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             bVal = (b.location || '').toString().toLowerCase();
             break;
           default:
+            if (sortConfig.key && sortConfig.key.startsWith(INVENTORY_SORT_LOC_QTY_PREFIX)) {
+              const lid = sortConfig.key.slice(INVENTORY_SORT_LOC_QTY_PREFIX.length);
+              aVal = inventoryQuantityAtLocationId(a, lid);
+              bVal = inventoryQuantityAtLocationId(b, lid);
+              break;
+            }
             return 0;
         }
 
@@ -3646,6 +3665,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (top) top.scrollLeft = main.scrollLeft;
   }, []);
 
+  const inventoryDesktopPerLocationColumns = useMemo(
+    () => sortManufacturingStockLocations(Array.isArray(stockLocations) ? [...stockLocations] : []),
+    [stockLocations]
+  );
+
   useLayoutEffect(() => {
     if (activeTab !== 'inventory') {
       setInventoryTableHasHorizontalOverflow(false);
@@ -3689,7 +3713,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     inventoryListPage,
     syncInventoryHorizontalScrollChrome,
     inventoryTableHasHorizontalOverflow,
-    inventoryDesktopColumns
+    inventoryDesktopColumns,
+    selectedLocationId,
+    inventoryDesktopPerLocationColumns
   ]);
 
   useEffect(() => {
@@ -3733,6 +3759,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const invSafePage = Math.min(Math.max(1, inventoryListPage), invTotalPages);
     const invPageStart = (invSafePage - 1) * INVENTORY_LIST_PAGE_SIZE;
     const paginatedInventory = filteredInventory.slice(invPageStart, invPageStart + INVENTORY_LIST_PAGE_SIZE);
+
+    const showPerLocationQtyInInventoryTable =
+      selectedLocationId === 'all' && inventoryDesktopPerLocationColumns.length > 0;
 
     // Get sort icon for column
     const getSortIcon = (columnKey) => {
@@ -4112,11 +4141,28 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                 : (item.type || '').replace('_', ' ')}
                           </span>
                         </div>
-                        {item.location && (
-                          <div>
-                            <span className="text-gray-500">Location:</span>
-                            <span className="ml-1 text-gray-900">{item.location}</span>
+                        {showPerLocationQtyInInventoryTable ? (
+                          <div className="col-span-2">
+                            <div className="text-gray-500 text-xs mb-1">Qty by location</div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-900">
+                              {inventoryDesktopPerLocationColumns.map((loc) => {
+                                const q = inventoryQuantityAtLocationId(item, loc.id);
+                                return (
+                                  <span key={loc.id} title={loc.name || loc.code || ''}>
+                                    <span className="text-gray-500">{loc.code || loc.name}:</span>{' '}
+                                    <span className={q < 0 ? 'text-red-600 font-semibold' : 'font-medium'}>{q}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
                           </div>
+                        ) : (
+                          item.location && (
+                            <div>
+                              <span className="text-gray-500">Location:</span>
+                              <span className="ml-1 text-gray-900">{item.location}</span>
+                            </div>
+                          )
                         )}
                       </div>
                       
@@ -4349,6 +4395,28 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </button>
                   </th>
                   )}
+                  {showPerLocationQtyInInventoryTable &&
+                    inventoryDesktopPerLocationColumns.map((loc) => {
+                      const sortKey = `${INVENTORY_SORT_LOC_QTY_PREFIX}${loc.id}`;
+                      const head = (loc.code || loc.name || 'Loc').trim();
+                      return (
+                        <th
+                          key={loc.id}
+                          className="inventory-desktop-loc-qty-col px-1.5 py-1.5 text-right text-[10px] font-medium text-gray-500 align-bottom"
+                          title={loc.name ? `${loc.name} — quantity` : `${head} — quantity`}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => handleSort(sortKey, e)}
+                            className="inline-flex flex-col items-end gap-0.5 hover:text-blue-600 transition-colors cursor-pointer max-w-[4.5rem] text-right font-medium bg-transparent border-0 p-0 leading-tight"
+                            title="Click to sort by quantity in this location"
+                          >
+                            <span className="truncate w-full">{head}</span>
+                            {getSortIcon(sortKey)}
+                          </button>
+                        </th>
+                      );
+                    })}
                   {invCol('unitCost') && (
                   <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
@@ -4602,6 +4670,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     />
                   </th>
                   )}
+                  {showPerLocationQtyInInventoryTable &&
+                    inventoryDesktopPerLocationColumns.map((loc) => (
+                      <th key={`f-${loc.id}`} className="inventory-desktop-loc-qty-col px-1.5 py-1.5" aria-hidden="true" />
+                    ))}
                   {invCol('unitCost') && (
                   <th className="px-3 py-1.5" aria-hidden="true"></th>
                   )}
@@ -4771,6 +4843,21 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {item.location ? item.location : <span className="text-gray-400">-</span>}
                     </td>
                     )}
+                    {showPerLocationQtyInInventoryTable &&
+                      inventoryDesktopPerLocationColumns.map((loc) => {
+                        const q = inventoryQuantityAtLocationId(item, loc.id);
+                        return (
+                          <td
+                            key={loc.id}
+                            className={`inventory-desktop-loc-qty-col px-1.5 py-1.5 text-[11px] text-right tabular-nums whitespace-nowrap ${
+                              q < 0 ? 'text-red-600 font-medium' : 'text-gray-700'
+                            }`}
+                            title={`${loc.code || loc.name || 'Location'}: ${q}`}
+                          >
+                            {q}
+                          </td>
+                        );
+                      })}
                     {invCol('unitCost') && (
                     <td className="px-3 py-1.5 text-xs text-right text-gray-900">
                       {item.unitCost > 0 ? formatCurrency(item.unitCost) : <span className="text-gray-400">-</span>}
