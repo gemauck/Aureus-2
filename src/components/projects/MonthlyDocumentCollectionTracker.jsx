@@ -1570,24 +1570,35 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             const containers = Array.from(root.querySelectorAll('[data-scroll-sync]'));
             const connected = containers.filter(el => el.isConnected);
             if (connected.length === 0) return false;
-            const baselineScrollLeft = connected[0].scrollLeft;
+            // Register listeners on every section first. Baseline scrollLeft sync used to run
+            // while registering in document order; synthetic scroll events could fire before
+            // later sections had handlers — peers stayed out of sync until manual scroll.
             connected.forEach(el => {
                 if (scrollHandlers.has(el)) return;
-                if (el.scrollLeft !== baselineScrollLeft) {
-                    el.scrollLeft = baselineScrollLeft;
-                }
                 const onScroll = () => handleScroll(el);
                 scrollHandlers.set(el, onScroll);
                 el.addEventListener('scroll', onScroll, { passive: true });
                 const onWheel = (e) => {
-                    if (e.deltaX === 0) return;
+                    let dx = e.deltaX;
+                    if (dx === 0 && e.shiftKey && e.deltaY !== 0) {
+                        dx = e.deltaY;
+                    }
+                    if (dx === 0) return;
                     e.preventDefault();
                     const maxScroll = el.scrollWidth - el.clientWidth;
-                    el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + e.deltaX, maxScroll));
+                    el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + dx, maxScroll));
                     handleScroll(el);
                 };
                 wheelHandlers.set(el, onWheel);
                 el.addEventListener('wheel', onWheel, { passive: false });
+            });
+            const baselineScrollLeft = connected[0].scrollLeft;
+            isScrollingRef.current = true;
+            connected.forEach(el => {
+                if (el.scrollLeft !== baselineScrollLeft) el.scrollLeft = baselineScrollLeft;
+            });
+            requestAnimationFrame(() => {
+                isScrollingRef.current = false;
             });
             return true;
         };
@@ -9188,7 +9199,7 @@ Abcotronics`;
                 )}
             </div>
             
-            {/* Per-section tables with independent horizontal scroll */}
+            {/* Per-section tables; horizontal scroll position is kept in sync across sections */}
             <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
                 {sections.length === 0 ? (
                     (() => {
