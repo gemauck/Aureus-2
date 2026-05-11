@@ -1519,6 +1519,23 @@ const ManagementMeetingNotes = () => {
         return `management-meeting-notes:${selectedMonth}:${weekForGeneralMinutes.id}`;
     }, [selectedMonth, weekForGeneralMinutes]);
 
+    /** Presence list may include the signed-in user; facepile shows others only. */
+    const presenceOthers = useMemo(() => {
+        if (!Array.isArray(presenceViewers)) {
+            return [];
+        }
+        const uid =
+            currentUser?.id != null
+                ? String(currentUser.id)
+                : currentUser?.sub != null
+                  ? String(currentUser.sub)
+                  : null;
+        if (!uid) {
+            return presenceViewers;
+        }
+        return presenceViewers.filter((v) => String(v?.userId || '') !== uid);
+    }, [presenceViewers, currentUser?.id, currentUser?.sub]);
+
     useEffect(() => {
         const id = weekForGeneralMinutes?.id;
         if (!id) {
@@ -5088,59 +5105,87 @@ const ManagementMeetingNotes = () => {
             {/* Weekly Notes Section */}
             {selectedMonth && currentMonthlyNotes && weeks.length > 0 && (
                 <div className="space-y-5">
-                    <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/60 border-slate-700 shadow-md' : 'bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200 shadow-sm'}`}>
+                    <div
+                        className={`rounded-2xl border p-4 sm:p-5 ${
+                            isDark
+                                ? 'border-slate-700/80 bg-slate-900/40 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
+                                : 'border-slate-200/90 bg-white/80 shadow-sm shadow-slate-200/40'
+                        }`}
+                    >
                         <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
                             <div>
-                                <p className={`text-sm font-bold uppercase tracking-wide mb-2 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-                                    <i className="fas fa-calendar-week mr-2 text-primary-600"></i>
-                                    Week Navigation
+                                <p className={`text-xs font-semibold uppercase tracking-[0.14em] mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    <i className="fas fa-calendar-week mr-2 text-primary-500 opacity-90"></i>
+                                    Week navigation
                                 </p>
-                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    Focus on the current week alongside next week while keeping earlier updates a swipe away. Scroll horizontally to move between weeks in the month.
+                                <p className={`text-sm font-medium leading-snug max-w-xl ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                    Pick a week to focus the grid. Scroll sideways when there are many weeks in the month.
                                 </p>
                             </div>
                         </div>
                         <div className="overflow-x-auto -mx-1">
-                            <div className="flex gap-3 px-1 pb-2">
+                            <div
+                                role="tablist"
+                                aria-label="Weeks in this month"
+                                className={`flex gap-2 px-1 pb-1 min-w-min p-1 rounded-2xl ${
+                                    isDark ? 'bg-slate-950/50 ring-1 ring-slate-700/60' : 'bg-slate-100/90 ring-1 ring-slate-200/80'
+                                }`}
+                            >
                                 {weeks.map((week, index) => {
                                     const rawId = getWeekIdentifier(week);
                                     const identifier = rawId || `week-${index}`;
                                     const isActualCurrentWeek = identifier === currentWeekId;
                                     const isActualNextWeek = identifier === nextWeekId;
                                     const isSelected = identifier === selectedWeek;
-                                const label = 'Week Overview';
+                                    const label = isActualCurrentWeek ? 'This week' : isActualNextWeek ? 'Next' : 'Week';
                                     return (
                                         <button
                                             key={identifier}
                                             type="button"
+                                            role="tab"
+                                            aria-selected={isSelected}
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
                                                 setSelectedWeek(identifier);
                                                 scrollToWeekId(identifier);
                                             }}
-                                            className={`relative whitespace-nowrap px-4 py-3 rounded-xl border text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 ${
-                                                isActualCurrentWeek
+                                            className={`relative text-left whitespace-nowrap min-w-[9.5rem] px-3.5 py-2.5 rounded-xl text-xs font-medium transition-[box-shadow,transform,border-color,background-color] duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
+                                                isDark ? 'focus-visible:ring-offset-slate-900' : 'focus-visible:ring-offset-white'
+                                            } ${
+                                                isSelected
                                                     ? isDark
-                                                        ? 'bg-gradient-to-br from-primary-600/30 to-primary-700/20 border-primary-400 text-primary-100 shadow-primary-900/40'
-                                                        : 'bg-gradient-to-br from-primary-50 to-primary-100/50 border-primary-500 text-primary-800 shadow-primary-200/50'
-                                                    : isActualNextWeek
-                                                        ? isDark
-                                                            ? 'bg-gradient-to-br from-amber-500/30 to-amber-600/20 border-amber-400 text-amber-100 shadow-amber-900/30'
-                                                            : 'bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-400 text-amber-800 shadow-amber-200/50'
-                                                        : isSelected
-                                                            ? isDark
-                                                                ? 'bg-slate-700 border-slate-500 text-slate-200 shadow-slate-900/30'
-                                                                : 'bg-slate-100 border-slate-400 text-slate-800 shadow-slate-200/40'
-                                                            : isDark
-                                                                ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-200 hover:bg-slate-750'
-                                                                : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:text-slate-800 hover:bg-slate-50'
+                                                        ? 'bg-slate-800 text-slate-100 shadow-md shadow-black/25 ring-1 ring-slate-600/90'
+                                                        : 'bg-white text-slate-900 shadow-md shadow-slate-300/50 ring-1 ring-slate-300/90'
+                                                    : isDark
+                                                      ? 'bg-transparent text-slate-400 hover:bg-slate-800/70 hover:text-slate-200 ring-1 ring-transparent hover:ring-slate-600/50'
+                                                      : 'bg-transparent text-slate-600 hover:bg-white/90 hover:text-slate-900 ring-1 ring-transparent hover:ring-slate-300/70'
                                             }`}
                                         >
-                                            <span className="block text-[10px] uppercase tracking-wider font-bold mb-1">
+                                            {(isActualCurrentWeek || isActualNextWeek) && (
+                                                <span
+                                                    className={`absolute top-2 right-2 h-1.5 w-1.5 rounded-full ${
+                                                        isActualCurrentWeek
+                                                            ? 'bg-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.25)]'
+                                                            : 'bg-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.2)]'
+                                                    }`}
+                                                    aria-hidden
+                                                />
+                                            )}
+                                            <span
+                                                className={`block text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${
+                                                    isSelected
+                                                        ? isDark
+                                                            ? 'text-primary-300'
+                                                            : 'text-primary-600'
+                                                        : isDark
+                                                          ? 'text-slate-500'
+                                                          : 'text-slate-500'
+                                                }`}
+                                            >
                                                 {label}
                                             </span>
-                                            <span className="block text-sm font-bold">
+                                            <span className={`block text-sm font-semibold tracking-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
                                                 {formatWeek(week.weekKey, week.weekStart)}
                                             </span>
                                         </button>
@@ -5150,36 +5195,74 @@ const ManagementMeetingNotes = () => {
                         </div>
                     </div>
 
-                    <div className={`flex flex-wrap items-center justify-end gap-2 px-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                        <span className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                            On this page
-                        </span>
-                        {presenceViewers.length === 0 ? (
-                            <span className={`text-xs italic ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Just you</span>
-                        ) : (
-                            <div className="flex -space-x-2 flex-row-reverse">
-                                {presenceViewers.map((v) => (
-                                    <span
-                                        key={v.userId}
-                                        title={v.name || v.email || 'User'}
-                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-semibold ring-2 overflow-hidden ${
-                                            isDark ? 'ring-slate-800 bg-primary-700 text-white' : 'ring-white bg-primary-600 text-white'
-                                        }`}
-                                    >
-                                        {v.avatar ? (
-                                            <img src={v.avatar} alt="" className="h-full w-full object-cover" />
-                                        ) : (
-                                            (v.name || v.email || '?')
-                                                .split(/\s+/)
-                                                .map((p) => p[0])
-                                                .join('')
-                                                .slice(0, 2)
-                                                .toUpperCase()
-                                        )}
+                    <div className="flex flex-wrap items-center justify-end gap-3 px-0.5">
+                        <div
+                            className={`inline-flex items-center gap-3 rounded-2xl border px-3 py-2 ${
+                                isDark
+                                    ? 'border-slate-700/80 bg-slate-900/35 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]'
+                                    : 'border-slate-200/90 bg-slate-50/90 shadow-sm'
+                            }`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <span
+                                    className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                                        isDark ? 'bg-slate-800 text-slate-400' : 'bg-white text-slate-500 shadow-sm ring-1 ring-slate-200/80'
+                                    }`}
+                                    aria-hidden
+                                >
+                                    <i className="fas fa-eye text-[11px]" />
+                                </span>
+                                <div className="flex flex-col leading-tight">
+                                    <span className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                        Viewing now
                                     </span>
-                                ))}
+                                    {presenceOthers.length === 0 ? (
+                                        <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Solo session</span>
+                                    ) : (
+                                        <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                            {1 + presenceOthers.length} viewing
+                                        </span>
+                                    )}
+                                </div>
                             </div>
-                        )}
+                            {presenceOthers.length > 0 && (
+                                <div
+                                    className={`flex flex-row-reverse items-center pl-3 border-l ${
+                                        isDark ? 'border-slate-600/70' : 'border-slate-200/90'
+                                    }`}
+                                >
+                                    {presenceOthers.map((v, i) => (
+                                        <span
+                                            key={v.userId}
+                                            title={v.name || v.email || 'User'}
+                                            style={{ zIndex: presenceOthers.length - i }}
+                                            className={`relative -ml-2 first:ml-0 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold overflow-hidden shadow-md ring-2 transition-transform duration-200 hover:z-10 hover:-translate-y-0.5 ${
+                                                isDark
+                                                    ? 'ring-slate-900 bg-gradient-to-br from-slate-600 to-slate-700 text-white'
+                                                    : 'ring-white bg-gradient-to-br from-slate-600 to-slate-800 text-white'
+                                            }`}
+                                        >
+                                            {v.avatar ? (
+                                                <img src={v.avatar} alt="" className="h-full w-full object-cover" />
+                                            ) : (
+                                                (v.name || v.email || '?')
+                                                    .split(/\s+/)
+                                                    .map((p) => p[0])
+                                                    .join('')
+                                                    .slice(0, 2)
+                                                    .toUpperCase()
+                                            )}
+                                            <span
+                                                className={`absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full border bg-emerald-400 ${
+                                                    isDark ? 'border-slate-900' : 'border-white/90'
+                                                }`}
+                                                aria-hidden
+                                            />
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div
@@ -5203,10 +5286,10 @@ const ManagementMeetingNotes = () => {
                                         gridRow: '1',
                                         gridColumn: `${getMonthlyGoalsGridColumn()}`
                                     }}
-                                    className={`rounded-xl border-2 p-5 transition-all duration-300 ${stickyMonthlyGoalsHeaderCol} ${
+                                    className={`rounded-2xl border p-5 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
                                         isDark
-                                            ? 'border-slate-600'
-                                            : 'border-slate-300'
+                                            ? 'border-slate-600/90 bg-slate-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
+                                            : 'border-slate-200/90 bg-white shadow-sm'
                                     }`}
                                 >
                                     <div className="flex items-start justify-between gap-3 mb-2">
@@ -5240,22 +5323,22 @@ const ManagementMeetingNotes = () => {
                                                 gridRow: '1',
                                                 gridColumn: `${getWeekGridColumn(index)}`
                                             }}
-                                            className={`rounded-xl border-2 p-5 transition-all duration-300 ${
+                                            className={`rounded-2xl border p-5 transition-[border-color,box-shadow,background-color] duration-200 ${
                                                 isActualCurrentWeek
                                                     ? isDark
-                                                        ? 'border-primary-400 shadow-xl shadow-primary-900/50 bg-gradient-to-br from-slate-800 to-slate-900'
-                                                        : 'border-primary-500 shadow-xl shadow-primary-200/60 bg-gradient-to-br from-white to-primary-50/30'
+                                                        ? 'border-primary-500/70 ring-1 ring-inset ring-primary-500/20 shadow-sm bg-slate-900/80'
+                                                        : 'border-primary-400/80 ring-1 ring-inset ring-primary-400/15 shadow-sm bg-white'
                                                     : isActualNextWeek
                                                         ? isDark
-                                                            ? 'border-amber-400 shadow-lg shadow-amber-900/40 bg-gradient-to-br from-slate-800 to-slate-900'
-                                                            : 'border-amber-400 shadow-lg shadow-amber-100/60 bg-gradient-to-br from-white to-amber-50/30'
+                                                            ? 'border-amber-500/55 ring-1 ring-inset ring-amber-400/15 shadow-sm bg-slate-900/60'
+                                                            : 'border-amber-300/90 ring-1 ring-inset ring-amber-200/40 shadow-sm bg-amber-50/50'
                                                         : isSelected
                                                             ? isDark
-                                                                ? 'border-slate-500 shadow-lg shadow-slate-900/30 bg-gradient-to-br from-slate-800 to-slate-900'
-                                                                : 'border-slate-400 shadow-lg shadow-slate-200/50 bg-gradient-to-br from-white to-slate-50'
+                                                                ? 'border-slate-600 ring-1 ring-inset ring-white/5 shadow-sm bg-slate-800/90'
+                                                                : 'border-slate-300 ring-1 ring-inset ring-slate-200/60 shadow-sm bg-slate-50/90'
                                                             : isDark
-                                                                ? 'border-slate-700 bg-slate-800 hover:border-slate-600 hover:shadow-md'
-                                                                : 'border-gray-300 bg-white hover:border-gray-400 hover:shadow-md'
+                                                                ? 'border-slate-700/90 bg-slate-900/35 hover:border-slate-600'
+                                                                : 'border-slate-200/90 bg-white hover:border-slate-300'
                                             }`}
                                         >
                                             <div className="flex items-start justify-between gap-3 mb-4">
