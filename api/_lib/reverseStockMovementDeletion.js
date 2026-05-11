@@ -56,17 +56,14 @@ async function createStockMovementTxWithRetry(tx, payload) {
 }
 
 /**
- * Same behavior as DELETE /api/manufacturing/stock-movements/:id — reverses qty at location,
- * updates master inventory, writes auto-reversal movement, deletes original row.
+ * Reverses LocationInventory + master InventoryItem for removing `movement` from the ledger.
+ * Does not delete the row or write a compensating StockMovement.
  *
  * @param {import('@prisma/client').Prisma.TransactionClient} tx
- * @param {string} id - StockMovement primary key (cuid)
- * @param {string} performedBy
+ * @param {import('@prisma/client').StockMovement} movement
+ * @param {string} id - StockMovement primary key (for error messages)
  */
-export async function reverseStockMovementDeletionTx(tx, id, performedBy = 'System') {
-  const movement = await tx.stockMovement.findUnique({ where: { id } })
-  if (!movement) throw httpError(404, 'Stock movement not found')
-
+async function applyInventoryReversalForRemovedMovementTx(tx, movement, id) {
   const reverseQty = -1 * (parseFloat(movement.quantity) || 0)
   const sku = movement.sku
   const itemName = movement.itemName
@@ -151,7 +148,42 @@ export async function reverseStockMovementDeletionTx(tx, id, performedBy = 'Syst
       }
     })
   }
+}
 
+/**
+ * Remove an adjustment-only movement and reverse inventory without writing a compensating ledger row.
+ * For correcting mistaken duplicate adjustments (admin / one-off tooling).
+ *
+ * @param {import('@prisma/client').Prisma.TransactionClient} tx
+ * @param {string} id - StockMovement primary key (cuid)
+ */
+export async function purgeAdjustmentStockMovementTx(tx, id) {
+  const movement = await tx.stockMovement.findUnique({ where: { id } })
+  if (!movement) throw httpError(404, 'Stock movement not found')
+  const t = String(movement.type || '').toLowerCase()
+  if (t !== 'adjustment') {
+    throw httpError(400, 'purgeAdjustmentStockMovementTx only supports type=adjustment')
+  }
+  await applyInventoryReversalForRemovedMovementTx(tx, movement, id)
+  await tx.stockMovement.delete({ where: { id } })
+}
+
+/**
+ * Same behavior as DELETE /api/manufacturing/stock-movements/:id — reverses qty at location,
+ * updates master inventory, writes auto-reversal movement, deletes original row.
+ *
+ * @param {import('@prisma/client').Prisma.TransactionClient} tx
+ * @param {string} id - StockMovement primary key (cuid)
+ * @param {string} performedBy
+ */
+export async function reverseStockMovementDeletionTx(tx, id, performedBy = 'System') {
+  const movement = await tx.stockMovement.findUnique({ where: { id } })
+  if (!movement) throw httpError(404, 'Stock movement not found')
+
+  const now = new Date()
+  await applyInventoryReversalForRemovedMovementTx(tx, movement, id)
+
+  const reverseQty = -1 * (parseFloat(movement.quantity) || 0)
   await createStockMovementTxWithRetry(tx, {
     date: now,
     type: 'adjustment',

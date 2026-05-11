@@ -5831,12 +5831,26 @@ async function handler(req, res) {
     }
 
     // DELETE ONE (DELETE /api/manufacturing/stock-movements/:id)
+    // :id may be Prisma cuid or public movementId (e.g. MOV-MP1B2XHC-FICNOX)
     if (req.method === 'DELETE' && id) {
       try {
+        let resolvedId = id
+        const idStr = String(id || '').trim()
+        if (idStr.startsWith('MOV-')) {
+          const byPub = await prisma.stockMovement.findFirst({
+            where: { movementId: idStr },
+            select: { id: true }
+          })
+          if (!byPub) return notFound(res, 'Stock movement not found')
+          resolvedId = byPub.id
+        }
+
         await prisma.$transaction(async (tx) => {
-          await reverseStockMovementDeletionTx(tx, id, req.user?.name || 'System')
+          await reverseStockMovementDeletionTx(tx, resolvedId, req.user?.name || 'System')
         })
-        auditManufacturing('delete', 'stock-movements', id, { summary: `Deleted stock movement ${id}` })
+        auditManufacturing('delete', 'stock-movements', resolvedId, {
+          summary: `Deleted stock movement ${resolvedId}`
+        })
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete stock movement:', error)

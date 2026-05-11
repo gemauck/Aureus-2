@@ -89,7 +89,17 @@ function copyJSFile(srcPath) {
       if (content.includes('defaultExport')) {
         exposeStatements += '\nif (typeof defaultExport !== "undefined") { window.GoogleCalendarService = defaultExport; }';
       }
-      content = `(() => {\n${content}\n\n// Expose to window\n${exposeStatements}\n})();`;
+      // Esbuild emits require() for cross-file imports in compiled JSX; the browser shim expects
+      // module.exports (see dist JSX using require("../../utils/...")).
+      const cjsNamedExports =
+        exportsToExpose.length > 0
+          ? `\nif (typeof module !== 'undefined' && module.exports) {\n  module.exports = {\n    ${exportsToExpose.join(',\n    ')}\n  };\n}`
+          : '';
+      const cjsDefaultExport =
+        content.includes('defaultExport') && exportsToExpose.length === 0
+          ? `\nif (typeof module !== 'undefined' && module.exports) {\n  module.exports = defaultExport;\n}`
+          : '';
+      content = `(() => {\n${content}\n\n// Expose to window\n${exposeStatements}${cjsNamedExports}${cjsDefaultExport}\n})();`;
       // Clean up any duplicate window.window assignments
       content = content.replace(/window\.window\s*=\s*window[;\n]*/g, '');
     } else {
