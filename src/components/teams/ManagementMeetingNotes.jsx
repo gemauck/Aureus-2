@@ -976,6 +976,7 @@ const ManagementMeetingNotes = () => {
             }
 
             const urlMonthCandidate = normalizeMonthKeyInput(getMeetingNotesRouteSearchParams().get('month'));
+            const calendarMonthKey = getMonthKeyFromDate(new Date());
             const nextMonthKey = (() => {
                 if (preferredMonthKey && notes.some((note) => note?.monthKey === preferredMonthKey)) {
                     return preferredMonthKey;
@@ -986,6 +987,9 @@ const ManagementMeetingNotes = () => {
                 const fromState = selectedMonthRef.current;
                 if (fromState && notes.some((note) => note?.monthKey === fromState)) {
                     return fromState;
+                }
+                if (calendarMonthKey && notes.some((note) => note?.monthKey === calendarMonthKey)) {
+                    return calendarMonthKey;
                 }
                 return notes[0].monthKey;
             })();
@@ -1192,7 +1196,7 @@ const ManagementMeetingNotes = () => {
 
     // Initialize selected month:
     // - Respect an explicit month in the URL (for shared links / navigation)
-    // - Otherwise, default to the current calendar month
+    // - Otherwise, default to the current calendar month (including full reload)
     useEffect(() => {
         try {
             const monthFromURL = getMonthFromURL();
@@ -1205,10 +1209,6 @@ const ManagementMeetingNotes = () => {
                 }
             }
             
-            // No (valid) month in URL — default to calendar month on fresh navigation only (reload keeps state / empty; avoids snapping to "now" after F5).
-            if (initialPageWasNavigationReload) {
-                return;
-            }
             const now = new Date();
             const monthKey = getMonthKeyFromDate(now);
             if (monthKey) {
@@ -1216,9 +1216,6 @@ const ManagementMeetingNotes = () => {
             }
         } catch (error) {
             console.warn('ManagementMeetingNotes: failed to initialize month, falling back to current month', error);
-            if (initialPageWasNavigationReload) {
-                return;
-            }
             const now = new Date();
             const monthKey = getMonthKeyFromDate(now);
             if (monthKey) {
@@ -1570,12 +1567,16 @@ const ManagementMeetingNotes = () => {
     /** Week whose general minutes are shown (falls back to first week when needed) */
     const weekForGeneralMinutes = selectedWeekObj ?? (weeks.length ? weeks[0] : null);
 
+    /**
+     * Presence room = whole month (not per selected week). Per-week keys split users who had
+     * different week columns focused, so "Viewing now" looked empty even when both were on the page.
+     */
     const meetingNotesRoomKey = useMemo(() => {
-        if (!selectedMonth || !weekForGeneralMinutes?.id) {
+        if (!selectedMonth) {
             return null;
         }
-        return `management-meeting-notes:${selectedMonth}:${weekForGeneralMinutes.id}`;
-    }, [selectedMonth, weekForGeneralMinutes]);
+        return `management-meeting-notes:${selectedMonth}`;
+    }, [selectedMonth]);
 
     /** Presence list may include the signed-in user; facepile shows others only. */
     const presenceOthers = useMemo(() => {
@@ -1610,8 +1611,9 @@ const ManagementMeetingNotes = () => {
     const getWeekGridColumn = (weekIndex) => weekIndex + 2;
     const getMonthlyGoalsGridColumn = () => 1;
 
-    /** Match pre–monthly-goals-column grid (before widen commit): same width for all columns */
-    const meetingNotesGridColumnWidth = 'minmax(520px, 560px)';
+    /** Column 1 = monthly goals (slightly narrower); week columns stay wide for editors. */
+    const meetingNotesMonthlyGoalsColumnWidth = 'minmax(400px, 460px)';
+    const meetingNotesWeekColumnWidth = 'minmax(520px, 560px)';
     const stickyMonthlyGoalsHeaderCol = isDark
         ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
         : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
@@ -3365,7 +3367,7 @@ const ManagementMeetingNotes = () => {
             }
         };
 
-        const id = setInterval(tick, 3000);
+        const id = setInterval(tick, 2000);
         void tick();
         return () => {
             cancelled = true;
@@ -3373,7 +3375,7 @@ const ManagementMeetingNotes = () => {
         };
     }, [isAdminUser, selectedMonth]);
 
-    // Presence: who else is on this week’s meeting notes room (same server process)
+    // Presence: who else is on this month’s meeting notes (same server process; in-memory)
     useEffect(() => {
         if (!isAdminUser || !meetingNotesRoomKey || !window.DatabaseAPI?.heartbeatMeetingNotesPresence) {
             return undefined;
@@ -3405,7 +3407,7 @@ const ManagementMeetingNotes = () => {
             if (!document.hidden) {
                 void load();
             }
-        }, 5000);
+        }, 3000);
         return () => clearInterval(iv);
     }, [isAdminUser, meetingNotesRoomKey]);
     
@@ -5322,7 +5324,7 @@ const ManagementMeetingNotes = () => {
                             <div 
                                 className="inline-grid gap-4 sm:gap-5"
                                 style={{
-                                    gridTemplateColumns: `repeat(${weeks.length + 1}, ${meetingNotesGridColumnWidth})`,
+                                    gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
                                     gridTemplateRows: 'auto'
                                 }}
                             >
@@ -5423,7 +5425,7 @@ const ManagementMeetingNotes = () => {
                         <div 
                             className="inline-grid gap-4 sm:gap-5"
                             style={{
-                                gridTemplateColumns: `repeat(${weeks.length + 1}, ${meetingNotesGridColumnWidth})`,
+                                gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
                                 gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
                                 alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with David Buttemer
                                 gridAutoFlow: 'row' // Ensure items flow row by row
