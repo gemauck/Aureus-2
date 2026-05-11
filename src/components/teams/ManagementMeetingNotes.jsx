@@ -1870,10 +1870,6 @@ const ManagementMeetingNotes = () => {
             return;
         }
 
-        if (initialPageWasNavigationReload) {
-            return;
-        }
-
         const preferredIdx = managementMeetingNotesPreferredWeekIndex(weeks);
         const preferredId = getWeekId(weeks[preferredIdx], preferredIdx);
         if (preferredId && preferredId !== selectedWeek) {
@@ -1883,9 +1879,6 @@ const ManagementMeetingNotes = () => {
 
     useEffect(() => {
         if (!selectedWeek || !weeksNavSignature) {
-            return;
-        }
-        if (initialPageWasNavigationReload) {
             return;
         }
         let cancelled = false;
