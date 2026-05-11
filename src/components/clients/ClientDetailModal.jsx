@@ -9069,7 +9069,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         role="presentation"
                     >
                         <div
-                            className={`flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden rounded-none shadow-none [zoom:0.88] ${
+                            className={`flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden rounded-none shadow-none [zoom:0.78] ${
                                 embedProposalWizardInLayout ? 'h-full' : 'h-[100dvh]'
                             } ${isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}
                             role="dialog"
