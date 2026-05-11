@@ -6,10 +6,10 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 const LEAD_PROPOSAL_PROCESS_STEPS = [
-    { step: 1, label: 'Customer Engagement Mandate' },
-    { step: 2, label: 'Proposal Drafting' },
-    { step: 3, label: 'Circulation for comment, pricing and approval' },
-    { step: 4, label: 'Submission to Client' },
+    { step: 1, label: 'Customer Engagement Mandate', shortLabel: 'Mandate' },
+    { step: 2, label: 'Proposal Drafting', shortLabel: 'Drafting' },
+    { step: 3, label: 'Circulation for comment, pricing and approval', shortLabel: 'Circulation' },
+    { step: 4, label: 'Submission to Client', shortLabel: 'Submission' },
 ];
 
 /** Step 3 circulation — keys must match api/_lib/leadProposalWorkflow.js LEAD_PROPOSAL_CIRCULATION_DEPT_KEYS */
@@ -9076,27 +9076,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             aria-modal="true"
                             aria-labelledby="lead-proposal-wizard-title"
                         >
-                        <div className={`shrink-0 border-b px-6 py-5 sm:px-8 sm:py-6 ${isDark ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gradient-to-r from-primary-50/80 to-white'}`}>
-                            <div className="flex items-start justify-between gap-3">
+                        <div className={`shrink-0 border-b px-4 py-3 sm:px-5 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50/90'}`}>
+                            <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                    <h2 id="lead-proposal-wizard-title" className="text-2xl md:text-3xl font-bold tracking-tight">
+                                    <h2 id="lead-proposal-wizard-title" className="text-lg font-semibold tracking-tight md:text-xl">
                                         {leadProposalWizardEditIndex != null ? 'Edit proposal process' : 'Add proposal'}
                                     </h2>
-                                    <p className={`mt-2 text-sm md:text-base leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        Work through the four standard stages. You can save anytime — data syncs with this lead.
+                                    <p className={`mt-0.5 text-xs leading-snug ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Four stages — save anytime; data syncs with this lead.
                                     </p>
                                 </div>
                                 <button
                                     type="button"
-                                    className={`rounded-lg p-2 shrink-0 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                                    className={`rounded-md p-1.5 shrink-0 text-sm ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-200/80'}`}
                                     onClick={() => !leadProposalWizardSaving && closeLeadProposalWizard()}
                                     aria-label="Close"
                                 >
                                     <i className="fas fa-times" />
                                 </button>
                             </div>
-                            <div className="mt-3">
-                                <label className={`block text-xs md:text-sm font-semibold uppercase tracking-wide mb-1.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <div className="mt-2">
+                                <label className={`block text-[10px] font-semibold uppercase tracking-wide mb-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                                     Proposal title
                                 </label>
                                 <input
@@ -9105,40 +9105,43 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     onChange={(e) =>
                                         setLeadProposalWizardDraft((p) => (p ? { ...p, title: e.target.value } : p))
                                     }
-                                    className={`w-full rounded-lg border px-4 py-3 text-base md:text-lg ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300'}`}
+                                    className={`w-full rounded-md border px-3 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`}
                                     placeholder="e.g. Opencast fuel management — Q3 proposal"
                                 />
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-2">
+                            <nav className="mt-2.5 flex flex-wrap gap-1" aria-label="Proposal workflow steps">
                                 {LEAD_PROPOSAL_PROCESS_STEPS.map((s) => {
                                     const active = leadProposalWizardStep === s.step;
                                     return (
                                         <button
                                             key={s.step}
                                             type="button"
+                                            title={s.label}
                                             onClick={() => goLeadProposalWizardStep(s.step)}
-                                            className={`rounded-full px-4 py-2.5 text-sm md:text-base font-semibold transition ${
+                                            className={`rounded-md px-2 py-1 text-xs font-medium transition ${
                                                 active
                                                     ? isDark
                                                         ? 'bg-primary-600 text-white'
-                                                        : 'bg-primary-600 text-white shadow'
+                                                        : 'bg-primary-600 text-white shadow-sm'
                                                     : isDark
-                                                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                      ? 'bg-gray-700/80 text-gray-300 hover:bg-gray-600'
+                                                      : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-100'
                                             }`}
                                         >
-                                            <span className="opacity-80 mr-1">{s.step}.</span>
-                                            {s.label.length > 48 ? `${s.label.slice(0, 46)}…` : s.label}
+                                            <span className="tabular-nums opacity-80">{s.step}.</span> {s.shortLabel}
                                         </button>
                                     );
                                 })}
-                            </div>
+                            </nav>
+                            <p className={`mt-1.5 hidden md:block text-[11px] leading-tight ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                {LEAD_PROPOSAL_PROCESS_STEPS.find((x) => x.step === leadProposalWizardStep)?.label}
+                            </p>
                         </div>
 
-                        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
+                        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
                             {leadProposalWizardHint ? (
                                 <div
-                                    className={`mb-4 rounded-lg border px-4 py-3 text-sm md:text-base ${isDark ? 'border-amber-700/50 bg-amber-900/20 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
+                                    className={`mb-3 rounded-md border px-3 py-2 text-xs ${isDark ? 'border-amber-700/50 bg-amber-900/20 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
                                 >
                                     {leadProposalWizardHint}
                                 </div>
@@ -9147,11 +9150,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 const d = leadProposalWizardDraft;
                                 const w = normalizeLeadProposalWorkflowUi(d.workflow);
                                 const qn = getEngagementQuestionnaires();
-                                const stepPanelCls = `rounded-xl border p-6 sm:p-8 ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50/80'} text-base`;
-                                const wizStepTitleCls = `text-lg md:text-xl font-bold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`;
-                                const wizDescCls = `text-sm md:text-base mb-5 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`;
-                                const labelCls = `block text-sm md:text-base font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
-                                const inputCls = `w-full rounded-lg border px-4 py-3 text-base md:text-lg ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`;
+                                const stepPanelCls = `rounded-lg border p-3 sm:p-4 ${isDark ? 'border-gray-700 bg-gray-900/25' : 'border-gray-200 bg-white'} text-sm`;
+                                const wizStepTitleCls = `text-sm font-semibold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`;
+                                const wizDescCls = `text-xs mb-3 leading-snug ${isDark ? 'text-gray-400' : 'text-gray-600'}`;
+                                const labelCls = `block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
+                                const inputCls = `w-full rounded-md border px-2.5 py-2 text-sm ${isDark ? 'border-gray-600 bg-gray-900 text-gray-100' : 'border-gray-300 bg-white'}`;
 
                                 if (leadProposalWizardStep === 1) {
                                     const isProposalEdit = leadProposalWizardEditIndex != null;
@@ -9709,53 +9712,58 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 Step 3 — Circulation for comment, pricing and approval
                                             </h3>
                                             <p className={wizDescCls}>
-                                                Capture comments by department and assign a responsible person for each. Assignees are
-                                                notified when you save.
+                                                Comments and assignees by department — notified when you save.
                                             </p>
-                                            <div className="space-y-5">
+                                            <div
+                                                className={`divide-y overflow-hidden rounded-md border ${isDark ? 'divide-gray-600 border-gray-600' : 'divide-gray-200 border-gray-200'}`}
+                                            >
                                                 {LEAD_PROPOSAL_CIRCULATION_DEPARTMENTS.map((dept) => {
                                                     const row = cd[dept.key] || { comment: '', responsibleUserId: '' };
                                                     return (
                                                         <div
                                                             key={dept.key}
-                                                            className={`rounded-xl border p-4 sm:p-5 ${isDark ? 'border-gray-600 bg-gray-900/35' : 'border-gray-200 bg-white'}`}
+                                                            className={`p-2.5 sm:p-3 ${isDark ? 'bg-gray-900/20' : 'bg-white'}`}
                                                         >
-                                                            <div className="mb-3">
-                                                                <span
-                                                                    className={`text-sm md:text-base font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
-                                                                >
-                                                                    {dept.label}
-                                                                </span>
-                                                            </div>
-                                                            <label className={`${labelCls} text-sm`}>Comments</label>
-                                                            <textarea
-                                                                value={row.comment || ''}
-                                                                onChange={(e) =>
-                                                                    updateCirculationDepartment(dept.key, {
-                                                                        comment: e.target.value
-                                                                    })
-                                                                }
-                                                                rows={3}
-                                                                className={`${inputCls} mb-4`}
-                                                                placeholder="Departmental feedback…"
-                                                            />
-                                                            <label className={`${labelCls} text-sm`}>Responsible person</label>
-                                                            <select
-                                                                value={row.responsibleUserId || ''}
-                                                                onChange={(e) =>
-                                                                    updateCirculationDepartment(dept.key, {
-                                                                        responsibleUserId: e.target.value
-                                                                    })
-                                                                }
-                                                                className={inputCls}
+                                                            <div
+                                                                className={`mb-2 text-xs font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
                                                             >
-                                                                <option value="">— Select responsible person —</option>
-                                                                {circulationAssigneeUsers.map((u) => (
-                                                                    <option key={u.id} value={u.id}>
-                                                                        {u.name || u.email || u.id}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
+                                                                {dept.label}
+                                                            </div>
+                                                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3">
+                                                                <div>
+                                                                    <label className={labelCls}>Comments</label>
+                                                                    <textarea
+                                                                        value={row.comment || ''}
+                                                                        onChange={(e) =>
+                                                                            updateCirculationDepartment(dept.key, {
+                                                                                comment: e.target.value
+                                                                            })
+                                                                        }
+                                                                        rows={2}
+                                                                        className={inputCls}
+                                                                        placeholder="Departmental feedback…"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className={labelCls}>Responsible person</label>
+                                                                    <select
+                                                                        value={row.responsibleUserId || ''}
+                                                                        onChange={(e) =>
+                                                                            updateCirculationDepartment(dept.key, {
+                                                                                responsibleUserId: e.target.value
+                                                                            })
+                                                                        }
+                                                                        className={inputCls}
+                                                                    >
+                                                                        <option value="">— Select —</option>
+                                                                        {circulationAssigneeUsers.map((u) => (
+                                                                            <option key={u.id} value={u.id}>
+                                                                                {u.name || u.email || u.id}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     );
                                                 })}
@@ -9815,7 +9823,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 setLeadProposalWizardHint('Submission timestamp recorded. Click Save & close to persist.');
                                                 setTimeout(() => setLeadProposalWizardHint(''), 5000);
                                             }}
-                                            className={`text-base font-semibold px-5 py-3 rounded-lg ${isDark ? 'bg-emerald-700 hover:bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                                            className={`text-sm font-semibold px-3 py-2 rounded-md ${isDark ? 'bg-emerald-700 hover:bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
                                         >
                                             <i className="fas fa-paper-plane mr-2" />
                                             {w.submittedToClientAt ? 'Update sent timestamp' : 'Record sent to client now'}
@@ -9825,13 +9833,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             })()}
                         </div>
 
-                        <div className={`shrink-0 flex flex-wrap items-center justify-between gap-3 border-t px-6 py-5 sm:px-8 ${isDark ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
-                            <div className="flex flex-wrap gap-3">
+                        <div className={`shrink-0 flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 sm:px-5 ${isDark ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+                            <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
                                     disabled={leadProposalWizardSaving || leadProposalWizardStep <= 1}
                                     onClick={() => goLeadProposalWizardStep(leadProposalWizardStep - 1)}
-                                    className={`rounded-lg px-5 py-3 text-base font-medium ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-white border border-gray-300 hover:bg-gray-50'} disabled:opacity-40`}
+                                    className={`rounded-md px-3 py-2 text-sm font-medium ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-white border border-gray-300 hover:bg-gray-50'} disabled:opacity-40`}
                                 >
                                     Back
                                 </button>
@@ -9843,17 +9851,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         (leadProposalWizardStep === 1 && leadProposalWizardCreatingQ)
                                     }
                                     onClick={() => goLeadProposalWizardStep(leadProposalWizardStep + 1)}
-                                    className={`rounded-lg px-5 py-3 text-base font-medium ${isDark ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-900 text-white hover:bg-gray-800'} disabled:opacity-40`}
+                                    className={`rounded-md px-3 py-2 text-sm font-medium ${isDark ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-900 text-white hover:bg-gray-800'} disabled:opacity-40`}
                                 >
                                     Next
                                 </button>
                             </div>
-                            <div className="flex flex-wrap gap-3">
+                            <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
                                     disabled={leadProposalWizardSaving}
                                     onClick={() => !leadProposalWizardSaving && closeLeadProposalWizard()}
-                                    className={`rounded-lg px-5 py-3 text-base ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-200'}`}
+                                    className={`rounded-md px-3 py-2 text-sm ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-200'}`}
                                 >
                                     Cancel
                                 </button>
@@ -9861,7 +9869,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     type="button"
                                     disabled={leadProposalWizardSaving || !String(leadProposalWizardDraft.title || '').trim()}
                                     onClick={() => void saveLeadProposalWizard()}
-                                    className="rounded-lg bg-primary-600 px-6 py-3 text-base font-semibold text-white hover:bg-primary-700 disabled:opacity-50 shadow-sm"
+                                    className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 shadow-sm"
                                 >
                                     {leadProposalWizardSaving ? (
                                         <>
