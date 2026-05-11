@@ -1,3 +1,8 @@
+import {
+  normalizeInventoryItemRow,
+  inventoryRowTotalValueForQuantity
+} from '../../utils/manufacturingInventoryValue.js';
+
 // Use React from window
 
 // Safely access React hooks from the global window.React without throwing
@@ -155,23 +160,6 @@ function dedupeInventoryRowsBySku(items) {
     out.push(row);
   }
   return out;
-}
-
-/** Same rule as API: extended value = quantity × unit cost on the catalog row. */
-function inventoryLineTotalValue(quantity, unitCost) {
-  return (Number(quantity) || 0) * (Number(unitCost) || 0);
-}
-
-/** Prefer API-provided totalValue (supports aggregated per-location costing); fallback to qty × unit cost. */
-function normalizeInventoryItemRow(item) {
-  if (!item || typeof item !== 'object') return item;
-  return {
-    ...item,
-    totalValue:
-      item.totalValue !== undefined && item.totalValue !== null
-        ? (Number(item.totalValue) || 0)
-        : inventoryLineTotalValue(item.quantity, item.unitCost)
-  };
 }
 
 function normalizeInventoryRows(items) {
@@ -1415,17 +1403,56 @@ try {
   };
 
   const handleExportInventory = useCallback(async () => {
-    if (!Array.isArray(inventory) || inventory.length === 0) {
-      window.alert('No inventory data available to export.');
-      return;
-    }
-
     setIsExportingInventory(true);
 
     try {
+      const locFilter = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+      let exportInventory = [];
+      if (window.DatabaseAPI?.getInventory) {
+        try {
+          const invRes = await window.DatabaseAPI.getInventory(locFilter, { forceRefresh: true });
+          exportInventory = Array.isArray(invRes?.data?.inventory) ? invRes.data.inventory : [];
+        } catch (e) {
+          console.warn('Export: fresh inventory fetch failed, using on-screen list', e);
+        }
+      }
+      if (!Array.isArray(exportInventory) || exportInventory.length === 0) {
+        exportInventory = Array.isArray(inventory) ? inventory : [];
+      }
+      if (!Array.isArray(exportInventory) || exportInventory.length === 0) {
+        window.alert('No inventory data available to export.');
+        return;
+      }
+
+      const lineTotalForExport = (item) => {
+        const row = normalizeInventoryItemRow(item);
+        return Number(row.totalValue) || 0;
+      };
+
+      let footerTotalValue = null;
+      if (window.DatabaseAPI?.getManufacturingInventoryLocationValueSummary) {
+        try {
+          const sumRes = await window.DatabaseAPI.getManufacturingInventoryLocationValueSummary({
+            forceRefresh: true
+          });
+          const inner = sumRes?.data ?? sumRes;
+          if (locFilter) {
+            const locRow = (inner?.locations || []).find((r) => String(r.locationId) === String(locFilter));
+            footerTotalValue = Number(locRow?.totalValue);
+          } else {
+            footerTotalValue = Number(inner?.grandTotal);
+          }
+        } catch (e) {
+          console.warn('Export: location value summary failed, footer will sum row totals', e);
+        }
+      }
+      if (footerTotalValue == null || Number.isNaN(footerTotalValue)) {
+        footerTotalValue = exportInventory.reduce((sum, item) => sum + lineTotalForExport(item), 0);
+      }
+
       const uniqueKeys = new Set();
 
-      inventory.forEach((item) => {
+      exportInventory.forEach((item) => {
         if (item && typeof item === 'object') {
           Object.keys(item).forEach((key) => uniqueKeys.add(key));
         }
@@ -1514,25 +1541,18 @@ try {
       }
 
       const inventoryExportCell = (item, key) => {
-        if (key === 'totalValue') return inventoryLineTotalValue(item.quantity, item.unitCost);
+        if (key === 'totalValue') return lineTotalForExport(item);
         return key in item ? item[key] : '';
       };
 
       if (XLSXLib && XLSXLib.utils) {
         const headerRow = orderedKeys.slice();
-        const dataRows = inventory.map((item) =>
+        const dataRows = exportInventory.map((item) =>
           orderedKeys.map((key) => formatValueForCell(inventoryExportCell(item, key)))
         );
-        // Sum Total Value column for footer row
         const totalValueIdx = orderedKeys.indexOf('totalValue');
-        let totalValueSum = 0;
-        if (totalValueIdx !== -1) {
-          inventory.forEach((item) => {
-            totalValueSum += inventoryLineTotalValue(item.quantity, item.unitCost);
-          });
-        }
         const totalRow = orderedKeys.map((key, idx) => {
-          if (key === 'totalValue') return totalValueSum;
+          if (key === 'totalValue' && totalValueIdx !== -1) return footerTotalValue;
           if (idx === 0) return 'Total';
           return '';
         });
@@ -1553,23 +1573,21 @@ try {
       } else {
         // Fallback: CSV so the file opens in Excel without format warnings
         const totalValueIdx = orderedKeys.indexOf('totalValue');
-        let totalValueSum = 0;
-        if (totalValueIdx !== -1) {
-          inventory.forEach((item) => {
-            totalValueSum += inventoryLineTotalValue(item.quantity, item.unitCost);
-          });
-        }
         const sanitizeCsv = (value) => {
           const s = String(formatValueForCell(value));
           if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
           return s;
         };
         const headerLine = orderedKeys.map(sanitizeCsv).join(',');
-        const dataLines = inventory.map((item) =>
+        const dataLines = exportInventory.map((item) =>
           orderedKeys.map((key) => sanitizeCsv(formatValueForCell(inventoryExportCell(item, key)))).join(',')
         );
         const totalRowCells = orderedKeys.map((key, idx) =>
-          key === 'totalValue' ? sanitizeCsv(totalValueSum) : idx === 0 ? 'Total' : ''
+          key === 'totalValue' && totalValueIdx !== -1
+            ? sanitizeCsv(footerTotalValue)
+            : idx === 0
+              ? 'Total'
+              : ''
         );
         const totalLine = totalRowCells.join(',');
         const csvContent = [headerLine, ...dataLines, totalLine].join('\r\n');
@@ -1589,7 +1607,7 @@ try {
     } finally {
       setIsExportingInventory(false);
     }
-  }, [inventory]);
+  }, [inventory, selectedLocationId]);
 
   // Download Excel template for bulk upload with dropdowns
   const handleDownloadTemplate = useCallback(async () => {
@@ -3523,8 +3541,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             bVal = parseFloat(b.unitCost || 0);
             break;
           case 'totalValue':
-            aVal = inventoryLineTotalValue(a.quantity, a.unitCost);
-            bVal = inventoryLineTotalValue(b.quantity, b.unitCost);
+            aVal = Number(normalizeInventoryItemRow(a).totalValue) || 0;
+            bVal = Number(normalizeInventoryItemRow(b).totalValue) || 0;
             break;
           case 'status':
             aVal = (a.status || '').toString().toLowerCase();
@@ -4058,7 +4076,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 }
               })();
               const availableQty = getAvailableInventoryQuantity(item);
-              const lineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
+              const lineTotalValue = Number(normalizeInventoryItemRow(item).totalValue) || 0;
 
               return (
                 <div 
@@ -4649,7 +4667,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {paginatedInventory.map(item => {
-                  const lineTotalValue = inventoryLineTotalValue(item.quantity, item.unitCost);
+                  const lineTotalValue = Number(normalizeInventoryItemRow(item).totalValue) || 0;
                   return (
                     <tr 
                       key={getInventoryItemId(item) || item.sku} 
@@ -6681,9 +6699,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
   };
 
-  const handleDeleteMovement = async (movementId) => {
-    // Find the movement for confirmation message
-    const movement = movements.find(m => m.id === movementId);
+  const handleDeleteMovement = async (movementId, movementHint = null) => {
+    // Prefer hint (e.g. from SKU ledger) — global `movements` may omit rows outside the first page
+    const movement = movementHint || movements.find(m => m.id === movementId);
     const movementInfo = movement 
       ? `${movement.itemName} (${movement.sku}) - ${movement.type} on ${movement.date}`
       : movementId;
@@ -8679,7 +8697,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <div>
                       <p className="text-xs text-gray-500">Total Value</p>
                       <p className="text-sm font-semibold text-blue-600">
-                        {formatCurrency(inventoryLineTotalValue(selectedItemMetrics?.quantity ?? selectedItem.quantity, selectedItem.unitCost))}
+                        {formatCurrency(
+                          inventoryRowTotalValueForQuantity(
+                            selectedItem,
+                            selectedItemMetrics?.quantity ?? selectedItem.quantity
+                          )
+                        )}
                       </p>
                     </div>
                     <div>
@@ -13151,7 +13174,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const allocatedQtyForDisplay = detailMetrics.allocated;
     const availableQty = detailMetrics.available;
     const computedDetailStatus = detailMetrics.status;
-    const catalogLineTotalValue = inventoryLineTotalValue(displayQuantity, item.unitCost);
+    const catalogLineTotalValue = inventoryRowTotalValueForQuantity(item, displayQuantity);
 
     const handleSaveEdit = async () => {
       try {
@@ -14028,6 +14051,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           Balance
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-[4.5rem]">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -14075,6 +14099,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                             <td className="px-3 py-2 text-sm text-gray-600">
                               {movement.reference || movement.movementId || '-'}
                             </td>
+                            <td className="px-3 py-2 text-sm text-right align-middle">
+                              <button
+                                type="button"
+                                title="Delete this movement"
+                                className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded border border-red-200 transition-colors"
+                                onClick={() => handleDeleteMovement(movement.id, movement)}
+                              >
+                                <i className="fas fa-trash text-sm" aria-hidden="true" />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -14094,6 +14128,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           {reconciledOnHandQty.toFixed(2)} {item.unit}
                         </td>
                         <td className="px-3 py-2 text-sm text-gray-700">-</td>
+                        <td className="px-3 py-2 text-sm text-gray-400 text-right" aria-hidden="true">
+                          —
+                        </td>
                       </tr>
                     </tbody>
                   </table>
