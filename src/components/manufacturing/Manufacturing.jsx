@@ -3770,7 +3770,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} p-4 rounded-xl border shadow-sm`}>
           <div className="space-y-2.5">
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 items-start min-w-0">
+              {/* Below xl width, show Columns/Export first so they are not buried under filters. */}
+              <div className="order-2 grid grid-cols-1 md:grid-cols-2 xl:order-1 xl:grid-cols-12 gap-3 items-start min-w-0">
                 <div className="flex flex-col gap-1.5 min-w-0 md:col-span-2 xl:col-span-5">
                   {/* Location Selector */}
                   <select
@@ -3906,7 +3907,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 </select>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1 justify-start xl:justify-end xl:pl-2">
+              <div className="order-1 flex flex-wrap items-center gap-1.5 justify-start xl:order-2 xl:justify-end xl:pl-2 shrink-0">
                 <div className="relative" ref={inventoryColumnPickerRef}>
                   <button
                     type="button"
@@ -3920,7 +3921,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750'
                           : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
                     }`}
-                    title="Choose which columns appear in the desktop inventory table"
+                    title="Show or hide columns in the wide-screen inventory table (1024px+). Your choices are saved in this browser."
                     aria-expanded={inventoryColumnPickerOpen}
                     aria-haspopup="dialog"
                   >
@@ -3938,9 +3939,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <div
                         className={`px-3 py-2 border-b ${isDark ? 'border-gray-800 bg-gray-850' : 'border-gray-100 bg-gray-50'}`}
                       >
-                        <p className="text-xs font-semibold">Desktop table columns</p>
+                        <p className="text-xs font-semibold">Wide-screen table columns</p>
                         <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                          SKU, item name, and actions always stay visible. Your choices are saved in this browser.
+                          Applies when the inventory grid is shown (window about 1024px wide or more). SKU, item name, and actions always stay on. Saved in this browser.
                         </p>
                       </div>
                       <ul className="max-h-60 overflow-y-auto py-1.5 px-1">

@@ -207,6 +207,64 @@ const DEPARTMENT_KEY_MAP = DEPARTMENTS.reduce((acc, dept) => {
     return acc;
 }, {});
 
+/** Explicit Tailwind for department cards (dynamic `text-${color}` is unreliable with JIT). */
+function meetingNotesDeptSurface(deptId) {
+    const map = {
+        management: {
+            stripe: 'border-l-4 border-l-blue-500',
+            chipL: 'bg-blue-50 text-blue-900 ring-1 ring-blue-100/90',
+            chipD: 'bg-blue-500/15 text-blue-100 ring-1 ring-blue-400/25'
+        },
+        compliance: {
+            stripe: 'border-l-4 border-l-red-500',
+            chipL: 'bg-red-50 text-red-950 ring-1 ring-red-100/90',
+            chipD: 'bg-red-500/15 text-red-100 ring-1 ring-red-400/25'
+        },
+        finance: {
+            stripe: 'border-l-4 border-l-amber-500',
+            chipL: 'bg-amber-50 text-amber-950 ring-1 ring-amber-100/90',
+            chipD: 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/25'
+        },
+        technical: {
+            stripe: 'border-l-4 border-l-slate-500',
+            chipL: 'bg-slate-100 text-slate-900 ring-1 ring-slate-200/90',
+            chipD: 'bg-slate-600/35 text-slate-100 ring-1 ring-slate-400/25'
+        },
+        data: {
+            stripe: 'border-l-4 border-l-sky-500',
+            chipL: 'bg-sky-50 text-sky-950 ring-1 ring-sky-100/90',
+            chipD: 'bg-sky-500/15 text-sky-100 ring-1 ring-sky-400/25'
+        },
+        support: {
+            stripe: 'border-l-4 border-l-emerald-500',
+            chipL: 'bg-emerald-50 text-emerald-950 ring-1 ring-emerald-100/90',
+            chipD: 'bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-400/25'
+        },
+        commercial: {
+            stripe: 'border-l-4 border-l-orange-500',
+            chipL: 'bg-orange-50 text-orange-950 ring-1 ring-orange-100/90',
+            chipD: 'bg-orange-500/15 text-orange-100 ring-1 ring-orange-400/25'
+        },
+        'business-development': {
+            stripe: 'border-l-4 border-l-fuchsia-500',
+            chipL: 'bg-fuchsia-50 text-fuchsia-950 ring-1 ring-fuchsia-100/90',
+            chipD: 'bg-fuchsia-500/15 text-fuchsia-100 ring-1 ring-fuchsia-400/25'
+        },
+        hr: {
+            stripe: 'border-l-4 border-l-violet-500',
+            chipL: 'bg-violet-50 text-violet-950 ring-1 ring-violet-100/90',
+            chipD: 'bg-violet-500/15 text-violet-100 ring-1 ring-violet-400/25'
+        }
+    };
+    return (
+        map[deptId] || {
+            stripe: 'border-l-4 border-l-primary-500',
+            chipL: 'bg-primary-50 text-primary-900 ring-1 ring-primary-100/90',
+            chipD: 'bg-primary-500/15 text-primary-100 ring-1 ring-primary-400/25'
+        }
+    );
+}
+
 const padTwo = (value) => String(value).padStart(2, '0');
 
 const isValidDate = (date) => date instanceof Date && !Number.isNaN(date.getTime());
@@ -4795,27 +4853,50 @@ const ManagementMeetingNotes = () => {
     }
 
     return (
-        <div className="space-y-4 relative">
+        <div className={`relative space-y-5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
             {/* Blocking Overlay - Prevents all navigation until saves complete */}
             {/* Navigation blocking happens silently - no messages shown */}
             
             {/* Header */}
-            <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-gray-200 shadow-sm'}`}>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h2 className={`text-xl font-bold mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                <i className="fas fa-clipboard-list mr-2 text-primary-600"></i>
-                                Management Meeting Notes
-                            </h2>
+            <div
+                className={`rounded-2xl border p-5 sm:p-6 backdrop-blur-sm ${
+                    isDark
+                        ? 'border-slate-700/80 bg-slate-900/40 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
+                        : 'border-slate-200/90 bg-white/90 shadow-sm shadow-slate-200/30'
+                }`}
+            >
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                    <div className="min-w-0">
+                        <div className="flex items-start gap-3">
+                            <span
+                                className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${
+                                    isDark
+                                        ? 'bg-primary-500/15 text-primary-300 ring-1 ring-primary-400/25'
+                                        : 'bg-primary-50 text-primary-600 ring-1 ring-primary-100'
+                                }`}
+                                aria-hidden
+                            >
+                                <i className="fas fa-clipboard-list" />
+                            </span>
+                            <div className="min-w-0">
+                                <h2 className={`text-xl sm:text-2xl font-bold tracking-tight ${isDark ? 'text-slate-50' : 'text-slate-900'}`}>
+                                    Management Meeting Notes
+                                </h2>
+                                <p className={`mt-1 text-sm leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                    Weekly department updates and action tracking
+                                </p>
+                            </div>
                         </div>
-                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">
                         <select
                             value={selectedMonth || ''}
                             onChange={(e) => setSelectedMonth(e.target.value)}
-                            className={`px-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 hover:border-slate-500' : 'bg-white border-gray-300 hover:border-gray-400'}`}
+                            className={`min-w-[10rem] px-3.5 py-2.5 text-sm font-medium rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-primary-500/80 focus:ring-offset-2 ${
+                                isDark
+                                    ? 'border-slate-600 bg-slate-800/80 text-slate-100 hover:border-slate-500 focus:ring-offset-slate-900'
+                                    : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 focus:ring-offset-white shadow-sm'
+                            }`}
                         >
                             <option value="">Select Month...</option>
                             {availableMonths.map(month => (
@@ -4840,7 +4921,11 @@ const ManagementMeetingNotes = () => {
                                 }}
                                 aria-label="Create month"
                                 title="Pick a month to create meeting notes ahead of time"
-                                className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                                className={`w-40 px-3 py-2.5 text-sm font-medium rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-primary-500/80 focus:ring-offset-2 ${
+                                    isDark
+                                        ? 'border-slate-600 bg-slate-800/80 text-slate-100 placeholder-slate-500 focus:ring-offset-slate-900'
+                                        : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:ring-offset-white shadow-sm'
+                                }`}
                             />
                             <button
                                 type="button"
@@ -4854,9 +4939,9 @@ const ManagementMeetingNotes = () => {
                                         // Error is already logged, silently handle
                                     }
                                 }}
-                                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition shadow-sm hover:shadow-md font-medium"
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-primary-600 text-white shadow-sm shadow-primary-900/20 hover:bg-primary-500 active:scale-[0.98] transition"
                             >
-                                <i className="fas fa-plus mr-1.5"></i>
+                                <i className="fas fa-plus text-xs" />
                                 Create Month
                             </button>
                         </div>
@@ -4867,10 +4952,10 @@ const ManagementMeetingNotes = () => {
                                 e.stopPropagation();
                                 handleGenerateMonth();
                             }}
-                            className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-sm hover:shadow-md font-medium"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-500 active:scale-[0.98] transition"
                             title="Generate new month from previous month"
                         >
-                            <i className="fas fa-magic mr-1.5"></i>
+                            <i className="fas fa-magic text-xs" />
                             Generate Month
                         </button>
                         {currentMonthlyNotes && (
@@ -4881,9 +4966,13 @@ const ManagementMeetingNotes = () => {
                                     e.stopPropagation();
                                     setShowAllocationModal(true);
                                 }}
-                                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
+                                className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl shadow-sm active:scale-[0.98] transition ${
+                                    isDark
+                                        ? 'bg-slate-100 text-slate-900 hover:bg-white'
+                                        : 'bg-slate-800 text-white hover:bg-slate-700'
+                                }`}
                             >
-                                <i className="fas fa-users mr-1.5"></i>
+                                <i className="fas fa-users text-xs" />
                                 Allocate Users
                             </button>
                         )}
@@ -4893,14 +4982,30 @@ const ManagementMeetingNotes = () => {
 
             {/* Month Selection Info */}
             {selectedMonth && (
-                <div className={`rounded-xl border p-4 ${isDark ? 'bg-gradient-to-r from-blue-900/40 to-blue-800/30 border-blue-700/50' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 border-blue-200 shadow-sm'}`}>
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                            <h3 className={`text-base font-bold mb-1 ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>
-                                <i className="fas fa-calendar-alt mr-2"></i>
+                <div
+                    className={`rounded-2xl border p-4 sm:p-5 ${
+                        isDark
+                            ? 'border-slate-700/80 bg-slate-900/35 ring-1 ring-white/5'
+                            : 'border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-primary-50/30 shadow-sm'
+                    }`}
+                >
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="min-w-0 flex items-start gap-3">
+                            <span
+                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${
+                                    isDark
+                                        ? 'bg-primary-500/15 text-primary-200 ring-1 ring-primary-400/20'
+                                        : 'bg-primary-100 text-primary-700 ring-1 ring-primary-200/60'
+                                }`}
+                                aria-hidden
+                            >
+                                <i className="fas fa-calendar-alt" />
+                            </span>
+                            <div className="min-w-0">
+                            <h3 className={`text-lg font-bold tracking-tight mb-0.5 ${isDark ? 'text-slate-50' : 'text-slate-900'}`}>
                                 {formatMonth(selectedMonth)}
                             </h3>
-                            <p className={`text-xs ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                            <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                                 {currentMonthlyNotes ? (
                                     <>
                                         {weeks.length} {weeks.length === 1 ? 'week' : 'weeks'} available
@@ -4909,8 +5014,9 @@ const ManagementMeetingNotes = () => {
                                     <>No meeting notes for this month yet</>
                                 )}
                             </p>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                             <input
                                 type="date"
                                 value={newWeekStartInput}
@@ -4929,7 +5035,11 @@ const ManagementMeetingNotes = () => {
                                 placeholder="YYYY-MM-DD"
                                 aria-label="Week start date"
                                 title="Pick a week start date to create notes ahead of time"
-                                className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                                className={`w-40 px-3 py-2.5 text-sm font-medium rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-primary-500/80 focus:ring-offset-2 ${
+                                    isDark
+                                        ? 'border-slate-600 bg-slate-800/80 text-slate-100 placeholder-slate-500 focus:ring-offset-slate-900'
+                                        : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:ring-offset-white shadow-sm'
+                                }`}
                             />
                             <button
                                 type="button"
@@ -4943,9 +5053,9 @@ const ManagementMeetingNotes = () => {
                                         // Error is already logged, silently handle
                                     }
                                 }}
-                                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-primary-600 text-white shadow-sm hover:bg-primary-500 active:scale-[0.98] transition"
                             >
-                                <i className="fas fa-plus mr-1.5"></i>
+                                <i className="fas fa-plus text-xs" />
                                 Add Week
                             </button>
                         </div>
@@ -5206,7 +5316,7 @@ const ManagementMeetingNotes = () => {
                             className={`sticky top-4 z-30 -mx-0.5 px-0.5 py-1 ${isDark ? 'bg-slate-900' : 'bg-white'}`}
                         >
                             <div 
-                                className="inline-grid gap-4"
+                                className="inline-grid gap-4 sm:gap-5"
                                 style={{
                                     gridTemplateColumns: `repeat(${weeks.length + 1}, ${meetingNotesGridColumnWidth})`,
                                     gridTemplateRows: 'auto'
@@ -5322,7 +5432,7 @@ const ManagementMeetingNotes = () => {
 
                         {/* Grid layout: General minutes row, then departments as rows, weeks as columns (same horizontal scroll as headers) */}
                         <div 
-                            className="inline-grid gap-4"
+                            className="inline-grid gap-4 sm:gap-5"
                             style={{
                                 gridTemplateColumns: `repeat(${weeks.length + 1}, ${meetingNotesGridColumnWidth})`,
                                 gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
@@ -5336,13 +5446,17 @@ const ManagementMeetingNotes = () => {
                                     gridRow: 1,
                                     gridColumn: `${getMonthlyGoalsGridColumn()}`
                                 }}
-                                className={`rounded-xl border-2 border-dashed p-4 flex flex-col justify-center self-stretch min-h-[8rem] h-full w-full min-w-0 overflow-hidden relative z-[27] isolate ${stickyMonthlyGoalsBodyCol} ${
-                                    isDark ? 'border-slate-600' : 'border-slate-300'
+                                className={`rounded-2xl border border-dashed p-5 flex flex-col justify-center self-stretch min-h-[8rem] h-full w-full min-w-0 overflow-hidden relative z-[27] isolate ${stickyMonthlyGoalsBodyCol} ${
+                                    isDark
+                                        ? 'border-slate-600/70 bg-slate-900/25 text-slate-400'
+                                        : 'border-slate-300/90 bg-slate-50/50 text-slate-600'
                                 }`}
                             >
-                                <p className={`text-xs font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Monthly goals</p>
-                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-                                    Department monthly targets use this column in each row below; weeks continue to the right.
+                                <p className={`text-[10px] font-bold uppercase tracking-[0.14em] mb-2 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                    Monthly goals column
+                                </p>
+                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+                                    Each department row uses this cell for month-level targets; week columns scroll to the right.
                                 </p>
                             </div>
 
@@ -5368,22 +5482,26 @@ const ManagementMeetingNotes = () => {
                                             gridRow: 1,
                                             gridColumn: `${getWeekGridColumn(gmWeekIndex)}`
                                         }}
-                                        className={`relative z-0 rounded-xl border-2 p-4 flex flex-col self-start w-full min-w-0 transition-all duration-200 ${
+                                        className={`relative z-0 rounded-2xl border p-4 sm:p-5 flex flex-col self-start w-full min-w-0 overflow-hidden transition-[box-shadow,border-color,transform] duration-200 ${
                                             gmSelected
                                                 ? isDark
-                                                    ? 'border-primary-500/80 bg-slate-800/90 shadow-lg shadow-primary-900/30'
-                                                    : 'border-primary-400 bg-white shadow-md shadow-primary-100/60'
+                                                    ? 'border-primary-500/60 bg-slate-900/60 shadow-lg shadow-black/30 ring-1 ring-primary-500/25'
+                                                    : 'border-primary-300 bg-white shadow-lg shadow-primary-500/10 ring-2 ring-primary-400/20'
                                                 : isDark
-                                                  ? 'border-slate-700 bg-slate-800/80 hover:border-slate-600'
-                                                  : 'border-gray-300 bg-white hover:border-gray-400'
+                                                  ? 'border-slate-700/80 bg-slate-900/30 hover:border-slate-600'
+                                                  : 'border-slate-200/90 bg-white hover:border-slate-300 shadow-sm'
                                         }`}
                                     >
-                                        <div className="flex items-center justify-between gap-2 mb-2">
-                                            <div>
-                                                <p className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                        <div
+                                            className={`flex items-center justify-between gap-3 mb-4 pb-3 border-b border-dashed ${
+                                                isDark ? 'border-slate-600/60' : 'border-slate-200/80'
+                                            }`}
+                                        >
+                                            <div className="min-w-0">
+                                                <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
                                                     General minutes
                                                 </p>
-                                                <p className={`text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                                                <p className={`text-sm font-semibold tracking-tight mt-0.5 truncate ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
                                                     {formatWeek(week.weekKey, week.weekStart)}
                                                 </p>
                                             </div>
@@ -5396,7 +5514,11 @@ const ManagementMeetingNotes = () => {
                                                         setSelectedWeek(gmIdentifier);
                                                         scrollToWeekId(gmIdentifier);
                                                     }}
-                                                    className={`text-[10px] px-2 py-1 rounded-lg font-medium shrink-0 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                    className={`text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1.5 rounded-lg shrink-0 transition ${
+                                                        isDark
+                                                            ? 'bg-slate-800 text-slate-200 ring-1 ring-slate-600 hover:bg-slate-700'
+                                                            : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200'
+                                                    }`}
                                                 >
                                                     Focus
                                                 </button>
@@ -5557,12 +5679,15 @@ const ManagementMeetingNotes = () => {
                             {/* Department rows - each department spans all weeks */}
                             {DEPARTMENTS.map((dept, deptIndex) => {
                                 const deptMonthlyGoal = monthlyGoalsByDepartment?.[dept.id] || '';
+                                const deptSurface = meetingNotesDeptSurface(dept.id);
                                 return (
                                     <React.Fragment key={`dept-row-${dept.id}`}>
                                         <div
                                             key={`${dept.id}-monthly-goals`}
-                                            className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${stickyMonthlyGoalsBodyCol} ${
-                                                isDark ? 'border-slate-700 hover:border-slate-600' : 'border-gray-300 hover:border-gray-400'
+                                            className={`group relative rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color] duration-200 h-full flex flex-col overflow-hidden ${deptSurface.stripe} ${stickyMonthlyGoalsBodyCol} ${
+                                                isDark
+                                                    ? 'border-slate-700/80 bg-slate-900/40 shadow-sm hover:border-slate-600'
+                                                    : 'border-slate-200/90 bg-white shadow-sm hover:border-slate-300'
                                             }`}
                                             style={{
                                                 minHeight: '200px',
@@ -5570,17 +5695,33 @@ const ManagementMeetingNotes = () => {
                                                 gridColumn: `${getMonthlyGoalsGridColumn()}`
                                             }}
                                         >
-                                            <div className="flex items-center justify-between mb-3">
-                                                <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
-                                                    <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
-                                                    {dept.name}
-                                                </h4>
-                                                <span className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                    Monthly Goals
-                                                </span>
+                                            <div className="flex items-start justify-between gap-3 mb-4">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <span
+                                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm ${
+                                                            isDark ? deptSurface.chipD : deptSurface.chipL
+                                                        }`}
+                                                    >
+                                                        <i className={`fas ${dept.icon}`} />
+                                                    </span>
+                                                    <div className="min-w-0">
+                                                        <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                            Monthly goals
+                                                        </p>
+                                                        <h4 className={`text-sm font-bold tracking-tight truncate ${isDark ? 'text-slate-50' : 'text-slate-900'}`}>
+                                                            {dept.name}
+                                                        </h4>
+                                                    </div>
+                                                </div>
                                             </div>
 
-                                            <div className="flex-grow">
+                                            <div
+                                                className={`flex-grow min-h-0 rounded-xl border p-1 ${
+                                                    isDark
+                                                        ? 'border-slate-700/60 bg-slate-950/30'
+                                                        : 'border-slate-200/60 bg-slate-50/50'
+                                                }`}
+                                            >
                                                 {window.RichTextEditor ? (
                                                     <window.RichTextEditor
                                                         key={`rich-editor-monthly-goals-${dept.id}`}
@@ -5597,7 +5738,7 @@ const ManagementMeetingNotes = () => {
                                                         onChange={(e) => handleMonthlyGoalsChange(dept.id, e.target.value)}
                                                         onBlur={(e) => handleMonthlyGoalsBlur(dept.id, e.target.value)}
                                                         placeholder="Capture the month's goals for this department."
-                                                        className={`w-full min-h-[160px] p-3 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                        className={`w-full min-h-[160px] p-3 text-sm rounded-lg border-0 bg-transparent focus:ring-0 ${isDark ? 'text-slate-100 placeholder-slate-500' : 'text-slate-900 placeholder-slate-400'}`}
                                                         rows={6}
                                                     />
                                                 )}
@@ -5607,6 +5748,7 @@ const ManagementMeetingNotes = () => {
                                         {weeks.map((week, weekIndex) => {
                                             const rawId = getWeekIdentifier(week);
                                             const identifier = rawId || `week-${weekIndex}`;
+                                            const weekSelected = identifier === selectedWeek;
                                             const deptNote = week.departmentNotes?.find(
                                                 (dn) => dn.departmentId === dept.id
                                             );
@@ -5614,10 +5756,16 @@ const ManagementMeetingNotes = () => {
                                             return (
                                                 <div
                                                     key={`${dept.id}-${identifier}`}
-                                                    className={`relative z-0 rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
-                                                        !deptNote 
-                                                            ? `border-dashed opacity-60 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50/50'}`
-                                                            : `${isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'}`
+                                                    className={`relative z-0 rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color,transform] duration-200 h-full flex flex-col overflow-hidden ${deptSurface.stripe} ${
+                                                        !deptNote
+                                                            ? `border-dashed ${isDark ? 'border-slate-600/70 bg-slate-900/20 opacity-90' : 'border-slate-300/90 bg-slate-50/60'}`
+                                                            : weekSelected
+                                                              ? isDark
+                                                                  ? 'border-slate-600/90 bg-slate-900/55 shadow-lg shadow-black/25 ring-1 ring-primary-500/30'
+                                                                  : 'border-primary-200 bg-white shadow-lg shadow-primary-500/10 ring-2 ring-primary-400/15'
+                                                              : isDark
+                                                                ? 'border-slate-700/80 bg-slate-900/35 shadow-sm hover:border-slate-600'
+                                                                : 'border-slate-200/90 bg-white shadow-sm hover:border-slate-300'
                                                     }`}
                                                     style={{ 
                                                         minHeight: '200px',
@@ -5627,18 +5775,38 @@ const ManagementMeetingNotes = () => {
                                                 >
                                                     {!deptNote ? (
                                                         <>
-                                                            <div className="flex items-center justify-between mb-3">
-                                                                <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
-                                                                    <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
-                                                                    {dept.name}
-                                                                </h4>
-                                                                <div className="flex gap-2">
+                                                            <div className="flex items-start justify-between gap-3 mb-4">
+                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                    <span
+                                                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm ${
+                                                                            isDark ? deptSurface.chipD : deptSurface.chipL
+                                                                        }`}
+                                                                    >
+                                                                        <i className={`fas ${dept.icon}`} />
+                                                                    </span>
+                                                                    <div className="min-w-0">
+                                                                        <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                            Weekly notes
+                                                                        </p>
+                                                                        <h4 className={`text-sm font-bold tracking-tight truncate ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                                                                            {dept.name}
+                                                                        </h4>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
                                                                     {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
-                                                                        <div className="flex gap-1">
+                                                                        <div className="flex flex-wrap gap-1 justify-end max-w-[11rem]">
                                                                             {currentMonthlyNotes.userAllocations
                                                                                 .filter((a) => a.departmentId === dept.id)
                                                                                 .map((allocation) => (
-                                                                                    <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                    <span
+                                                                                        key={allocation.id}
+                                                                                        className={`text-[10px] font-medium px-2 py-0.5 rounded-full truncate max-w-full ${
+                                                                                            isDark
+                                                                                                ? 'bg-slate-800 text-slate-200 ring-1 ring-slate-600/80'
+                                                                                                : 'bg-white text-slate-700 ring-1 ring-slate-200 shadow-sm'
+                                                                                        }`}
+                                                                                    >
                                                                                         {getUserName(allocation.userId)}
                                                                                     </span>
                                                                                 ))}
@@ -5652,52 +5820,106 @@ const ManagementMeetingNotes = () => {
                                                                             setSelectedDepartment(dept.id);
                                                                             setShowAllocationModal(true);
                                                                         }}
-                                                                        className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-xs transition ${
+                                                                            isDark
+                                                                                ? 'bg-slate-800 text-slate-200 ring-1 ring-slate-600 hover:bg-slate-700'
+                                                                                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 shadow-sm'
+                                                                        }`}
                                                                         title="Allocate users"
                                                                     >
-                                                                        <i className="fas fa-user-plus"></i>
+                                                                        <i className="fas fa-user-plus" />
                                                                     </button>
                                                                 </div>
                                                             </div>
-                                                            <div className={`text-center py-4 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
-                                                                <p className="text-xs">No notes for this department yet</p>
+                                                            <div
+                                                                className={`flex flex-col items-center justify-center rounded-xl border border-dashed py-8 px-4 text-center ${
+                                                                    isDark ? 'border-slate-600/60 bg-slate-950/20' : 'border-slate-300/80 bg-white/60'
+                                                                }`}
+                                                            >
+                                                                <span
+                                                                    className={`mb-2 flex h-10 w-10 items-center justify-center rounded-full text-sm ${
+                                                                        isDark ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'
+                                                                    }`}
+                                                                    aria-hidden
+                                                                >
+                                                                    <i className="fas fa-file-lines" />
+                                                                </span>
+                                                                <p className={`text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                                                                    No notes for this week yet
+                                                                </p>
+                                                                <p className={`mt-1 text-[11px] leading-snug ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                    Allocate users or add department coverage for this month.
+                                                                </p>
                                                             </div>
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <div className="flex items-center justify-between mb-3">
-                                                                <div className="flex items-center gap-2">
-                                                                    <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
-                                                                        <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
-                                                                        {dept.name}
-                                                                    </h4>
-                                                                    {/* Auto-save status indicator */}
-                                                                    {autoSaveStatus[deptNote.id] === 'saving' && (
-                                                                        <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
-                                                                            <i className="fas fa-circle-notch fa-spin text-xs"></i>
-                                                                            Saving...
-                                                                        </span>
-                                                                    )}
-                                                                    {autoSaveStatus[deptNote.id] === 'saved' && (
-                                                                        <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                                                                            <i className="fas fa-check text-xs"></i>
-                                                                            Saved
-                                                                        </span>
-                                                                    )}
-                                                                    {autoSaveStatus[deptNote.id] === 'error' && (
-                                                                        <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                                                                            <i className="fas fa-exclamation-triangle text-xs"></i>
-                                                                            Save failed
-                                                                        </span>
-                                                                    )}
+                                                            <div
+                                                                className={`flex items-start justify-between gap-3 mb-4 pb-3 border-b border-dashed ${
+                                                                    isDark ? 'border-slate-600/50' : 'border-slate-200/80'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-start gap-3 min-w-0">
+                                                                    <span
+                                                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm ${
+                                                                            isDark ? deptSurface.chipD : deptSurface.chipL
+                                                                        }`}
+                                                                    >
+                                                                        <i className={`fas ${dept.icon}`} />
+                                                                    </span>
+                                                                    <div className="min-w-0">
+                                                                        <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                            Department
+                                                                        </p>
+                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                                            <h4 className={`text-sm font-bold tracking-tight ${isDark ? 'text-slate-50' : 'text-slate-900'}`}>
+                                                                                {dept.name}
+                                                                            </h4>
+                                                                            {autoSaveStatus[deptNote.id] === 'saving' && (
+                                                                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                                                                                    <i className="fas fa-circle-notch fa-spin text-[9px]" />
+                                                                                    Saving
+                                                                                </span>
+                                                                            )}
+                                                                            {autoSaveStatus[deptNote.id] === 'saved' && (
+                                                                                <span
+                                                                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                                                                        isDark
+                                                                                            ? 'bg-emerald-500/20 text-emerald-300'
+                                                                                            : 'bg-emerald-500/15 text-emerald-700'
+                                                                                    }`}
+                                                                                >
+                                                                                    <i className="fas fa-check text-[9px]" />
+                                                                                    Saved
+                                                                                </span>
+                                                                            )}
+                                                                            {autoSaveStatus[deptNote.id] === 'error' && (
+                                                                                <span
+                                                                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                                                                        isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-500/15 text-red-700'
+                                                                                    }`}
+                                                                                >
+                                                                                    <i className="fas fa-exclamation-triangle text-[9px]" />
+                                                                                    Error
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex gap-2">
+                                                                <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
                                                                     {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
-                                                                        <div className="flex gap-1">
+                                                                        <div className="flex flex-wrap gap-1 justify-end max-w-[14rem]">
                                                                             {currentMonthlyNotes.userAllocations
                                                                                 .filter((a) => a.departmentId === dept.id)
                                                                                 .map((allocation) => (
-                                                                                    <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                    <span
+                                                                                        key={allocation.id}
+                                                                                        className={`text-[10px] font-medium px-2 py-0.5 rounded-full truncate max-w-full ${
+                                                                                            isDark
+                                                                                                ? 'bg-slate-800 text-slate-200 ring-1 ring-slate-600/80'
+                                                                                                : 'bg-white text-slate-700 ring-1 ring-slate-200 shadow-sm'
+                                                                                        }`}
+                                                                                    >
                                                                                         {getUserName(allocation.userId)}
                                                                                     </span>
                                                                                 ))}
@@ -5711,20 +5933,31 @@ const ManagementMeetingNotes = () => {
                                                                             setSelectedDepartment(dept.id);
                                                                             setShowAllocationModal(true);
                                                                         }}
-                                                                        className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-xs transition ${
+                                                                            isDark
+                                                                                ? 'bg-slate-800 text-slate-200 ring-1 ring-slate-600 hover:bg-slate-700'
+                                                                                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 shadow-sm'
+                                                                        }`}
                                                                         title="Allocate users"
                                                                     >
-                                                                        <i className="fas fa-user-plus"></i>
+                                                                        <i className="fas fa-user-plus" />
                                                                     </button>
                                                                 </div>
                                                             </div>
                                                             
-                                                            <div className="space-y-3 flex-grow">
+                                                            <div className="space-y-3 flex-grow min-h-0">
                                                                 {/* Successes */}
-                                                                <div>
-                                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                            Last Week's Successes
-                                                                        </label>
+                                                                <div
+                                                                    className={`rounded-xl border p-3 ${
+                                                                        isDark
+                                                                            ? 'border-slate-700/60 bg-slate-950/25'
+                                                                            : 'border-slate-200/90 bg-slate-50/80'
+                                                                    }`}
+                                                                >
+                                                                    <label className={`mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                        <i className="fas fa-arrow-trend-up text-[10px] text-emerald-500" aria-hidden />
+                                                                        Last week&apos;s successes
+                                                                    </label>
                                                                     {window.RichTextEditor ? (
                                                                         <window.RichTextEditor
                                                                             key={`rich-editor-${deptNote.id}-successes`}
@@ -5776,7 +6009,11 @@ const ManagementMeetingNotes = () => {
                                                                                 });
                                                                             }}
                                                                             placeholder="What went well during the week?"
-                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                            className={`w-full min-h-[88px] rounded-lg border p-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary-500/40 ${
+                                                                                isDark
+                                                                                    ? 'border-slate-600 bg-slate-900/40 text-slate-100 placeholder-slate-500'
+                                                                                    : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                                                            }`}
                                                                             rows={4}
                                                                             data-dept-note-id={deptNote.id}
                                                                             data-field="successes"
@@ -5785,10 +6022,17 @@ const ManagementMeetingNotes = () => {
                                                                 </div>
 
                                                         {/* Week to Follow */}
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                    Weekly Plan
-                                                                </label>
+                                                        <div
+                                                            className={`rounded-xl border p-3 ${
+                                                                isDark
+                                                                    ? 'border-slate-700/60 bg-slate-950/25'
+                                                                    : 'border-slate-200/90 bg-slate-50/80'
+                                                            }`}
+                                                        >
+                                                            <label className={`mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                <i className="fas fa-list-check text-[10px] text-primary-500" aria-hidden />
+                                                                Weekly plan
+                                                            </label>
                                                             {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
                                                                     key={`rich-editor-${deptNote.id}-weekToFollow`}
@@ -5827,7 +6071,11 @@ const ManagementMeetingNotes = () => {
                                                                         });
                                                                     }}
                                                                     placeholder="What's planned for the upcoming week?"
-                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    className={`w-full min-h-[88px] rounded-lg border p-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary-500/40 ${
+                                                                        isDark
+                                                                            ? 'border-slate-600 bg-slate-900/40 text-slate-100 placeholder-slate-500'
+                                                                            : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                                                    }`}
                                                                     rows={4}
                                                                     data-dept-note-id={deptNote.id}
                                                                     data-field="weekToFollow"
@@ -5836,10 +6084,17 @@ const ManagementMeetingNotes = () => {
                                                         </div>
 
                                                         {/* Frustrations */}
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                    Frustrations/Challenges
-                                                                </label>
+                                                        <div
+                                                            className={`rounded-xl border p-3 ${
+                                                                isDark
+                                                                    ? 'border-slate-700/60 bg-slate-950/25'
+                                                                    : 'border-slate-200/90 bg-slate-50/80'
+                                                            }`}
+                                                        >
+                                                            <label className={`mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                <i className="fas fa-cloud-bolt text-[10px] text-amber-500" aria-hidden />
+                                                                Frustrations / challenges
+                                                            </label>
                                                             {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
                                                                     key={`rich-editor-${deptNote.id}-frustrations`}
@@ -5878,7 +6133,11 @@ const ManagementMeetingNotes = () => {
                                                                         });
                                                                     }}
                                                                     placeholder="What challenges or blockers are we facing?"
-                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    className={`w-full min-h-[88px] rounded-lg border p-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary-500/40 ${
+                                                                        isDark
+                                                                            ? 'border-slate-600 bg-slate-900/40 text-slate-100 placeholder-slate-500'
+                                                                            : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                                                    }`}
                                                                     rows={4}
                                                                     data-dept-note-id={deptNote.id}
                                                                     data-field="frustrations"
@@ -5887,8 +6146,15 @@ const ManagementMeetingNotes = () => {
                                                     </div>
                                                 
                                                     {/* Attachments */}
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                        <div
+                                                            className={`rounded-xl border p-3 ${
+                                                                isDark
+                                                                    ? 'border-slate-700/60 bg-slate-950/25'
+                                                                    : 'border-slate-200/90 bg-slate-50/80'
+                                                            }`}
+                                                        >
+                                                            <label className={`mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                <i className="fas fa-paperclip text-[10px] text-slate-400" aria-hidden />
                                                                 Attachments
                                                             </label>
                                                             
@@ -5906,18 +6172,25 @@ const ManagementMeetingNotes = () => {
                                                                 }
                                                                 
                                                                 return attachments.length > 0 ? (
-                                                                    <div className="space-y-1 mb-2">
+                                                                    <div className="space-y-1.5 mb-2">
                                                                         {attachments.map((attachment, index) => (
-                                                                            <div key={index} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-slate-700 border border-slate-600' : 'bg-gray-50 border border-gray-200'}`}>
+                                                                            <div
+                                                                                key={index}
+                                                                                className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 transition ${
+                                                                                    isDark
+                                                                                        ? 'bg-slate-900/50 ring-1 ring-slate-700/80 hover:ring-slate-600'
+                                                                                        : 'bg-white ring-1 ring-slate-200/90 shadow-sm hover:ring-slate-300'
+                                                                                }`}
+                                                                            >
                                                                                 <a 
                                                                                     href={attachment.url} 
                                                                                     target="_blank" 
                                                                                     rel="noopener noreferrer"
-                                                                                    className={`flex items-center gap-2 flex-1 text-xs ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}
+                                                                                    className={`flex min-w-0 flex-1 items-center gap-2 text-xs font-medium ${isDark ? 'text-primary-300 hover:text-primary-200' : 'text-primary-700 hover:text-primary-800'}`}
                                                                                 >
-                                                                                    <i className="fas fa-file"></i>
+                                                                                    <i className="fas fa-file shrink-0 opacity-80" />
                                                                                     <span className="truncate">{attachment.name}</span>
-                                                                                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                                                    <span className={`shrink-0 text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
                                                                                         ({(attachment.size / 1024).toFixed(1)} KB)
                                                                                     </span>
                                                                                 </a>
@@ -5928,10 +6201,10 @@ const ManagementMeetingNotes = () => {
                                                                                         e.stopPropagation();
                                                                                         handleDeleteAttachment(deptNote.id, index);
                                                                                     }}
-                                                                                    className={`p-1 rounded transition ml-2 ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                    className={`shrink-0 rounded-lg p-1.5 transition ${isDark ? 'text-slate-500 hover:bg-red-950/40 hover:text-red-300' : 'text-slate-400 hover:bg-red-50 hover:text-red-600'}`}
                                                                                     title="Delete attachment"
                                                                                 >
-                                                                                    <i className="fas fa-trash text-xs"></i>
+                                                                                    <i className="fas fa-trash text-xs" />
                                                                                 </button>
                                                                             </div>
                                                                         ))}
@@ -5940,7 +6213,13 @@ const ManagementMeetingNotes = () => {
                                                             })()}
                                                             
                                                             {/* File upload input */}
-                                                            <div className={`border-2 border-dashed rounded-lg p-2 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50'}`}>
+                                                            <div
+                                                                className={`rounded-xl border border-dashed px-3 py-2.5 transition ${
+                                                                    isDark
+                                                                        ? 'border-slate-600/80 bg-slate-900/30 hover:border-slate-500'
+                                                                        : 'border-slate-300/90 bg-white/80 hover:border-slate-400'
+                                                                }`}
+                                                            >
                                                                 <input
                                                                     type="file"
                                                                     id={`attachment-${deptNote.id}`}
@@ -5955,32 +6234,44 @@ const ManagementMeetingNotes = () => {
                                                                 />
                                                                 <label
                                                                     htmlFor={`attachment-${deptNote.id}`}
-                                                                    className={`cursor-pointer flex items-center gap-2 text-xs ${isDark ? 'text-slate-300 hover:text-slate-200' : 'text-gray-700 hover:text-gray-900'}`}
+                                                                    className={`flex cursor-pointer items-center gap-2 text-xs font-medium ${isDark ? 'text-slate-300 hover:text-slate-100' : 'text-slate-600 hover:text-slate-900'}`}
                                                                 >
-                                                                    <i className={`fas ${uploadingAttachments[deptNote.id] ? 'fa-spinner fa-spin' : 'fa-paperclip'}`}></i>
-                                                                    <span>
-                                                                        {uploadingAttachments[deptNote.id] ? 'Uploading...' : 'Attach files'}
-                                                                    </span>
+                                                                    <i className={`fas ${uploadingAttachments[deptNote.id] ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-up'}`} />
+                                                                    <span>{uploadingAttachments[deptNote.id] ? 'Uploading…' : 'Drop files or click to upload'}</span>
                                                                 </label>
                                                             </div>
                                                         </div>
 
                                                         {/* Action Items */}
                                                         {deptNote.actionItems && deptNote.actionItems.length > 0 && (
-                                                            <div>
-                                                                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                    Action Items
+                                                            <div
+                                                                className={`rounded-xl border p-3 ${
+                                                                    isDark
+                                                                        ? 'border-slate-700/60 bg-slate-950/25'
+                                                                        : 'border-slate-200/90 bg-slate-50/80'
+                                                                }`}
+                                                            >
+                                                                <label className={`mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                    <i className="fas fa-bolt text-[10px] text-amber-500" aria-hidden />
+                                                                    Action items
                                                                 </label>
                                                                 <div className="space-y-2">
                                                                     {deptNote.actionItems.map((item) => (
-                                                                        <div key={item.id} className={`flex items-center justify-between p-2 rounded transition-all duration-200 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                                                                            <div className="flex-1">
-                                                                                <p className={`text-xs font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
+                                                                        <div
+                                                                            key={item.id}
+                                                                            className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 transition ${
+                                                                                isDark
+                                                                                    ? 'bg-slate-900/45 ring-1 ring-slate-700/80'
+                                                                                    : 'bg-white ring-1 ring-slate-200/90 shadow-sm'
+                                                                            }`}
+                                                                        >
+                                                                            <div className="min-w-0 flex-1">
+                                                                                <p className={`text-xs font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{item.title}</p>
                                                                                 {item.description && (
-                                                                                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{item.description}</p>
+                                                                                    <p className={`mt-0.5 text-[11px] leading-snug ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{item.description}</p>
                                                                                 )}
                                                                             </div>
-                                                                            <div className="flex gap-1">
+                                                                            <div className="flex shrink-0 gap-0.5">
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={(e) => {
@@ -5989,10 +6280,10 @@ const ManagementMeetingNotes = () => {
                                                                                         setEditingActionItem(item);
                                                                                         setShowActionItemModal(true);
                                                                                     }}
-                                                                                    className={`p-1 rounded transition ${isDark ? 'text-slate-400 hover:text-primary-400 hover:bg-primary-900/30' : 'text-gray-400 hover:text-primary-600 hover:bg-primary-50'}`}
+                                                                                    className={`rounded-lg p-1.5 transition ${isDark ? 'text-slate-400 hover:bg-primary-900/40 hover:text-primary-300' : 'text-slate-400 hover:bg-primary-50 hover:text-primary-600'}`}
                                                                                     title="Edit action item"
                                                                                 >
-                                                                                    <i className="fas fa-edit text-xs"></i>
+                                                                                    <i className="fas fa-edit text-xs" />
                                                                                 </button>
                                                                                 <button
                                                                                     type="button"
@@ -6001,10 +6292,10 @@ const ManagementMeetingNotes = () => {
                                                                                         e.stopPropagation();
                                                                                         handleDeleteActionItem(item.id);
                                                                                     }}
-                                                                                    className={`p-1 rounded transition ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                    className={`rounded-lg p-1.5 transition ${isDark ? 'text-slate-400 hover:bg-red-950/40 hover:text-red-300' : 'text-slate-400 hover:bg-red-50 hover:text-red-600'}`}
                                                                                     title="Delete action item"
                                                                                 >
-                                                                                    <i className="fas fa-trash text-xs"></i>
+                                                                                    <i className="fas fa-trash text-xs" />
                                                                                 </button>
                                                                             </div>
                                                                         </div>
@@ -6015,9 +6306,16 @@ const ManagementMeetingNotes = () => {
 
                                                         {/* Comments */}
                                                         {deptNote.comments && deptNote.comments.length > 0 && (
-                                                            <div>
-                                                                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                    Comments
+                                                            <div
+                                                                className={`rounded-xl border p-3 ${
+                                                                    isDark
+                                                                        ? 'border-slate-700/60 bg-slate-950/25'
+                                                                        : 'border-slate-200/90 bg-slate-50/80'
+                                                                }`}
+                                                            >
+                                                                <label className={`mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                    <i className="fas fa-comments text-[10px] text-sky-500" aria-hidden />
+                                                                    Discussion
                                                                 </label>
                                                                 <div className="space-y-2">
                                                                     {deptNote.comments.map((comment) => {
@@ -6029,15 +6327,23 @@ const ManagementMeetingNotes = () => {
                                                                         displayContent = linkifyText(displayContent);
                                                                         
                                                                         return (
-                                                                            <div key={comment.id} data-meeting-comment-id={comment.id} className={`p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                                                            <div
+                                                                                key={comment.id}
+                                                                                data-meeting-comment-id={comment.id}
+                                                                                className={`rounded-xl p-3 transition ${
+                                                                                    isDark
+                                                                                        ? 'bg-slate-900/50 ring-1 ring-slate-700/80 hover:ring-slate-600'
+                                                                                        : 'bg-white ring-1 ring-slate-200/90 shadow-sm hover:ring-slate-300'
+                                                                                }`}
+                                                                            >
                                                                                 <div className="flex items-start justify-between gap-2">
-                                                                                    <div className="flex-1 min-w-0">
+                                                                                    <div className="min-w-0 flex-1">
                                                                                         <p 
-                                                                                            className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
+                                                                                            className={`text-xs leading-relaxed ${isDark ? 'text-slate-100' : 'text-slate-900'}`}
                                                                                             dangerouslySetInnerHTML={{ __html: displayContent }}
                                                                                         />
-                                                                                        <p className={`text-xs mt-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
+                                                                                        <p className={`mt-2 text-[10px] font-medium uppercase tracking-wide ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} · {new Date(comment.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
                                                                                         </p>
                                                                                     </div>
                                                                                     <button
@@ -6047,10 +6353,10 @@ const ManagementMeetingNotes = () => {
                                                                                             e.stopPropagation();
                                                                                             handleDeleteComment(comment.id);
                                                                                         }}
-                                                                                        className={`p-1.5 rounded-lg transition flex-shrink-0 ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                        className={`shrink-0 rounded-lg p-1.5 transition ${isDark ? 'text-slate-500 hover:bg-red-950/40 hover:text-red-300' : 'text-slate-400 hover:bg-red-50 hover:text-red-600'}`}
                                                                                         title="Delete comment"
                                                                                     >
-                                                                                        <i className="fas fa-trash text-xs"></i>
+                                                                                        <i className="fas fa-trash text-xs" />
                                                                                     </button>
                                                                                 </div>
                                                                             </div>
@@ -6060,6 +6366,7 @@ const ManagementMeetingNotes = () => {
                                                             </div>
                                                         )}
 
+                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                                         {/* Add Comment Button */}
                                                         <button
                                                             type="button"
@@ -6074,10 +6381,14 @@ const ManagementMeetingNotes = () => {
                                                                 });
                                                                 setShowCommentModal(true);
                                                             }}
-                                                            className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                            className={`inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
+                                                                isDark
+                                                                    ? 'border-slate-600 bg-slate-900/40 text-slate-200 hover:border-slate-500 hover:bg-slate-800/80'
+                                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 shadow-sm'
+                                                            }`}
                                                         >
-                                                            <i className="fas fa-comment mr-1"></i>
-                                                            Add Comment
+                                                            <i className="fas fa-comment text-[11px]" />
+                                                            Add comment
                                                         </button>
 
                                                         {/* Add Action Item Button */}
@@ -6093,11 +6404,16 @@ const ManagementMeetingNotes = () => {
                                                                 });
                                                                 setShowActionItemModal(true);
                                                             }}
-                                                            className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                            className={`inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
+                                                                isDark
+                                                                    ? 'border-primary-500/40 bg-primary-900/25 text-primary-100 hover:border-primary-400/60 hover:bg-primary-900/40'
+                                                                    : 'border-primary-200 bg-primary-50/80 text-primary-800 hover:border-primary-300 hover:bg-primary-50'
+                                                            }`}
                                                         >
-                                                            <i className="fas fa-plus mr-1"></i>
-                                                            Add Action Item
+                                                            <i className="fas fa-plus text-[11px]" />
+                                                            Add action item
                                                         </button>
+                                                        </div>
                                                     </div>
                                                 </>
                                             )}
@@ -6114,9 +6430,20 @@ const ManagementMeetingNotes = () => {
 
             {/* Empty State - No monthly notes */}
             {selectedMonth && !currentMonthlyNotes && (
-                <div className={`rounded-lg border p-8 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <i className={`fas fa-clipboard-list text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                    <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                <div
+                    className={`rounded-2xl border p-10 text-center ${
+                        isDark ? 'border-slate-700/80 bg-slate-900/35 ring-1 ring-white/5' : 'border-slate-200/90 bg-white shadow-sm'
+                    }`}
+                >
+                    <span
+                        className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-2xl ${
+                            isDark ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'
+                        }`}
+                        aria-hidden
+                    >
+                        <i className="fas fa-clipboard-list" />
+                    </span>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                         No meeting notes for {formatMonth(selectedMonth)} yet.
                     </p>
                     <button
@@ -6131,30 +6458,52 @@ const ManagementMeetingNotes = () => {
                                 // Error is already logged, silently handle
                             }
                         }}
-                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                        className="mt-5 inline-flex items-center justify-center rounded-xl bg-primary-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-500"
                     >
-                        Create Month Notes
+                        Create month notes
                     </button>
                 </div>
             )}
 
             {/* Empty State - Monthly notes exist but no weeks */}
             {selectedMonth && currentMonthlyNotes && weeks.length === 0 && (
-                <div className={`rounded-lg border p-8 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <i className={`fas fa-calendar-week text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                    <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                <div
+                    className={`rounded-2xl border p-10 text-center ${
+                        isDark ? 'border-slate-700/80 bg-slate-900/35 ring-1 ring-white/5' : 'border-slate-200/90 bg-white shadow-sm'
+                    }`}
+                >
+                    <span
+                        className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-2xl ${
+                            isDark ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'
+                        }`}
+                        aria-hidden
+                    >
+                        <i className="fas fa-calendar-week" />
+                    </span>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                         No weeks created for {formatMonth(selectedMonth)} yet.
                     </p>
-                    <p className={`text-xs mb-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                    <p className={`mt-2 text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
                         Use the controls above to add a week or generate a month.
                     </p>
                 </div>
             )}
 
             {!selectedMonth && (
-                <div className={`rounded-lg border p-8 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <i className={`fas fa-calendar text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
-                    <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                <div
+                    className={`rounded-2xl border p-10 text-center ${
+                        isDark ? 'border-slate-700/80 bg-slate-900/35 ring-1 ring-white/5' : 'border-slate-200/90 bg-white shadow-sm'
+                    }`}
+                >
+                    <span
+                        className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-2xl ${
+                            isDark ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'
+                        }`}
+                        aria-hidden
+                    >
+                        <i className="fas fa-calendar" />
+                    </span>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                         Select a month to view or create meeting notes.
                     </p>
                 </div>
