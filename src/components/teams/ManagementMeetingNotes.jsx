@@ -5355,7 +5355,7 @@ const ManagementMeetingNotes = () => {
 
                     <div className="min-w-0 pb-2 space-y-4">
                         <div
-                            className={`sticky top-4 z-40 -mx-0.5 border-b px-0.5 py-2 shadow-sm backdrop-blur-md ${
+                            className={`sticky top-0 z-40 -mx-0.5 border-b px-0 py-0 shadow-sm backdrop-blur-md ${
                                 isDark
                                     ? 'border-slate-800/80 bg-slate-900/95 supports-[backdrop-filter]:bg-slate-900/80'
                                     : 'border-slate-200/90 bg-white/95 supports-[backdrop-filter]:bg-white/85'
@@ -5366,7 +5366,7 @@ const ManagementMeetingNotes = () => {
                                 className="meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--header -mx-0.5 overflow-x-auto overflow-y-hidden"
                             >
                             <div 
-                                className="inline-grid gap-4 sm:gap-5"
+                                className="inline-grid gap-2 sm:gap-3 py-1.5 px-0.5"
                                 style={{
                                     gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
                                     gridTemplateRows: 'auto'
@@ -5379,25 +5379,25 @@ const ManagementMeetingNotes = () => {
                                         gridRow: '1',
                                         gridColumn: `${getMonthlyGoalsGridColumn()}`
                                     }}
-                                    className={`rounded-2xl border p-5 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
+                                    className={`rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
                                         isDark
                                             ? 'border-slate-600/90 bg-slate-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
                                             : 'border-slate-200/90 bg-white shadow-sm'
                                     }`}
                                 >
-                                    <div className="flex items-start justify-between gap-3 mb-2">
-                                        <div className="flex-1">
-                                            <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>
-                                                Monthly Goals
+                                    <div className="flex items-center justify-between gap-2 min-h-0">
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                Monthly goals
                                             </p>
-                                            <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                                <i className={`fas fa-bullseye mr-2 ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
-                                                Department Focus
+                                            <h3 className={`text-sm font-bold flex items-center gap-1.5 truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                <i className={`fas fa-bullseye shrink-0 text-xs ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
+                                                <span className="truncate">Department focus</span>
                                             </h3>
                                         </div>
                                     </div>
-                                    <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                        Capture month-level goals for each department.
+                                    <p className={`hidden text-[10px] leading-snug mt-1 line-clamp-1 md:block ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+                                        Month-level targets per department.
                                     </p>
                                 </div>
 
@@ -5416,7 +5416,7 @@ const ManagementMeetingNotes = () => {
                                                 gridRow: '1',
                                                 gridColumn: `${getWeekGridColumn(index)}`
                                             }}
-                                            className={`rounded-2xl border p-5 transition-[border-color,box-shadow,background-color] duration-200 ${
+                                            className={`rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow,background-color] duration-200 ${
                                                 isActualCurrentWeek
                                                     ? isDark
                                                         ? 'border-primary-500/70 ring-1 ring-inset ring-primary-500/20 shadow-sm bg-slate-900/80'
@@ -5434,17 +5434,17 @@ const ManagementMeetingNotes = () => {
                                                                 : 'border-slate-200/90 bg-white hover:border-slate-300'
                                             }`}
                                         >
-                                            <div className="flex items-start justify-between gap-3 mb-4">
-                                                <div className="flex-1">
-                                                    <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                        Week Overview
+                                            <div className="flex items-center justify-between gap-2 min-h-0">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                        Week
                                                     </p>
-                                                    <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                                        <i className={`fas fa-calendar-week mr-2 ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
-                                                        {formatWeek(week.weekKey, week.weekStart)}
+                                                    <h3 className={`text-sm font-bold flex items-center gap-1.5 min-w-0 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                        <i className={`fas fa-calendar-week shrink-0 text-xs ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
+                                                        <span className="truncate">{formatWeek(week.weekKey, week.weekStart)}</span>
                                                     </h3>
                                                 </div>
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex shrink-0 items-center">
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -5452,10 +5452,10 @@ const ManagementMeetingNotes = () => {
                                                             e.stopPropagation();
                                                             handleDeleteWeek(week);
                                                         }}
-                                                        className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-red-900/50 text-red-200 hover:bg-red-800/50 border border-red-700' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
+                                                        className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-md font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-red-900/50 text-red-200 hover:bg-red-800/50 border border-red-700' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
                                                     >
-                                                        <i className="fas fa-trash"></i>
-                                                        Delete
+                                                        <i className="fas fa-trash text-[9px]" />
+                                                        <span className="hidden sm:inline">Delete</span>
                                                     </button>
                                                 </div>
                                             </div>
