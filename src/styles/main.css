@@ -134,7 +134,21 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     vertical-align: middle;
 }
 
-/* Narrow SKU column: typical codes like SKU0409; ellipsis + title on cell for full value */
+/* Sticky column backgrounds (horizontal scroll freeze for SKU + Image + Item Name) */
+.inventory-desktop-table-wrap {
+    --inv-sticky-thead: #f9fafb;
+    --inv-sticky-body: #ffffff;
+    --inv-sticky-hover: #f9fafb;
+    --inv-sticky-edge: rgba(15, 23, 42, 0.12);
+}
+.inventory-desktop-table-wrap--dark {
+    --inv-sticky-thead: #1f2937;
+    --inv-sticky-body: #111827;
+    --inv-sticky-hover: #1f2937;
+    --inv-sticky-edge: rgba(0, 0, 0, 0.45);
+}
+
+/* Narrow SKU column + frozen left */
 .inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-sku-col,
 .inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td.inventory-desktop-sku-col {
     width: 4.75rem;
@@ -145,6 +159,77 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-sku-col {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+    background-color: var(--inv-sticky-thead);
+    box-shadow: 1px 0 0 0 var(--inv-sticky-edge);
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td.inventory-desktop-sku-col {
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    background-color: var(--inv-sticky-body);
+    box-shadow: 1px 0 0 0 var(--inv-sticky-edge);
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr:hover > td.inventory-desktop-sku-col {
+    background-color: var(--inv-sticky-hover);
+}
+
+/* Image column: fixed width lane, frozen after SKU */
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-image-col,
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td.inventory-desktop-image-col {
+    width: 3rem;
+    min-width: 3rem;
+    max-width: 3rem;
+    box-sizing: border-box;
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-image-col {
+    position: sticky;
+    left: 4.75rem;
+    z-index: 6;
+    background-color: var(--inv-sticky-thead);
+    box-shadow: 1px 0 0 0 var(--inv-sticky-edge);
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td.inventory-desktop-image-col {
+    position: sticky;
+    left: 4.75rem;
+    z-index: 4;
+    background-color: var(--inv-sticky-body);
+    box-shadow: 1px 0 0 0 var(--inv-sticky-edge);
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr:hover > td.inventory-desktop-image-col {
+    background-color: var(--inv-sticky-hover);
+}
+
+/* Item name: frozen after SKU + image; shadow separates from scrolling columns */
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-name-col,
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td.inventory-desktop-name-col {
+    min-width: 11rem;
+    max-width: 16rem;
+    width: 14rem;
+    box-sizing: border-box;
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-name-col {
+    position: sticky;
+    left: calc(4.75rem + 3rem);
+    z-index: 6;
+    background-color: var(--inv-sticky-thead);
+    box-shadow: 4px 0 8px -2px var(--inv-sticky-edge);
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr > td.inventory-desktop-name-col {
+    position: sticky;
+    left: calc(4.75rem + 3rem);
+    z-index: 4;
+    background-color: var(--inv-sticky-body);
+    box-shadow: 4px 0 8px -2px var(--inv-sticky-edge);
+    overflow: hidden;
+}
+.inventory-desktop-table-wrap table.inventory-desktop-table > tbody > tr:hover > td.inventory-desktop-name-col {
+    background-color: var(--inv-sticky-hover);
+}
+
 .inventory-desktop-table-wrap table.inventory-desktop-table > thead > tr > th.inventory-desktop-sku-col .inventory-desktop-sku-filter {
     max-width: 100%;
     min-width: 0;

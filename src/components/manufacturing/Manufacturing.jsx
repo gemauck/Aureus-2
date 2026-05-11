@@ -27,6 +27,49 @@ const normalizeManufacturingTab = (value = 'dashboard') => {
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
 };
 
+/** Desktop inventory grid: optional columns (SKU, Item Name, Actions always visible). */
+const INVENTORY_DESKTOP_OPTIONAL_COLUMN_META = [
+  { key: 'image', label: 'Image' },
+  { key: 'supplierPart', label: 'Supplier Part No.' },
+  { key: 'manufacturingPart', label: 'Manufacturing Part Number' },
+  { key: 'legacyPart', label: 'Legacy Part No.' },
+  { key: 'category', label: 'Category' },
+  { key: 'type', label: 'Type' },
+  { key: 'quantity', label: 'Quantity' },
+  { key: 'location', label: 'Location' },
+  { key: 'unitCost', label: 'Unit Cost' },
+  { key: 'totalValue', label: 'Total Value' },
+  { key: 'status', label: 'Status' }
+];
+const DEFAULT_INVENTORY_DESKTOP_COLUMNS = Object.fromEntries(
+  INVENTORY_DESKTOP_OPTIONAL_COLUMN_META.map(({ key }) => [key, true])
+);
+
+function loadInventoryDesktopColumnsFromStorage(storageKey) {
+  try {
+    if (typeof window === 'undefined' || !storageKey) {
+      return { ...DEFAULT_INVENTORY_DESKTOP_COLUMNS };
+    }
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return { ...DEFAULT_INVENTORY_DESKTOP_COLUMNS };
+    }
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return { ...DEFAULT_INVENTORY_DESKTOP_COLUMNS };
+    }
+    const merged = { ...DEFAULT_INVENTORY_DESKTOP_COLUMNS };
+    for (const { key } of INVENTORY_DESKTOP_OPTIONAL_COLUMN_META) {
+      if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+        merged[key] = Boolean(parsed[key]);
+      }
+    }
+    return merged;
+  } catch {
+    return { ...DEFAULT_INVENTORY_DESKTOP_COLUMNS };
+  }
+}
+
 /** True if catalog row is tied to this supplier (primary supplier name or supplierPartNumbers[].supplier). */
 function inventoryItemLinkedToSupplierName(item, supplierName) {
   const needle = String(supplierName || '').trim().toLowerCase();
@@ -445,6 +488,14 @@ try {
   const inventoryTableScrollRef = useRef(null);
   const inventoryTableScrollTopRef = useRef(null);
   const inventoryTableScrollSpacerRef = useRef(null);
+  const inventoryColumnStorageKey = useMemo(
+    () =>
+      `manufacturing.inventoryDesktopColumns.v1:${String(currentUser?.id || currentUser?.email || 'anonymous')}`,
+    [currentUser?.id, currentUser?.email]
+  );
+  const [inventoryDesktopColumns, setInventoryDesktopColumns] = useState(() => ({ ...DEFAULT_INVENTORY_DESKTOP_COLUMNS }));
+  const [inventoryColumnPickerOpen, setInventoryColumnPickerOpen] = useState(false);
+  const inventoryColumnPickerRef = useRef(null);
   const inventoryValueSummaryLastLoadedAtRef = useRef(0);
   const loadInventoryValueByLocationSummary = useCallback(async (options = {}) => {
     if (!window.DatabaseAPI?.getManufacturingInventoryLocationValueSummary) {
@@ -3524,6 +3575,45 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     };
   }, [currentUser?.id, currentUser?.email]);
 
+  useEffect(() => {
+    setInventoryDesktopColumns(loadInventoryDesktopColumnsFromStorage(inventoryColumnStorageKey));
+  }, [inventoryColumnStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      window.localStorage.setItem(inventoryColumnStorageKey, JSON.stringify(inventoryDesktopColumns));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [inventoryColumnStorageKey, inventoryDesktopColumns]);
+
+  useEffect(() => {
+    if (!inventoryColumnPickerOpen) {
+      return undefined;
+    }
+    const onPointerDown = (e) => {
+      if (inventoryColumnPickerRef.current && !inventoryColumnPickerRef.current.contains(e.target)) {
+        setInventoryColumnPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [inventoryColumnPickerOpen]);
+
+  const toggleInventoryDesktopColumn = useCallback((key) => {
+    setInventoryDesktopColumns((prev) => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  }, []);
+
+  const resetInventoryDesktopColumns = useCallback(() => {
+    setInventoryDesktopColumns({ ...DEFAULT_INVENTORY_DESKTOP_COLUMNS });
+  }, []);
+
   const handleInventoryStockViewChange = useCallback(async (nextMode) => {
     const normalizedMode = normalizeInventoryStockView(nextMode);
     setInventoryStockView(normalizedMode);
@@ -3593,7 +3683,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       main.removeEventListener('scroll', onMainScroll);
       if (top && onTopScroll) top.removeEventListener('scroll', onTopScroll);
     };
-  }, [activeTab, filteredInventoryList, inventoryListPage, syncInventoryHorizontalScrollChrome, inventoryTableHasHorizontalOverflow]);
+  }, [
+    activeTab,
+    filteredInventoryList,
+    inventoryListPage,
+    syncInventoryHorizontalScrollChrome,
+    inventoryTableHasHorizontalOverflow,
+    inventoryDesktopColumns
+  ]);
 
   useEffect(() => {
     if (activeTab !== 'inventory') return;
@@ -3602,9 +3699,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (main) main.scrollLeft = 0;
     if (top) top.scrollLeft = 0;
     syncInventoryHorizontalScrollChrome();
-  }, [activeTab, inventoryListPage, syncInventoryHorizontalScrollChrome]);
+  }, [activeTab, inventoryListPage, syncInventoryHorizontalScrollChrome, inventoryDesktopColumns]);
 
   const renderInventoryView = () => {
+    const invCol = (key) => inventoryDesktopColumns[key] !== false;
     // Get unique categories from inventory items
     const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
     const hasInventoryValueSummary =
@@ -3809,6 +3907,82 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </div>
 
               <div className="flex flex-wrap items-center gap-1 justify-start xl:justify-end xl:pl-2">
+                <div className="relative" ref={inventoryColumnPickerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setInventoryColumnPickerOpen((o) => !o)}
+                    className={`px-2 py-1 text-[11px] rounded-md flex items-center gap-1 border transition-all duration-200 whitespace-nowrap ${
+                      inventoryColumnPickerOpen
+                        ? isDark
+                          ? 'bg-gray-750 border-blue-500/50 text-blue-200'
+                          : 'bg-blue-50 border-blue-200 text-blue-800'
+                        : isDark
+                          ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-750'
+                          : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
+                    }`}
+                    title="Choose which columns appear in the desktop inventory table"
+                    aria-expanded={inventoryColumnPickerOpen}
+                    aria-haspopup="dialog"
+                  >
+                    <i className="fas fa-columns text-xs" aria-hidden />
+                    Columns
+                  </button>
+                  {inventoryColumnPickerOpen && (
+                    <div
+                      role="dialog"
+                      aria-label="Inventory column visibility"
+                      className={`absolute right-0 top-full z-[80] mt-1.5 w-[min(18rem,calc(100vw-1.5rem))] rounded-xl border shadow-xl overflow-hidden ${
+                        isDark ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-900'
+                      }`}
+                    >
+                      <div
+                        className={`px-3 py-2 border-b ${isDark ? 'border-gray-800 bg-gray-850' : 'border-gray-100 bg-gray-50'}`}
+                      >
+                        <p className="text-xs font-semibold">Desktop table columns</p>
+                        <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                          SKU, item name, and actions always stay visible. Your choices are saved in this browser.
+                        </p>
+                      </div>
+                      <ul className="max-h-60 overflow-y-auto py-1.5 px-1">
+                        {INVENTORY_DESKTOP_OPTIONAL_COLUMN_META.map(({ key, label }) => (
+                          <li key={key}>
+                            <label
+                              className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs ${
+                                isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                checked={invCol(key)}
+                                onChange={() => toggleInventoryDesktopColumn(key)}
+                              />
+                              <span className="select-none">{label}</span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className={`flex items-center justify-between gap-2 px-2 py-2 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                        <button
+                          type="button"
+                          onClick={() => resetInventoryDesktopColumns()}
+                          className={`text-[11px] font-medium px-2 py-1 rounded-md ${isDark ? 'text-blue-300 hover:bg-gray-800' : 'text-blue-600 hover:bg-blue-50'}`}
+                        >
+                          Show all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setInventoryColumnPickerOpen(false)}
+                          className={`text-[11px] font-medium px-2.5 py-1 rounded-md border ${
+                            isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={handleExportInventory}
                   disabled={isExportingInventory}
@@ -4064,7 +4238,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         {/* Desktop table: synced top + bottom horizontal scrollbars so you need not scroll to the bottom to pan wide columns. */}
         <div
           className={`inventory-desktop-table-wrap table-responsive rounded-lg border ${
-            isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
+            isDark ? 'inventory-desktop-table-wrap--dark bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
           }`}
         >
           {inventoryTableHasHorizontalOverflow && (
@@ -4099,21 +4273,30 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('sku')}
                     </button>
                   </th>
-                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Image</th>
-                  <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
+                  {invCol('image') && (
+                  <th className="inventory-desktop-image-col px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Image</th>
+                  )}
+                  <th className="inventory-desktop-name-col px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
                       onClick={(e) => handleSort('name', e)}
-                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full min-w-0 text-left font-medium bg-transparent border-0 p-0"
                       title="Click to sort"
                     >
-                      <span>Item Name</span>
+                      <span className="truncate">Item Name</span>
                       {getSortIcon('name')}
                     </button>
                   </th>
+                  {invCol('supplierPart') && (
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Supplier Part No.</th>
+                  )}
+                  {invCol('manufacturingPart') && (
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Manufacturing Part Number</th>
+                  )}
+                  {invCol('legacyPart') && (
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Abcotronics Part Number (Legacy)</th>
+                  )}
+                  {invCol('category') && (
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4125,6 +4308,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('category')}
                     </button>
                   </th>
+                  )}
+                  {invCol('type') && (
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4136,6 +4321,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('type')}
                     </button>
                   </th>
+                  )}
+                  {invCol('quantity') && (
                   <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4147,6 +4334,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('quantity')}
                     </button>
                   </th>
+                  )}
+                  {invCol('location') && (
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4158,6 +4347,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('location')}
                     </button>
                   </th>
+                  )}
+                  {invCol('unitCost') && (
                   <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4169,6 +4360,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('unitCost')}
                     </button>
                   </th>
+                  )}
+                  {invCol('totalValue') && (
                   <th className="px-3 py-1.5 text-right text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4180,6 +4373,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('totalValue')}
                     </button>
                   </th>
+                  )}
+                  {invCol('status') && (
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">
                     <button 
                       type="button"
@@ -4191,6 +4386,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {getSortIcon('status')}
                     </button>
                   </th>
+                  )}
                   <th className="px-3 py-1.5 text-left text-[11px] font-medium text-gray-500">Actions</th>
                 </tr>
                 {/* Filter Row */}
@@ -4219,8 +4415,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="inventory-desktop-sku-filter w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-1.5"></th>
-                  <th className="px-3 py-1.5">
+                  {invCol('image') && (
+                  <th className="inventory-desktop-image-col px-3 py-1.5" aria-hidden="true"></th>
+                  )}
+                  <th className="inventory-desktop-name-col px-3 py-1.5">
                     <input
                       key="filter-name-input"
                       ref={(el) => { if (el) filterInputRefs.current.name = el; }}
@@ -4244,6 +4442,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
+                  {invCol('supplierPart') && (
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-supplier-input"
@@ -4268,6 +4467,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
+                  )}
+                  {invCol('manufacturingPart') && (
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-mfg-part-input"
@@ -4292,6 +4493,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
+                  )}
+                  {invCol('legacyPart') && (
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-legacy-part-input"
@@ -4316,6 +4519,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
+                  )}
+                  {invCol('category') && (
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-category-input"
@@ -4340,6 +4545,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
+                  )}
+                  {invCol('type') && (
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-type-input"
@@ -4364,7 +4571,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-1.5"></th>
+                  )}
+                  {invCol('quantity') && (
+                  <th className="px-3 py-1.5" aria-hidden="true"></th>
+                  )}
+                  {invCol('location') && (
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-location-input"
@@ -4389,8 +4600,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
-                  <th className="px-3 py-1.5"></th>
-                  <th className="px-3 py-1.5"></th>
+                  )}
+                  {invCol('unitCost') && (
+                  <th className="px-3 py-1.5" aria-hidden="true"></th>
+                  )}
+                  {invCol('totalValue') && (
+                  <th className="px-3 py-1.5" aria-hidden="true"></th>
+                  )}
+                  {invCol('status') && (
                   <th className="px-3 py-1.5">
                     <input
                       key="filter-status-input"
@@ -4415,6 +4632,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
+                  )}
                   <th className="px-3 py-1.5">
                     {(Object.keys(columnFilters).length > 0) && (
                       <button
@@ -4438,7 +4656,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       onClick={() => setViewingInventoryItemDetail(item)}
                     >
                     <td className="inventory-desktop-sku-col px-3 py-1.5 text-xs font-medium text-gray-900" title={item.sku || ''}>{item.sku}</td>
-                    <td className="px-3 py-1.5">
+                    {invCol('image') && (
+                    <td className="inventory-desktop-image-col px-3 py-1.5">
                       {item.thumbnail ? (
                         <>
                           <img 
@@ -4465,12 +4684,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-1.5">
-                      <div className="text-xs font-medium text-gray-900 leading-snug">{item.name}</div>
+                    )}
+                    <td className="inventory-desktop-name-col px-3 py-1.5" title={item.name || ''}>
+                      <div className="text-xs font-medium text-gray-900 leading-snug truncate">{item.name}</div>
                       {item.reorderPoint > 0 && (
-                        <div className="text-[11px] text-gray-500 leading-tight">Reorder: {item.reorderPoint} {item.unit}</div>
+                        <div className="text-[11px] text-gray-500 leading-tight truncate">Reorder: {item.reorderPoint} {item.unit}</div>
                       )}
                     </td>
+                    {invCol('supplierPart') && (
                     <td className="px-3 py-1.5 text-xs text-gray-600">
                       {(() => {
                         try {
@@ -4494,17 +4715,25 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         }
                       })()}
                     </td>
+                    )}
+                    {invCol('manufacturingPart') && (
                     <td className="px-3 py-1.5 text-xs text-gray-600">
                       {(item.manufacturingPartNumber !== undefined && item.manufacturingPartNumber) 
                         ? item.manufacturingPartNumber 
                         : <span className="text-gray-400">-</span>}
                     </td>
+                    )}
+                    {invCol('legacyPart') && (
                     <td className="px-3 py-1.5 text-xs text-gray-600">
                       {(item.legacyPartNumber !== undefined && item.legacyPartNumber) 
                         ? item.legacyPartNumber 
                         : <span className="text-gray-400">-</span>}
                     </td>
+                    )}
+                    {invCol('category') && (
                     <td className="px-3 py-1.5 text-xs text-gray-600 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</td>
+                    )}
+                    {invCol('type') && (
                     <td className="px-3 py-1.5 text-xs text-gray-600 capitalize">
                       {item.type === 'final_product'
                         ? 'Final Product'
@@ -4512,6 +4741,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           ? 'Component'
                           : (item.type || '').replace('_', ' ')}
                     </td>
+                    )}
+                    {invCol('quantity') && (
                     <td className="px-3 py-1.5 text-right leading-tight">
                       {item.type === 'final_product' ? (
                         <div className="text-[11px] leading-tight">
@@ -4533,20 +4764,29 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         </>
                       )}
                     </td>
+                    )}
+                    {invCol('location') && (
                     <td className="px-3 py-1.5 text-xs text-gray-600">
                       {item.location ? item.location : <span className="text-gray-400">-</span>}
                     </td>
+                    )}
+                    {invCol('unitCost') && (
                     <td className="px-3 py-1.5 text-xs text-right text-gray-900">
                       {item.unitCost > 0 ? formatCurrency(item.unitCost) : <span className="text-gray-400">-</span>}
                     </td>
+                    )}
+                    {invCol('totalValue') && (
                     <td className="px-3 py-1.5 text-xs font-semibold text-right text-gray-900">
                       {lineTotalValue > 0 ? formatCurrency(lineTotalValue) : <span className="text-gray-400">-</span>}
                     </td>
+                    )}
+                    {invCol('status') && (
                     <td className="px-3 py-1.5">
                         <span className={`inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium capitalize leading-tight ${getStatusColor(item.status || '')}`}>
                           {(item.status || '').replace('_', ' ')}
                       </span>
                     </td>
+                    )}
                     <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-1.5">
                         <button
