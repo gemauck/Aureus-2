@@ -20,6 +20,10 @@ import {
 import { runStockCountTemplateImport } from './_lib/stockCountTemplateImport.js'
 import { runFlexibleStockCountByLocationImport } from './_lib/flexibleStockCountImport.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
+import {
+  loadMovementNetCombinedBySku,
+  annotateInventoryRowsWithCompanyWideLedger
+} from './_lib/alignLocationInventoryToMovements.js'
 import XLSX from 'xlsx'
 import QRCode from 'qrcode'
 
@@ -844,6 +848,10 @@ async function buildAllLocationsInventoryResponse() {
     else if (row.locations.length === 1) row.location = row.locations[0].locationName || row.locations[0].locationCode || ''
     else row.location = 'Multiple locations'
   }
+
+  const movementNetBySku = await loadMovementNetCombinedBySku(prisma)
+  annotateInventoryRowsWithCompanyWideLedger(result, movementNetBySku)
+
   return result
 }
 

@@ -2,6 +2,8 @@ import { computedInventoryTotalValue } from './inventoryValue.js'
 import { findCanonicalInventoryItemBySkuTx, getStatusFromQuantity } from './stockCountAdjustment.js'
 
 const EPS = 0.001
+/** Same tolerance as `scripts/verify-ledger-reconciliation.js` for list badges. */
+export const COMBINED_LEDGER_RECONCILE_EPS = EPS
 export const ALIGN_LI_TO_MOVEMENTS_REF = 'LI_ALIGN_TO_MOVEMENTS'
 
 /** Same rules as `scripts/verify-ledger-reconciliation.js` (company-wide net per movement). */
@@ -64,12 +66,49 @@ export async function computeCombinedLedgerMismatches(prisma) {
   for (const sku of allSkus) {
     const recorded = recordedCombined(sku)
     const net = netBySku.get(sku) || 0
-    if (Math.abs(net - recorded) > EPS) {
+    if (Math.abs(net - recorded) > COMBINED_LEDGER_RECONCILE_EPS) {
       mismatched.push({ sku, recorded, net, diff: net - recorded })
     }
   }
   mismatched.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
   return mismatched
+}
+
+/**
+ * Company-wide movement-implied on-hand per SKU (internal transfers net to 0).
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @returns {Promise<Map<string, number>>}
+ */
+export async function loadMovementNetCombinedBySku(prisma) {
+  const movements = await prisma.stockMovement.findMany({
+    select: { sku: true, quantity: true, type: true }
+  })
+  const netBySku = new Map()
+  for (const m of movements) {
+    const sku = String(m.sku || '').trim()
+    if (!sku) continue
+    netBySku.set(sku, (netBySku.get(sku) || 0) + normalizeCombinedForSkuLedger(m))
+  }
+  return netBySku
+}
+
+/**
+ * Annotate aggregated (all-locations) inventory rows with combined ledger reconciliation.
+ * `row.quantity` must already be recorded on-hand (Σ LocationInventory or catalog fallback).
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {Map<string, number>} movementNetBySku
+ */
+export function annotateInventoryRowsWithCompanyWideLedger(rows, movementNetBySku) {
+  for (const row of rows) {
+    const sku = String(row.sku || '').trim()
+    const recorded = Number(row.quantity) || 0
+    const movementNet = sku ? movementNetBySku.get(sku) ?? 0 : 0
+    const variance = recorded - movementNet
+    row.ledgerMovementNet = movementNet
+    row.ledgerVariance = variance
+    row.ledgerReconciled = Math.abs(variance) <= COMBINED_LEDGER_RECONCILE_EPS
+  }
+  return rows
 }
 
 async function defaultStockLocationId(tx) {
