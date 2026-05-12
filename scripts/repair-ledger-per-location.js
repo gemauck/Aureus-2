@@ -5,8 +5,10 @@
  *
  * Usage:
  *   node scripts/repair-ledger-per-location.js --dry-run
+ *   node scripts/repair-ledger-per-location.js --dry-run --sku=SKU0028
  *   node scripts/backup-stock-movements.js
  *   node scripts/repair-ledger-per-location.js --write
+ *   node scripts/repair-ledger-per-location.js --write --sku=SKU0028
  */
 
 import 'dotenv/config'
@@ -38,10 +40,19 @@ function normalizeAtLocation(m, locId, locCode) {
   return qty
 }
 
+function skuFilterFromArgv(argv) {
+  const eq = argv.find((a) => /^--sku=/.test(a))
+  if (eq) return String(eq.split('=')[1] || '').trim()
+  const idx = argv.indexOf('--sku')
+  if (idx !== -1 && argv[idx + 1]) return String(argv[idx + 1]).trim()
+  return ''
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   const dryRun = argv.includes('--dry-run')
   const write = argv.includes('--write')
+  const skuFilter = skuFilterFromArgv(argv)
   if ((dryRun && write) || (!dryRun && !write)) {
     console.error('Specify exactly one of --dry-run or --write')
     process.exit(1)
@@ -86,6 +97,7 @@ async function main() {
     const sku = String(li.sku || '').trim()
     const locId = li.locationId
     if (!sku || !locId) continue
+    if (skuFilter && sku !== skuFilter) continue
     const code = codeById.get(locId) || ''
     const list = movementsBySku.get(sku) || []
     let net = 0
@@ -124,6 +136,7 @@ async function main() {
     JSON.stringify(
       {
         mode: dryRun ? 'dry-run' : 'write',
+        skuFilter: skuFilter || null,
         rowsToInsert: planned.length,
         sample: planned.slice(0, 20),
         truncated: planned.length > 20
