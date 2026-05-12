@@ -41,12 +41,13 @@ import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import 'dotenv/config'
 import { prisma } from '../api/_lib/prisma.js'
+import { LEDGER_BASELINE_REF_PREFIX } from '../api/_lib/ledgerBaselinePrefix.js'
 import { buildMovementId } from '../api/_lib/stockCountAdjustment.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
 
-const REF_PREFIX = 'LEDGER_BASELINE_2026-04-30'
+const REF_PREFIX = LEDGER_BASELINE_REF_PREFIX
 
 function parseArgs() {
   const argv = process.argv.slice(2)
