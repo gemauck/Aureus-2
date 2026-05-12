@@ -2504,6 +2504,8 @@ model HrLibraryDocument {
 model MonthlyMeetingNotes {
   id              String                  @id @default(cuid())
   monthKey        String                  @unique
+  /// Rich HTML: company / leadership “high level” goals for the month (shown above per-dept monthly goals in meeting notes UI).
+  highGoals       String                  @default("")
   monthlyGoals    String                  @default("")
   status          String                  @default("active")
   ownerId         String?

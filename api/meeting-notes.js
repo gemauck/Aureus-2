@@ -403,7 +403,7 @@ async function handler(req, res) {
   // Create monthly meeting notes
   if (req.method === 'POST' && !action) {
     try {
-      const { monthKey, monthlyGoals } = req.body
+      const { monthKey, monthlyGoals, highGoals } = req.body
 
       if (!monthKey) {
         return badRequest(res, 'monthKey is required')
@@ -412,6 +412,7 @@ async function handler(req, res) {
       const monthlyNotes = await prisma.monthlyMeetingNotes.create({
         data: {
           monthKey,
+          highGoals: typeof highGoals === 'string' ? highGoals : '',
           monthlyGoals: typeof monthlyGoals === 'string' ? monthlyGoals : '',
           ownerId: req.user?.sub || req.user?.id || null
         },
@@ -442,7 +443,7 @@ async function handler(req, res) {
   // Update monthly meeting notes
   if (req.method === 'PUT' && !action) {
     try {
-      const { id, status, monthlyGoals } = req.body
+      const { id, status, monthlyGoals, highGoals } = req.body
 
       if (!id) {
         return badRequest(res, 'id is required')
@@ -451,6 +452,9 @@ async function handler(req, res) {
       const updateData = {}
       if (status !== undefined) {
         updateData.status = status
+      }
+      if (highGoals !== undefined) {
+        updateData.highGoals = typeof highGoals === 'string' ? highGoals : ''
       }
       if (monthlyGoals !== undefined) {
         updateData.monthlyGoals = typeof monthlyGoals === 'string' ? monthlyGoals : ''
