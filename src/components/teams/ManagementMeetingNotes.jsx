@@ -6399,20 +6399,16 @@ const ManagementMeetingNotes = () => {
                                                 onClick={() =>
                                                     setMeetingNotesMonthlyGoalsColumnVisiblePersisted(!meetingNotesMonthlyGoalsColumnVisible)
                                                 }
-                                                className={`self-start rounded-lg border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                                                className={`self-start rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold leading-snug tracking-tight transition ${
                                                     isDark
-                                                        ? 'border-slate-500/80 bg-slate-800/90 text-slate-200 hover:bg-slate-700/90'
-                                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
+                                                        ? 'border-red-900/55 bg-red-950/35 text-red-300/90 hover:border-red-800/60 hover:bg-red-950/50'
+                                                        : 'border-red-300/80 bg-red-50/95 text-red-900/85 hover:border-red-400/70 hover:bg-red-100/90'
                                                 }`}
                                                 aria-expanded={meetingNotesMonthlyGoalsColumnVisible}
-                                                aria-label={
-                                                    meetingNotesMonthlyGoalsColumnVisible
-                                                        ? 'Hide monthly goals column'
-                                                        : 'Show monthly goals column'
-                                                }
+                                                aria-label="Hide monthly goals column"
                                             >
-                                                <i className="fas mr-1.5 fa-columns" aria-hidden />
-                                                Hide goals
+                                                <i className="fas mr-1.5 fa-columns opacity-90" aria-hidden />
+                                                Hide Monthly Goals
                                             </button>
                                             <div className="min-w-0 flex-1">
                                                 <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -6469,16 +6465,16 @@ const ManagementMeetingNotes = () => {
                                                         onClick={() =>
                                                             setMeetingNotesMonthlyGoalsColumnVisiblePersisted(!meetingNotesMonthlyGoalsColumnVisible)
                                                         }
-                                                        className={`self-start rounded-lg border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                                                        className={`self-start rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold leading-snug tracking-tight transition ${
                                                             isDark
-                                                                ? 'border-slate-500/80 bg-slate-800/90 text-slate-200 hover:bg-slate-700/90'
+                                                                ? 'border-slate-600/80 bg-slate-800/80 text-slate-200 hover:bg-slate-700/80'
                                                                 : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
                                                         }`}
                                                         aria-expanded={meetingNotesMonthlyGoalsColumnVisible}
                                                         aria-label="Show monthly goals column"
                                                     >
-                                                        <i className="fas mr-1.5 fa-table" aria-hidden />
-                                                        Show goals
+                                                        <i className="fas mr-1.5 fa-table opacity-90" aria-hidden />
+                                                        Show Monthly Goals
                                                     </button>
                                                 ) : null}
                                                 <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
