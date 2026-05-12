@@ -22,7 +22,8 @@ import { runFlexibleStockCountByLocationImport } from './_lib/flexibleStockCount
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
 import {
   loadMovementNetCombinedBySku,
-  annotateInventoryRowsWithCompanyWideLedger
+  annotateInventoryRowsWithCompanyWideLedger,
+  annotateInventoryRowsWithWarehouseSiteLedger
 } from './_lib/alignLocationInventoryToMovements.js'
 import XLSX from 'xlsx'
 import QRCode from 'qrcode'
@@ -2662,6 +2663,19 @@ async function handler(req, res) {
 
         if (locationFilterActive) {
           items = await buildLocationInventoryResponse(locationId)
+          const locationMeta = await prisma.stockLocation.findUnique({
+            where: { id: locationId },
+            select: { code: true }
+          })
+          const movementsForSiteLedger = await prisma.stockMovement.findMany({
+            select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
+          })
+          annotateInventoryRowsWithWarehouseSiteLedger(
+            items,
+            movementsForSiteLedger,
+            locationId,
+            String(locationMeta?.code || '').trim()
+          )
         } else {
           // One row per SKU (aggregated across locations); no per-location duplicate rows
           items = await buildAllLocationsInventoryResponse()

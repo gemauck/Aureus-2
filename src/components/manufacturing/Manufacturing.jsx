@@ -217,7 +217,7 @@ function inventoryRowsEquivalentForUi(prevRows, nextRows) {
   const fingerprintFor = (row) => {
     const ledgerSig =
       typeof row?.ledgerReconciled === 'boolean'
-        ? `${row.ledgerReconciled ? 1 : 0}:${Number(row?.ledgerMovementNet) || 0}:${Number(row?.ledgerVariance) || 0}`
+        ? `${String(row?.ledgerScope || '')}:${row.ledgerReconciled ? 1 : 0}:${Number(row?.ledgerMovementNet) || 0}:${Number(row?.ledgerVariance) || 0}`
         : '';
     return [
       row?.inventoryItemId || row?.id || '',
@@ -517,7 +517,7 @@ try {
   const [filterCategory, setFilterCategory] = useState('all');
   /** When true, inventory list shows only items flagged from stock-count import. */
   const [showCatalogReviewOnly, setShowCatalogReviewOnly] = useState(false);
-  /** Combined (all-locations) list only: stock movements vs recorded on-hand mismatch. */
+  /** When true, inventory list shows only rows where movement-implied qty ≠ recorded (combined view or current warehouse). */
   const [showLedgerMismatchOnly, setShowLedgerMismatchOnly] = useState(false);
   const [inventoryStockView, setInventoryStockView] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
@@ -711,6 +711,8 @@ try {
   const columnFiltersRef = useRef({});
   const inventoryLoadSeqRef = useRef(0);
   const ledgerFilterMetaRetryRef = useRef(false);
+  /** Tracks prior `showLedgerMismatchOnly` so we only force-refresh inventory when the filter is turned on. */
+  const prevShowLedgerMismatchOnlyRef = useRef(false);
   
   // Sync refs with state
   useEffect(() => {
@@ -3654,12 +3656,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setInventoryListPage(1);
   }, [searchTerm, filterCategory, showCatalogReviewOnly, showLedgerMismatchOnly, selectedLocationId, sortConfig.key, sortConfig.direction, columnFilters, inventoryStockView]);
 
-  useEffect(() => {
-    if (selectedLocationId !== 'all') {
-      setShowLedgerMismatchOnly(false);
-    }
-  }, [selectedLocationId]);
-
   /** Deep link: `/manufacturing/inventory?location=<warehouseId>` selects that warehouse in the list. */
   useEffect(() => {
     if (activeTab !== 'inventory' || !window.RouteState?.getRoute || !Array.isArray(stockLocations) || stockLocations.length === 0) {
@@ -3677,16 +3673,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setSelectedLocationId((prev) => (String(prev) === String(urlLoc) ? prev : urlLoc));
   }, [activeTab, stockLocations]);
 
-  /** Unreconciled filter needs `ledgerReconciled` from API; bypass GET cache once when enabling. */
+  /** Unreconciled filter needs `ledgerReconciled` from API; bypass GET cache when turning the filter on. */
   useEffect(() => {
-    if (!showLedgerMismatchOnly || selectedLocationId !== 'all' || activeTab !== 'inventory') {
+    if (activeTab !== 'inventory') {
       return undefined;
     }
-    void reloadInventoryForLocation({ forceRefresh: true });
-  }, [showLedgerMismatchOnly, selectedLocationId, activeTab, reloadInventoryForLocation]);
+    if (showLedgerMismatchOnly) {
+      const turnedOn = !prevShowLedgerMismatchOnlyRef.current;
+      prevShowLedgerMismatchOnlyRef.current = true;
+      if (turnedOn) void reloadInventoryForLocation({ forceRefresh: true });
+    } else {
+      prevShowLedgerMismatchOnlyRef.current = false;
+    }
+    return undefined;
+  }, [showLedgerMismatchOnly, activeTab, reloadInventoryForLocation]);
 
   useEffect(() => {
-    if (activeTab !== 'inventory' || !showLedgerMismatchOnly || selectedLocationId !== 'all') {
+    if (activeTab !== 'inventory' || !showLedgerMismatchOnly) {
       ledgerFilterMetaRetryRef.current = false;
       return undefined;
     }
@@ -3887,11 +3890,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const inventoryHasAnyLedgerMeta = inventory.some((row) => typeof row?.ledgerReconciled === 'boolean');
     const ledgerFilterEmptyHint =
       showLedgerMismatchOnly &&
-      selectedLocationId === 'all' &&
       invFilteredTotal === 0 &&
       inventory.length > 0
         ? inventoryHasAnyLedgerMeta
-          ? 'No SKUs currently mismatch the stock movement ledger in the combined (all locations) view.'
+          ? selectedLocationId === 'all'
+            ? 'No SKUs currently mismatch the stock movement ledger in the combined (all locations) view.'
+            : `No rows at ${selectedLocationLabel} currently mismatch the per-warehouse movement ledger (same rules as item detail with this site selected).`
           : 'Ledger audit fields were not returned (cached or older API). Try Refresh, a hard reload, or confirm this host is on the latest deploy.'
         : null;
 
@@ -3916,27 +3920,36 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     return (
       <div className="erp-module-root space-y-4 min-w-0">
-        {showLedgerMismatchOnly && selectedLocationId === 'all' && (
+        {showLedgerMismatchOnly && (
           <div
             className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 rounded-xl border ${
               isDark ? 'bg-orange-950/30 border-orange-800 text-orange-100' : 'bg-orange-50 border-orange-200 text-orange-950'
             }`}
           >
             <span className="text-sm">
-              Showing only SKUs where <span className="font-semibold">recorded on-hand</span> (all locations) does not match the{' '}
-              <span className="font-semibold">net of stock movements</span> (same rules as the inventory detail audit and verify-ledger-reconciliation).
+              {selectedLocationId === 'all' ? (
+                <>
+                  Showing only SKUs where <span className="font-semibold">recorded on-hand</span> (all locations combined) does not match the{' '}
+                  <span className="font-semibold">company-wide net of stock movements</span> (internal transfers net to zero; same rules as{' '}
+                  <span className="font-semibold">verify-ledger-reconciliation</span>).
+                </>
+              ) : (
+                <>
+                  Showing only rows at <span className="font-semibold">{selectedLocationLabel}</span> where{' '}
+                  <span className="font-semibold">on-hand at this warehouse</span> does not match the{' '}
+                  <span className="font-semibold">movement net attributed to this site</span> (same rules as inventory detail with this location selected and{' '}
+                  <span className="font-semibold">verify-ledger-per-location</span>).
+                </>
+              )}
             </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowLedgerMismatchOnly(false);
-                          applyInventoryListLocationInUrl('all');
-                        }}
+            <button
+              type="button"
+              onClick={() => setShowLedgerMismatchOnly(false)}
               className={`text-sm font-medium px-3 py-1.5 rounded-lg border ${
                 isDark ? 'border-orange-700 hover:bg-orange-950/50' : 'border-orange-300 hover:bg-orange-100'
               }`}
             >
-              Show all inventory
+              Clear ledger filter
             </button>
           </div>
         )}
@@ -4026,33 +4039,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         Out
                       </button>
                     </div>
-                    {selectedLocationId === 'all' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowLedgerMismatchOnly((v) => {
-                            const next = !v;
-                            if (next) {
-                              setSelectedLocationId('all');
-                              applyInventoryListLocationInUrl('all');
-                            }
-                            return next;
-                          });
-                        }}
-                        className={`shrink-0 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors ${
-                          showLedgerMismatchOnly
-                            ? isDark
-                              ? 'bg-orange-600/90 border-orange-500 text-white'
-                              : 'bg-orange-500 border-orange-600 text-white'
-                            : isDark
-                              ? 'border-gray-600 text-gray-200 hover:bg-gray-700'
-                              : 'border-gray-300 text-gray-700 hover:bg-white'
-                        }`}
-                        title="Filter to SKUs where movement net ≠ recorded quantity (all locations combined)"
-                      >
-                        Unreconciled ledger
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowLedgerMismatchOnly((v) => !v)}
+                      className={`shrink-0 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors ${
+                        showLedgerMismatchOnly
+                          ? isDark
+                            ? 'bg-orange-600/90 border-orange-500 text-white'
+                            : 'bg-orange-500 border-orange-600 text-white'
+                          : isDark
+                            ? 'border-gray-600 text-gray-200 hover:bg-gray-700'
+                            : 'border-gray-300 text-gray-700 hover:bg-white'
+                      }`}
+                      title={
+                        selectedLocationId === 'all'
+                          ? 'Filter to SKUs where combined movement net ≠ recorded quantity (all locations)'
+                          : 'Filter to rows where this warehouse’s movement net ≠ on-hand at this site'
+                      }
+                    >
+                      Unreconciled ledger
+                    </button>
                     <div className={`rounded-md border px-2.5 py-1 min-w-[180px] shrink-0 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
                       <div className="flex items-center gap-1.5 text-[11px] leading-none whitespace-nowrap">
                         <span className={`uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Value</span>

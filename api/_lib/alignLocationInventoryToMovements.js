@@ -19,6 +19,35 @@ export function normalizeCombinedForSkuLedger(m) {
 }
 
 /**
+ * Signed movement effect at one warehouse — matches `scripts/verify-ledger-per-location.js`
+ * and Manufacturing inventory detail when a site is selected.
+ * @param {{ quantity?: unknown, type?: string, fromLocation?: string|null, toLocation?: string|null }} m
+ * @param {string} locationId
+ * @param {string} locationCode
+ */
+export function normalizeMovementAtLocationForSiteLedger(m, locationId, locationCode) {
+  const matches = (loc) => !!loc && (loc === locationId || (!!locationCode && loc === locationCode))
+  let qty = parseFloat(m.quantity) || 0
+  const t = (m.type || '').toLowerCase()
+  if (t === 'transfer') {
+    const qtyAbs = Math.abs(qty)
+    const fromHere = matches(m.fromLocation)
+    const toHere = matches(m.toLocation)
+    if (toHere && !fromHere) return qtyAbs
+    if (fromHere && !toHere) return -qtyAbs
+    if (fromHere && toHere) return 0
+    return 0
+  }
+  const touches = matches(m.fromLocation) || matches(m.toLocation)
+  if (!touches) return 0
+  if (t === 'receipt') return Math.abs(qty)
+  if (t === 'production') return -Math.abs(qty)
+  if (t === 'consumption' || t === 'sale') return -Math.abs(qty)
+  if (t === 'issue') return -Math.abs(qty)
+  return qty
+}
+
+/**
  * SKUs where sum(LocationInventory) ≠ sum(normalized movements), using catalog fallback when no LI rows.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @returns {Promise<Array<{ sku: string, recorded: number, net: number, diff: number }>>}
@@ -107,6 +136,37 @@ export function annotateInventoryRowsWithCompanyWideLedger(rows, movementNetBySk
     row.ledgerMovementNet = movementNet
     row.ledgerVariance = variance
     row.ledgerReconciled = Math.abs(variance) <= COMBINED_LEDGER_RECONCILE_EPS
+    row.ledgerScope = 'combined'
+  }
+  return rows
+}
+
+/**
+ * Per-warehouse ledger: each row is one SKU at one site (LocationInventory.quantity vs movement net there).
+ * Matches `scripts/verify-ledger-per-location.js` / Manufacturing detail ledger when a warehouse is selected.
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {Array<{ sku?: string, quantity?: unknown, type?: string, fromLocation?: string|null, toLocation?: string|null }>} movements
+ * @param {string} locationId
+ * @param {string} [locationCode]
+ */
+export function annotateInventoryRowsWithWarehouseSiteLedger(rows, movements, locationId, locationCode = '') {
+  const code = String(locationCode || '').trim()
+  const netBySku = new Map()
+  for (const m of movements) {
+    const sku = String(m.sku || '').trim()
+    if (!sku) continue
+    const delta = normalizeMovementAtLocationForSiteLedger(m, locationId, code)
+    netBySku.set(sku, (netBySku.get(sku) || 0) + delta)
+  }
+  for (const row of rows) {
+    const sku = String(row.sku || '').trim()
+    const recorded = Number(row.quantity) || 0
+    const movementNet = sku ? netBySku.get(sku) ?? 0 : 0
+    const variance = recorded - movementNet
+    row.ledgerMovementNet = movementNet
+    row.ledgerVariance = variance
+    row.ledgerReconciled = Math.abs(variance) <= COMBINED_LEDGER_RECONCILE_EPS
+    row.ledgerScope = 'warehouse'
   }
   return rows
 }

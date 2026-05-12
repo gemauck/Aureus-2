@@ -9,6 +9,8 @@
  * Usage:
  *   node scripts/verify-ledger-per-location.js
  *   node scripts/verify-ledger-per-location.js --quiet   # exit 1 if any mismatch
+ *   node scripts/verify-ledger-per-location.js --ignore-zero-on-hand
+ *     # skip LI rows where on-hand is ~0 (cleared depots / mirror noise); exit & summary reflect "active" rows only
  */
 
 import 'dotenv/config'
@@ -41,6 +43,7 @@ function normalizeAtLocation(m, locId, locCode) {
 
 async function main() {
   const quiet = process.argv.includes('--quiet')
+  const ignoreZeroOnHand = process.argv.includes('--ignore-zero-on-hand')
 
   const locations = await prisma.stockLocation.findMany({
     select: { id: true, code: true, name: true }
@@ -66,6 +69,7 @@ async function main() {
   })
 
   const mismatched = []
+  let skippedZeroOnHandMismatches = 0
   for (const li of liRows) {
     const sku = String(li.sku || '').trim()
     const locId = li.locationId
@@ -78,6 +82,10 @@ async function main() {
     }
     const recorded = parseFloat(li.quantity) || 0
     if (Math.abs(net - recorded) > EPS) {
+      if (ignoreZeroOnHand && Math.abs(recorded) <= EPS) {
+        skippedZeroOnHandMismatches++
+        continue
+      }
       mismatched.push({
         sku,
         locationId: locId,
@@ -94,6 +102,8 @@ async function main() {
 
   const summary = {
     check: 'per-location / per-warehouse',
+    ignoreZeroOnHand: ignoreZeroOnHand || undefined,
+    skippedZeroOnHandMismatches: ignoreZeroOnHand ? skippedZeroOnHandMismatches : undefined,
     locationInventoryRowsChecked: liRows.length,
     ok: mismatched.length === 0,
     mismatchedCount: mismatched.length,

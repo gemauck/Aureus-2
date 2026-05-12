@@ -6,14 +6,18 @@
  * Usage:
  *   node scripts/export-location-ledger-imbalances.mjs
  *   node scripts/export-location-ledger-imbalances.mjs --out=/path/to/file.csv
+ *   node scripts/export-location-ledger-imbalances.mjs --ignore-zero-on-hand
+ *     # omit rows where recorded on-hand is ~0 (same as verify-ledger-per-location.js)
+ *   node scripts/export-location-ledger-imbalances.mjs --annotate-suspect-2x
+ *     # add CSV column flagging net ≳ 2× on-hand (duplicate-movement heuristic; review manually)
  *
  * Default output: ~/Desktop/location-ledger-imbalances-<timestamp>.csv
  */
 
+import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import 'dotenv/config'
 import { prisma } from '../api/_lib/prisma.js'
 
 const EPS = 0.001
@@ -46,10 +50,26 @@ function csvCell(v) {
   return s
 }
 
+/** Heuristic: movement net at site ≥ ~2× recorded on-hand (same sign) — possible duplicate receipt / double count. */
+function suspectMovementDoubleVsOnHand(recorded, net) {
+  const r = parseFloat(recorded) || 0
+  const n = parseFloat(net) || 0
+  if (r <= EPS || n <= EPS) return false
+  if (r > 0 && n > 0) return n >= 2 * r - Math.max(EPS, 0.01 * r)
+  return false
+}
+
 async function main() {
   const outArg = process.argv.find((a) => a.startsWith('--out='))?.slice('--out='.length)?.trim()
+  const ignoreZeroOnHand = process.argv.includes('--ignore-zero-on-hand')
+  const annotateSuspect2x = process.argv.includes('--annotate-suspect-2x')
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  const defaultPath = path.join(os.homedir(), 'Desktop', `location-ledger-imbalances-${ts}.csv`)
+  const suffix = ignoreZeroOnHand ? '-active-sites' : ''
+  const defaultPath = path.join(
+    os.homedir(),
+    'Desktop',
+    `location-ledger-imbalances${suffix}-${ts}.csv`
+  )
   const outPath = outArg ? path.resolve(outArg) : defaultPath
 
   const locations = await prisma.stockLocation.findMany({
@@ -75,6 +95,7 @@ async function main() {
   })
 
   const rows = []
+  let skippedZeroOnHandMismatches = 0
   for (const li of liRows) {
     const sku = String(li.sku || '').trim()
     const locId = li.locationId
@@ -87,6 +108,11 @@ async function main() {
     }
     const recorded = parseFloat(li.quantity) || 0
     if (Math.abs(net - recorded) > EPS) {
+      if (ignoreZeroOnHand && Math.abs(recorded) <= EPS) {
+        skippedZeroOnHandMismatches++
+        continue
+      }
+      const suspect2x = annotateSuspect2x ? suspectMovementDoubleVsOnHand(recorded, net) : null
       rows.push({
         locationInventoryId: li.id,
         sku,
@@ -97,7 +123,8 @@ async function main() {
         recordedOnHand: recorded,
         netFromMovements: net,
         diffMovementMinusRecorded: net - recorded,
-        movementRowCountForSku: list.length
+        movementRowCountForSku: list.length,
+        suspectMovementDoubleVsOnHand: suspect2x
       })
     }
   }
@@ -114,13 +141,14 @@ async function main() {
     'recordedOnHand',
     'netFromMovements',
     'diffMovementMinusRecorded',
-    'movementRowCountForSku'
+    'movementRowCountForSku',
+    ...(annotateSuspect2x ? ['suspectMovementDoubleVsOnHand'] : [])
   ]
 
   const lines = [
     header.join(','),
-    ...rows.map((r) =>
-      [
+    ...rows.map((r) => {
+      const base = [
         r.locationInventoryId,
         r.sku,
         r.itemName,
@@ -131,8 +159,12 @@ async function main() {
         r.netFromMovements,
         r.diffMovementMinusRecorded,
         r.movementRowCountForSku
-      ].map(csvCell).join(',')
-    )
+      ]
+      if (annotateSuspect2x) {
+        base.push(r.suspectMovementDoubleVsOnHand ? 'yes' : '')
+      }
+      return base.map(csvCell).join(',')
+    })
   ]
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true })
@@ -144,7 +176,11 @@ async function main() {
         written: outPath,
         locationInventoryRowsChecked: liRows.length,
         imbalanceRows: rows.length,
-        basis: 'Per LocationInventory row: sum of StockMovement contributions at that location (id or code match) vs quantity on hand; same as verify-ledger-per-location.js'
+        ignoreZeroOnHand: ignoreZeroOnHand || undefined,
+        skippedZeroOnHandMismatches: ignoreZeroOnHand ? skippedZeroOnHandMismatches : undefined,
+        annotateSuspect2x: annotateSuspect2x || undefined,
+        basis:
+          'Per LocationInventory row: sum of StockMovement contributions at that location (id or code match) vs quantity on hand; same as verify-ledger-per-location.js'
       },
       null,
       2

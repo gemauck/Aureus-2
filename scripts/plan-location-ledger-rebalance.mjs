@@ -11,6 +11,8 @@
  * Usage:
  *   node scripts/plan-location-ledger-rebalance.mjs
  *   node scripts/plan-location-ledger-rebalance.mjs --sku=SKU0044
+ *   node scripts/plan-location-ledger-rebalance.mjs --ignore-zero-on-hand
+ *     # same as verify: omit LI rows with ~0 on-hand when building mismatches / transfer suggestions
  */
 
 import 'dotenv/config'
@@ -87,6 +89,7 @@ function suggestTransfersForSku(rows) {
 
 async function main() {
   const skuArg = process.argv.find((a) => a.startsWith('--sku='))?.slice('--sku='.length)?.trim()
+  const ignoreZeroOnHand = process.argv.includes('--ignore-zero-on-hand')
 
   const locations = await prisma.stockLocation.findMany({
     select: { id: true, code: true, name: true }
@@ -111,6 +114,7 @@ async function main() {
   })
 
   const mismatched = []
+  let skippedZeroOnHandMismatches = 0
   for (const li of liRows) {
     const sku = String(li.sku || '').trim()
     const locId = li.locationId
@@ -124,6 +128,10 @@ async function main() {
     }
     const recorded = parseFloat(li.quantity) || 0
     if (Math.abs(net - recorded) > EPS) {
+      if (ignoreZeroOnHand && Math.abs(recorded) <= EPS) {
+        skippedZeroOnHandMismatches++
+        continue
+      }
       mismatched.push({
         sku,
         locationId: locId,
@@ -158,6 +166,8 @@ async function main() {
       {
         policy: 'Option B — planner only (no DB writes). Post transfers in Manufacturing to apply.',
         skuFilter: skuArg || null,
+        ignoreZeroOnHand: ignoreZeroOnHand || undefined,
+        skippedZeroOnHandMismatches: ignoreZeroOnHand ? skippedZeroOnHandMismatches : undefined,
         mismatchedLiRows: mismatched.length,
         skusAffected: bySku.size,
         suggestedTransferLegs: transferCount,
