@@ -4000,11 +4000,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       </option>
                     ))}
                   </select>
-                  <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap">
-                    <span className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className={`text-[11px] font-semibold uppercase tracking-wide shrink-0 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                       Stock
                     </span>
-                    <div className={`inline-flex w-fit rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className={`inline-flex w-fit shrink-0 rounded-md border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
                       <button
                         type="button"
                         onClick={() => handleInventoryStockViewChange('all')}
@@ -4059,13 +4059,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     >
                       Unreconciled ledger
                     </button>
-                    <div className={`rounded-md border px-2.5 py-1 min-w-[180px] shrink-0 ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                      <div className="flex items-center gap-1.5 text-[11px] leading-none whitespace-nowrap">
-                        <span className={`uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Value</span>
-                        <span className="font-semibold tabular-nums">
+                    <div className={`rounded-md border px-2.5 py-1 min-w-0 flex-1 basis-[min(100%,14rem)] ${isDark ? 'border-gray-700 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                      <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[11px] leading-snug">
+                        <span className={`uppercase tracking-wide shrink-0 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Value</span>
+                        <span className="font-semibold tabular-nums shrink-0 break-all sm:break-normal">
                           {hasInventoryValueSummary ? formatCurrency(selectedLocationStockValue) : '—'}
                         </span>
-                        <span className={`${isDark ? 'text-gray-500' : 'text-gray-500'} truncate`} title={selectedLocationLabel}>
+                        <span className={`min-w-0 ${isDark ? 'text-gray-500' : 'text-gray-500'} break-words`} title={selectedLocationLabel}>
                           {selectedLocationLabel}
                         </span>
                       </div>
