@@ -1438,6 +1438,11 @@ const ManagementMeetingNotes = () => {
                 setGmMinuteInlinePopover(null);
                 return;
             }
+            const wid = pop.weeklyNotesId;
+            if (generalMinutesTimers.current[wid]) {
+                clearTimeout(generalMinutesTimers.current[wid]);
+                delete generalMinutesTimers.current[wid];
+            }
             const monthlyId = currentMonthlyNotes?.id || null;
             const existing = gmParseInlineThreadsRaw(w?.generalMinutesThreads);
             const user = window.storage?.getUserInfo?.() || {};
@@ -1474,7 +1479,6 @@ const ManagementMeetingNotes = () => {
                 if (wrapGmThreadRangeFromSelection(threadId)) {
                     generalMinutesUpdate = editor.innerHTML;
                     generalMinutesValuesRef.current[pop.weeklyNotesId] = generalMinutesUpdate;
-                    lastSavedGeneralMinutesHash.current[pop.weeklyNotesId] = generalMinutesUpdate;
                 }
             }
 
@@ -1492,6 +1496,9 @@ const ManagementMeetingNotes = () => {
                 payload.generalMinutes = generalMinutesUpdate;
             }
             await window.DatabaseAPI.updateWeeklyNotes(pop.weeklyNotesId, payload);
+            if (generalMinutesUpdate !== undefined) {
+                lastSavedGeneralMinutesHash.current[pop.weeklyNotesId] = generalMinutesUpdate;
+            }
             const localPartial = { generalMinutesThreads: reconciled };
             if (generalMinutesUpdate !== undefined) {
                 localPartial.generalMinutes = generalMinutesUpdate;
@@ -3793,16 +3800,30 @@ const ManagementMeetingNotes = () => {
             }
             const monthlyId = currentMonthlyNotes?.id || null;
             const weekData = currentMonthlyNotes?.weeklyNotes?.find((w) => w.id === weeklyNotesId);
-            const html =
+            const readHtml = () =>
                 generalMinutesValuesRef.current[weeklyNotesId] !== undefined
                     ? generalMinutesValuesRef.current[weeklyNotesId]
                     : weekData?.generalMinutes ?? '';
-            const hash = typeof html === 'string' ? html : '';
+            let hash = typeof readHtml() === 'string' ? readHtml() : '';
             if (lastSavedGeneralMinutesHash.current[weeklyNotesId] === hash) {
                 return;
             }
+            // Re-read immediately before the network: ref may have advanced (e.g. gm-thread-anchor wrap)
+            // while an older save was scheduled or awaited — avoids PUTting stale HTML over newer content.
+            const hashFresh = typeof readHtml() === 'string' ? readHtml() : '';
+            if (hashFresh !== hash) {
+                hash = hashFresh;
+                if (lastSavedGeneralMinutesHash.current[weeklyNotesId] === hash) {
+                    return;
+                }
+            }
             try {
                 await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, { generalMinutes: hash });
+                const after = typeof readHtml() === 'string' ? readHtml() : '';
+                if (after !== hash) {
+                    void triggerGeneralMinutesSave(weeklyNotesId);
+                    return;
+                }
                 lastSavedGeneralMinutesHash.current[weeklyNotesId] = hash;
                 updateWeeklyNotesLocal(weeklyNotesId, { generalMinutes: hash }, monthlyId);
             } catch (error) {
