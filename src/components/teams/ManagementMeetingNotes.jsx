@@ -6251,87 +6251,89 @@ const ManagementMeetingNotes = () => {
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-3 px-0.5">
-                        <button
-                            type="button"
-                            onClick={() => setGmCommentsSidebarVisiblePersisted(!gmCommentsSidebarVisible)}
-                            className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                                isDark
-                                    ? 'border-slate-600/80 bg-slate-800/80 text-slate-200 hover:bg-slate-800'
-                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
-                            }`}
-                            aria-expanded={gmCommentsSidebarVisible}
-                            aria-controls={gmCommentsSidebarVisible ? 'gm-minutes-comments-aside' : undefined}
-                        >
-                            <i className={`fas mr-2 ${gmCommentsSidebarVisible ? 'fa-eye-slash' : 'fa-comments'}`} aria-hidden />
-                            {gmCommentsSidebarVisible ? 'Hide comments' : 'Show comments'}
-                        </button>
-                        <div
-                            className={`inline-flex items-center gap-3 rounded-2xl border px-3 py-2 ${
-                                isDark
-                                    ? 'border-slate-700/80 bg-slate-900/35 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]'
-                                    : 'border-slate-200/90 bg-slate-50/90 shadow-sm'
-                            }`}
-                        >
-                            <div className="flex items-center gap-2">
-                                <span
-                                    className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                                        isDark ? 'bg-slate-800 text-slate-400' : 'bg-white text-slate-500 shadow-sm ring-1 ring-slate-200/80'
-                                    }`}
-                                    aria-hidden
-                                >
-                                    <i className="fas fa-eye text-[11px]" />
-                                </span>
-                                <div className="flex flex-col leading-tight">
-                                    <span className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-                                        Viewing now
+                    <div className="flex flex-wrap items-center justify-end gap-3 px-0.5">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <div
+                                className={`inline-flex items-center gap-3 rounded-2xl border px-3 py-2 ${
+                                    isDark
+                                        ? 'border-slate-700/80 bg-slate-900/35 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]'
+                                        : 'border-slate-200/90 bg-slate-50/90 shadow-sm'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span
+                                        className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                                            isDark ? 'bg-slate-800 text-slate-400' : 'bg-white text-slate-500 shadow-sm ring-1 ring-slate-200/80'
+                                        }`}
+                                        aria-hidden
+                                    >
+                                        <i className="fas fa-eye text-[11px]" />
                                     </span>
-                                    {presenceOthers.length === 0 ? (
-                                        <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Solo session</span>
-                                    ) : (
-                                        <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                                            {1 + presenceOthers.length} viewing
+                                    <div className="flex flex-col leading-tight">
+                                        <span className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                            Viewing now
                                         </span>
-                                    )}
+                                        {presenceOthers.length === 0 ? (
+                                            <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Solo session</span>
+                                        ) : (
+                                            <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                                {1 + presenceOthers.length} viewing
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                            {presenceOthers.length > 0 && (
-                                <div
-                                    className={`flex flex-row-reverse items-center pl-3 border-l ${
-                                        isDark ? 'border-slate-600/70' : 'border-slate-200/90'
-                                    }`}
-                                >
-                                    {presenceOthers.map((v, i) => (
-                                        <span
-                                            key={v.userId}
-                                            title={v.name || v.email || 'User'}
-                                            style={{ zIndex: presenceOthers.length - i }}
-                                            className={`relative -ml-2 first:ml-0 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold overflow-hidden shadow-md ring-2 transition-transform duration-200 hover:z-10 hover:-translate-y-0.5 ${
-                                                isDark
-                                                    ? 'ring-slate-900 bg-gradient-to-br from-slate-600 to-slate-700 text-white'
-                                                    : 'ring-white bg-gradient-to-br from-slate-600 to-slate-800 text-white'
-                                            }`}
-                                        >
-                                            {v.avatar ? (
-                                                <img src={v.avatar} alt="" className="h-full w-full object-cover" />
-                                            ) : (
-                                                (v.name || v.email || '?')
-                                                    .split(/\s+/)
-                                                    .map((p) => p[0])
-                                                    .join('')
-                                                    .slice(0, 2)
-                                                    .toUpperCase()
-                                            )}
+                                {presenceOthers.length > 0 && (
+                                    <div
+                                        className={`flex flex-row-reverse items-center pl-3 border-l ${
+                                            isDark ? 'border-slate-600/70' : 'border-slate-200/90'
+                                        }`}
+                                    >
+                                        {presenceOthers.map((v, i) => (
                                             <span
-                                                className={`absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full border bg-emerald-400 ${
-                                                    isDark ? 'border-slate-900' : 'border-white/90'
+                                                key={v.userId}
+                                                title={v.name || v.email || 'User'}
+                                                style={{ zIndex: presenceOthers.length - i }}
+                                                className={`relative -ml-2 first:ml-0 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold overflow-hidden shadow-md ring-2 transition-transform duration-200 hover:z-10 hover:-translate-y-0.5 ${
+                                                    isDark
+                                                        ? 'ring-slate-900 bg-gradient-to-br from-slate-600 to-slate-700 text-white'
+                                                        : 'ring-white bg-gradient-to-br from-slate-600 to-slate-800 text-white'
                                                 }`}
-                                                aria-hidden
-                                            />
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
+                                            >
+                                                {v.avatar ? (
+                                                    <img src={v.avatar} alt="" className="h-full w-full object-cover" />
+                                                ) : (
+                                                    (v.name || v.email || '?')
+                                                        .split(/\s+/)
+                                                        .map((p) => p[0])
+                                                        .join('')
+                                                        .slice(0, 2)
+                                                        .toUpperCase()
+                                                )}
+                                                <span
+                                                    className={`absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full border bg-emerald-400 ${
+                                                        isDark ? 'border-slate-900' : 'border-white/90'
+                                                    }`}
+                                                    aria-hidden
+                                                />
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setGmCommentsSidebarVisiblePersisted(!gmCommentsSidebarVisible)}
+                                className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                    isDark
+                                        ? 'border-slate-600/80 bg-slate-800/80 text-slate-200 hover:bg-slate-800'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
+                                }`}
+                                aria-expanded={gmCommentsSidebarVisible}
+                                aria-controls={gmCommentsSidebarVisible ? 'gm-minutes-comments-aside' : undefined}
+                            >
+                                <i className={`fas mr-2 ${gmCommentsSidebarVisible ? 'fa-eye-slash' : 'fa-comments'}`} aria-hidden />
+                                {gmCommentsSidebarVisible ? 'Hide comments' : 'Show comments'}
+                            </button>
                         </div>
                     </div>
 
