@@ -2335,44 +2335,6 @@ const ManagementMeetingNotes = () => {
         }
     }, [currentMonthlyNotes?.id]);
 
-    const updateHighGoalsLocal = useCallback((html) => {
-        const next = typeof html === 'string' ? html : '';
-        if (!currentMonthlyNotes?.id) return;
-        setCurrentMonthlyNotes((prev) => (prev ? { ...prev, highGoals: next } : prev));
-        setMonthlyNotesList((prev) =>
-            prev.map((note) => (note?.id === currentMonthlyNotes.id ? { ...note, highGoals: next } : note))
-        );
-    }, [currentMonthlyNotes?.id]);
-
-    const persistHighGoals = useCallback(async (html) => {
-        if (!currentMonthlyNotes?.id) return;
-        if (!window.DatabaseAPI?.updateMonthlyNotes) {
-            console.warn('Meeting notes: updateMonthlyNotes API not available.');
-            return;
-        }
-        const next = typeof html === 'string' ? html : '';
-        try {
-            await window.DatabaseAPI.updateMonthlyNotes(currentMonthlyNotes.id, { highGoals: next });
-        } catch (error) {
-            console.error('Failed to save high goals:', error);
-        }
-    }, [currentMonthlyNotes?.id]);
-
-    const handleHighGoalsChange = useCallback(
-        (html) => {
-            updateHighGoalsLocal(html);
-        },
-        [updateHighGoalsLocal]
-    );
-
-    const handleHighGoalsBlur = useCallback(
-        (html) => {
-            updateHighGoalsLocal(html);
-            persistHighGoals(html);
-        },
-        [persistHighGoals, updateHighGoalsLocal]
-    );
-
     const handleMonthlyGoalsChange = useCallback((departmentId, value) => {
         const nextGoals = { ...(monthlyGoalsRef.current || {}) };
         const normalizedValue = typeof value === 'string' ? value : '';
@@ -2486,44 +2448,23 @@ const ManagementMeetingNotes = () => {
         lastSavedGeneralMinutesHash.current[id] = gm;
     }, [weekForGeneralMinutes?.id, weekForGeneralMinutes?.generalMinutes]);
 
-    /** Column 1 = high goals; column 2 = monthly goals when visible; else week 0 starts at column 2. */
-    const getHighGoalsGridColumn = () => 1;
-    const getMonthlyGoalsGridColumn = () => (meetingNotesMonthlyGoalsColumnVisible ? 2 : null);
-    const getWeekGridColumn = (weekIndex) =>
-        weekIndex + (meetingNotesMonthlyGoalsColumnVisible ? 3 : 2);
+    /** Column 1 = monthly goals when visible; else week 0 starts at column 1. */
+    const getWeekGridColumn = (weekIndex) => weekIndex + (meetingNotesMonthlyGoalsColumnVisible ? 2 : 1);
+    const getMonthlyGoalsGridColumn = () => 1;
 
-    /** Fixed rail widths so sticky `left` offsets match `grid-template-columns` during horizontal scroll. */
-    const meetingNotesHighGoalsRailPx = 320;
-    const meetingNotesMonthlyGoalsRailPx = 440;
-    const meetingNotesHighGoalsColumnWidth = `${meetingNotesHighGoalsRailPx}px`;
-    const meetingNotesMonthlyGoalsColumnWidth = `${meetingNotesMonthlyGoalsRailPx}px`;
+    /** Column 1 = monthly goals (slightly narrower); week columns stay wide for editors. */
+    const meetingNotesMonthlyGoalsColumnWidth = 'minmax(400px, 460px)';
     const meetingNotesWeekColumnWidth = 'minmax(520px, 560px)';
     const meetingNotesMainGridTemplateColumns = meetingNotesMonthlyGoalsColumnVisible
-        ? `${meetingNotesHighGoalsColumnWidth} ${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`
-        : `${meetingNotesHighGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`;
-    const meetingNotesStickyMonthlyStyle = meetingNotesMonthlyGoalsColumnVisible
-        ? { left: `${meetingNotesHighGoalsRailPx}px` }
-        : undefined;
-    const meetingNotesStickyFirstWeekStyle = !meetingNotesMonthlyGoalsColumnVisible
-        ? { left: `${meetingNotesHighGoalsRailPx}px` }
-        : undefined;
-
-    const stickyHighGoalsHeaderCol = isDark
-        ? 'sticky left-0 z-[30] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
-        : 'sticky left-0 z-[30] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
-    const stickyHighGoalsBodyCol = isDark
-        ? 'sticky left-0 z-[31] bg-slate-800 shadow-[8px_0_20px_-4px_rgba(0,0,0,0.55)]'
-        : 'sticky left-0 z-[31] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
-
+        ? `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`
+        : `repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`;
     const stickyMonthlyGoalsHeaderCol = isDark
-        ? 'sticky z-[28] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
-        : 'sticky z-[28] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
+        ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
+        : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
     /** Higher z-index than week columns so horizontal scroll slides weeks under this column (no bleed-through). Fully opaque backgrounds — no /opacity or translucent slate. */
     const stickyMonthlyGoalsBodyCol = isDark
-        ? 'sticky z-[29] bg-slate-800 shadow-[8px_0_20px_-4px_rgba(0,0,0,0.55)]'
-        : 'sticky z-[29] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
-
-    const highGoalsBodyRowSpan = 1 + DEPARTMENTS.length;
+        ? 'sticky left-0 z-[26] bg-slate-800 shadow-[8px_0_20px_-4px_rgba(0,0,0,0.55)]'
+        : 'sticky left-0 z-[26] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
 
     const scrollToWeekId = useCallback((weekId) => {
         if (!weekId || !Array.isArray(weeks) || weeks.length === 0) {
@@ -6452,40 +6393,13 @@ const ManagementMeetingNotes = () => {
                                     gridTemplateRows: 'auto'
                                 }}
                             >
-                                {/* High goals header — left rail (column 1) */}
-                                <div
-                                    key="header-high-goals"
-                                    style={{
-                                        gridRow: '1',
-                                        gridColumn: `${getHighGoalsGridColumn()}`
-                                    }}
-                                    className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow] duration-200 ${stickyHighGoalsHeaderCol} ${
-                                        isDark
-                                            ? 'border-slate-600/90 bg-slate-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
-                                            : 'border-slate-200/90 bg-white shadow-sm'
-                                    }`}
-                                >
-                                    <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
-                                        <div className="min-w-0 flex-1">
-                                            <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                High goals
-                                            </p>
-                                            <h3 className={`text-sm font-bold leading-tight flex items-center gap-1.5 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                                <i className={`fas fa-mountain shrink-0 text-xs ${isDark ? 'text-amber-400' : 'text-amber-600'}`}></i>
-                                                <span className="line-clamp-2 break-words">Company focus</span>
-                                            </h3>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Monthly goals header — column 2 when visible */}
+                                {/* Monthly goals header — column 1 */}
                                 {meetingNotesMonthlyGoalsColumnVisible ? (
                                     <div
                                         key="header-monthly-goals"
                                         style={{
                                             gridRow: '1',
-                                            gridColumn: `${getMonthlyGoalsGridColumn()}`,
-                                            ...(meetingNotesStickyMonthlyStyle || {})
+                                            gridColumn: `${getMonthlyGoalsGridColumn()}`
                                         }}
                                         className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
                                             isDark
@@ -6507,7 +6421,7 @@ const ManagementMeetingNotes = () => {
                                     </div>
                                 ) : null}
 
-                                {/* Week headers */}
+                                {/* Week headers row — columns 2+ */}
                                 {weeks.map((week, index) => {
                                     const rawId = getWeekIdentifier(week);
                                     const identifier = rawId || `week-${index}`;
@@ -6520,8 +6434,7 @@ const ManagementMeetingNotes = () => {
                                             key={`header-${identifier}`}
                                             style={{
                                                 gridRow: '1',
-                                                gridColumn: `${getWeekGridColumn(index)}`,
-                                                ...(meetingNotesStickyFirstWeekStyle && index === 0 ? meetingNotesStickyFirstWeekStyle : {})
+                                                gridColumn: `${getWeekGridColumn(index)}`
                                             }}
                                             className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow,background-color] duration-200 ${
                                                 !meetingNotesMonthlyGoalsColumnVisible && index === 0 ? stickyMonthlyGoalsHeaderCol : ''
@@ -6589,61 +6502,14 @@ const ManagementMeetingNotes = () => {
                                 gridAutoFlow: 'row'
                             }}
                         >
-                            <div
-                                key="body-high-goals"
-                                style={{
-                                    gridRow: `1 / span ${highGoalsBodyRowSpan}`,
-                                    gridColumn: `${getHighGoalsGridColumn()}`
-                                }}
-                                className={`relative z-[31] isolate flex min-h-0 w-full min-w-0 flex-col justify-start self-stretch overflow-hidden rounded-2xl border p-4 sm:p-5 ${stickyHighGoalsBodyCol} ${
-                                    isDark
-                                        ? 'border-slate-600/70 bg-slate-900/25 text-slate-200'
-                                        : 'border-slate-300/90 bg-slate-50/50 text-slate-800'
-                                }`}
-                            >
-                                <p className={`text-[10px] font-bold uppercase tracking-[0.14em] mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                    High goals
-                                </p>
-                                <p className={`text-xs leading-relaxed mb-3 ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-                                    Month-wide priorities and leadership themes. Saved with this month.
-                                </p>
-                                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                                    {window.RichTextEditor ? (
-                                        <window.RichTextEditor
-                                            key={`monthly-high-goals-${currentMonthlyNotes.id}`}
-                                            value={currentMonthlyNotes.highGoals || ''}
-                                            onChange={handleHighGoalsChange}
-                                            onBlur={handleHighGoalsBlur}
-                                            placeholder="Company-level goals and themes for the month."
-                                            rows={6}
-                                            compact
-                                            autoGrow
-                                            maxEditorHeight="min(82vh, 900px)"
-                                            tableTools
-                                            isDark={isDark}
-                                        />
-                                    ) : (
-                                        <textarea
-                                            value={currentMonthlyNotes.highGoals || ''}
-                                            onChange={(e) => handleHighGoalsChange(e.target.value)}
-                                            onBlur={(e) => handleHighGoalsBlur(e.target.value)}
-                                            placeholder="Company-level goals and themes for the month."
-                                            className={`w-full min-h-[12rem] max-h-[min(82vh,900px)] resize-y overflow-y-auto p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                                            rows={8}
-                                        />
-                                    )}
-                                </div>
-                            </div>
-
                             {meetingNotesMonthlyGoalsColumnVisible ? (
                                 <div
                                     key="general-minutes-monthly-placeholder"
                                     style={{
                                         gridRow: 1,
-                                        gridColumn: `${getMonthlyGoalsGridColumn()}`,
-                                        ...(meetingNotesStickyMonthlyStyle || {})
+                                        gridColumn: `${getMonthlyGoalsGridColumn()}`
                                     }}
-                                    className={`relative isolate flex h-full min-h-[8rem] w-full min-w-0 flex-col justify-start self-stretch overflow-hidden rounded-2xl border border-dashed p-4 sm:p-5 ${stickyMonthlyGoalsBodyCol} ${
+                                    className={`relative z-[27] isolate flex h-full min-h-[8rem] w-full min-w-0 flex-col justify-start self-stretch overflow-hidden rounded-2xl border border-dashed p-4 sm:p-5 ${stickyMonthlyGoalsBodyCol} ${
                                         isDark
                                             ? 'border-slate-600/70 bg-slate-900/25 text-slate-400'
                                             : 'border-slate-300/90 bg-slate-50/50 text-slate-600'
@@ -6678,10 +6544,7 @@ const ManagementMeetingNotes = () => {
                                         }}
                                         style={{
                                             gridRow: 1,
-                                            gridColumn: `${getWeekGridColumn(gmWeekIndex)}`,
-                                            ...(meetingNotesStickyFirstWeekStyle && gmWeekIndex === 0
-                                                ? meetingNotesStickyFirstWeekStyle
-                                                : {})
+                                            gridColumn: `${getWeekGridColumn(gmWeekIndex)}`
                                         }}
                                         className={`relative z-0 flex h-full min-h-0 w-full min-w-0 flex-col self-stretch overflow-hidden rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color,transform] duration-200 ${
                                             !meetingNotesMonthlyGoalsColumnVisible && gmWeekIndex === 0 ? stickyMonthlyGoalsBodyCol : ''
@@ -6890,8 +6753,7 @@ const ManagementMeetingNotes = () => {
                                                 style={{
                                                     minHeight: '200px',
                                                     gridRow: `${deptIndex + 2}`,
-                                                    gridColumn: `${getMonthlyGoalsGridColumn()}`,
-                                                    ...(meetingNotesStickyMonthlyStyle || {})
+                                                    gridColumn: `${getMonthlyGoalsGridColumn()}`
                                                 }}
                                             >
                                                 <div className="flex items-start justify-between gap-3 mb-4">
@@ -6969,13 +6831,10 @@ const ManagementMeetingNotes = () => {
                                                                 ? 'border-slate-700/80 bg-slate-900/35 shadow-sm hover:border-slate-600'
                                                                 : 'border-slate-200/90 bg-white shadow-sm hover:border-slate-300'
                                                     }`}
-                                                    style={{
+                                                    style={{ 
                                                         minHeight: '200px',
                                                         gridRow: `${deptIndex + 2}`,
-                                                        gridColumn: `${getWeekGridColumn(weekIndex)}`,
-                                                        ...(meetingNotesStickyFirstWeekStyle && weekIndex === 0
-                                                            ? meetingNotesStickyFirstWeekStyle
-                                                            : {})
+                                                        gridColumn: `${getWeekGridColumn(weekIndex)}`
                                                     }}
                                                 >
                                                     {!deptNote ? (
