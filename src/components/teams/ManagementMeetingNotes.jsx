@@ -1090,6 +1090,9 @@ const ManagementMeetingNotes = () => {
     const previousWeekKeysRef = useRef(null);
     /** After auto-week for `month|weeksNavSignature`, skip until that signature changes. */
     const meetingNotesAutoWeekAppliedSigRef = useRef('');
+    /** Horizontal scroll-to-week column: only on full document reload (once), or one deep-link when `?week=` matches. Week tabs call scrollToWeekId themselves. */
+    const meetingNotesUrlWeekHorizontalScrollDoneRef = useRef(false);
+    const meetingNotesReloadWeekScrollConsumedRef = useRef(false);
     
     // Effect to restore scroll position after explicit save operations
     // Only triggers when scrollRestoreTrigger changes (not on every data update)
@@ -2349,9 +2352,30 @@ const ManagementMeetingNotes = () => {
     }, [weeks, selectedWeek, selectedMonth, weeksNavSignature]);
 
     useEffect(() => {
+        meetingNotesUrlWeekHorizontalScrollDoneRef.current = false;
+    }, [selectedMonth]);
+
+    useEffect(() => {
         if (!selectedWeek || !weeksNavSignature) {
             return;
         }
+        let urlWeek = '';
+        try {
+            urlWeek = getWeekFromURL() || '';
+        } catch (_) {
+            urlWeek = '';
+        }
+        const allowDeepLinkOnce =
+            Boolean(urlWeek) &&
+            String(selectedWeek) === String(urlWeek) &&
+            !meetingNotesUrlWeekHorizontalScrollDoneRef.current;
+        const allowReloadOnce =
+            initialPageWasNavigationReload && !meetingNotesReloadWeekScrollConsumedRef.current;
+        const allowHorizontalWeekScroll = allowReloadOnce || allowDeepLinkOnce;
+        if (!allowHorizontalWeekScroll) {
+            return undefined;
+        }
+        const didScheduleReloadScroll = allowReloadOnce;
         let cancelled = false;
         let chainRaf = 0;
         let attempts = 0;
@@ -2382,6 +2406,12 @@ const ManagementMeetingNotes = () => {
                 return;
             }
             if (columnReady() || attempts >= maxAttempts) {
+                if (didScheduleReloadScroll) {
+                    meetingNotesReloadWeekScrollConsumedRef.current = true;
+                }
+                if (allowDeepLinkOnce) {
+                    meetingNotesUrlWeekHorizontalScrollDoneRef.current = true;
+                }
                 scrollToWeekId(selectedWeek);
                 return;
             }
@@ -2397,7 +2427,7 @@ const ManagementMeetingNotes = () => {
             cancelAnimationFrame(outerRaf);
             cancelAnimationFrame(chainRaf);
         };
-    }, [selectedWeek, scrollToWeekId, weeksNavSignature]);
+    }, [selectedWeek, scrollToWeekId, weeksNavSignature, initialPageWasNavigationReload]);
 
     // Expose functions for parent components (no tracking - always returns false)
     const managementMeetingNotesRef = useRef({
