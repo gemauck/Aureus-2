@@ -470,7 +470,29 @@ function buildMeetingNotesClientDeepLink({ selectedMonth, selectedWeek, commentC
     return `#/teams/management?${q.toString()}`;
 }
 
-/** Plain text from general minutes HTML (for selection anchors). */
+/**
+ * Plain text for GM comment offsets — concatenation of text nodes in document order only.
+ * Must match `gmSetSelectionByPlainOffsets` (same walker), not `innerText` (which inserts
+ * block breaks and mismatches selection ranges → wrong quotes / wrap targets).
+ */
+function gmElementPlainTextLinear(root) {
+    if (!root) {
+        return '';
+    }
+    try {
+        const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+        let s = '';
+        let n;
+        while ((n = w.nextNode())) {
+            s += n.nodeValue || '';
+        }
+        return String(s).replace(/\r\n/g, '\n');
+    } catch (_) {
+        return '';
+    }
+}
+
+/** Plain text from stored HTML — same linearization as live editor (thread start/end indices). */
 function gmHtmlToPlainText(html) {
     if (!html || typeof html !== 'string') {
         return '';
@@ -478,7 +500,7 @@ function gmHtmlToPlainText(html) {
     try {
         const d = document.createElement('div');
         d.innerHTML = html;
-        return String(d.innerText || d.textContent || '').replace(/\r\n/g, '\n');
+        return gmElementPlainTextLinear(d);
     } catch (_) {
         return '';
     }
@@ -540,16 +562,21 @@ function gmCaptureSelectionInEditor(editorEl) {
     if (!editorEl.contains(range.commonAncestorContainer)) {
         return null;
     }
-    const quote = String(sel.toString() || '');
-    if (!quote.trim()) {
-        return null;
-    }
     try {
         const pre = document.createRange();
         pre.selectNodeContents(editorEl);
         pre.setEnd(range.startContainer, range.startOffset);
-        const start = pre.toString().length;
-        const end = start + range.toString().length;
+        const preDiv = document.createElement('div');
+        preDiv.appendChild(pre.cloneContents());
+        const start = gmElementPlainTextLinear(preDiv);
+
+        const selDiv = document.createElement('div');
+        selDiv.appendChild(range.cloneContents());
+        const quote = gmElementPlainTextLinear(selDiv);
+        if (!String(quote).trim()) {
+            return null;
+        }
+        const end = start + quote.length;
         const rect = range.getBoundingClientRect();
         return { start, end, quote, rect };
     } catch (_) {
@@ -618,7 +645,12 @@ function gmSetSelectionByPlainOffsets(editorEl, start, end) {
     }
 }
 
-/** Wrap current selection range in a persistent anchor span (rich text only). */
+/**
+ * Wrap current selection in an inline anchor span (rich text only).
+ * Uses surroundContents only — extractContents fallback split block nodes and caused forced
+ * line breaks / corrupted minutes; if the range is not strictly wrappable, skip DOM wrap
+ * (thread still saves; sidebar shows the discussion).
+ */
 function wrapGmThreadRangeStable(range, threadId) {
     if (!range || range.collapsed || !threadId) {
         return false;
@@ -630,19 +662,9 @@ function wrapGmThreadRangeStable(range, threadId) {
         const r = range.cloneRange();
         r.surroundContents(span);
         return true;
-    } catch (_) {
-        try {
-            const span = document.createElement('span');
-            span.setAttribute('data-gm-thread-id', threadId);
-            span.className = 'gm-thread-anchor';
-            const contents = range.extractContents();
-            span.appendChild(contents);
-            range.insertNode(span);
-            return true;
-        } catch (e2) {
-            console.warn('wrapGmThreadRangeStable', e2);
-            return false;
-        }
+    } catch (e) {
+        console.warn('wrapGmThreadRangeStable: surroundContents failed (range may cross blocks)', e);
+        return false;
     }
 }
 
@@ -1071,6 +1093,8 @@ const ManagementMeetingNotes = () => {
     const lastSavedGeneralMinutesHash = useRef({});
     /** Google Docs–style: selection in general minutes → floating comment chip + compose. */
     const [gmMinuteInlinePopover, setGmMinuteInlinePopover] = useState(null);
+    /** Clicking a highlight in the editor focuses that thread in the right sidebar. */
+    const [gmSidebarFocusThreadId, setGmSidebarFocusThreadId] = useState(null);
     // { weeklyNotesId, weekKey, start, end, quote, phase: 'chip'|'compose', top, left }
     
     // Refs for cursor position preservation
@@ -2184,6 +2208,45 @@ const ManagementMeetingNotes = () => {
         }
     }, [weeks]);
 
+    const handleGmEditorHostClick = useCallback(
+        (e, week, gmIdentifier) => {
+            const t = e.target;
+            const anchor = t && typeof t.closest === 'function' ? t.closest('.gm-thread-anchor[data-gm-thread-id]') : null;
+            if (!anchor || !week?.id) {
+                return;
+            }
+            const threadId = anchor.getAttribute('data-gm-thread-id');
+            if (!threadId) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            setGmSidebarFocusThreadId(threadId);
+            setSelectedWeek(gmIdentifier);
+            scrollToWeekId(gmIdentifier);
+        },
+        [scrollToWeekId]
+    );
+
+    useEffect(() => {
+        if (!gmSidebarFocusThreadId) {
+            return undefined;
+        }
+        const id = String(gmSidebarFocusThreadId);
+        const esc =
+            typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const run = () => {
+            const el = document.querySelector(`[data-gm-sidebar-thread="${esc}"]`);
+            if (el) {
+                el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        };
+        const r1 = requestAnimationFrame(() => {
+            requestAnimationFrame(run);
+        });
+        return () => cancelAnimationFrame(r1);
+    }, [gmSidebarFocusThreadId]);
+
     /** Keep header and body horizontal scroll aligned (split scrollers so `sticky top` dates work). */
     useEffect(() => {
         const body = meetingNotesHorizontalScrollRef.current;
@@ -2353,6 +2416,7 @@ const ManagementMeetingNotes = () => {
 
     useEffect(() => {
         meetingNotesUrlWeekHorizontalScrollDoneRef.current = false;
+        setGmSidebarFocusThreadId(null);
     }, [selectedMonth]);
 
     useEffect(() => {
@@ -6134,6 +6198,7 @@ const ManagementMeetingNotes = () => {
                                                     data-gm-week-key={gmIdentifier}
                                                     className="flex min-h-0 min-w-0 flex-1 flex-col gap-2"
                                                     onMouseUp={(e) => handleGmEditorHostMouseUp(e, week, gmIdentifier)}
+                                                    onClick={(e) => handleGmEditorHostClick(e, week, gmIdentifier)}
                                                 >
                                                     {window.RichTextEditor ? (
                                                         <div
@@ -7387,8 +7452,15 @@ const ManagementMeetingNotes = () => {
                                         {threads.map((t) => (
                                             <li
                                                 key={t.id}
+                                                data-gm-sidebar-thread={t.id}
                                                 className={`rounded-lg border px-2.5 py-2 text-[11px] ${
                                                     isDark ? 'border-slate-700 bg-slate-800/80' : 'border-slate-200 bg-slate-50/90'
+                                                } ${
+                                                    gmSidebarFocusThreadId === t.id
+                                                        ? isDark
+                                                            ? 'ring-2 ring-primary-400/50 ring-offset-2 ring-offset-slate-900'
+                                                            : 'ring-2 ring-primary-500/40 ring-offset-2 ring-offset-white'
+                                                        : ''
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between gap-1">
@@ -7402,6 +7474,7 @@ const ManagementMeetingNotes = () => {
                                                         type="button"
                                                         className={`shrink-0 text-[10px] underline ${isDark ? 'text-primary-400' : 'text-primary-600'}`}
                                                         onClick={() => {
+                                                            setGmSidebarFocusThreadId(t.id);
                                                             setSelectedWeek(gmIdent);
                                                             scrollToWeekId(gmIdent);
                                                             const run = () => {

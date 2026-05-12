@@ -750,6 +750,7 @@ html.dark .meeting-notes-week-nav-scroll::-webkit-scrollbar-thumb {
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
     border-radius: 2px;
+    cursor: pointer;
     background-color: rgba(253, 224, 71, 0.42);
     box-shadow: inset 0 -2px 0 rgba(234, 179, 8, 0.55);
 }
