@@ -10,8 +10,10 @@
  *    at each site (same normalization rules as Manufacturing inventory detail).
  *    With `--delete-all-movements`, net since cutoff is treated as zero → opening = current qty.
  *
- * Does NOT change LocationInventory or InventoryItem quantities — ledger-only fix so the UI
- * reconciliation banner can tie out.
+ * Does NOT change LocationInventory or InventoryItem quantities — ledger-only fix so movement
+ * history matches **current** on-hand at run time. Product rule elsewhere: ongoing corrections
+ * should use stock take / `applyStockCountAdjustmentTx` (movements + LI in one transaction).
+ * If LI is edited without new movements after this script, variance vs movements will return.
  *
  * Usage:
  *   node scripts/ledger-cutover-after-stocktake.js --dry-run --mismatch-only
