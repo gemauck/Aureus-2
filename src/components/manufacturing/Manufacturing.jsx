@@ -13020,14 +13020,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       };
     }, [item?.sku, detailLedgerRefreshNonce]);
 
-    const itemMovementsForDetail = useMemo(() => {
+    /** Movements for this SKU, oldest-first — all sites, or only rows touching the selected warehouse. */
+    const itemMovementsChronological = useMemo(() => {
       if (!item?.sku) return [];
       if (!Array.isArray(skuLedgerMovements)) return [];
-      let list = skuLedgerMovements;
+      let list = [...skuLedgerMovements];
       if (selectedDetailLocationId) {
-        list = list.filter(m => {
-          const fromMatch = m.fromLocation === selectedDetailLocationId || (selectedDetailLocationCode && m.fromLocation === selectedDetailLocationCode);
-          const toMatch = m.toLocation === selectedDetailLocationId || (selectedDetailLocationCode && m.toLocation === selectedDetailLocationCode);
+        list = list.filter((m) => {
+          const fromMatch =
+            m.fromLocation === selectedDetailLocationId ||
+            (selectedDetailLocationCode && m.fromLocation === selectedDetailLocationCode);
+          const toMatch =
+            m.toLocation === selectedDetailLocationId ||
+            (selectedDetailLocationCode && m.toLocation === selectedDetailLocationCode);
           return fromMatch || toMatch;
         });
       }
@@ -13050,14 +13055,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }, [skuLedgerMovements, item?.sku, selectedDetailLocationId, selectedDetailLocationCode]);
 
     const recentMovementTemplates = useMemo(() => {
-      let eligible = itemMovementsForDetail.filter((m) => m.type !== 'production');
+      let eligible = itemMovementsChronological.filter((m) => m.type !== 'production');
       if (!isAdmin) {
         eligible = eligible.filter((m) => m.type !== 'consumption');
       }
       if (!eligible.length) return [];
       const startIndex = Math.max(eligible.length - 5, 0);
       return eligible.slice(startIndex).reverse();
-    }, [itemMovementsForDetail, isAdmin]);
+    }, [itemMovementsChronological, isAdmin]);
 
     useEffect(() => {
       setSelectedMovementTemplateId('');
@@ -13100,7 +13105,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }, [formatMovementType]);
 
     const handleRecordMovementForCurrentItem = useCallback((movementId = null) => {
-      const template = movementId ? itemMovementsForDetail.find(m => m.id === movementId) : null;
+      const template = movementId ? itemMovementsChronological.find(m => m.id === movementId) : null;
       const parsedQty = template ? parseFloat(template.quantity) || 0 : 0;
       const normalizedQty = template
         ? (template.type === 'adjustment' ? parsedQty : Math.abs(parsedQty))
@@ -13131,7 +13136,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (movementId) {
         setSelectedMovementTemplateId('');
       }
-    }, [item, itemMovementsForDetail, openAddMovementModal, isAdmin]);
+    }, [item, itemMovementsChronological, openAddMovementModal, isAdmin]);
 
     // Keep edit form in sync with latest item payload.
     useEffect(() => {
@@ -13195,8 +13200,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     })();
 
     const selectedLocationInfo = selectedDetailLocationId && detailLocations.find(l => l.locationId === selectedDetailLocationId);
-    const totalQuantityFromLocations = detailLocations.reduce((sum, loc) => sum + (parseFloat(loc?.quantity) || 0), 0);
     const hasLocationBreakdown = detailLocations.length > 0;
+    const totalQuantityFromLocations = detailLocations.reduce((sum, loc) => sum + (parseFloat(loc?.quantity) || 0), 0);
+    /** Sum of LocationInventory for this SKU (used for audit ledger vs movements). */
+    const recordedInventoryTotalAllSites = hasLocationBreakdown
+      ? totalQuantityFromLocations
+      : parseFloat(item.quantity) || 0;
     // Prefer location-derived quantity for detail cards so stockholding reflects selected location
     // (and correctly shows full reversals netting to zero). Fall back to catalog quantity when
     // no location breakdown is available.
@@ -13386,11 +13395,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
           </div>
 
-          {/* Location selector: view ledger and quantities for a specific location */}
+          {/* Location selector: header quantities + which movements appear in the ledger below */}
           {detailLocations.length > 0 && (
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Location</h2>
-              <p className="text-sm text-gray-500 mb-3">Select a location to view quantity and ledger for that location.</p>
+              <p className="text-sm text-gray-500 mb-3">
+                <span className="font-medium text-gray-700">All locations (combined)</span> shows every movement for this SKU and audit totals across the whole company.
+                When you pick a single warehouse, the <span className="font-medium text-gray-700">Stock Ledger</span> lists only movements that involve that site, with running balances for that location.
+              </p>
               <select
                 value={selectedDetailLocationId || ''}
                 onChange={(e) => setSelectedDetailLocationId(e.target.value)}
@@ -13932,63 +13944,79 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
           </div>
           {(() => {
-            const locationMatchesDetail = (loc) =>
-              !!loc &&
-              (loc === selectedDetailLocationId ||
-                (!!selectedDetailLocationCode && loc === selectedDetailLocationCode));
+            const LEDGER_EPS = 0.0005;
+            const ledgerAllSitesMode = !selectedDetailLocationId;
+            const siteId = selectedDetailLocationId;
+            const siteCode = selectedDetailLocationCode || '';
+            const recordedForLedgerAudit = ledgerAllSitesMode
+              ? recordedInventoryTotalAllSites
+              : parseFloat(selectedLocationInfo?.quantity) || 0;
 
-            // Helper: normalize quantity by movement type (receipt = +, consumption/sale = -, adjustment = as-is).
-            // Transfers store positive qty in DB; sign depends on whether this row is stock leaving or entering the selected location.
-            const normalizeQuantity = (movement) => {
+            /**
+             * Signed effect on **total** quantity across all locations.
+             * Matches `scripts/verify-ledger-reconciliation.js`.
+             */
+            const companyWideDelta = (movement) => {
               let qty = parseFloat(movement.quantity) || 0;
-              if (movement.type === 'transfer') {
-                const qtyAbs = Math.abs(qty);
-                if (selectedDetailLocationId) {
-                  const fromHere = locationMatchesDetail(movement.fromLocation);
-                  const toHere = locationMatchesDetail(movement.toLocation);
-                  if (toHere && !fromHere) return qtyAbs;
-                  if (fromHere && !toHere) return -qtyAbs;
-                  if (fromHere && toHere) return 0;
-                }
-                // Combined (all-locations) view: internal transfers do not change total stock.
-                return 0;
-              }
-              if (movement.type === 'receipt') qty = Math.abs(qty);
-              else if (movement.type === 'production') {
-                // Production movement in this ledger represents component/material usage (stock-out).
-                // Treat legacy positive rows as stock-out as well.
-                qty = -Math.abs(qty);
-              } else if (movement.type === 'consumption' || movement.type === 'sale') qty = -Math.abs(qty);
+              const t = (movement.type || '').toLowerCase();
+              if (t === 'transfer') return 0;
+              if (t === 'receipt') return Math.abs(qty);
+              if (t === 'production') return -Math.abs(qty);
+              if (t === 'consumption' || t === 'sale') return -Math.abs(qty);
+              if (t === 'issue') return -Math.abs(qty);
               return qty;
             };
 
-            // Compute balances with a derived opening so closing matches the current quantity.
-            // This keeps the ledger reconciled even when historical movements are incomplete.
-            const rowsWithBalances = itemMovementsForDetail.map((movement) => {
-              const qty = normalizeQuantity(movement);
-              return { movement, qty };
-            });
-            const movementNetChange = rowsWithBalances.reduce((sum, row) => sum + row.qty, 0);
-            const currentQuantity = selectedDetailLocationId
-              ? (parseFloat(selectedLocationInfo?.quantity) || 0)
-              : displayQuantity;
-            /** If you started at 0 and only these movements happened, on-hand would be this (ignores synthetic opening). */
-            const onHandIfOnlyTheseMovementsFromZero = movementNetChange;
-            const impliedOpeningBeforeOldestMovement = currentQuantity - movementNetChange;
-            const movementsMatchRecordedFromZero =
-              rowsWithBalances.length === 0 ||
-              Math.abs(onHandIfOnlyTheseMovementsFromZero - currentQuantity) <= 0.001;
-            let opening = currentQuantity - movementNetChange;
-            const rowsCalculated = rowsWithBalances.map(({ movement, qty }) => {
-              const openingBalance = opening;
-              const balanceAfter = openingBalance + qty;
-              opening = balanceAfter;
-              return { movement, qty, openingBalance, balanceAfter };
-            });
-            const reconciledOnHandQty = opening;
+            /**
+             * Signed effect at one warehouse — matches `scripts/verify-ledger-per-location.js`.
+             */
+            const siteScopedDelta = (movement) => {
+              const matches = (loc) => !!loc && (loc === siteId || (!!siteCode && loc === siteCode));
+              let qty = parseFloat(movement.quantity) || 0;
+              const t = (movement.type || '').toLowerCase();
+              if (t === 'transfer') {
+                const qtyAbs = Math.abs(qty);
+                const fromHere = matches(movement.fromLocation);
+                const toHere = matches(movement.toLocation);
+                if (toHere && !fromHere) return qtyAbs;
+                if (fromHere && !toHere) return -qtyAbs;
+                if (fromHere && toHere) return 0;
+                return 0;
+              }
+              const touches = matches(movement.fromLocation) || matches(movement.toLocation);
+              if (!touches) return 0;
+              if (t === 'receipt') return Math.abs(qty);
+              if (t === 'production') return -Math.abs(qty);
+              if (t === 'consumption' || t === 'sale') return -Math.abs(qty);
+              if (t === 'issue') return -Math.abs(qty);
+              return qty;
+            };
 
-            // Display newest-first
+            const movementDelta = ledgerAllSitesMode ? companyWideDelta : siteScopedDelta;
+
+            const rowsWithDeltas = itemMovementsChronological.map((movement) => ({
+              movement,
+              delta: movementDelta(movement),
+              docQty: Math.abs(parseFloat(movement.quantity) || 0)
+            }));
+            const movementNetChange = rowsWithDeltas.reduce((sum, row) => sum + row.delta, 0);
+            let running = 0;
+            const rowsCalculated = rowsWithDeltas.map(({ movement, delta, docQty }) => {
+              const balanceAfter = running + delta;
+              running = balanceAfter;
+              return { movement, delta, docQty, balanceAfter };
+            });
+            const ledgerClosingFromMovements = rowsCalculated.length
+              ? rowsCalculated[rowsCalculated.length - 1].balanceAfter
+              : 0;
+            const auditVariance = recordedForLedgerAudit - ledgerClosingFromMovements;
+            const ledgerTiesOut =
+              rowsCalculated.length === 0 ||
+              Math.abs(auditVariance) <= LEDGER_EPS;
+
             const displayRows = [...rowsCalculated].reverse();
+
+            const deltaColumnTitle = ledgerAllSitesMode ? 'Δ total stock' : 'Δ this site';
 
             return (
               <div className="overflow-x-auto">
@@ -14000,110 +14028,152 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 ) : displayRows.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <i className="fas fa-inbox text-4xl mb-2 text-gray-300"></i>
-                    <p className="text-sm">No stock movements recorded for this item</p>
-                    <p className="text-xs text-gray-400 mt-1">Stock movements will appear here as they are recorded</p>
+                    <p className="text-sm">
+                      {ledgerAllSitesMode
+                        ? 'No stock movements recorded for this item'
+                        : 'No stock movements at this warehouse for this item'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {ledgerAllSitesMode
+                        ? 'Stock movements will appear here as they are recorded'
+                        : 'Try All locations (combined) to see movements at other sites, or record a receipt/transfer/adjustment here.'}
+                    </p>
                   </div>
                 ) : (
                   <>
-                  <p className="text-xs text-gray-500 mb-2">
-                    Movements are listed <span className="font-medium text-gray-600">newest first</span>. Each row&apos;s Balance is on-hand{' '}
-                    <span className="font-medium text-gray-600">after that event in time</span> (the last row in the table is the{' '}
-                    <span className="font-medium text-gray-600">oldest</span> movement shown, not necessarily today&apos;s total). Opening + In − Out = Balance;
-                    the first row&apos;s Opening is derived so the running total reconciles to current stock.
+                  <p className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {ledgerAllSitesMode ? (
+                      <>
+                        <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>Company-wide audit ledger.</span>{' '}
+                        Rows are <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>newest first</span>.
+                        Running balance starts at <span className="font-mono tabular-nums">0</span> before the oldest movement;{' '}
+                        <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>{deltaColumnTitle}</span> is the signed change to inventory across{' '}
+                        <strong>all</strong> locations (internal transfers show document quantity but Δ is 0 for company total).
+                        No opening balance is synthesized — variance vs recorded inventory is shown if they differ.
+                      </>
+                    ) : (
+                      <>
+                        <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>Warehouse-scoped ledger.</span>{' '}
+                        Only movements that reference this site (from/to) are listed. Rows are{' '}
+                        <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>newest first</span>.
+                        Running balance starts at <span className="font-mono tabular-nums">0</span> before the oldest movement shown;{' '}
+                        <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>{deltaColumnTitle}</span> is the signed effect on quantity{' '}
+                        <strong>at this warehouse only</strong>. Transfers in add stock here; transfers out subtract.
+                        No synthetic opening — variance compares this list to LocationInventory for this site.
+                      </>
+                    )}
                   </p>
-                  {!selectedDetailLocationId && detailLocations.length > 1 && (
-                    <p className="text-xs text-gray-500 mb-2">
-                      <span className="font-medium text-gray-600">All locations (combined):</span> each line still names the{' '}
-                      <span className="font-medium text-gray-600">site where that movement was recorded</span> (for example a stock take will name the counted warehouse).
-                      Other locations can show 0 on hand while totals above include stock elsewhere. Use the Location control to filter this ledger to one site.
-                    </p>
-                  )}
                   <div
                     className={`text-xs mb-2 px-2.5 py-2 rounded-md border ${
-                      movementsMatchRecordedFromZero
-                        ? 'bg-gray-50 text-gray-700 border-gray-200'
-                        : 'bg-amber-50 text-amber-950 border-amber-200'
+                      ledgerTiesOut
+                        ? isDark
+                          ? 'bg-emerald-950/40 text-emerald-100 border-emerald-800'
+                          : 'bg-emerald-50 text-emerald-950 border-emerald-200'
+                        : isDark
+                          ? 'bg-amber-950/40 text-amber-100 border-amber-800'
+                          : 'bg-amber-50 text-amber-950 border-amber-200'
                     }`}
                   >
-                    <span className="font-semibold text-gray-800">Reconciliation check: </span>
-                    <span className="font-medium">Net of movements in this list</span> (as signed In/Out){' '}
+                    <span className="font-semibold">Audit summary — </span>
+                    <span className="font-medium">Net of movements ({deltaColumnTitle})</span>{' '}
                     ={' '}
                     <span className="font-mono tabular-nums">
                       {movementNetChange >= 0 ? '+' : ''}
                       {movementNetChange.toFixed(2)} {item.unit}
                     </span>
                     {' · '}
-                    <span className="font-medium">Recorded on-hand</span> (catalog / LocationInventory){' '}
+                    <span className="font-medium">
+                      {ledgerAllSitesMode ? 'Recorded inventory (sum of locations)' : 'Recorded (this warehouse)'}
+                    </span>{' '}
                     ={' '}
-                    <span className="font-mono tabular-nums">{currentQuantity.toFixed(2)} {item.unit}</span>
-                    {movementsMatchRecordedFromZero ? (
-                      <span className="text-gray-600"> — these match (treating this list as full history from zero).</span>
-                    ) : (
-                      <span className="text-amber-900">
+                    <span className="font-mono tabular-nums">{recordedForLedgerAudit.toFixed(2)} {item.unit}</span>
+                    {' · '}
+                    <span className="font-medium">Ledger closing (from movements, from zero)</span>{' '}
+                    ={' '}
+                    <span className="font-mono tabular-nums">{ledgerClosingFromMovements.toFixed(2)} {item.unit}</span>
+                    {' · '}
+                    <span className="font-medium">Variance (recorded − ledger)</span>{' '}
+                    ={' '}
+                    <span className="font-mono tabular-nums">
+                      {auditVariance >= 0 ? '+' : ''}
+                      {auditVariance.toFixed(2)} {item.unit}
+                    </span>
+                    {ledgerTiesOut ? (
+                      <span className={isDark ? ' text-emerald-200/90' : ' text-emerald-800'}>
                         {' '}
-                        — mismatch: the table below still ends at <strong>recorded</strong> on-hand because Opening on each row is back-filled.
+                        — ledger ties to recorded inventory within tolerance.
+                      </span>
+                    ) : (
+                      <span className={isDark ? ' text-amber-200/95' : ' text-amber-900'}>
+                        {' '}
+                        — investigate missing or duplicate movements, or correct LocationInventory / stock take so records match facts.
                       </span>
                     )}
                   </div>
-                  {!movementsMatchRecordedFromZero && rowsWithBalances.length > 0 && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 mb-3 text-xs text-amber-950">
-                      <p className="font-semibold text-amber-900 mb-1">Movement total vs recorded on-hand</p>
-                      {Math.abs(movementNetChange) <= 0.001 ? (
-                        <p className="text-amber-900 leading-relaxed">
-                          The movements in this list <strong>net to zero</strong>, but{' '}
-                          <strong>recorded on-hand is still {currentQuantity.toFixed(2)} {item.unit}</strong>.
-                          The running Balance column is forced to match recorded stock by inventing an opening balance before the oldest row — so the numbers can look consistent even though{' '}
-                          <strong>these lines alone would leave 0 {item.unit}</strong> if you started from empty stock.
-                        </p>
-                      ) : (
-                        <p className="text-amber-900 leading-relaxed">
-                          <strong>Net of movements in this view:</strong>{' '}
-                          {movementNetChange >= 0 ? '+' : ''}{movementNetChange.toFixed(2)} {item.unit}.{' '}
-                          <strong>Recorded on-hand:</strong> {currentQuantity.toFixed(2)} {item.unit}.
-                          {' '}Roughly <strong>{impliedOpeningBeforeOldestMovement.toFixed(2)} {item.unit}</strong> would need to have existed before the <em>oldest</em> movement listed (or history is incomplete / filtered).
-                        </p>
-                      )}
-                      {Math.abs(movementNetChange) <= 0.001 && currentQuantity > 0.001 && (
-                        <p className="text-amber-900 leading-relaxed mt-2 border-t border-amber-200 pt-2">
-                          <strong>If on-hand should be zero:</strong> post an <strong>adjustment of −{currentQuantity.toFixed(2)} {item.unit}</strong> at the location that holds this stock (or a <strong>stock take</strong> with counted quantity <strong>0</strong> there).
-                          <span className="block mt-1 text-amber-800">
-                            If stock is real, older movements may be missing from this list, or quantity may sit at another warehouse — check <strong>All locations</strong> and filters.
-                          </span>
-                        </p>
-                      )}
+                  {!ledgerTiesOut && rowsCalculated.length > 0 && (
+                    <div
+                      className={`rounded-lg border px-3 py-2 mb-3 text-xs ${
+                        isDark ? 'border-amber-800 bg-amber-950/35 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-950'
+                      }`}
+                    >
+                      <p className="font-semibold mb-1">Variance (audit)</p>
+                      <p className="leading-relaxed">
+                        {ledgerAllSitesMode ? (
+                          <>
+                            Movements alone imply <strong>{ledgerClosingFromMovements.toFixed(2)} {item.unit}</strong> on hand company-wide,
+                            but LocationInventory totals <strong>{recordedForLedgerAudit.toFixed(2)} {item.unit}</strong>.
+                          </>
+                        ) : (
+                          <>
+                            Movements at this warehouse imply <strong>{ledgerClosingFromMovements.toFixed(2)} {item.unit}</strong> on hand here,
+                            but this site&apos;s LocationInventory shows <strong>{recordedForLedgerAudit.toFixed(2)} {item.unit}</strong>.
+                          </>
+                        )}{' '}
+                        The table does <strong>not</strong> adjust rows to hide this; resolve by posting accurate movements or updating counted quantities.
+                      </p>
                     </div>
                   )}
                   <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
+                    <thead className={`border-b ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                        <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Date</th>
+                        <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Type</th>
+                        <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Description</th>
                         <th
-                          className="px-3 py-2 text-right text-xs font-medium text-gray-500"
-                          title="On-hand immediately before this movement (chronological order; first row uses a derived opening)"
+                          className={`px-3 py-2 text-right text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                          title="Document quantity (absolute value on the movement row)"
                         >
-                          Opening
+                          Qty
                         </th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">In</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Out</th>
                         <th
-                          className="px-3 py-2 text-right text-xs font-medium text-gray-500"
-                          title="On-hand after this movement (chronological order — table is sorted newest first)"
+                          className={`px-3 py-2 text-right text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                          title={`Signed change to ${ledgerAllSitesMode ? 'total stock (all locations)' : 'quantity at the selected warehouse'}`}
+                        >
+                          {deltaColumnTitle}
+                        </th>
+                        <th
+                          className={`px-3 py-2 text-right text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                          title={
+                            ledgerAllSitesMode
+                              ? 'Running company-wide quantity after this event (chronological); table sorted newest first'
+                              : 'Running on-hand at this warehouse after this event (chronological); table sorted newest first'
+                          }
                         >
                           Balance
                         </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-[4.5rem]">Actions</th>
+                        <th className={`px-3 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Reference</th>
+                        <th className={`px-3 py-2 text-right text-xs font-medium w-[4.5rem] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {displayRows.map(({ movement, qty, openingBalance, balanceAfter }) => {
-                        const isIncrease = qty > 0;
-                        const isDecrease = qty < 0;
+                    <tbody className={`divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                      {displayRows.map(({ movement, delta, docQty, balanceAfter }) => {
+                        const isTransfer = (movement.type || '').toLowerCase() === 'transfer';
+                        const transferDeltaTitle = ledgerAllSitesMode
+                          ? 'Internal transfer: document quantity shown; Δ total stock is 0 (no change to company-wide on hand).'
+                          : 'Transfer: positive Δ means stock into this warehouse; negative means stock out; zero means both legs are at this site.';
                         return (
-                          <tr key={movement.id} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-sm text-gray-900">
+                          <tr key={movement.id} className={isDark ? 'hover:bg-gray-800/60' : 'hover:bg-gray-50'}>
+                            <td className={`px-3 py-2 text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                               {movement.date || (movement.createdAt ? new Date(movement.createdAt).toLocaleDateString() : '-')}
                             </td>
                             <td className="px-3 py-2">
@@ -14111,35 +14181,45 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                 {formatMovementType(movement.type)}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-sm text-gray-700">
+                            <td className={`px-3 py-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                               {getMovementDescription(movement)}
                             </td>
-                            <td className="px-3 py-2 text-sm text-right text-gray-600 font-medium" title="On-hand immediately before this movement (chronological)">
-                              {openingBalance.toFixed(2)} {item.unit}
-                            </td>
-                            <td className="px-3 py-2 text-sm text-right">
-                              {isIncrease ? (
-                                <span className="text-green-600 font-medium">+{Math.abs(qty).toFixed(2)}</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-sm text-right">
-                              {isDecrease ? (
-                                <span className="text-red-600 font-medium">{qty.toFixed(2)}</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
+                            <td className={`px-3 py-2 text-sm text-right font-mono tabular-nums ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                              {docQty.toFixed(2)}
                             </td>
                             <td
-                              className={`px-3 py-2 text-sm text-right font-semibold ${
-                              balanceAfter < 0 ? 'text-red-600' : balanceAfter === 0 ? 'text-orange-600' : 'text-gray-900'
+                              className={`px-3 py-2 text-sm text-right font-mono tabular-nums font-medium ${
+                                delta > 0
+                                  ? 'text-green-600'
+                                  : delta < 0
+                                    ? 'text-red-600'
+                                    : isDark
+                                      ? 'text-gray-500'
+                                      : 'text-gray-500'
+                              }`}
+                              title={
+                                isTransfer
+                                  ? transferDeltaTitle
+                                  : ledgerAllSitesMode
+                                    ? 'Signed effect on sum of all locations'
+                                    : 'Signed effect on quantity at this warehouse'
+                              }
+                            >
+                              {delta > 0 ? `+${delta.toFixed(2)}` : delta < 0 ? delta.toFixed(2) : '0'}
+                            </td>
+                            <td
+                              className={`px-3 py-2 text-sm text-right font-semibold font-mono tabular-nums ${
+                              balanceAfter < 0 ? 'text-red-600' : balanceAfter === 0 ? 'text-orange-600' : isDark ? 'text-gray-100' : 'text-gray-900'
                             }`}
-                              title="On-hand after this movement (chronological); table rows are newest-first"
+                              title={
+                                ledgerAllSitesMode
+                                  ? 'Company-wide running balance after this movement (chronological)'
+                                  : 'Running on-hand at this warehouse after this movement (chronological)'
+                              }
                             >
                               {balanceAfter.toFixed(2)} {item.unit}
                             </td>
-                            <td className="px-3 py-2 text-sm text-gray-600">
+                            <td className={`px-3 py-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                               {movement.reference || movement.movementId || '-'}
                             </td>
                             <td className="px-3 py-2 text-sm text-right align-middle">
@@ -14155,23 +14235,29 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           </tr>
                         );
                       })}
-                      {/* Matches item quantity; not the same as the last table row when rows are newest-first */}
-                      <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
-                        <td className="px-3 py-2 text-sm text-gray-700" colSpan="6">
-                          <span className="text-gray-900">Current on hand</span>
-                          <span className="block text-xs font-normal text-gray-500 mt-0.5">
-                            {movementsMatchRecordedFromZero
-                              ? 'Matches Stock Information (same as net of movements in this list, from a zero start).'
-                              : 'Matches Stock Information / LocationInventory — not the same as “net of movements” when the reconciliation check above shows a mismatch.'}
+                      <tr className={`font-semibold border-t-2 ${isDark ? 'bg-gray-800/80 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                        <td className={`px-3 py-2 text-sm col-span-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`} colSpan="4">
+                          <span className={isDark ? 'text-gray-100' : 'text-gray-900'}>
+                            {ledgerAllSitesMode
+                              ? 'Recorded inventory (LocationInventory)'
+                              : 'Recorded (this warehouse · LocationInventory)'}
+                          </span>
+                          <span className={`block text-xs font-normal mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {ledgerAllSitesMode
+                              ? 'Sum of warehouse rows for this SKU — audit compares this to the ledger closing from movements above.'
+                              : 'Quantity on hand at the selected site — audit compares this to the ledger closing from movements above.'}
                           </span>
                         </td>
-                        <td className={`px-3 py-2 text-sm text-right font-bold ${
-                          reconciledOnHandQty < 0 ? 'text-red-600' : reconciledOnHandQty === 0 ? 'text-orange-600' : 'text-blue-600'
-                        }`}>
-                          {reconciledOnHandQty.toFixed(2)} {item.unit}
+                        <td className={`px-3 py-2 text-sm text-right font-mono tabular-nums ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                          —
                         </td>
-                        <td className="px-3 py-2 text-sm text-gray-700">-</td>
-                        <td className="px-3 py-2 text-sm text-gray-400 text-right" aria-hidden="true">
+                        <td className={`px-3 py-2 text-sm text-right font-bold font-mono tabular-nums ${
+                          recordedForLedgerAudit < 0 ? 'text-red-600' : recordedForLedgerAudit === 0 ? 'text-orange-600' : isDark ? 'text-blue-300' : 'text-blue-600'
+                        }`}>
+                          {recordedForLedgerAudit.toFixed(2)} {item.unit}
+                        </td>
+                        <td className={`px-3 py-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-700'}`}>-</td>
+                        <td className={`px-3 py-2 text-sm text-right ${isDark ? 'text-gray-500' : 'text-gray-400'}`} aria-hidden="true">
                           —
                         </td>
                       </tr>

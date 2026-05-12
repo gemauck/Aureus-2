@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Combined-view reconciliation: sum(normalized movements) vs LocationInventory (+ catalog fallback).
- * Matches Manufacturing "All locations" logic (adjustments count toward net).
+ * Matches Manufacturing inventory audit ledger (company-wide Δ; adjustments as stored; transfers 0).
  *
  * Usage:
  *   node scripts/verify-ledger-reconciliation.js

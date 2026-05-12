@@ -311,9 +311,9 @@ async function testStockLedgerAccuracy(page, sku) {
       const currentQtyText = await page.locator('text=/Total Quantity|Quantity/').first().textContent({ timeout: 5000 }).catch(() => '');
       const currentQty = parseInt(currentQtyText.match(/\d+/)?.[0] || '0');
       
-      // Footer row: "Current on hand" (second cell is the quantity)
-      const footerRow = page.locator('tbody tr').filter({ hasText: 'Current on hand' });
-      const onHandText = await footerRow.locator('td').nth(1).textContent({ timeout: 5000 }).catch(() => '');
+      // Footer row: recorded inventory total (company-wide audit ledger)
+      const footerRow = page.locator('tbody tr').filter({ hasText: 'Recorded inventory (LocationInventory)' });
+      const onHandText = await footerRow.locator('td').nth(2).textContent({ timeout: 5000 }).catch(() => '');
       const onHandQty = parseInt(onHandText.match(/\d+/)?.[0] || '0', 10);
       
       if (currentQty === onHandQty && currentQty === 130) {
