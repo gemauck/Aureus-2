@@ -13401,8 +13401,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       // This avoids stale URL location params forcing incorrect detail quantities
       // when users click through from the "all locations" inventory list.
       if (!inventoryListIsLocationScoped) return;
-      const route = window.RouteState.getRoute();
-      const search = route.search instanceof URLSearchParams ? route.search : new URLSearchParams(window.location.search || '');
+      // Prefer real browser query string — hash-router `route.search` can lag or omit `?location=`.
+      const search = new URLSearchParams(typeof window !== 'undefined' ? window.location.search || '' : '');
       const urlLocation = search.get('location');
       if (urlLocation && validLocationIds.has(urlLocation)) {
         setSelectedDetailLocationId(urlLocation);
@@ -13410,11 +13410,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }, [item?.id, validLocationIds, inventoryListIsLocationScoped]);
     useEffect(() => {
       if (!window.RouteState?.navigate) return;
-      const route = window.RouteState.getRoute();
-      const search = route.search instanceof URLSearchParams ? route.search : new URLSearchParams(window.location.search || '');
-      const currentUrlLocation = search.get('location') || '';
+      const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search || '' : '');
+      const currentUrlLocation = params.get('location') || '';
       if (currentUrlLocation === (selectedDetailLocationId || '')) return;
-      const params = new URLSearchParams(search.toString());
       if (selectedDetailLocationId) params.set('location', selectedDetailLocationId);
       else params.delete('location');
       window.RouteState.navigate({
@@ -14287,6 +14285,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>{deltaColumnTitle}</span> is the signed change to inventory across{' '}
                         <strong>all</strong> locations (internal transfers show document quantity but Δ is 0 for company total).
                         No opening balance is synthesized — variance vs recorded inventory is shown if they differ.
+                        {inventoryListIsLocationScoped ? (
+                          <span className={`block mt-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            The <span className="font-mono">?location=</span> query in the address bar matches the warehouse dropdown when it is set; refresh keeps the same site scope.
+                          </span>
+                        ) : (
+                          <span className={`block mt-1.5 ${isDark ? 'text-amber-200/85' : 'text-amber-800'}`}>
+                            If the address bar still shows <span className="font-mono">?location=…</span> while this dropdown is{' '}
+                            <span className="font-medium">All locations (combined)</span>, ignore it for this audit — the net here is company-wide.
+                            The query is cleared when possible; pick a warehouse in the dropdown to audit that site only.
+                          </span>
+                        )}
                       </>
                     ) : (
                       <>
@@ -14297,6 +14306,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>{deltaColumnTitle}</span> is the signed effect on quantity{' '}
                         <strong>at this warehouse only</strong>. Transfers in add stock here; transfers out subtract.
                         No synthetic opening — variance compares this list to LocationInventory for this site.
+                        <span className={`block mt-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          The address bar <span className="font-mono">?location=</span> is kept in line with this scope when you use the dropdown (shareable deep link).
+                        </span>
                       </>
                     )}
                   </p>
