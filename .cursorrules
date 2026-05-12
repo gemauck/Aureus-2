@@ -58,4 +58,13 @@ When adding a new `resourceType` branch in `api/manufacturing.js` or new order e
 
 Run **`npm run lint:audit`** before merging manufacturing/order API changes; ESLint enforces `auditManufacturing` / `logAuditFromRequest` before `ok`/`created` in `POST`/`PATCH`/`DELETE` branches (`eslint-rules/manufacturing-audit.mjs`).
 
+## Manufacturing inventory: movements as source of truth
 
+For **stock take imports**, **template stock-count apply**, and **alignment / repair** flows that are meant to be auditable:
+
+- **Authoritative changes** must persist both **`StockMovement`** and **`LocationInventory`** (and master `InventoryItem` aggregates where applicable) in the **same transaction**, using existing helpers such as **`applyStockCountAdjustmentTx`** in `api/_lib/stockCountAdjustment.js` (same pattern as POST stock-movements adjustment paths). Do not “fix” on-hand in the DB without a matching movement row.
+- **Never hide drift** in the UI (no synthetic opening balances, no silent overwriting of variance). The inventory detail ledger is audit-style: if recorded on-hand and movement math disagree, that is a **data defect** to fix in the database or via an explicit posted movement — not a display workaround.
+- **Ledger-only maintenance scripts** (e.g. `scripts/ledger-cutover-after-stocktake.js --mismatch-only`) rebuild movement rows from **current** `LocationInventory` at run time; they do **not** establish “movements as truth” by themselves. If quantities are later edited without new movements, variance will reappear. Prefer stock-count / adjustment APIs for ongoing corrections.
+- **Bulk alignment** (movements already correct, sum(LI) wrong): `npm run align:inventory-to-movements -- --dry-run` then `--write` (see `scripts/align-location-inventory-to-movements.mjs`). Posts `LI_ALIGN_TO_MOVEMENTS` adjustments via `applyStockCountAdjustmentTx` so every fix is auditable.
+
+Legacy one-off imports (`scripts/import-stock-count-excel.js`, `STOCK_COUNT_IMPORT`) may use older movement location fields; normalize with `scripts/backfill-stock-movement-location-ids.js` when touching those rows.

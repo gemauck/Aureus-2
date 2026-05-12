@@ -3242,8 +3242,14 @@ async function handler(req, res) {
         if (body.type !== undefined) updateData.type = body.type
         if (body.inProductionQuantity !== undefined) updateData.inProductionQuantity = parseFloat(body.inProductionQuantity) || 0
         if (body.completedQuantity !== undefined) updateData.completedQuantity = parseFloat(body.completedQuantity) || 0
-        // Quantity cannot be edited (only through stock movements)
+        // Quantity cannot be edited except via stock movements / stock-count pipeline (movements are truth).
         // if (body.quantity !== undefined) updateData.quantity = parseFloat(body.quantity)
+        if (body.quantity !== undefined) {
+          return badRequest(
+            res,
+            'Inventory quantity cannot be changed through this endpoint. Record a stock movement, use the stock count import / adjustment pipeline, or run ops alignment (see scripts/align-location-inventory-to-movements.mjs).'
+          )
+        }
         if (body.unit !== undefined) updateData.unit = body.unit
         if (body.reorderPoint !== undefined) updateData.reorderPoint = parseFloat(body.reorderPoint)
         if (body.reorderQty !== undefined) updateData.reorderQty = parseFloat(body.reorderQty)
