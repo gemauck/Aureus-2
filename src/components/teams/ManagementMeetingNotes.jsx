@@ -1340,6 +1340,24 @@ const ManagementMeetingNotes = () => {
         }
         setGmCommentsSidebarVisible(!!next);
     }, []);
+    /** First grid column (monthly goals + per-dept month targets). Persisted. */
+    const [meetingNotesMonthlyGoalsColumnVisible, setMeetingNotesMonthlyGoalsColumnVisible] = useState(() => {
+        try {
+            return typeof localStorage !== 'undefined' && localStorage.getItem('managementMeetingMonthlyGoalsColumn') !== '0';
+        } catch (_) {
+            return true;
+        }
+    });
+    const setMeetingNotesMonthlyGoalsColumnVisiblePersisted = useCallback((next) => {
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('managementMeetingMonthlyGoalsColumn', next ? '1' : '0');
+            }
+        } catch (_) {
+            /* ignore */
+        }
+        setMeetingNotesMonthlyGoalsColumnVisible(!!next);
+    }, []);
     // { weeklyNotesId, weekKey, start, end, quote, phase: 'chip'|'compose', top, left }
     
     // Refs for cursor position preservation
@@ -2430,13 +2448,16 @@ const ManagementMeetingNotes = () => {
         lastSavedGeneralMinutesHash.current[id] = gm;
     }, [weekForGeneralMinutes?.id, weekForGeneralMinutes?.generalMinutes]);
 
-    /** Column 1 = monthly goals; columns 2..n+1 = weeks left → right (weekIndex 0 = first week). */
-    const getWeekGridColumn = (weekIndex) => weekIndex + 2;
+    /** Column 1 = monthly goals when visible; else week 0 starts at column 1. */
+    const getWeekGridColumn = (weekIndex) => weekIndex + (meetingNotesMonthlyGoalsColumnVisible ? 2 : 1);
     const getMonthlyGoalsGridColumn = () => 1;
 
     /** Column 1 = monthly goals (slightly narrower); week columns stay wide for editors. */
     const meetingNotesMonthlyGoalsColumnWidth = 'minmax(400px, 460px)';
     const meetingNotesWeekColumnWidth = 'minmax(520px, 560px)';
+    const meetingNotesMainGridTemplateColumns = meetingNotesMonthlyGoalsColumnVisible
+        ? `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`
+        : `repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`;
     const stickyMonthlyGoalsHeaderCol = isDark
         ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
         : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
@@ -6334,6 +6355,20 @@ const ManagementMeetingNotes = () => {
                                 <i className={`fas mr-2 ${gmCommentsSidebarVisible ? 'fa-eye-slash' : 'fa-comments'}`} aria-hidden />
                                 {gmCommentsSidebarVisible ? 'Hide comments' : 'Show comments'}
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setMeetingNotesMonthlyGoalsColumnVisiblePersisted(!meetingNotesMonthlyGoalsColumnVisible)}
+                                className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                    isDark
+                                        ? 'border-slate-600/80 bg-slate-800/80 text-slate-200 hover:bg-slate-800'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
+                                }`}
+                                aria-expanded={meetingNotesMonthlyGoalsColumnVisible}
+                                aria-label={meetingNotesMonthlyGoalsColumnVisible ? 'Hide monthly goals column' : 'Show monthly goals column'}
+                            >
+                                <i className={`fas mr-2 ${meetingNotesMonthlyGoalsColumnVisible ? 'fa-columns' : 'fa-table'}`} aria-hidden />
+                                {meetingNotesMonthlyGoalsColumnVisible ? 'Hide goals' : 'Show goals'}
+                            </button>
                         </div>
                     </div>
 
@@ -6354,35 +6389,37 @@ const ManagementMeetingNotes = () => {
                             <div
                                 className="inline-grid items-stretch gap-4 sm:gap-5 pb-1"
                                 style={{
-                                    gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
+                                    gridTemplateColumns: meetingNotesMainGridTemplateColumns,
                                     gridTemplateRows: 'auto'
                                 }}
                             >
                                 {/* Monthly goals header — column 1 */}
-                                <div
-                                    key="header-monthly-goals"
-                                    style={{
-                                        gridRow: '1',
-                                        gridColumn: `${getMonthlyGoalsGridColumn()}`
-                                    }}
-                                    className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
-                                        isDark
-                                            ? 'border-slate-600/90 bg-slate-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
-                                            : 'border-slate-200/90 bg-white shadow-sm'
-                                    }`}
-                                >
-                                    <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
-                                        <div className="min-w-0 flex-1">
-                                            <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                Monthly goals
-                                            </p>
-                                            <h3 className={`text-sm font-bold leading-tight flex items-center gap-1.5 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                                <i className={`fas fa-bullseye shrink-0 text-xs ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
-                                                <span className="line-clamp-2 break-words">Department focus</span>
-                                            </h3>
+                                {meetingNotesMonthlyGoalsColumnVisible ? (
+                                    <div
+                                        key="header-monthly-goals"
+                                        style={{
+                                            gridRow: '1',
+                                            gridColumn: `${getMonthlyGoalsGridColumn()}`
+                                        }}
+                                        className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow] duration-200 ${stickyMonthlyGoalsHeaderCol} ${
+                                            isDark
+                                                ? 'border-slate-600/90 bg-slate-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]'
+                                                : 'border-slate-200/90 bg-white shadow-sm'
+                                        }`}
+                                    >
+                                        <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                    Monthly goals
+                                                </p>
+                                                <h3 className={`text-sm font-bold leading-tight flex items-center gap-1.5 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                    <i className={`fas fa-bullseye shrink-0 text-xs ${isDark ? 'text-primary-400' : 'text-primary-600'}`}></i>
+                                                    <span className="line-clamp-2 break-words">Department focus</span>
+                                                </h3>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                ) : null}
 
                                 {/* Week headers row — columns 2+ */}
                                 {weeks.map((week, index) => {
@@ -6400,6 +6437,8 @@ const ManagementMeetingNotes = () => {
                                                 gridColumn: `${getWeekGridColumn(index)}`
                                             }}
                                             className={`min-h-[4.75rem] h-full flex flex-col justify-center rounded-xl border px-2.5 py-2 transition-[border-color,box-shadow,background-color] duration-200 ${
+                                                !meetingNotesMonthlyGoalsColumnVisible && index === 0 ? stickyMonthlyGoalsHeaderCol : ''
+                                            } ${
                                                 isActualCurrentWeek
                                                     ? isDark
                                                         ? 'border-primary-500/70 ring-1 ring-inset ring-primary-500/20 shadow-sm bg-slate-900/80'
@@ -6457,31 +6496,33 @@ const ManagementMeetingNotes = () => {
                         <div
                             className="inline-grid items-stretch gap-4 sm:gap-5"
                             style={{
-                                gridTemplateColumns: `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`,
+                                gridTemplateColumns: meetingNotesMainGridTemplateColumns,
                                 gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
                                 alignItems: 'stretch',
                                 gridAutoFlow: 'row'
                             }}
                         >
-                            <div
-                                key="general-minutes-monthly-placeholder"
-                                style={{
-                                    gridRow: 1,
-                                    gridColumn: `${getMonthlyGoalsGridColumn()}`
-                                }}
-                                className={`relative z-[27] isolate flex h-full min-h-[8rem] w-full min-w-0 flex-col justify-start self-stretch overflow-hidden rounded-2xl border border-dashed p-4 sm:p-5 ${stickyMonthlyGoalsBodyCol} ${
-                                    isDark
-                                        ? 'border-slate-600/70 bg-slate-900/25 text-slate-400'
-                                        : 'border-slate-300/90 bg-slate-50/50 text-slate-600'
-                                }`}
-                            >
-                                <p className={`text-[10px] font-bold uppercase tracking-[0.14em] mb-2 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-                                    Monthly goals column
-                                </p>
-                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-                                    Each department row uses this cell for month-level targets; week columns scroll to the right.
-                                </p>
-                            </div>
+                            {meetingNotesMonthlyGoalsColumnVisible ? (
+                                <div
+                                    key="general-minutes-monthly-placeholder"
+                                    style={{
+                                        gridRow: 1,
+                                        gridColumn: `${getMonthlyGoalsGridColumn()}`
+                                    }}
+                                    className={`relative z-[27] isolate flex h-full min-h-[8rem] w-full min-w-0 flex-col justify-start self-stretch overflow-hidden rounded-2xl border border-dashed p-4 sm:p-5 ${stickyMonthlyGoalsBodyCol} ${
+                                        isDark
+                                            ? 'border-slate-600/70 bg-slate-900/25 text-slate-400'
+                                            : 'border-slate-300/90 bg-slate-50/50 text-slate-600'
+                                    }`}
+                                >
+                                    <p className={`text-[10px] font-bold uppercase tracking-[0.14em] mb-2 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                        Monthly goals column
+                                    </p>
+                                    <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+                                        Each department row uses this cell for month-level targets; week columns scroll to the right.
+                                    </p>
+                                </div>
+                            ) : null}
 
                             {weeks.map((week, gmWeekIndex) => {
                                 const rawGmId = getWeekIdentifier(week);
@@ -6506,6 +6547,8 @@ const ManagementMeetingNotes = () => {
                                             gridColumn: `${getWeekGridColumn(gmWeekIndex)}`
                                         }}
                                         className={`relative z-0 flex h-full min-h-0 w-full min-w-0 flex-col self-stretch overflow-hidden rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color,transform] duration-200 ${
+                                            !meetingNotesMonthlyGoalsColumnVisible && gmWeekIndex === 0 ? stickyMonthlyGoalsBodyCol : ''
+                                        } ${
                                             gmSelected
                                                 ? isDark
                                                     ? 'border-primary-500/60 bg-slate-900/60 shadow-lg shadow-black/30 ring-1 ring-primary-500/25'
@@ -6699,68 +6742,70 @@ const ManagementMeetingNotes = () => {
                                 const deptSurface = meetingNotesDeptSurface(dept.id);
                                 return (
                                     <React.Fragment key={`dept-row-${dept.id}`}>
-                                        <div
-                                            key={`${dept.id}-monthly-goals`}
-                                            className={`group relative rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color] duration-200 h-full flex flex-col overflow-hidden ${deptSurface.stripe} ${stickyMonthlyGoalsBodyCol} ${
-                                                isDark
-                                                    ? 'border-slate-700/80 bg-slate-900/40 shadow-sm hover:border-slate-600'
-                                                    : 'border-slate-200/90 bg-white shadow-sm hover:border-slate-300'
-                                            }`}
-                                            style={{
-                                                minHeight: '200px',
-                                                gridRow: `${deptIndex + 2}`,
-                                                gridColumn: `${getMonthlyGoalsGridColumn()}`
-                                            }}
-                                        >
-                                            <div className="flex items-start justify-between gap-3 mb-4">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <span
-                                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm ${
-                                                            isDark ? deptSurface.chipD : deptSurface.chipL
-                                                        }`}
-                                                    >
-                                                        <i className={`fas ${dept.icon}`} />
-                                                    </span>
-                                                    <div className="min-w-0">
-                                                        <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-                                                            Monthly goals
-                                                        </p>
-                                                        <h4 className={`text-sm font-bold tracking-tight truncate ${isDark ? 'text-slate-50' : 'text-slate-900'}`}>
-                                                            {dept.name}
-                                                        </h4>
+                                        {meetingNotesMonthlyGoalsColumnVisible ? (
+                                            <div
+                                                key={`${dept.id}-monthly-goals`}
+                                                className={`group relative rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color] duration-200 h-full flex flex-col overflow-hidden ${deptSurface.stripe} ${stickyMonthlyGoalsBodyCol} ${
+                                                    isDark
+                                                        ? 'border-slate-700/80 bg-slate-900/40 shadow-sm hover:border-slate-600'
+                                                        : 'border-slate-200/90 bg-white shadow-sm hover:border-slate-300'
+                                                }`}
+                                                style={{
+                                                    minHeight: '200px',
+                                                    gridRow: `${deptIndex + 2}`,
+                                                    gridColumn: `${getMonthlyGoalsGridColumn()}`
+                                                }}
+                                            >
+                                                <div className="flex items-start justify-between gap-3 mb-4">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <span
+                                                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm ${
+                                                                isDark ? deptSurface.chipD : deptSurface.chipL
+                                                            }`}
+                                                        >
+                                                            <i className={`fas ${dept.icon}`} />
+                                                        </span>
+                                                        <div className="min-w-0">
+                                                            <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                                                Monthly goals
+                                                            </p>
+                                                            <h4 className={`text-sm font-bold tracking-tight truncate ${isDark ? 'text-slate-50' : 'text-slate-900'}`}>
+                                                                {dept.name}
+                                                            </h4>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            <div
-                                                className={`flex-grow min-h-0 rounded-xl border p-1 ${
-                                                    isDark
-                                                        ? 'border-slate-700/60 bg-slate-950/30'
-                                                        : 'border-slate-200/60 bg-slate-50/50'
-                                                }`}
-                                            >
-                                                {window.RichTextEditor ? (
-                                                    <window.RichTextEditor
-                                                        key={`rich-editor-monthly-goals-${dept.id}`}
-                                                        value={deptMonthlyGoal}
-                                                        onChange={(html) => handleMonthlyGoalsChange(dept.id, html)}
-                                                        onBlur={(html) => handleMonthlyGoalsBlur(dept.id, html)}
-                                                        placeholder="Capture the month's goals for this department."
-                                                        rows={6}
-                                                        isDark={isDark}
-                                                    />
-                                                ) : (
-                                                    <textarea
-                                                        value={deptMonthlyGoal}
-                                                        onChange={(e) => handleMonthlyGoalsChange(dept.id, e.target.value)}
-                                                        onBlur={(e) => handleMonthlyGoalsBlur(dept.id, e.target.value)}
-                                                        placeholder="Capture the month's goals for this department."
-                                                        className={`w-full min-h-[160px] p-3 text-sm rounded-lg border-0 bg-transparent focus:ring-0 ${isDark ? 'text-slate-100 placeholder-slate-500' : 'text-slate-900 placeholder-slate-400'}`}
-                                                        rows={6}
-                                                    />
-                                                )}
+                                                <div
+                                                    className={`flex-grow min-h-0 rounded-xl border p-1 ${
+                                                        isDark
+                                                            ? 'border-slate-700/60 bg-slate-950/30'
+                                                            : 'border-slate-200/60 bg-slate-50/50'
+                                                    }`}
+                                                >
+                                                    {window.RichTextEditor ? (
+                                                        <window.RichTextEditor
+                                                            key={`rich-editor-monthly-goals-${dept.id}`}
+                                                            value={deptMonthlyGoal}
+                                                            onChange={(html) => handleMonthlyGoalsChange(dept.id, html)}
+                                                            onBlur={(html) => handleMonthlyGoalsBlur(dept.id, html)}
+                                                            placeholder="Capture the month's goals for this department."
+                                                            rows={6}
+                                                            isDark={isDark}
+                                                        />
+                                                    ) : (
+                                                        <textarea
+                                                            value={deptMonthlyGoal}
+                                                            onChange={(e) => handleMonthlyGoalsChange(dept.id, e.target.value)}
+                                                            onBlur={(e) => handleMonthlyGoalsBlur(dept.id, e.target.value)}
+                                                            placeholder="Capture the month's goals for this department."
+                                                            className={`w-full min-h-[160px] p-3 text-sm rounded-lg border-0 bg-transparent focus:ring-0 ${isDark ? 'text-slate-100 placeholder-slate-500' : 'text-slate-900 placeholder-slate-400'}`}
+                                                            rows={6}
+                                                        />
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
+                                        ) : null}
 
                                         {weeks.map((week, weekIndex) => {
                                             const rawId = getWeekIdentifier(week);
@@ -6774,6 +6819,8 @@ const ManagementMeetingNotes = () => {
                                                 <div
                                                     key={`${dept.id}-${identifier}`}
                                                     className={`relative z-0 rounded-2xl border p-4 sm:p-5 transition-[box-shadow,border-color,transform] duration-200 h-full flex flex-col overflow-hidden ${deptSurface.stripe} ${
+                                                        !meetingNotesMonthlyGoalsColumnVisible && weekIndex === 0 ? stickyMonthlyGoalsBodyCol : ''
+                                                    } ${
                                                         !deptNote
                                                             ? `border-dashed ${isDark ? 'border-slate-600/70 bg-slate-900/20 opacity-90' : 'border-slate-300/90 bg-slate-50/60'}`
                                                             : weekSelected
