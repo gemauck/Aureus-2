@@ -3,11 +3,17 @@
  * Align per-warehouse ledgers with LocationInventory without changing combined SKU totals:
  * inserts neutral transfers (combined net +0) so site-scoped movement sums match each site's qty.
  *
+ * Omit `--sku` to plan **all** mismatched LocationInventory rows (bulk). Prefer `--dry-run` first,
+ * then `--write` after a stock-movement backup.
+ *
  * Usage:
  *   node scripts/repair-ledger-per-location.js --dry-run
+ *   node scripts/repair-ledger-per-location.js --dry-run --require-combined-ok
  *   node scripts/repair-ledger-per-location.js --dry-run --sku=SKU0028
+ *   node scripts/repair-ledger-per-location.js --dry-run --require-combined-ok --max-rows=50
  *   node scripts/backup-stock-movements.js
  *   node scripts/repair-ledger-per-location.js --write
+ *   node scripts/repair-ledger-per-location.js --write --require-combined-ok
  *   node scripts/repair-ledger-per-location.js --write --sku=SKU0028
  */
 
@@ -48,11 +54,38 @@ function skuFilterFromArgv(argv) {
   return ''
 }
 
+function intFlag(argv, name) {
+  const eq = argv.find((a) => a.startsWith(`${name}=`))
+  if (eq) {
+    const n = parseInt(String(eq.split('=')[1] || ''), 10)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }
+  const idx = argv.indexOf(name)
+  if (idx !== -1 && argv[idx + 1]) {
+    const n = parseInt(String(argv[idx + 1]), 10)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }
+  return 0
+}
+
+function normalizeCombined(m) {
+  let qty = parseFloat(m.quantity) || 0
+  const t = (m.type || '').toLowerCase()
+  if (t === 'transfer') return 0
+  if (t === 'receipt') return Math.abs(qty)
+  if (t === 'production') return -Math.abs(qty)
+  if (t === 'consumption' || t === 'sale') return -Math.abs(qty)
+  if (t === 'issue') return -Math.abs(qty)
+  return qty
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   const dryRun = argv.includes('--dry-run')
   const write = argv.includes('--write')
   const skuFilter = skuFilterFromArgv(argv)
+  const requireCombinedOk = argv.includes('--require-combined-ok')
+  const maxRows = intFlag(argv, '--max-rows')
   if ((dryRun && write) || (!dryRun && !write)) {
     console.error('Specify exactly one of --dry-run or --write')
     process.exit(1)
@@ -76,6 +109,13 @@ async function main() {
     movementsBySku.get(sku).push(m)
   }
 
+  const netCombinedBySku = new Map()
+  for (const m of movements) {
+    const sku = String(m.sku || '').trim()
+    if (!sku) continue
+    netCombinedBySku.set(sku, (netCombinedBySku.get(sku) || 0) + normalizeCombined(m))
+  }
+
   const canonicalBySku = new Map()
   const invRows = await prisma.inventoryItem.findMany({
     orderBy: [{ sku: 'asc' }, { locationId: 'asc' }, { updatedAt: 'desc' }]
@@ -90,6 +130,39 @@ async function main() {
     select: { sku: true, locationId: true, quantity: true, itemName: true }
   })
 
+  const liSumBySku = new Map()
+  const liCountBySku = new Map()
+  for (const li of liRows) {
+    const sku = String(li.sku || '').trim()
+    if (!sku) continue
+    liSumBySku.set(sku, (liSumBySku.get(sku) || 0) + (parseFloat(li.quantity) || 0))
+    liCountBySku.set(sku, (liCountBySku.get(sku) || 0) + 1)
+  }
+
+  const canonicalQtyBySku = new Map()
+  for (const row of invRows) {
+    const sku = String(row.sku || '').trim()
+    if (!sku || canonicalQtyBySku.has(sku)) continue
+    canonicalQtyBySku.set(sku, parseFloat(row.quantity) || 0)
+  }
+
+  function recordedCombined(sku) {
+    if ((liCountBySku.get(sku) || 0) > 0) return liSumBySku.get(sku) || 0
+    return canonicalQtyBySku.get(sku) || 0
+  }
+
+  /** @type {Set<string>} */
+  let combinedOkSku = null
+  if (requireCombinedOk) {
+    combinedOkSku = new Set()
+    const allSkus = new Set([...liSumBySku.keys(), ...netCombinedBySku.keys(), ...canonicalQtyBySku.keys()])
+    for (const sku of allSkus) {
+      const rec = recordedCombined(sku)
+      const net = netCombinedBySku.get(sku) || 0
+      if (Math.abs(net - rec) <= EPS) combinedOkSku.add(sku)
+    }
+  }
+
   /** Planned inserts */
   const planned = []
 
@@ -98,6 +171,7 @@ async function main() {
     const locId = li.locationId
     if (!sku || !locId) continue
     if (skuFilter && sku !== skuFilter) continue
+    if (requireCombinedOk && combinedOkSku && !combinedOkSku.has(sku)) continue
     const code = codeById.get(locId) || ''
     const list = movementsBySku.get(sku) || []
     let net = 0
@@ -132,14 +206,30 @@ async function main() {
     }
   }
 
+  const plannedBeforeCap = planned.length
+  let droppedForMaxRows = 0
+  if (maxRows > 0 && planned.length > maxRows) {
+    droppedForMaxRows = planned.length - maxRows
+    planned.length = maxRows
+  }
+
+  const skuSet = new Set(planned.map((p) => p.sku))
+  const totalQty = planned.reduce((s, p) => s + (parseFloat(p.quantity) || 0), 0)
+
   console.log(
     JSON.stringify(
       {
         mode: dryRun ? 'dry-run' : 'write',
         skuFilter: skuFilter || null,
+        requireCombinedOk: requireCombinedOk || undefined,
+        maxRows: maxRows || undefined,
         rowsToInsert: planned.length,
+        plannedBeforeMaxRowsCap: droppedForMaxRows ? plannedBeforeCap : undefined,
+        droppedForMaxRows: droppedForMaxRows || undefined,
+        distinctSkus: skuSet.size,
+        sumAbsQuantities: totalQty,
         sample: planned.slice(0, 20),
-        truncated: planned.length > 20
+        sampleTruncated: planned.length > 20
       },
       null,
       2
@@ -147,7 +237,9 @@ async function main() {
   )
 
   if (dryRun) {
-    console.log('\nRun backup then: node scripts/repair-ledger-per-location.js --write')
+    console.log(
+      '\nAfter backup: node scripts/repair-ledger-per-location.js --write [--require-combined-ok] [--max-rows=N] [--sku=…]'
+    )
     await prisma.$disconnect()
     return
   }
