@@ -63,6 +63,7 @@
     "verify:ledger:all:active": "node scripts/verify-ledger-reconciliation.js && node scripts/verify-ledger-per-location.js --ignore-zero-on-hand",
     "plan:location-ledger-rebalance": "node scripts/plan-location-ledger-rebalance.mjs",
     "plan:location-ledger-rebalance:active": "node scripts/plan-location-ledger-rebalance.mjs --ignore-zero-on-hand",
+    "diagnose:sku-ledger-sites": "node scripts/diagnose-sku-per-site-ledger.mjs",
     "report:ledger-baseline-drift": "node scripts/fix-ledger-baseline-anchor-drift.mjs",
     "fix:ledger-baseline-drift": "node scripts/fix-ledger-baseline-anchor-drift.mjs --write",
     "report:ledger-baseline-merge-splits": "node scripts/fix-ledger-baseline-anchor-drift.mjs --merge-baseline-splits",
