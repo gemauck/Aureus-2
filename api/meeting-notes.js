@@ -632,7 +632,8 @@ async function handler(req, res) {
   // Update weekly meeting notes (general minutes, optional week range)
   if (req.method === 'PUT' && action === 'weekly') {
     try {
-      const { id, generalMinutes, generalMinutesAttachments, weekStart, weekEnd } = req.body || {}
+      const { id, generalMinutes, generalMinutesThreads, generalMinutesAttachments, weekStart, weekEnd } =
+        req.body || {}
 
       if (!id) {
         return badRequest(res, 'id is required')
@@ -641,6 +642,19 @@ async function handler(req, res) {
       const updateData = {}
       if (generalMinutes !== undefined) {
         updateData.generalMinutes = typeof generalMinutes === 'string' ? generalMinutes : ''
+      }
+      if (generalMinutesThreads !== undefined) {
+        if (Array.isArray(generalMinutesThreads)) {
+          updateData.generalMinutesThreads = generalMinutesThreads
+        } else if (typeof generalMinutesThreads === 'string') {
+          try {
+            updateData.generalMinutesThreads = JSON.parse(generalMinutesThreads || '[]')
+          } catch {
+            updateData.generalMinutesThreads = []
+          }
+        } else {
+          updateData.generalMinutesThreads = []
+        }
       }
       if (generalMinutesAttachments !== undefined) {
         if (typeof generalMinutesAttachments === 'string') {

@@ -2526,6 +2526,8 @@ model WeeklyMeetingNotes {
   weekStart       DateTime
   weekEnd         DateTime?
   generalMinutes  String              @default("")
+  /// JSON array: inline comment threads on general minutes (plain-text anchors + messages)
+  generalMinutesThreads Json         @default("[]")
   /// JSON array: { name, url, size?, mimeType?, uploadedAt? }[]
   generalMinutesAttachments String     @default("[]")
   ownerId         String?

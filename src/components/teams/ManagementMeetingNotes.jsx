@@ -470,6 +470,177 @@ function buildMeetingNotesClientDeepLink({ selectedMonth, selectedWeek, commentC
     return `#/teams/management?${q.toString()}`;
 }
 
+/** Plain text from general minutes HTML (for selection anchors). */
+function gmHtmlToPlainText(html) {
+    if (!html || typeof html !== 'string') {
+        return '';
+    }
+    try {
+        const d = document.createElement('div');
+        d.innerHTML = html;
+        return String(d.innerText || d.textContent || '').replace(/\r\n/g, '\n');
+    } catch (_) {
+        return '';
+    }
+}
+
+function gmParseInlineThreadsRaw(raw) {
+    if (Array.isArray(raw)) {
+        return raw.filter((t) => t && typeof t === 'object' && typeof t.id === 'string');
+    }
+    if (typeof raw === 'string') {
+        try {
+            const p = JSON.parse(raw || '[]');
+            return Array.isArray(p) ? p.filter((t) => t && typeof t === 'object' && typeof t.id === 'string') : [];
+        } catch (_) {
+            return [];
+        }
+    }
+    return [];
+}
+
+function gmReconcileThreadsWithPlain(threads, plainText) {
+    const text = String(plainText || '');
+    return threads.map((t) => {
+        const quote = String(t.quote || '');
+        let start = Number(t.start);
+        let end = Number(t.end);
+        if (Number.isNaN(start)) start = 0;
+        if (Number.isNaN(end)) end = 0;
+        if (quote && text.slice(start, end) === quote) {
+            return { ...t, start, end, anchorStale: false };
+        }
+        if (quote) {
+            const idx = text.indexOf(quote);
+            if (idx !== -1) {
+                return { ...t, start: idx, end: idx + quote.length, anchorStale: false };
+            }
+        }
+        return { ...t, start, end, anchorStale: true };
+    });
+}
+
+function gmGenInlineThreadId() {
+    return `gmthr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function gmGenInlineMsgId() {
+    return `gmmsg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function gmCaptureSelectionInEditor(editorEl) {
+    if (!editorEl) {
+        return null;
+    }
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        return null;
+    }
+    const range = sel.getRangeAt(0);
+    if (!editorEl.contains(range.commonAncestorContainer)) {
+        return null;
+    }
+    const quote = String(sel.toString() || '');
+    if (!quote.trim()) {
+        return null;
+    }
+    try {
+        const pre = document.createRange();
+        pre.selectNodeContents(editorEl);
+        pre.setEnd(range.startContainer, range.startOffset);
+        const start = pre.toString().length;
+        const end = start + range.toString().length;
+        const rect = range.getBoundingClientRect();
+        return { start, end, quote, rect };
+    } catch (_) {
+        return null;
+    }
+}
+
+function gmCaptureSelectionTextarea(ta) {
+    if (!ta || typeof ta.selectionStart !== 'number' || typeof ta.selectionEnd !== 'number') {
+        return null;
+    }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (end <= start) {
+        return null;
+    }
+    const quote = String(ta.value.slice(start, end) || '');
+    if (!quote.trim()) {
+        return null;
+    }
+    const r = ta.getBoundingClientRect();
+    return { start, end, quote, rect: r };
+}
+
+function gmSetSelectionByPlainOffsets(editorEl, start, end) {
+    if (!editorEl || typeof start !== 'number' || typeof end !== 'number') {
+        return false;
+    }
+    const walk = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT, null);
+    let pos = 0;
+    let startNode = null;
+    let startOff = 0;
+    let endNode = null;
+    let endOff = 0;
+    let foundStart = false;
+    let n;
+    while ((n = walk.nextNode())) {
+        const text = n.nodeValue || '';
+        const len = text.length;
+        if (!foundStart && pos + len >= start) {
+            startNode = n;
+            startOff = Math.max(0, Math.min(len, start - pos));
+            foundStart = true;
+        }
+        if (foundStart && pos + len >= end) {
+            endNode = n;
+            endOff = Math.max(0, Math.min(len, end - pos));
+            break;
+        }
+        pos += len;
+    }
+    if (!startNode || !endNode) {
+        return false;
+    }
+    try {
+        const r = document.createRange();
+        r.setStart(startNode, startOff);
+        r.setEnd(endNode, endOff);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        editorEl.focus();
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+async function gmNotifyInlineCommentMentions(commentText, { contextTitle, contextLink, authorName }) {
+    if (!commentText?.trim() || !window.MentionHelper?.hasMentions?.(commentText)) {
+        return;
+    }
+    try {
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            return;
+        }
+        const response = await fetch('/api/users', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            return;
+        }
+        const data = await response.json();
+        const allUsers = data.data?.users || data.users || [];
+        await window.MentionHelper.processMentions(commentText, contextTitle, contextLink, authorName, allUsers);
+    } catch (e) {
+        console.error('General minutes inline comment mentions:', e);
+    }
+}
+
 const ManagementMeetingNotes = () => {
     // Get theme state
     let themeResult = { isDark: false };
@@ -861,6 +1032,9 @@ const ManagementMeetingNotes = () => {
     const generalMinutesEditingWeekIdRef = useRef(null);
     const generalMinutesValuesRef = useRef({});
     const lastSavedGeneralMinutesHash = useRef({});
+    /** Google Docs–style: selection in general minutes → floating comment chip + compose. */
+    const [gmMinuteInlinePopover, setGmMinuteInlinePopover] = useState(null);
+    // { weeklyNotesId, weekKey, start, end, quote, phase: 'chip'|'compose', top, left }
     
     // Refs for cursor position preservation
     const savedCursorPositions = useRef({}); // { [fieldKey]: { start: number, end: number, element: HTMLElement } }
@@ -1197,6 +1371,178 @@ const ManagementMeetingNotes = () => {
             });
         }
     }, []);
+
+    const persistGeneralMinutesThreads = useCallback(
+        async (weeklyNotesId, nextThreads) => {
+            if (!weeklyNotesId || !window.DatabaseAPI?.updateWeeklyNotes) {
+                return;
+            }
+            const monthlyId = currentMonthlyNotes?.id || null;
+            const htmlFromRef = generalMinutesValuesRef.current[weeklyNotesId];
+            const weekSnap = currentMonthlyNotes?.weeklyNotes?.find((w) => w.id === weeklyNotesId);
+            const html =
+                htmlFromRef !== undefined && htmlFromRef !== null ? htmlFromRef : weekSnap?.generalMinutes ?? '';
+            const plain = gmHtmlToPlainText(typeof html === 'string' ? html : '');
+            const reconciled = gmReconcileThreadsWithPlain(nextThreads, plain).map(({ anchorStale, ...t }) => t);
+            await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, { generalMinutesThreads: reconciled });
+            updateWeeklyNotesLocal(weeklyNotesId, { generalMinutesThreads: reconciled }, monthlyId);
+        },
+        [currentMonthlyNotes, updateWeeklyNotesLocal]
+    );
+
+    const submitGmMinuteInlineComment = useCallback(
+        async (commentText) => {
+            const pop = gmMinuteInlinePopover;
+            if (!pop || pop.phase !== 'compose' || !commentText?.trim()) {
+                return;
+            }
+            const w = currentMonthlyNotes?.weeklyNotes?.find((x) => x.id === pop.weeklyNotesId);
+            const existing = gmParseInlineThreadsRaw(w?.generalMinutesThreads);
+            const user = window.storage?.getUserInfo?.() || {};
+            const msg = {
+                id: gmGenInlineMsgId(),
+                text: commentText.trim(),
+                createdAt: new Date().toISOString(),
+                authorId: user.id || user.userId || '',
+                authorName: user.name || user.displayName || 'User',
+                authorEmail: user.email || ''
+            };
+            const next = [
+                ...existing,
+                {
+                    id: gmGenInlineThreadId(),
+                    start: pop.start,
+                    end: pop.end,
+                    quote: pop.quote,
+                    resolved: false,
+                    messages: [msg]
+                }
+            ];
+            await persistGeneralMinutesThreads(pop.weeklyNotesId, next);
+            const title = `General minutes (${selectedMonth || ''} · ${pop.weekKey || 'week'})`;
+            const link = `${window.location.origin}${window.location.pathname}${window.location.search}#/teams/management?tab=meeting-notes&team=management&month=${encodeURIComponent(
+                selectedMonth || ''
+            )}&week=${encodeURIComponent(pop.weekKey || '')}`;
+            void gmNotifyInlineCommentMentions(commentText.trim(), {
+                contextTitle: title,
+                contextLink: link,
+                authorName: msg.authorName || msg.authorEmail || 'Someone'
+            });
+            setGmMinuteInlinePopover(null);
+        },
+        [gmMinuteInlinePopover, currentMonthlyNotes, persistGeneralMinutesThreads, selectedMonth]
+    );
+
+    const replyGmMinuteThread = useCallback(
+        async (weeklyNotesId, threadId, commentText, weekKeyForLink) => {
+            if (!commentText?.trim()) {
+                return;
+            }
+            const w = currentMonthlyNotes?.weeklyNotes?.find((x) => x.id === weeklyNotesId);
+            const existing = gmParseInlineThreadsRaw(w?.generalMinutesThreads);
+            const user = window.storage?.getUserInfo?.() || {};
+            const msg = {
+                id: gmGenInlineMsgId(),
+                text: commentText.trim(),
+                createdAt: new Date().toISOString(),
+                authorId: user.id || user.userId || '',
+                authorName: user.name || user.displayName || 'User',
+                authorEmail: user.email || ''
+            };
+            const next = existing.map((t) =>
+                t.id === threadId ? { ...t, messages: [...(t.messages || []), msg] } : t
+            );
+            await persistGeneralMinutesThreads(weeklyNotesId, next);
+            const title = `General minutes (${selectedMonth || ''} · ${weekKeyForLink || 'week'})`;
+            const link = `${window.location.origin}${window.location.pathname}${window.location.search}#/teams/management?tab=meeting-notes&team=management&month=${encodeURIComponent(
+                selectedMonth || ''
+            )}&week=${encodeURIComponent(weekKeyForLink || '')}`;
+            void gmNotifyInlineCommentMentions(commentText.trim(), {
+                contextTitle: title,
+                contextLink: link,
+                authorName: msg.authorName || msg.authorEmail || 'Someone'
+            });
+        },
+        [currentMonthlyNotes, persistGeneralMinutesThreads, selectedMonth]
+    );
+
+    const toggleGmMinuteThreadResolved = useCallback(
+        async (weeklyNotesId, threadId, resolved) => {
+            const w = currentMonthlyNotes?.weeklyNotes?.find((x) => x.id === weeklyNotesId);
+            const existing = gmParseInlineThreadsRaw(w?.generalMinutesThreads);
+            const next = existing.map((t) => (t.id === threadId ? { ...t, resolved: !!resolved } : t));
+            await persistGeneralMinutesThreads(weeklyNotesId, next);
+        },
+        [currentMonthlyNotes, persistGeneralMinutesThreads]
+    );
+
+    const handleGmEditorHostMouseUp = useCallback((e, week, gmIdentifier) => {
+        if (!week?.id) {
+            return;
+        }
+        const host = e.currentTarget;
+        requestAnimationFrame(() => {
+            const editor = host.querySelector('[contenteditable="true"]');
+            if (editor) {
+                const cap = gmCaptureSelectionInEditor(editor);
+                if (!cap) {
+                    setGmMinuteInlinePopover((p) => (p?.weeklyNotesId === week.id ? null : p));
+                    return;
+                }
+                const r = cap.rect;
+                setGmMinuteInlinePopover({
+                    weeklyNotesId: week.id,
+                    weekKey: gmIdentifier,
+                    start: cap.start,
+                    end: cap.end,
+                    quote: cap.quote,
+                    phase: 'chip',
+                    top: r.bottom + 6,
+                    left: Math.min(window.innerWidth - 220, Math.max(8, r.left)),
+                    editorKind: 'richtext'
+                });
+                return;
+            }
+            const ta = host.querySelector('textarea');
+            if (ta) {
+                const cap = gmCaptureSelectionTextarea(ta);
+                if (!cap) {
+                    setGmMinuteInlinePopover((p) => (p?.weeklyNotesId === week.id ? null : p));
+                    return;
+                }
+                const r2 = ta.getBoundingClientRect();
+                setGmMinuteInlinePopover({
+                    weeklyNotesId: week.id,
+                    weekKey: gmIdentifier,
+                    start: cap.start,
+                    end: cap.end,
+                    quote: cap.quote,
+                    phase: 'chip',
+                    top: r2.bottom + 6,
+                    left: Math.min(window.innerWidth - 220, Math.max(8, r2.left)),
+                    editorKind: 'textarea'
+                });
+            }
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!gmMinuteInlinePopover) {
+            return undefined;
+        }
+        const onDocDown = (e) => {
+            if (e.target?.closest?.('[data-gm-minute-inline-popover]')) {
+                return;
+            }
+            setGmMinuteInlinePopover(null);
+        };
+        document.addEventListener('mousedown', onDocDown, true);
+        return () => document.removeEventListener('mousedown', onDocDown, true);
+    }, [gmMinuteInlinePopover]);
+
+    useEffect(() => {
+        setGmMinuteInlinePopover(null);
+    }, [selectedMonth]);
 
     // Initialize selected month:
     // - Respect an explicit month in the URL (for shared links / navigation)
@@ -3420,7 +3766,11 @@ const ManagementMeetingNotes = () => {
                                 generalMinutesAttachments:
                                     lw.generalMinutesAttachments !== undefined && lw.generalMinutesAttachments !== null
                                         ? lw.generalMinutesAttachments
-                                        : rw.generalMinutesAttachments
+                                        : rw.generalMinutesAttachments,
+                                generalMinutesThreads:
+                                    lw.generalMinutesThreads !== undefined && lw.generalMinutesThreads !== null
+                                        ? lw.generalMinutesThreads
+                                        : rw.generalMinutesThreads
                             };
                         }
                         return rw;
@@ -5575,47 +5925,175 @@ const ManagementMeetingNotes = () => {
                                             </div>
                                         </div>
                                         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                                            {week?.id && window.RichTextEditor ? (
+                                            {week?.id ? (
                                                 <div
-                                                    className="min-h-0 min-w-0 flex-1"
-                                                    onFocusCapture={() => {
-                                                        generalMinutesEditingWeekIdRef.current = week.id;
-                                                    }}
+                                                    data-gm-editor-host={week.id}
+                                                    data-gm-week-key={gmIdentifier}
+                                                    className="flex min-h-0 min-w-0 flex-1 flex-col gap-2"
+                                                    onMouseUp={(e) => handleGmEditorHostMouseUp(e, week, gmIdentifier)}
                                                 >
-                                                    <window.RichTextEditor
-                                                        key={`weekly-gm-col-${week.id}`}
-                                                        value={week.generalMinutes || ''}
-                                                        onChange={(html) => handleGeneralMinutesChange(week.id, html)}
-                                                        onBlur={(html) => {
-                                                            generalMinutesEditingWeekIdRef.current = null;
-                                                            handleGeneralMinutesBlur(week.id, html);
-                                                        }}
-                                                        placeholder="Weekly minutes — agenda, decisions, shared notes for this week."
-                                                        rows={6}
-                                                        compact
-                                                        autoGrow
-                                                        maxEditorHeight="min(82vh, 900px)"
-                                                        tableTools
-                                                        isDark={isDark}
-                                                    />
+                                                    {window.RichTextEditor ? (
+                                                        <div
+                                                            className="min-h-0 min-w-0 flex-1"
+                                                            onFocusCapture={() => {
+                                                                generalMinutesEditingWeekIdRef.current = week.id;
+                                                            }}
+                                                        >
+                                                            <window.RichTextEditor
+                                                                key={`weekly-gm-col-${week.id}`}
+                                                                value={week.generalMinutes || ''}
+                                                                onChange={(html) => handleGeneralMinutesChange(week.id, html)}
+                                                                onBlur={(html) => {
+                                                                    generalMinutesEditingWeekIdRef.current = null;
+                                                                    handleGeneralMinutesBlur(week.id, html);
+                                                                }}
+                                                                placeholder="Weekly minutes — agenda, decisions, shared notes for this week."
+                                                                rows={6}
+                                                                compact
+                                                                autoGrow
+                                                                maxEditorHeight="min(82vh, 900px)"
+                                                                tableTools
+                                                                isDark={isDark}
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <textarea
+                                                            value={week.generalMinutes || ''}
+                                                            onChange={(e) => handleGeneralMinutesChange(week.id, e.target.value)}
+                                                            onBlur={(e) => {
+                                                                generalMinutesEditingWeekIdRef.current = null;
+                                                                handleGeneralMinutesBlur(week.id, e.target.value);
+                                                            }}
+                                                            onFocus={() => {
+                                                                generalMinutesEditingWeekIdRef.current = week.id;
+                                                            }}
+                                                            placeholder="Weekly minutes..."
+                                                            className={`w-full min-h-[6.75rem] max-h-[min(82vh,900px)] resize-y overflow-y-auto p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                            rows={6}
+                                                        />
+                                                    )}
+                                                    {(() => {
+                                                        const htmlNow =
+                                                            generalMinutesEditingWeekIdRef.current === week.id &&
+                                                            generalMinutesValuesRef.current[week.id] !== undefined
+                                                                ? generalMinutesValuesRef.current[week.id]
+                                                                : week.generalMinutes || '';
+                                                        const plain = window.RichTextEditor ? gmHtmlToPlainText(htmlNow) : String(htmlNow || '');
+                                                        const threadsView = gmReconcileThreadsWithPlain(
+                                                            gmParseInlineThreadsRaw(week.generalMinutesThreads),
+                                                            plain
+                                                        ).sort((a, b) => a.start - b.start);
+                                                        const CommentInp = window.CommentInputWithMentions;
+                                                        if (threadsView.length === 0) {
+                                                            return null;
+                                                        }
+                                                        return (
+                                                            <div
+                                                                className={`shrink-0 max-h-40 overflow-y-auto rounded-lg border px-2 py-1.5 ${
+                                                                    isDark ? 'border-slate-600/80 bg-slate-900/50' : 'border-slate-200 bg-slate-50/90'
+                                                                }`}
+                                                            >
+                                                                <p
+                                                                    className={`text-[10px] font-bold uppercase tracking-wide mb-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}
+                                                                >
+                                                                    Text comments
+                                                                </p>
+                                                                <ul className="space-y-1.5">
+                                                                    {threadsView.map((t) => (
+                                                                        <li
+                                                                            key={t.id}
+                                                                            className={`rounded-md border px-2 py-1 text-[11px] ${
+                                                                                isDark ? 'border-slate-700 bg-slate-800/80' : 'border-slate-200 bg-white'
+                                                                            }`}
+                                                                        >
+                                                                            <div className="flex items-start justify-between gap-1">
+                                                                                <span
+                                                                                    className={`italic line-clamp-2 min-w-0 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
+                                                                                >
+                                                                                    {(t.quote || '').slice(0, 120)}
+                                                                                    {(t.quote || '').length > 120 ? '…' : ''}
+                                                                                </span>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className={`shrink-0 text-[10px] underline ${isDark ? 'text-primary-400' : 'text-primary-600'}`}
+                                                                                    onClick={() => {
+                                                                                        const host = document.querySelector(
+                                                                                            `[data-gm-editor-host="${String(week.id)}"]`
+                                                                                        );
+                                                                                        if (!host) {
+                                                                                            return;
+                                                                                        }
+                                                                                        const ed = host.querySelector('[contenteditable="true"]');
+                                                                                        const ta = host.querySelector('textarea');
+                                                                                        if (ed) {
+                                                                                            gmSetSelectionByPlainOffsets(ed, t.start, t.end);
+                                                                                        } else if (ta) {
+                                                                                            ta.focus();
+                                                                                            try {
+                                                                                                ta.setSelectionRange(t.start, t.end);
+                                                                                            } catch (_) {
+                                                                                                /* ignore */
+                                                                                            }
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    Jump
+                                                                                </button>
+                                                                            </div>
+                                                                            {t.anchorStale ? (
+                                                                                <span
+                                                                                    className={`text-[9px] font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}
+                                                                                >
+                                                                                    Text may have moved
+                                                                                </span>
+                                                                            ) : null}
+                                                                            <label
+                                                                                className={`mt-0.5 flex items-center gap-1 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}
+                                                                            >
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={!!t.resolved}
+                                                                                    onChange={(e) =>
+                                                                                        void toggleGmMinuteThreadResolved(
+                                                                                            week.id,
+                                                                                            t.id,
+                                                                                            e.target.checked
+                                                                                        )
+                                                                                    }
+                                                                                />
+                                                                                Resolved
+                                                                            </label>
+                                                                            <div className={`mt-1 space-y-0.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                                                                {(t.messages || []).map((m) => (
+                                                                                    <div key={m.id} className="whitespace-pre-wrap break-words">
+                                                                                        <span className="font-medium">{m.authorName || 'Someone'}:</span>{' '}
+                                                                                        {m.text}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                            {CommentInp ? (
+                                                                                <div className="mt-1">
+                                                                                    <CommentInp
+                                                                                        onSubmit={(txt) =>
+                                                                                            void replyGmMinuteThread(week.id, t.id, txt, gmIdentifier)
+                                                                                        }
+                                                                                        placeholder="Reply… (@mention)"
+                                                                                        rows={2}
+                                                                                        showButton={true}
+                                                                                    />
+                                                                                </div>
+                                                                            ) : null}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
-                                            ) : week?.id ? (
-                                                <textarea
-                                                    value={week.generalMinutes || ''}
-                                                    onChange={(e) => handleGeneralMinutesChange(week.id, e.target.value)}
-                                                    onBlur={(e) => {
-                                                        generalMinutesEditingWeekIdRef.current = null;
-                                                        handleGeneralMinutesBlur(week.id, e.target.value);
-                                                    }}
-                                                    onFocus={() => {
-                                                        generalMinutesEditingWeekIdRef.current = week.id;
-                                                    }}
-                                                    placeholder="Weekly minutes..."
-                                                    className={`w-full min-h-[6.75rem] max-h-[min(82vh,900px)] resize-y overflow-y-auto p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                                                    rows={6}
-                                                />
                                             ) : (
-                                                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Save the week to add minutes.</p>
+                                                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                                                    Save the week to add minutes.
+                                                </p>
                                             )}
                                             {week?.id ? (
                                                 <div
@@ -6722,6 +7200,77 @@ const ManagementMeetingNotes = () => {
                     </div>
                 </div>
             )}
+            {gmMinuteInlinePopover &&
+            window.ReactDOM &&
+            typeof window.ReactDOM.createPortal === 'function'
+                ? window.ReactDOM.createPortal(
+                      <div
+                          data-gm-minute-inline-popover
+                          className={`rounded-xl border shadow-2xl p-3 min-w-[240px] max-w-[min(94vw,340px)] ${
+                              isDark ? 'bg-slate-900 border-slate-600 text-slate-100' : 'bg-white border-gray-200 text-gray-900'
+                          }`}
+                          style={{
+                              position: 'fixed',
+                              top: `${gmMinuteInlinePopover.top}px`,
+                              left: `${gmMinuteInlinePopover.left}px`,
+                              zIndex: 400
+                          }}
+                      >
+                          {gmMinuteInlinePopover.phase === 'chip' ? (
+                              <>
+                                  <p className={`text-[11px] mb-2 max-h-20 overflow-y-auto whitespace-pre-wrap ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                      {gmMinuteInlinePopover.quote}
+                                  </p>
+                                  <div className="flex flex-wrap gap-2 justify-end">
+                                      <button
+                                          type="button"
+                                          onClick={() => setGmMinuteInlinePopover(null)}
+                                          className={`text-xs px-2 py-1 rounded-lg ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-gray-600 hover:bg-gray-100'}`}
+                                      >
+                                          Cancel
+                                      </button>
+                                      <button
+                                          type="button"
+                                          onClick={() =>
+                                              setGmMinuteInlinePopover((p) => (p ? { ...p, phase: 'compose' } : p))
+                                          }
+                                          className="text-xs px-3 py-1.5 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700"
+                                      >
+                                          Comment
+                                      </button>
+                                  </div>
+                              </>
+                          ) : window.CommentInputWithMentions ? (
+                              <div className="space-y-2">
+                                  <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                      Selected text (others will see this thread on this week’s minutes).
+                                  </p>
+                                  <window.CommentInputWithMentions
+                                      onSubmit={(t) => void submitGmMinuteInlineComment(t)}
+                                      placeholder="Comment or add others with @…"
+                                      rows={3}
+                                      showButton={true}
+                                      autoFocus={true}
+                                  />
+                                  <button
+                                      type="button"
+                                      onClick={() =>
+                                          setGmMinuteInlinePopover((p) => (p ? { ...p, phase: 'chip' } : p))
+                                      }
+                                      className={`text-xs ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                                  >
+                                      Back
+                                  </button>
+                              </div>
+                          ) : (
+                              <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+                                  Comment input unavailable.
+                              </p>
+                          )}
+                      </div>,
+                      document.body
+                  )
+                : null}
         </div>
     );
 };
