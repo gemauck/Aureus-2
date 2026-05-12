@@ -103,6 +103,17 @@ export async function computeCombinedLedgerMismatches(prisma) {
   return mismatched
 }
 
+/** In-memory combined net per SKU (internal transfers net to zero). */
+export function buildCombinedMovementNetBySkuFromMovementRows(movements) {
+  const netBySku = new Map()
+  for (const m of movements) {
+    const sku = String(m.sku || '').trim()
+    if (!sku) continue
+    netBySku.set(sku, (netBySku.get(sku) || 0) + normalizeCombinedForSkuLedger(m))
+  }
+  return netBySku
+}
+
 /**
  * Company-wide movement-implied on-hand per SKU (internal transfers net to 0).
  * @param {import('@prisma/client').PrismaClient} prisma
@@ -112,13 +123,63 @@ export async function loadMovementNetCombinedBySku(prisma) {
   const movements = await prisma.stockMovement.findMany({
     select: { sku: true, quantity: true, type: true }
   })
-  const netBySku = new Map()
-  for (const m of movements) {
+  return buildCombinedMovementNetBySkuFromMovementRows(movements)
+}
+
+/**
+ * SKUs where at least one `LocationInventory` row fails per-warehouse reconciliation.
+ * Same rules as `scripts/verify-ledger-per-location.js` (each LI row vs movement net at that site).
+ * @param {Array<{ sku?: string, quantity?: unknown, type?: string, fromLocation?: string|null, toLocation?: string|null }>} movements
+ * @param {Array<{ id: string, code?: string|null }>} stockLocations
+ * @param {Array<{ sku?: string, locationId?: string|null, quantity?: unknown }>} liRows
+ * @returns {Set<string>}
+ */
+export function computeSkusWithAnyPerWarehouseLedgerMismatch(movements, stockLocations, liRows) {
+  const codeById = new Map(
+    (stockLocations || []).map((l) => [l.id, String(l?.code || '').trim()])
+  )
+  /** @type {Map<string, typeof movements>} */
+  const movementsBySku = new Map()
+  for (const m of movements || []) {
     const sku = String(m.sku || '').trim()
     if (!sku) continue
-    netBySku.set(sku, (netBySku.get(sku) || 0) + normalizeCombinedForSkuLedger(m))
+    if (!movementsBySku.has(sku)) movementsBySku.set(sku, [])
+    movementsBySku.get(sku).push(m)
   }
-  return netBySku
+  const bad = new Set()
+  for (const li of liRows || []) {
+    const sku = String(li.sku || '').trim()
+    const locId = li.locationId
+    if (!sku || !locId) continue
+    const code = codeById.get(locId) || ''
+    const list = movementsBySku.get(sku) || []
+    let net = 0
+    for (const m of list) {
+      net += normalizeMovementAtLocationForSiteLedger(m, locId, code)
+    }
+    const recorded = parseFloat(li.quantity) || 0
+    if (Math.abs(net - recorded) > COMBINED_LEDGER_RECONCILE_EPS) {
+      bad.add(sku)
+    }
+  }
+  return bad
+}
+
+/**
+ * On aggregated (all-locations) rows, set `ledgerPerSiteMismatch` when any warehouse row
+ * for that SKU disagrees with movements at that site.
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {Array<{ sku?: string, quantity?: unknown, type?: string, fromLocation?: string|null, toLocation?: string|null }>} movements
+ * @param {Array<{ id: string, code?: string|null }>} stockLocations
+ * @param {Array<{ sku?: string, locationId?: string|null, quantity?: unknown }>} liRows
+ */
+export function annotateInventoryRowsWithPerWarehouseLedgerMismatch(rows, movements, stockLocations, liRows) {
+  const bad = computeSkusWithAnyPerWarehouseLedgerMismatch(movements, stockLocations, liRows)
+  for (const row of rows) {
+    const sku = String(row.sku || '').trim()
+    row.ledgerPerSiteMismatch = sku ? bad.has(sku) : false
+  }
+  return rows
 }
 
 /**
