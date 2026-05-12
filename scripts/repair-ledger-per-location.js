@@ -116,48 +116,28 @@ async function main() {
     netCombinedBySku.set(sku, (netCombinedBySku.get(sku) || 0) + normalizeCombined(m))
   }
 
-  const canonicalBySku = new Map()
-  const invRows = await prisma.inventoryItem.findMany({
-    orderBy: [{ sku: 'asc' }, { locationId: 'asc' }, { updatedAt: 'desc' }]
-  })
-  for (const row of invRows) {
-    const k = String(row.sku || '').trim()
-    if (!k || canonicalBySku.has(k)) continue
-    canonicalBySku.set(k, row)
-  }
-
   const liRows = await prisma.locationInventory.findMany({
     select: { sku: true, locationId: true, quantity: true, itemName: true }
   })
 
   const liSumBySku = new Map()
-  const liCountBySku = new Map()
   for (const li of liRows) {
     const sku = String(li.sku || '').trim()
     if (!sku) continue
     liSumBySku.set(sku, (liSumBySku.get(sku) || 0) + (parseFloat(li.quantity) || 0))
-    liCountBySku.set(sku, (liCountBySku.get(sku) || 0) + 1)
   }
 
-  const canonicalQtyBySku = new Map()
-  for (const row of invRows) {
-    const sku = String(row.sku || '').trim()
-    if (!sku || canonicalQtyBySku.has(sku)) continue
-    canonicalQtyBySku.set(sku, parseFloat(row.quantity) || 0)
-  }
-
-  function recordedCombined(sku) {
-    if ((liCountBySku.get(sku) || 0) > 0) return liSumBySku.get(sku) || 0
-    return canonicalQtyBySku.get(sku) || 0
-  }
-
+  /**
+   * For SKUs with any LocationInventory row, combined recorded stock is Σ LI (same as
+   * verify-ledger-reconciliation when LI exists). No full-table InventoryItem scan — avoids
+   * statement timeouts on large catalogs.
+   */
   /** @type {Set<string>} */
   let combinedOkSku = null
   if (requireCombinedOk) {
     combinedOkSku = new Set()
-    const allSkus = new Set([...liSumBySku.keys(), ...netCombinedBySku.keys(), ...canonicalQtyBySku.keys()])
-    for (const sku of allSkus) {
-      const rec = recordedCombined(sku)
+    for (const sku of liSumBySku.keys()) {
+      const rec = liSumBySku.get(sku) || 0
       const net = netCombinedBySku.get(sku) || 0
       if (Math.abs(net - rec) <= EPS) combinedOkSku.add(sku)
     }
@@ -182,7 +162,7 @@ async function main() {
     const delta = recorded - net
     if (Math.abs(delta) <= EPS) continue
 
-    const itemName = canonicalBySku.get(sku)?.name || li.itemName || sku
+    const itemName = String(li.itemName || sku).slice(0, 500)
     if (delta > 0) {
       planned.push({
         sku,
@@ -215,6 +195,15 @@ async function main() {
 
   const skuSet = new Set(planned.map((p) => p.sku))
   const totalQty = planned.reduce((s, p) => s + (parseFloat(p.quantity) || 0), 0)
+  const topByQuantity = [...planned]
+    .sort((a, b) => (parseFloat(b.quantity) || 0) - (parseFloat(a.quantity) || 0))
+    .slice(0, 25)
+    .map((p) => ({
+      sku: p.sku,
+      locationLabel: p.locationLabel,
+      kind: p.kind,
+      quantity: p.quantity
+    }))
 
   console.log(
     JSON.stringify(
@@ -228,6 +217,7 @@ async function main() {
         droppedForMaxRows: droppedForMaxRows || undefined,
         distinctSkus: skuSet.size,
         sumAbsQuantities: totalQty,
+        topByQuantity,
         sample: planned.slice(0, 20),
         sampleTruncated: planned.length > 20
       },
