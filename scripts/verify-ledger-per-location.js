@@ -3,6 +3,9 @@
  * Per-warehouse reconciliation: for each LocationInventory row, movement net at that site
  * vs quantity on hand — matches Manufacturing inventory detail when a specific Location is selected.
  *
+ * `StockMovement.fromLocation` / `toLocation` may be **location id** (preferred for new rows) or
+ * **location code** (legacy); both are matched when resolving a site.
+ *
  * Usage:
  *   node scripts/verify-ledger-per-location.js
  *   node scripts/verify-ledger-per-location.js --quiet   # exit 1 if any mismatch

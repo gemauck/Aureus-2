@@ -1,4 +1,5 @@
-import { applyStockCountAdjustmentTx, findCanonicalInventoryItemBySkuTx } from './stockCountAdjustment.js'
+import { computedInventoryTotalValue } from './inventoryValue.js'
+import { findCanonicalInventoryItemBySkuTx, getStatusFromQuantity } from './stockCountAdjustment.js'
 
 const EPS = 0.001
 export const ALIGN_LI_TO_MOVEMENTS_REF = 'LI_ALIGN_TO_MOVEMENTS'
@@ -79,19 +80,34 @@ async function defaultStockLocationId(tx) {
   return loc?.id || null
 }
 
+async function syncMasterQuantityFromLocationSumTx(tx, skuTrim) {
+  const agg = await tx.locationInventory.aggregate({
+    _sum: { quantity: true },
+    where: { sku: skuTrim }
+  })
+  const aggQty = agg._sum.quantity ?? 0
+  const item = await findCanonicalInventoryItemBySkuTx(tx, skuTrim)
+  if (!item) return
+  await tx.inventoryItem.update({
+    where: { id: item.id },
+    data: {
+      quantity: aggQty,
+      totalValue: computedInventoryTotalValue(aggQty, item.unitCost || 0),
+      status: getStatusFromQuantity(aggQty, item.reorderPoint || 0)
+    }
+  })
+}
+
 /**
- * Post adjustment movement(s) so sum(LocationInventory) matches combined movement net for one SKU.
- * Positive net vs sum: one +delta at the largest LI row (or default location).
- * Negative net vs sum: sequential -qty adjustments from largest-qty sites until the gap closes.
+ * Set sum(LocationInventory) to match existing combined StockMovement net **without** inserting new
+ * movements (adjustments would add to net and double-count). Updates LI + canonical aggregate only.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} sku
- * @param {{ dryRun?: boolean, req?: { user?: { name?: string } }, notesPrefix?: string }} [options]
+ * @param {{ dryRun?: boolean }} [options]
  */
 export async function alignSkuInventoryToCombinedMovements(prisma, sku, options = {}) {
   const dryRun = Boolean(options.dryRun)
-  const req = options.req || { user: { name: 'align-inventory-to-movements' } }
-  const notesPrefix = String(options.notesPrefix || 'Align LocationInventory to combined StockMovement net').slice(0, 180)
 
   const skuTrim = String(sku || '').trim()
   if (!skuTrim) throw new Error('sku required')
@@ -113,7 +129,7 @@ export async function alignSkuInventoryToCombinedMovements(prisma, sku, options 
       sumLi,
       net,
       delta: 0,
-      movementsCreated: 0,
+      locationRowsUpdated: 0,
       detail: 'already aligned'
     }
   }
@@ -153,14 +169,14 @@ export async function alignSkuInventoryToCombinedMovements(prisma, sku, options 
       sumLi,
       net,
       delta,
-      movementsPlanned: delta > EPS ? 1 : negSteps.steps.length,
+      locationUpdatesPlanned: delta > EPS ? (liRows.length ? 1 : 1) : negSteps.steps.length,
       wouldFailNegative: delta < -EPS && negSteps.remaining > EPS,
       unresolvedRemaining: negSteps.remaining > EPS ? negSteps.remaining : 0,
       negativePlan: delta < -EPS ? negSteps : null
     }
   }
 
-  let movementsCreated = 0
+  let locationRowsUpdated = 0
 
   await prisma.$transaction(
     async (tx) => {
@@ -168,23 +184,39 @@ export async function alignSkuInventoryToCombinedMovements(prisma, sku, options 
         const sorted = [...liRows].sort(
           (a, b) => (parseFloat(b.quantity) || 0) - (parseFloat(a.quantity) || 0)
         )
-        let locationId = sorted[0]?.locationId
-        if (!locationId) {
-          const canon = await findCanonicalInventoryItemBySkuTx(tx, skuTrim)
-          locationId = canon?.locationId || (await defaultStockLocationId(tx))
-        }
-        if (!locationId) throw new Error(`No location to apply positive correction for ${skuTrim}`)
+        const canon = await findCanonicalInventoryItemBySkuTx(tx, skuTrim)
+        const uc = Number(canon?.unitCost) || Number(sorted[0]?.unitCost) || 0
+        const rp = Number(canon?.reorderPoint) || Number(sorted[0]?.reorderPoint) || 0
 
-        const r = await applyStockCountAdjustmentTx(tx, {
-          req,
-          sku: skuTrim,
-          itemName,
-          quantityDelta: delta,
-          locationId,
-          reference: ALIGN_LI_TO_MOVEMENTS_REF,
-          notes: `${notesPrefix}: net ${net} vs sum(LI) ${sumLi}; +${delta} at one site.`
-        })
-        if (r.movement) movementsCreated++
+        if (sorted.length === 0) {
+          let locationId = canon?.locationId || (await defaultStockLocationId(tx))
+          if (!locationId) throw new Error(`No location to create LocationInventory for ${skuTrim}`)
+          const nq = delta
+          await tx.locationInventory.create({
+            data: {
+              locationId,
+              sku: skuTrim,
+              itemName,
+              quantity: nq,
+              unitCost: uc,
+              reorderPoint: rp,
+              status: getStatusFromQuantity(nq, rp)
+            }
+          })
+          locationRowsUpdated = 1
+        } else {
+          const row = sorted[0]
+          const q = parseFloat(row.quantity) || 0
+          const nq = q + delta
+          await tx.locationInventory.update({
+            where: { id: row.id },
+            data: {
+              quantity: nq,
+              status: getStatusFromQuantity(nq, row.reorderPoint || rp)
+            }
+          })
+          locationRowsUpdated = 1
+        }
       } else {
         let remaining = Math.abs(delta)
         const sorted = [...liRows]
@@ -196,28 +228,37 @@ export async function alignSkuInventoryToCombinedMovements(prisma, sku, options 
           const q = parseFloat(row.quantity) || 0
           const take = Math.min(q, remaining)
           if (take <= EPS) continue
-          await applyStockCountAdjustmentTx(tx, {
-            req,
-            sku: skuTrim,
-            itemName,
-            quantityDelta: -take,
-            locationId: row.locationId,
-            reference: ALIGN_LI_TO_MOVEMENTS_REF,
-            notes: `${notesPrefix}: net ${net} vs sum(LI) ${sumLi}; -${take} at site.`
+          const nq = q - take
+          await tx.locationInventory.update({
+            where: { id: row.id },
+            data: {
+              quantity: nq,
+              status: getStatusFromQuantity(nq, row.reorderPoint || 0)
+            }
           })
-          movementsCreated++
+          locationRowsUpdated++
           remaining -= take
         }
 
         if (remaining > EPS) {
           throw new Error(
-            `Cannot fully align ${skuTrim}: still ${remaining} units to remove but insufficient positive LocationInventory to absorb it without going past stock on hand.`
+            `Cannot fully align ${skuTrim}: still ${remaining} units to remove but insufficient LocationInventory on hand.`
           )
         }
       }
+
+      await syncMasterQuantityFromLocationSumTx(tx, skuTrim)
     },
     { maxWait: 60000, timeout: 120000 }
   )
 
-  return { applied: true, sku: skuTrim, sumLiBefore: sumLi, net, delta, movementsCreated }
+  return {
+    applied: true,
+    sku: skuTrim,
+    sumLiBefore: sumLi,
+    net,
+    delta,
+    locationRowsUpdated,
+    method: 'direct_location_inventory_only'
+  }
 }

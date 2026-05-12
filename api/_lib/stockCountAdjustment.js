@@ -18,6 +18,10 @@ import { computedInventoryTotalValue } from './inventoryValue.js'
  *
  * - **Backfill movement strings** to UUIDs (so per-location ledger filters match):
  *   `node scripts/backfill-stock-movement-location-ids.js` (dry run) then `--write`.
+ *
+ * - **New writes (Option B):** sales shipments, PO receipts, manufacturing bulk/initial balance,
+ *   production completion, and incremental production consume persist **location UUIDs** in
+ *   `fromLocation` / `toLocation` where applicable (not location codes).
  */
 
 export const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {

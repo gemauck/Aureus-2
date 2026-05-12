@@ -2977,7 +2977,7 @@ async function handler(req, res) {
                   const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
                   locationCode = location?.code || ''
                 }
-                
+
                 await prisma.stockMovement.create({
                   data: {
                     movementId: buildMovementId(),
@@ -2986,11 +2986,11 @@ async function handler(req, res) {
                     itemName: inventoryItem.name,
                     sku: inventoryItem.sku,
                     quantity: quantity, // Positive for starting balance
-                    fromLocation: '',
-                    toLocation: locationCode,
+                    fromLocation: locationId || '',
+                    toLocation: '',
                     reference: 'BULK_IMPORT',
                     performedBy: 'System',
-                    notes: locationCode 
+                    notes: locationCode
                       ? `Initial stock balance recorded for ${inventoryItem.name} at ${locationCode} (bulk import)`
                       : `Initial stock balance recorded for ${inventoryItem.name} (bulk import, no location assigned)`,
                     ownerId: null
@@ -3176,7 +3176,7 @@ async function handler(req, res) {
               const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
               locationCode = location?.code || ''
             }
-            
+
             await prisma.stockMovement.create({
               data: {
                 movementId: buildMovementId(),
@@ -3185,11 +3185,11 @@ async function handler(req, res) {
                 itemName: item.name,
                 sku: item.sku,
                 quantity: quantity, // Positive for starting balance
-                fromLocation: '',
-                toLocation: locationCode,
+                fromLocation: locationId || '',
+                toLocation: '',
                 reference: 'INITIAL_BALANCE',
                 performedBy: req.user?.name || 'System',
-                notes: locationCode 
+                notes: locationCode
                   ? `Initial stock balance recorded for ${item.name} at ${locationCode}`
                   : `Initial stock balance recorded for ${item.name} (no location assigned)`,
                 ownerId: null
@@ -4107,10 +4107,6 @@ async function handler(req, res) {
                 }
               })
                 
-              // Get location code for stock movement
-              const componentLocation = componentLocationId ? await tx.stockLocation.findUnique({ where: { id: componentLocationId } }) : null
-              const componentLocationCode = componentLocation?.code || ''
-                
               // Create stock movement record (consumption should always be negative)
               await createStockMovementTxWithRetry(tx, {
                   date: new Date(),
@@ -4118,7 +4114,7 @@ async function handler(req, res) {
                   itemName: component.name || component.sku,
                   sku: component.sku,
                   quantity: -Math.abs(requiredQty),
-                  fromLocation: componentLocationCode,
+                  fromLocation: componentLocationId || '',
                   toLocation: '',
                   reference: orderInTx.workOrderNumber || id,
                   performedBy: req.user?.name || 'System',
@@ -4254,10 +4250,6 @@ async function handler(req, res) {
               console.warn(`⚠️ No location ID found for finished product ${finishedProduct.sku} - LocationInventory not updated`)
             }
             
-            // Create stock movement record for finished product receipt
-            const location = toLocationId ? await tx.stockLocation.findUnique({ where: { id: toLocationId } }) : null
-            const locationCode = location?.code || ''
-            
             const movement = await createStockMovementTxWithRetry(tx, {
                 date: new Date(),
                 type: 'receipt', // Finished product receipt (increases stock)
@@ -4265,7 +4257,7 @@ async function handler(req, res) {
                 sku: finishedProduct.sku,
                 quantity: quantityProduced, // positive for receipt
                 fromLocation: '',
-                toLocation: locationCode,
+                toLocation: toLocationId || '',
                 reference: orderInTx.workOrderNumber || id,
                 performedBy: req.user?.name || 'System',
                 notes: `Production completion for ${orderInTx.productName} - Cost: ${unitCost.toFixed(2)} per unit (sum of parts)`
@@ -5909,11 +5901,16 @@ async function handler(req, res) {
         return badRequest(res, 'BOM has no consumable components')
       }
 
-      // Get production location - default to main warehouse (LOC001)
+      // Get production location - default to main warehouse (LOC001 or 01_LOC1)
       // In a real system, production orders might have a specific location
-      const mainWarehouse = await prisma.stockLocation.findFirst({
+      let mainWarehouse = await prisma.stockLocation.findFirst({
         where: { code: 'LOC001' }
       })
+      if (!mainWarehouse) {
+        mainWarehouse = await prisma.stockLocation.findFirst({
+          where: { code: '01_LOC1' }
+        })
+      }
       const productionLocationId = mainWarehouse?.id || null
 
       // Verify stock availability (check LocationInventory if location specified)
@@ -6035,8 +6032,8 @@ async function handler(req, res) {
               itemName: reqComp.itemName || item.name,
               sku: reqComp.sku,
               quantity: -Math.abs(consumeQty), // Consumption should always be negative
-              fromLocation: mainWarehouse?.code || 'store',
-              toLocation: 'production',
+              fromLocation: productionLocationId || mainWarehouse?.id || '',
+              toLocation: '',
               reference: `production:${order.id}`,
               performedBy: req.user?.name || 'System',
               notes: body.notes || '',

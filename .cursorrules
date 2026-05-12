@@ -35,6 +35,26 @@ Before editing, verify:
 2. File is referenced in the build process or loaded by the server
 3. Changes appear when testing with `npm run dev:backend`
 
+## Before merging (build sanity)
+
+For substantive UI work under `src/` that ships via the JSX pipeline:
+
+- Run **`node build-jsx.js`** (or **`npm run build:jsx`**) before merge so `dist/` and `index.html` cache-bust stay consistent.
+- If **`src/styles/main.css`** (or other Tailwind entry inputs) changed: **`npm run build:css`**.
+
+Manufacturing/order API changes: still run **`npm run lint:audit`** (see **Manufacturing audit trail** later in this file).
+
+## Where rules live
+
+Treat **this file (repo-root `.cursorrules`)** as the canonical AI/project rule set. If you add **`.cursor/rules/`** entries later, avoid duplicating long policy in two places—keep one source of truth or sync both so guidance does not drift.
+
+## Management meeting notes (General minutes inline comments)
+
+- **Code:** `src/components/teams/ManagementMeetingNotes.jsx` only (not `frontend/`).
+- **Data:** each week’s **`generalMinutes`** (HTML string) plus **`generalMinutesThreads`** (JSON: `id`, `start`, `end`, `quote`, `resolved`, `messages`).
+- **DOM:** inline discussion anchors use **`span.gm-thread-anchor`** and **`data-gm-thread-id`**. The editor wrapper uses **`data-gm-editor-host`** (week id) for selection capture and click-to-thread in the sidebar.
+- **API:** `api/meeting-notes.js` weekly update accepts `generalMinutes` / `generalMinutesThreads`; keep HTML and offset math aligned when changing this feature.
+
 ## Live updates and background refresh (list/detail views)
 
 For list or detail views that poll or refetch (discussions, notifications, task comments, etc.):
@@ -44,6 +64,8 @@ For list or detail views that poll or refetch (discussions, notifications, task 
 - **Reference equality**: When updating state after a silent fetch, avoid replacing the list/array if the data is unchanged (e.g. compare by id list) so React can avoid unnecessary re-renders.
 
 Examples: `TeamDiscussions.jsx` (loadDetail with silent + reply merge), `NotificationCenter.jsx` (loadNotifications({ silent: true }) and only update list when ids changed).
+
+**Meeting notes month poll:** when refetching `ManagementMeetingNotes` data in the background, follow the same ideas—avoid wiping focused editors or replacing lists wholesale; merge by id where possible.
 
 ## Manufacturing audit trail (mandatory for new mutations)
 
@@ -58,13 +80,16 @@ When adding a new `resourceType` branch in `api/manufacturing.js` or new order e
 
 Run **`npm run lint:audit`** before merging manufacturing/order API changes; ESLint enforces `auditManufacturing` / `logAuditFromRequest` before `ok`/`created` in `POST`/`PATCH`/`DELETE` branches (`eslint-rules/manufacturing-audit.mjs`).
 
-## Manufacturing inventory: movements as source of truth
+## Manufacturing inventory: Option B (multi-warehouse truth)
 
-For **stock take imports**, **template stock-count apply**, and **alignment / repair** flows that are meant to be auditable:
-
-- **Authoritative changes** must persist both **`StockMovement`** and **`LocationInventory`** (and master `InventoryItem` aggregates where applicable) in the **same transaction**, using existing helpers such as **`applyStockCountAdjustmentTx`** in `api/_lib/stockCountAdjustment.js` (same pattern as POST stock-movements adjustment paths). Do not “fix” on-hand in the DB without a matching movement row.
-- **Never hide drift** in the UI (no synthetic opening balances, no silent overwriting of variance). The inventory detail ledger is audit-style: if recorded on-hand and movement math disagree, that is a **data defect** to fix in the database or via an explicit posted movement — not a display workaround.
-- **Ledger-only maintenance scripts** (e.g. `scripts/ledger-cutover-after-stocktake.js --mismatch-only`) rebuild movement rows from **current** `LocationInventory` at run time; they do **not** establish “movements as truth” by themselves. If quantities are later edited without new movements, variance will reappear. Prefer stock-count / adjustment APIs for ongoing corrections.
-- **Bulk alignment** (movements already correct, sum(LI) wrong): `npm run align:inventory-to-movements -- --dry-run` then `--write` (see `scripts/align-location-inventory-to-movements.mjs`). Posts `LI_ALIGN_TO_MOVEMENTS` adjustments via `applyStockCountAdjustmentTx` so every fix is auditable.
+- **Policy:** Every site that holds stock should have **movement rows attributed to that site** (receipts, issues, transfers, adjustments). Baselines and corrections must be **per `LocationInventory` row** when multiple bins exist, not one SKU-level blob on a default warehouse id.
+- **Authoritative mutations:** Persist **`StockMovement` + `LocationInventory`** (and master aggregates) in the **same transaction** via `applyStockCountAdjustmentTx` or manufacturing transfer / stock-movement APIs — not silent LI edits alone.
+- **`StockMovement.fromLocation` / `toLocation`:** Prefer **location UUID** on all **new** writes (sales, PO goods receipt, manufacturing production paths, adjustments). Legacy rows may still hold codes; run `node scripts/backfill-stock-movement-location-ids.js --write` once when cleaning history.
+- **Ledger-only cutover:** `scripts/ledger-cutover-after-stocktake.js` rebuilds baselines from **current** `LocationInventory` per row (`--mismatch-only` or cutoff modes). Catalog-only SKUs fall back to `01_LOC1` then `LOC001`.
+- **Never hide drift** in the UI: disagreement between on-hand and movement math is a **data defect** — fix with posted movements or controlled scripts.
+- **Combined alignment** (Σ LI vs combined movement net only): `npm run align:inventory-to-movements -- --dry-run` then `--write`. Does **not** fix per-site attribution. If an older adjustment-based align ran: `npm run undo:li-align-to-movements -- --write` first.
+- **Verification:** `npm run verify:ledger` (company-wide) and `npm run verify:ledger:locations` (per warehouse row). `npm run verify:ledger:all` runs both.
+- **Per-site rebalance plan (dry-run):** `npm run plan:location-ledger-rebalance` — suggests transfer legs to align movement story with current LI; review then post transfers in the app.
+- **New inventory / ledger operational scripts:** add an **`npm run …` script in `package.json`** when operators are expected to run them, and a **one-line purpose comment** at the top of the script file (prefer **dry-run by default** for destructive or wide writes).
 
 Legacy one-off imports (`scripts/import-stock-count-excel.js`, `STOCK_COUNT_IMPORT`) may use older movement location fields; normalize with `scripts/backfill-stock-movement-location-ids.js` when touching those rows.

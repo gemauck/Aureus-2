@@ -10,6 +10,10 @@
  *    at each site (same normalization rules as Manufacturing inventory detail).
  *    With `--delete-all-movements`, net since cutoff is treated as zero → opening = current qty.
  *
+ * **Multi-warehouse (Option B):** Baselines are written **per `LocationInventory` row** with
+ * `fromLocation` = that row's `locationId` (not a single default warehouse for the whole SKU).
+ * Catalog-only SKUs use `defaultCatalogLocationId` (prefers `01_LOC1`, then `LOC001`).
+ *
  * Does NOT change LocationInventory or InventoryItem quantities — ledger-only fix so movement
  * history matches **current** on-hand at run time. Product rule elsewhere: ongoing corrections
  * should use stock take / `applyStockCountAdjustmentTx` (movements + LI in one transaction).
@@ -119,6 +123,17 @@ async function loadCanonicalBySku() {
 
 const EPS = 0.0001
 
+/** Prefer main office / legacy main warehouse code when catalog-only SKU has no LI row. */
+function defaultCatalogLocationId(locations) {
+  const list = locations || []
+  return (
+    list.find((l) => String(l.code || '').trim() === '01_LOC1')?.id ||
+    list.find((l) => String(l.code || '').trim() === 'LOC001')?.id ||
+    list[0]?.id ||
+    null
+  )
+}
+
 /**
  * Same combined ledger vs stock check as Manufacturing inventory detail (all locations).
  * @returns {{ mismatched: string[], recordedCombined: (sku: string) => number, movementCountBySku: Map<string, number> }}
@@ -201,7 +216,7 @@ function buildBaselinesFromCurrentStock(mismatchedSet, liRows, canonicalBySku, l
     if (!item) continue
     const current = parseFloat(item.quantity) || 0
     if (Math.abs(current) <= EPS) continue
-    const locId = item.locationId || locations.find((l) => l.code === 'LOC001')?.id || locations[0]?.id
+    const locId = item.locationId || defaultCatalogLocationId(locations)
     if (!locId) continue
     baselines.push({
       sku,
@@ -422,7 +437,7 @@ async function main() {
     const current = parseFloat(item.quantity) || 0
     const opening = current - combinedNet
     if (Math.abs(opening) <= EPS) continue
-    const locId = item.locationId || locations.find((l) => l.code === 'LOC001')?.id || locations[0]?.id
+    const locId = item.locationId || defaultCatalogLocationId(locations)
     if (!locId) continue
     baselines.push({
       sku,

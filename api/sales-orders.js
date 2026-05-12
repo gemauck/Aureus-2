@@ -306,11 +306,8 @@ async function handler(req, res) {
                   -quantityToDeduct // negative for sale
                 )
                 
-                // Get location code for movement record
-                const location = await tx.stockLocation.findUnique({ where: { id: locationId } })
-                const locationCode = location?.code || ''
-                
-                // Create stock movement record
+                // StockMovement.fromLocation / toLocation: store location UUID (matches adjustments,
+                // ledger cutover, and verify-ledger-per-location.js — codes break site-level audit).
                 const movement = await tx.stockMovement.create({
                   data: {
                     movementId: `MOV${String(seq++).padStart(4, '0')}`,
@@ -319,7 +316,7 @@ async function handler(req, res) {
                     itemName: item.name || inventoryItem.name,
                     sku: item.sku,
                     quantity: -quantityToDeduct, // negative for sale
-                    fromLocation: locationCode,
+                    fromLocation: locationId,
                     toLocation: '',
                     reference: existingOrder.orderNumber || id,
                     performedBy: req.user?.name || 'System',

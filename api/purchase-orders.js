@@ -297,7 +297,7 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
         sku: item.sku,
         quantity: quantity,
         fromLocation: '',
-        toLocation: mainWarehouse?.code || '',
+        toLocation: toLocationId || mainWarehouse?.id || '',
         reference: existingOrder.orderNumber || id,
         performedBy: req.user?.name || 'System',
         notes: `Stock received from purchase order ${existingOrder.orderNumber || id} - Supplier: ${existingOrder.supplierName || 'N/A'}`,

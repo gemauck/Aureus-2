@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
  * Align sum(LocationInventory) to combined StockMovement net (movements as truth).
- * Uses applyStockCountAdjustmentTx — every change is a visible adjustment row + LI update in one transaction.
+ * Updates LocationInventory (+ canonical aggregate) only — does **not** insert StockMovement rows,
+ * because adjustments would change combined net and double-count.
+ *
+ * If a previous run used adjustment-based alignment, undo first:
+ *   npm run undo:li-align-to-movements -- --write
  *
  * Usage:
  *   node scripts/align-location-inventory-to-movements.mjs --dry-run
@@ -55,8 +59,7 @@ async function main() {
   for (const row of targets) {
     try {
       const r = await alignSkuInventoryToCombinedMovements(prisma, row.sku, {
-        dryRun,
-        req: { user: { name: 'script:align-location-inventory-to-movements.mjs' } }
+        dryRun
       })
       results.push(r)
     } catch (e) {
