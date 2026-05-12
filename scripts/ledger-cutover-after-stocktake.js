@@ -5,14 +5,14 @@
  * 1. Optionally removes prior baseline rows from a previous run (reference prefix).
  * 2. Deletes StockMovement rows — either before cutoff only (default), or **all** rows with
  *    `--delete-all-movements` (drops post–April history too; baselines become full current on-hand).
- * 3. Inserts per-location "adjustment" movements dated at the stock-take anchor so that:
- *    opening_at_cutoff + net(movements since cutoff) == current LocationInventory quantity
- *    at each site (same normalization rules as Manufacturing inventory detail).
- *    With `--delete-all-movements`, net since cutoff is treated as zero → opening = current qty.
- *
- * **Multi-warehouse (Option B):** Baselines are written **per `LocationInventory` row** with
- * `fromLocation` = that row's `locationId` (not a single default warehouse for the whole SKU).
- * Catalog-only SKUs use `defaultCatalogLocationId` (prefers `01_LOC1`, then `LOC001`).
+ * 3. Inserts "adjustment" movements dated at the stock-take anchor. Behavior depends on mode:
+ *    - **Default / cutoff / `--delete-all-movements`:** implied opening per `LocationInventory` row
+ *      from retained movements (same rules as Manufacturing per-site detail).
+ *    - **`--mismatch-only`:** deletes all movements for mismatched SKUs, then inserts **exactly one**
+ *      baseline per SKU: `fromLocation` = **main office only** (`01_LOC1`, else `LOC001`, else first
+ *      site), `quantity` = **total** on-hand (Σ `LocationInventory` or catalog when no LI rows).
+ *      References look like `LEDGER_BASELINE_…:SKUxxxx:<mainOfficeId>`. Use transfers afterward for
+ *      per-warehouse movement truth (see `plan:location-ledger-rebalance`).
  *
  * Does NOT change LocationInventory or InventoryItem quantities — ledger-only fix so movement
  * history matches **current** on-hand at run time. Product rule elsewhere: ongoing corrections
@@ -30,8 +30,8 @@
  *   --cutoff=ISO       Default: 2026-05-01T00:00:00.000Z (delete movements strictly before this; keep this instant onward).
  *   --delete-all-movements  Delete **every** StockMovement row, then insert baselines = current on-hand only (no retained history).
  *   --mismatch-only         Only SKUs where combined ledger net ≠ recorded on-hand (Manufacturing “All locations” check).
- *                           Deletes **all** movements for those SKUs and inserts one baseline per location = **current** holding.
- *                           Reconciled SKUs are left unchanged. Incompatible with --delete-all-movements.
+ *                           Deletes **all** movements for those SKUs and inserts **one** baseline per SKU at **main office only**
+ *                           (`01_LOC1` / `LOC001`), quantity = **total** on-hand (Σ locations). Reconciled SKUs unchanged. Incompatible with `--delete-all-movements`.
  *   --opening-date=ISO Default: 2026-04-30T23:59:59.999Z (movement date for new baseline rows).
  *   --backup-out=PATH  If used with --write, writes the same JSON backup as backup-stock-movements.js first.
  */
@@ -187,45 +187,38 @@ async function findMismatchedSkus() {
   return { mismatched, recordedCombined, movementCountBySku, canonicalBySku, liRows }
 }
 
-/** Baselines = full current on-hand per LI row (and catalog-only rows) for given SKU set. */
-function buildBaselinesFromCurrentStock(mismatchedSet, liRows, canonicalBySku, locations) {
-  const baselines = []
-  for (const li of liRows) {
-    const sku = String(li.sku || '').trim()
-    if (!sku || !mismatchedSet.has(sku)) continue
-    const locId = li.locationId
-    if (!locId) continue
-    const current = parseFloat(li.quantity) || 0
-    if (Math.abs(current) <= EPS) continue
-    const item = canonicalBySku.get(sku)
-    baselines.push({
-      sku,
-      locationId: locId,
-      quantity: current,
-      itemName: item?.name || li.itemName || sku,
-      current,
-      netSinceCutoff: 0,
-      repair: true
-    })
+/**
+ * `--mismatch-only` repair: one baseline per SKU, always at main office (`defaultCatalogLocationId`),
+ * quantity = combined on-hand (`recordedCombined` — same rule as the mismatch detector).
+ */
+function buildMismatchOnlyBaselinesAnchoredAtMainOffice(
+  mismatchedSet,
+  liRows,
+  canonicalBySku,
+  locations,
+  recordedCombined
+) {
+  const mainLocId = defaultCatalogLocationId(locations)
+  if (!mainLocId) return []
+
+  const itemNameBySku = new Map()
+  for (const r of liRows) {
+    const k = String(r.sku || '').trim()
+    if (k && !itemNameBySku.has(k) && r.itemName) itemNameBySku.set(k, r.itemName)
   }
 
-  const liSkus = new Set(liRows.map((r) => String(r.sku || '').trim()).filter(Boolean))
+  const baselines = []
   for (const sku of mismatchedSet) {
-    if (liSkus.has(sku)) continue
+    const total = recordedCombined(sku)
+    if (Math.abs(total) <= EPS) continue
     const item = canonicalBySku.get(sku)
-    if (!item) continue
-    const current = parseFloat(item.quantity) || 0
-    if (Math.abs(current) <= EPS) continue
-    const locId = item.locationId || defaultCatalogLocationId(locations)
-    if (!locId) continue
     baselines.push({
       sku,
-      locationId: locId,
-      quantity: current,
-      itemName: item.name || sku,
-      current,
+      locationId: mainLocId,
+      quantity: total,
+      itemName: item?.name || itemNameBySku.get(sku) || sku,
+      current: total,
       netSinceCutoff: 0,
-      catalogOnly: true,
       repair: true
     })
   }
@@ -279,9 +272,25 @@ async function main() {
     const locations = await prisma.stockLocation.findMany({
       select: { id: true, code: true, name: true }
     })
-    const { mismatched, movementCountBySku, canonicalBySku, liRows } = await findMismatchedSkus()
+    const { mismatched, movementCountBySku, canonicalBySku, liRows, recordedCombined } =
+      await findMismatchedSkus()
     const mismatchedSet = new Set(mismatched)
-    const baselines = buildBaselinesFromCurrentStock(mismatchedSet, liRows, canonicalBySku, locations)
+    const baselines = buildMismatchOnlyBaselinesAnchoredAtMainOffice(
+      mismatchedSet,
+      liRows,
+      canonicalBySku,
+      locations,
+      recordedCombined
+    )
+
+    const anchorId = defaultCatalogLocationId(locations)
+    if (!anchorId) {
+      console.error(
+        'ERROR: No StockLocation for mismatch baseline anchor. Create a site with code 01_LOC1 or LOC001.'
+      )
+      await prisma.$disconnect()
+      process.exit(1)
+    }
 
     let movementsToDelete = 0
     for (const sku of mismatched) {
@@ -293,6 +302,7 @@ async function main() {
         {
           mode: 'mismatch-only',
           openingMovementDate: OPENING_DATE.toISOString(),
+          baselineAnchorLocationId: anchorId,
           mismatchedSkuCount: mismatched.length,
           movementsToDeleteForThoseSkus: movementsToDelete,
           baselineAdjustmentsToInsert: baselines.length,
@@ -337,7 +347,7 @@ async function main() {
               toLocation: '',
               reference: `${REF_PREFIX}:${b.sku}:${b.locationId}`.slice(0, 500),
               performedBy: 'ledger-cutover-after-stocktake.js',
-              notes: `Mismatch repair: ledger cleared for SKU; baseline = current on-hand ${b.current} at this location.`.slice(
+              notes: `Mismatch repair: ledger cleared for SKU; baseline = total on-hand ${b.current} (all locations) anchored at main office (01_LOC1 / LOC001) only.`.slice(
                 0,
                 2000
               ),
