@@ -646,11 +646,113 @@ function gmSetSelectionByPlainOffsets(editorEl, start, end) {
 }
 
 /**
- * Wrap current selection in an inline anchor span (rich text only).
- * Uses surroundContents only — extractContents fallback split block nodes and caused forced
- * line breaks / corrupted minutes; if the range is not strictly wrappable, skip DOM wrap
- * (thread still saves; sidebar shows the discussion).
+ * Unwrap all inline anchor spans for a thread id (mutates container div).
  */
+function gmUnwrapThreadSpansInElement(rootEl, threadId) {
+    if (!rootEl || !threadId) {
+        return;
+    }
+    const esc =
+        typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(String(threadId)) : String(threadId).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    rootEl.querySelectorAll(`span[data-gm-thread-id="${esc}"]`).forEach((el) => {
+        const p = el.parentNode;
+        if (!p) {
+            return;
+        }
+        while (el.firstChild) {
+            p.insertBefore(el.firstChild, el);
+        }
+        p.removeChild(el);
+    });
+}
+
+function gmStripThreadSpansFromHtmlString(html, threadId) {
+    if (!html || !threadId) {
+        return typeof html === 'string' ? html : '';
+    }
+    try {
+        const d = document.createElement('div');
+        d.innerHTML = html;
+        gmUnwrapThreadSpansInElement(d, threadId);
+        return d.innerHTML;
+    } catch (_) {
+        return typeof html === 'string' ? html : '';
+    }
+}
+
+/**
+ * Wrap selection in gm-thread-anchor span(s). Prefer single surroundContents; if the range
+ * spans multiple text nodes, split end text boundaries then wrap each text slice using
+ * extractContents on a range confined to one text node (does not hoist block nodes).
+ */
+function wrapGmThreadPerTextNodeExtract(range, threadId) {
+    if (!range || range.collapsed || !threadId) {
+        return false;
+    }
+    const r = range.cloneRange();
+    if (r.startContainer.nodeType === 3 && r.startOffset > 0) {
+        const tail = r.startContainer.splitText(r.startOffset);
+        r.setStart(tail, 0);
+    }
+    if (r.endContainer.nodeType === 3 && r.endOffset < r.endContainer.length) {
+        r.endContainer.splitText(r.endOffset);
+    }
+    const root = r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement;
+    if (!root) {
+        return false;
+    }
+    const tuples = [];
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let t;
+    while ((t = w.nextNode())) {
+        if (!r.intersectsNode(t)) {
+            continue;
+        }
+        const L = t.length;
+        let s = 0;
+        let e = L;
+        if (t === r.startContainer) {
+            s = r.startOffset;
+        }
+        if (t === r.endContainer) {
+            e = r.endOffset;
+        }
+        if (e <= s) {
+            continue;
+        }
+        tuples.push({ t, s, e });
+    }
+    if (tuples.length === 0) {
+        return false;
+    }
+    for (let i = tuples.length - 1; i >= 0; i -= 1) {
+        const { t: tn, s, e } = tuples[i];
+        if (!tn.parentNode) {
+            continue;
+        }
+        const sub = document.createRange();
+        try {
+            sub.setStart(tn, s);
+            sub.setEnd(tn, e);
+        } catch (err) {
+            console.warn('wrapGmThreadPerTextNodeExtract: invalid offsets', err);
+            return false;
+        }
+        const span = document.createElement('span');
+        span.setAttribute('data-gm-thread-id', threadId);
+        span.className = 'gm-thread-anchor';
+        try {
+            const frag = sub.extractContents();
+            span.appendChild(frag);
+            sub.insertNode(span);
+        } catch (err) {
+            console.warn('wrapGmThreadPerTextNodeExtract: segment failed', err);
+            return false;
+        }
+    }
+    return true;
+}
+
 function wrapGmThreadRangeStable(range, threadId) {
     if (!range || range.collapsed || !threadId) {
         return false;
@@ -659,12 +761,11 @@ function wrapGmThreadRangeStable(range, threadId) {
         const span = document.createElement('span');
         span.setAttribute('data-gm-thread-id', threadId);
         span.className = 'gm-thread-anchor';
-        const r = range.cloneRange();
-        r.surroundContents(span);
+        const rTry = range.cloneRange();
+        rTry.surroundContents(span);
         return true;
-    } catch (e) {
-        console.warn('wrapGmThreadRangeStable: surroundContents failed (range may cross blocks)', e);
-        return false;
+    } catch (_) {
+        return wrapGmThreadPerTextNodeExtract(range, threadId);
     }
 }
 
@@ -1095,6 +1196,24 @@ const ManagementMeetingNotes = () => {
     const [gmMinuteInlinePopover, setGmMinuteInlinePopover] = useState(null);
     /** Clicking a highlight in the editor focuses that thread in the right sidebar. */
     const [gmSidebarFocusThreadId, setGmSidebarFocusThreadId] = useState(null);
+    /** General minutes comment threads panel (xl: right column). Persisted so preference survives reload. */
+    const [gmCommentsSidebarVisible, setGmCommentsSidebarVisible] = useState(() => {
+        try {
+            return typeof localStorage !== 'undefined' && localStorage.getItem('managementMeetingGmCommentsSidebar') !== '0';
+        } catch (_) {
+            return true;
+        }
+    });
+    const setGmCommentsSidebarVisiblePersisted = useCallback((next) => {
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('managementMeetingGmCommentsSidebar', next ? '1' : '0');
+            }
+        } catch (_) {
+            /* ignore */
+        }
+        setGmCommentsSidebarVisible(!!next);
+    }, []);
     // { weeklyNotesId, weekKey, start, end, quote, phase: 'chip'|'compose', top, left }
     
     // Refs for cursor position preservation
@@ -1624,6 +1743,69 @@ const ManagementMeetingNotes = () => {
                 localPartial.generalMinutes = generalMinutesUpdate;
             }
             updateWeeklyNotesLocal(weeklyNotesId, localPartial, monthlyId);
+        },
+        [currentMonthlyNotes, updateWeeklyNotesLocal]
+    );
+
+    const deleteGmMinuteThread = useCallback(
+        async (weeklyNotesId, threadId) => {
+            if (!weeklyNotesId || !threadId) {
+                return;
+            }
+            if (!window.confirm('Delete this comment thread and remove its highlight from the minutes?')) {
+                return;
+            }
+            const w = currentMonthlyNotes?.weeklyNotes?.find((x) => x.id === weeklyNotesId);
+            if (!w) {
+                return;
+            }
+            const monthlyId = currentMonthlyNotes?.id || null;
+            const existing = gmParseInlineThreadsRaw(w?.generalMinutesThreads);
+            const next = existing.filter((th) => th.id !== threadId);
+
+            const host =
+                typeof document !== 'undefined'
+                    ? document.querySelector(`[data-gm-editor-host="${String(weeklyNotesId)}"]`)
+                    : null;
+            const editor = host?.querySelector('[contenteditable="true"]');
+            let generalMinutesUpdate;
+            if (editor) {
+                gmUnwrapThreadSpansInElement(editor, threadId);
+                generalMinutesUpdate = editor.innerHTML;
+                generalMinutesValuesRef.current[weeklyNotesId] = generalMinutesUpdate;
+                lastSavedGeneralMinutesHash.current[weeklyNotesId] = generalMinutesUpdate;
+            } else {
+                const htmlFromRef = generalMinutesValuesRef.current[weeklyNotesId];
+                const base =
+                    htmlFromRef !== undefined && htmlFromRef !== null ? htmlFromRef : String(w.generalMinutes ?? '');
+                const stripped = gmStripThreadSpansFromHtmlString(base, threadId);
+                if (stripped !== base) {
+                    generalMinutesUpdate = stripped;
+                    generalMinutesValuesRef.current[weeklyNotesId] = stripped;
+                    lastSavedGeneralMinutesHash.current[weeklyNotesId] = stripped;
+                }
+            }
+
+            const htmlForPlain =
+                generalMinutesUpdate !== undefined
+                    ? generalMinutesUpdate
+                    : generalMinutesValuesRef.current[weeklyNotesId] !== undefined
+                      ? generalMinutesValuesRef.current[weeklyNotesId]
+                      : w?.generalMinutes ?? '';
+            const plain = window.RichTextEditor ? gmHtmlToPlainText(htmlForPlain) : String(htmlForPlain || '');
+            const reconciled = gmReconcileThreadsWithPlain(next, plain).map(({ anchorStale, ...th }) => th);
+
+            const payload = { generalMinutesThreads: reconciled };
+            if (generalMinutesUpdate !== undefined) {
+                payload.generalMinutes = generalMinutesUpdate;
+            }
+            await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, payload);
+            const localPartial = { generalMinutesThreads: reconciled };
+            if (generalMinutesUpdate !== undefined) {
+                localPartial.generalMinutes = generalMinutesUpdate;
+            }
+            updateWeeklyNotesLocal(weeklyNotesId, localPartial, monthlyId);
+            setGmSidebarFocusThreadId((cur) => (cur === threadId ? null : cur));
         },
         [currentMonthlyNotes, updateWeeklyNotesLocal]
     );
@@ -2221,11 +2403,12 @@ const ManagementMeetingNotes = () => {
             }
             e.preventDefault();
             e.stopPropagation();
+            setGmCommentsSidebarVisiblePersisted(true);
             setGmSidebarFocusThreadId(threadId);
             setSelectedWeek(gmIdentifier);
             scrollToWeekId(gmIdentifier);
         },
-        [scrollToWeekId]
+        [scrollToWeekId, setGmCommentsSidebarVisiblePersisted]
     );
 
     useEffect(() => {
@@ -5929,7 +6112,21 @@ const ManagementMeetingNotes = () => {
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-end gap-3 px-0.5">
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-0.5">
+                        <button
+                            type="button"
+                            onClick={() => setGmCommentsSidebarVisiblePersisted(!gmCommentsSidebarVisible)}
+                            className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                isDark
+                                    ? 'border-slate-600/80 bg-slate-800/80 text-slate-200 hover:bg-slate-800'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
+                            }`}
+                            aria-expanded={gmCommentsSidebarVisible}
+                            aria-controls={gmCommentsSidebarVisible ? 'gm-minutes-comments-aside' : undefined}
+                        >
+                            <i className={`fas mr-2 ${gmCommentsSidebarVisible ? 'fa-eye-slash' : 'fa-comments'}`} aria-hidden />
+                            {gmCommentsSidebarVisible ? 'Hide comments' : 'Show comments'}
+                        </button>
                         <div
                             className={`inline-flex items-center gap-3 rounded-2xl border px-3 py-2 ${
                                 isDark
@@ -7423,18 +7620,30 @@ const ManagementMeetingNotes = () => {
                   )
                 : null}
             </div>
-            {currentMonthlyNotes && Array.isArray(weeks) && weeks.length > 0 ? (
+            {currentMonthlyNotes && Array.isArray(weeks) && weeks.length > 0 && gmCommentsSidebarVisible ? (
                 <aside
+                    id="gm-minutes-comments-aside"
                     className={`mt-4 w-full shrink-0 rounded-2xl border p-4 sm:p-5 xl:mt-0 xl:w-[min(22rem,calc(100vw-2rem))] xl:max-h-[calc(100vh-1.5rem)] xl:overflow-y-auto xl:sticky xl:top-4 ${
                         isDark ? 'border-slate-700/80 bg-slate-900/55' : 'border-slate-200/90 bg-white shadow-sm'
                     }`}
                     aria-label="General minutes text comments"
                 >
-                    <h3
-                        className={`text-[10px] font-bold uppercase tracking-[0.14em] mb-3 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
-                    >
-                        General minutes comments
-                    </h3>
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                        <h3
+                            className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
+                        >
+                            General minutes comments
+                        </h3>
+                        <button
+                            type="button"
+                            onClick={() => setGmCommentsSidebarVisiblePersisted(false)}
+                            className={`shrink-0 rounded-lg p-1.5 transition ${isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'}`}
+                            title="Hide comments sidebar"
+                            aria-label="Hide comments sidebar"
+                        >
+                            <i className="fas fa-times text-xs" aria-hidden />
+                        </button>
+                    </div>
                     {gmScreenSidebarWeeks.length === 0 ? (
                         <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
                             No threads yet. Select text in a week’s General minutes, then use Comment to start a discussion.
@@ -7470,39 +7679,48 @@ const ManagementMeetingNotes = () => {
                                                         {(t.quote || '').slice(0, 160)}
                                                         {(t.quote || '').length > 160 ? '…' : ''}
                                                     </span>
-                                                    <button
-                                                        type="button"
-                                                        className={`shrink-0 text-[10px] underline ${isDark ? 'text-primary-400' : 'text-primary-600'}`}
-                                                        onClick={() => {
-                                                            setGmSidebarFocusThreadId(t.id);
-                                                            setSelectedWeek(gmIdent);
-                                                            scrollToWeekId(gmIdent);
-                                                            const run = () => {
-                                                                const host = document.querySelector(
-                                                                    `[data-gm-editor-host="${String(week.id)}"]`
-                                                                );
-                                                                if (!host) {
-                                                                    return;
-                                                                }
-                                                                const ed = host.querySelector('[contenteditable="true"]');
-                                                                const ta = host.querySelector('textarea');
-                                                                if (ed) {
-                                                                    ed.focus();
-                                                                    gmSetSelectionByPlainOffsets(ed, t.start, t.end);
-                                                                } else if (ta) {
-                                                                    ta.focus();
-                                                                    try {
-                                                                        ta.setSelectionRange(t.start, t.end);
-                                                                    } catch (_) {
-                                                                        /* ignore */
+                                                    <div className="flex shrink-0 flex-col items-end gap-0.5">
+                                                        <button
+                                                            type="button"
+                                                            className={`text-[10px] underline ${isDark ? 'text-primary-400' : 'text-primary-600'}`}
+                                                            onClick={() => {
+                                                                setGmSidebarFocusThreadId(t.id);
+                                                                setSelectedWeek(gmIdent);
+                                                                scrollToWeekId(gmIdent);
+                                                                const run = () => {
+                                                                    const host = document.querySelector(
+                                                                        `[data-gm-editor-host="${String(week.id)}"]`
+                                                                    );
+                                                                    if (!host) {
+                                                                        return;
                                                                     }
-                                                                }
-                                                            };
-                                                            requestAnimationFrame(() => requestAnimationFrame(run));
-                                                        }}
-                                                    >
-                                                        Jump
-                                                    </button>
+                                                                    const ed = host.querySelector('[contenteditable="true"]');
+                                                                    const ta = host.querySelector('textarea');
+                                                                    if (ed) {
+                                                                        ed.focus();
+                                                                        gmSetSelectionByPlainOffsets(ed, t.start, t.end);
+                                                                    } else if (ta) {
+                                                                        ta.focus();
+                                                                        try {
+                                                                            ta.setSelectionRange(t.start, t.end);
+                                                                        } catch (_) {
+                                                                            /* ignore */
+                                                                        }
+                                                                    }
+                                                                };
+                                                                requestAnimationFrame(() => requestAnimationFrame(run));
+                                                            }}
+                                                        >
+                                                            Jump
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className={`text-[10px] underline ${isDark ? 'text-rose-400' : 'text-rose-600'}`}
+                                                            onClick={() => void deleteGmMinuteThread(week.id, t.id)}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
                                                 </div>
                                                 {t.anchorStale ? (
                                                     <span
