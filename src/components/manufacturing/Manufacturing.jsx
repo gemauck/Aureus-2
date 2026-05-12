@@ -214,17 +214,24 @@ function inventoryRowsEquivalentForUi(prevRows, nextRows) {
   if (!Array.isArray(prevRows) || !Array.isArray(nextRows)) return false;
   if (prevRows.length !== nextRows.length) return false;
 
-  const fingerprintFor = (row) => [
-    row?.inventoryItemId || row?.id || '',
-    row?.id || '',
-    Number(row?.quantity) || 0,
-    Number(row?.availableQuantity) || 0,
-    Number(row?.allocatedQuantity) || 0,
-    Number(row?.unitCost) || 0,
-    Number(row?.totalValue) || 0,
-    row?.status || '',
-    row?.updatedAt || ''
-  ].join('|');
+  const fingerprintFor = (row) => {
+    const ledgerSig =
+      typeof row?.ledgerReconciled === 'boolean'
+        ? `${row.ledgerReconciled ? 1 : 0}:${Number(row?.ledgerMovementNet) || 0}:${Number(row?.ledgerVariance) || 0}`
+        : '';
+    return [
+      row?.inventoryItemId || row?.id || '',
+      row?.id || '',
+      Number(row?.quantity) || 0,
+      Number(row?.availableQuantity) || 0,
+      Number(row?.allocatedQuantity) || 0,
+      Number(row?.unitCost) || 0,
+      Number(row?.totalValue) || 0,
+      row?.status || '',
+      row?.updatedAt || '',
+      ledgerSig
+    ].join('|');
+  };
 
   for (let i = 0; i < prevRows.length; i += 1) {
     if (fingerprintFor(prevRows[i]) !== fingerprintFor(nextRows[i])) {
@@ -3625,6 +3632,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       setShowLedgerMismatchOnly(false);
     }
   }, [selectedLocationId]);
+
+  /** Unreconciled filter needs `ledgerReconciled` from API; bypass GET cache once when enabling. */
+  useEffect(() => {
+    if (!showLedgerMismatchOnly || selectedLocationId !== 'all' || activeTab !== 'inventory') {
+      return undefined;
+    }
+    void reloadInventoryForLocation({ forceRefresh: true });
+  }, [showLedgerMismatchOnly, selectedLocationId, activeTab, reloadInventoryForLocation]);
 
   useEffect(() => {
     let cancelled = false;
