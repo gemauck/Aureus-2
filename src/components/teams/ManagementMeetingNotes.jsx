@@ -601,9 +601,10 @@ function gmCaptureSelectionTextarea(ta) {
     return { start, end, quote, rect: r };
 }
 
-function gmSetSelectionByPlainOffsets(editorEl, start, end) {
+/** Build a DOM range from linear text offsets (same walker as `gmElementPlainTextLinear`). */
+function gmRangeFromPlainOffsets(editorEl, start, end) {
     if (!editorEl || typeof start !== 'number' || typeof end !== 'number') {
-        return false;
+        return null;
     }
     const walk = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT, null);
     let pos = 0;
@@ -629,12 +630,24 @@ function gmSetSelectionByPlainOffsets(editorEl, start, end) {
         pos += len;
     }
     if (!startNode || !endNode) {
-        return false;
+        return null;
     }
     try {
         const r = document.createRange();
         r.setStart(startNode, startOff);
         r.setEnd(endNode, endOff);
+        return r;
+    } catch (_) {
+        return null;
+    }
+}
+
+function gmSetSelectionByPlainOffsets(editorEl, start, end) {
+    const r = gmRangeFromPlainOffsets(editorEl, start, end);
+    if (!r) {
+        return false;
+    }
+    try {
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(r);
@@ -642,6 +655,119 @@ function gmSetSelectionByPlainOffsets(editorEl, start, end) {
         return true;
     } catch (_) {
         return false;
+    }
+}
+
+/** Per-week memo key for injected GM anchors (avoids DOM work every render). */
+function gmQuickHash(str) {
+    const s = String(str || '');
+    let h = 5381;
+    const max = Math.min(s.length, 48000);
+    for (let i = 0; i < max; i += 1) {
+        h = (h * 33) ^ s.charCodeAt(i);
+    }
+    return `${s.length}:${(h >>> 0).toString(36)}`;
+}
+
+function gmStableThreadsAnchorKey(threads) {
+    if (!Array.isArray(threads) || threads.length === 0) {
+        return '';
+    }
+    return threads
+        .map((t) => `${t.id}:${t.start}:${t.end}:${t.resolved ? 1 : 0}`)
+        .sort()
+        .join('|');
+}
+
+const gmDisplayHtmlCache = new Map();
+
+function getGmRichTextEditorValue(week, editingWeekIdRef, valuesRef) {
+    if (!week?.id) {
+        return '';
+    }
+    const isDraft = editingWeekIdRef?.current === week.id && valuesRef?.current[week.id] !== undefined;
+    const raw = isDraft ? valuesRef.current[week.id] : week.generalMinutes || '';
+    const plain = gmHtmlToPlainText(typeof raw === 'string' ? raw : '');
+    const threads = gmReconcileThreadsWithPlain(gmParseInlineThreadsRaw(week.generalMinutesThreads), plain);
+    const sig = `${isDraft ? 'd' : 's'}|${gmQuickHash(raw)}|${gmStableThreadsAnchorKey(threads)}`;
+    const prev = gmDisplayHtmlCache.get(week.id);
+    if (prev && prev.sig === sig) {
+        return prev.html;
+    }
+    const html = gmEnsureThreadAnchorsInHtml(typeof raw === 'string' ? raw : '', threads);
+    gmDisplayHtmlCache.set(week.id, { sig, html });
+    return html;
+}
+
+/**
+ * Insert missing `span.gm-thread-anchor` wraps for threads whose HTML has no anchor yet.
+ * Uses the same wrap helpers as live commenting; runs in a hidden host on `document.body` briefly for reliable ranges.
+ */
+function gmEnsureThreadAnchorsInHtml(html, threads) {
+    if (typeof document === 'undefined' || !document.body) {
+        return typeof html === 'string' ? html : '';
+    }
+    if (typeof html !== 'string' || !html) {
+        return typeof html === 'string' ? html : '';
+    }
+    const list = Array.isArray(threads)
+        ? threads.filter((t) => t && t.id && typeof t.start === 'number' && typeof t.end === 'number' && t.end > t.start)
+        : [];
+    if (list.length === 0) {
+        return html;
+    }
+    const sorted = [...list].sort((a, b) => a.start - b.start);
+    let host = null;
+    let appended = false;
+    try {
+        host = document.createElement('div');
+        host.setAttribute('data-gm-anchor-inject', '1');
+        host.style.cssText =
+            'position:fixed;left:-99999px;top:0;width:min(1600px,100vw);max-height:90vh;overflow:auto;opacity:0;pointer-events:none;visibility:hidden;z-index:-1;';
+        host.innerHTML = html;
+        document.body.appendChild(host);
+        appended = true;
+
+        for (let i = 0; i < sorted.length; i += 1) {
+            const t = sorted[i];
+            const tid = String(t.id);
+            const esc = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(tid) : tid.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            if (host.querySelector(`span[data-gm-thread-id="${esc}"]`)) {
+                continue;
+            }
+            const plainNow = gmElementPlainTextLinear(host);
+            const start = Math.max(0, Math.min(plainNow.length, t.start));
+            const end = Math.max(start, Math.min(plainNow.length, t.end));
+            if (end <= start) {
+                continue;
+            }
+            const r = gmRangeFromPlainOffsets(host, start, end);
+            if (!r || r.collapsed) {
+                continue;
+            }
+            wrapGmThreadRangeStable(r, tid);
+        }
+
+        sorted.forEach((t) => {
+            const tid = String(t.id);
+            const esc = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(tid) : tid.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            host.querySelectorAll(`span[data-gm-thread-id="${esc}"]`).forEach((el) => {
+                if (t.resolved) {
+                    el.classList.add('gm-thread-resolved');
+                } else {
+                    el.classList.remove('gm-thread-resolved');
+                }
+            });
+        });
+
+        return host.innerHTML;
+    } catch (e) {
+        console.warn('gmEnsureThreadAnchorsInHtml:', e);
+        return html;
+    } finally {
+        if (appended && host && host.parentNode) {
+            host.parentNode.removeChild(host);
+        }
     }
 }
 
@@ -1636,6 +1762,19 @@ const ManagementMeetingNotes = () => {
                       : w.generalMinutes ?? '';
             const plain = window.RichTextEditor ? gmHtmlToPlainText(htmlForPlain) : String(htmlForPlain || '');
             const reconciled = gmReconcileThreadsWithPlain(next, plain).map(({ anchorStale, ...t }) => t);
+
+            if (generalMinutesUpdate === undefined && window.RichTextEditor) {
+                const baseHtml = typeof htmlForPlain === 'string' ? htmlForPlain : '';
+                const mergedHtml = gmEnsureThreadAnchorsInHtml(baseHtml, reconciled);
+                if (mergedHtml !== baseHtml) {
+                    generalMinutesUpdate = mergedHtml;
+                    generalMinutesValuesRef.current[pop.weeklyNotesId] = mergedHtml;
+                    if (editor && pop.editorKind === 'richtext') {
+                        editor.innerHTML = mergedHtml;
+                    }
+                    gmDisplayHtmlCache.delete(pop.weeklyNotesId);
+                }
+            }
 
             const payload = { generalMinutesThreads: reconciled };
             if (generalMinutesUpdate !== undefined) {
@@ -6406,7 +6545,7 @@ const ManagementMeetingNotes = () => {
                                                         >
                                                             <window.RichTextEditor
                                                                 key={`weekly-gm-col-${week.id}`}
-                                                                value={week.generalMinutes || ''}
+                                                                value={getGmRichTextEditorValue(week, generalMinutesEditingWeekIdRef, generalMinutesValuesRef)}
                                                                 onChange={(html) => handleGeneralMinutesChange(week.id, html)}
                                                                 onBlur={(html) => {
                                                                     generalMinutesEditingWeekIdRef.current = null;
