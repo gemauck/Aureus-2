@@ -1358,6 +1358,8 @@ model TeamDocument {
   category    String                    @default("General")
   description String                    @default("")
   content     String                    @default("")
+  /// Inline comment threads on Notes text (selection anchors + messages with @mentions)
+  contentThreads Json @default("[]")
   version     String                    @default("1.0")
   status      String                    @default("Draft")
   tags        Json?                     @default("[]") // JSONB array of strings

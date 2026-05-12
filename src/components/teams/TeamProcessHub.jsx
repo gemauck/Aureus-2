@@ -307,6 +307,38 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
         loadAll(false);
     }, [loadAll]);
 
+    const openedProcessDocFromUrlRef = useRef(false);
+    useEffect(() => {
+        openedProcessDocFromUrlRef.current = false;
+    }, [team?.id]);
+
+    useEffect(() => {
+        if (loading || !documents.length) return;
+        if (openedProcessDocFromUrlRef.current) return;
+        let want = '';
+        try {
+            const hash = window.location.hash || '';
+            const qi = hash.indexOf('?');
+            if (qi !== -1) {
+                want = new URLSearchParams(hash.slice(qi + 1)).get('processDoc') || '';
+            }
+        } catch (_) {
+            want = '';
+        }
+        if (!want) return;
+        const found = documents.find((d) => String(d.id) === String(want));
+        if (!found) return;
+        openedProcessDocFromUrlRef.current = true;
+        setSelected({
+            kind: 'document',
+            id: found.id,
+            title: found.title,
+            updatedAt: found.updatedAt,
+            sub: '',
+            raw: found
+        });
+    }, [loading, documents]);
+
     const artifacts = useMemo(() => {
         const wf = workflows.map((w) => ({
             kind: 'workflow',
@@ -1360,6 +1392,7 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
                     {selectedDocument && (
                         <DocumentDetailPane
                             doc={selectedDocument}
+                            teamId={team?.id}
                             isDark={isDark}
                             onAssignGroup={assignSelectedToGroup}
                             onUpdate={async (patch) => {
@@ -1461,26 +1494,103 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     );
 };
 
-function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) {
-    const [title, setTitle] = useState(doc.title || '');
-    const [content, setContent] = useState(doc.content || '');
-    useEffect(() => {
-        setTitle(doc.title || '');
-        setContent(doc.content || '');
-    }, [doc.id, doc.title, doc.content]);
+function genThreadId() {
+    return `thr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
-    let safeAttachments = [];
-    if (Array.isArray(doc.attachments)) safeAttachments = doc.attachments;
-    else if (typeof doc.attachments === 'string') {
+function genMessageId() {
+    return `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function parseContentThreadsRaw(raw) {
+    if (Array.isArray(raw)) {
+        return raw.filter((t) => t && typeof t === 'object' && typeof t.id === 'string');
+    }
+    if (typeof raw === 'string') {
         try {
-            safeAttachments = JSON.parse(doc.attachments || '[]');
+            const p = JSON.parse(raw || '[]');
+            return Array.isArray(p) ? p.filter((t) => t && typeof t === 'object' && typeof t.id === 'string') : [];
         } catch (_) {
-            safeAttachments = [];
+            return [];
         }
     }
-    if (!Array.isArray(safeAttachments)) safeAttachments = [];
+    return [];
+}
 
-    const firstPdf = safeAttachments.find((a) => (a.mimeType && a.mimeType.includes('pdf')) || (a.name || '').toLowerCase().endsWith('.pdf'));
+function reconcileThreadsWithContent(threads, content) {
+    const text = String(content || '');
+    return threads.map((t) => {
+        const quote = String(t.quote || '');
+        let start = Number(t.start);
+        let end = Number(t.end);
+        if (Number.isNaN(start)) start = 0;
+        if (Number.isNaN(end)) end = 0;
+        if (quote && text.slice(start, end) === quote) {
+            return { ...t, start, end, anchorStale: false };
+        }
+        if (quote) {
+            const idx = text.indexOf(quote);
+            if (idx !== -1) {
+                return { ...t, start: idx, end: idx + quote.length, anchorStale: false };
+            }
+        }
+        return { ...t, start, end, anchorStale: true };
+    });
+}
+
+function buildTeamProcessHubDocLink(teamId, documentId) {
+    try {
+        const base = `${window.location.origin}${window.location.pathname || '/'}`;
+        const search = window.location.search || '';
+        return `${base}${search}#/teams?tab=process-flows&team=${encodeURIComponent(teamId || '')}&processDoc=${encodeURIComponent(documentId || '')}`;
+    } catch (_) {
+        return `#/teams?tab=process-flows&team=${encodeURIComponent(teamId || '')}&processDoc=${encodeURIComponent(documentId || '')}`;
+    }
+}
+
+async function notifyTeamDocumentCommentMentions(commentText, { contextTitle, contextLink, authorName }) {
+    if (!commentText?.trim() || !window.MentionHelper?.hasMentions?.(commentText)) return;
+    try {
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        const response = await fetch('/api/users', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        const allUsers = data.data?.users || data.users || [];
+        await window.MentionHelper.processMentions(commentText, contextTitle, contextLink, authorName, allUsers);
+    } catch (e) {
+        console.error('Team document comment mentions:', e);
+    }
+}
+
+function DocumentDetailPane({ doc, teamId, isDark, onUpdate, onDelete, onAssignGroup }) {
+    const [title, setTitle] = useState(doc.title || '');
+    const [content, setContent] = useState(doc.content || '');
+    const [threads, setThreads] = useState(() => reconcileThreadsWithContent(parseContentThreadsRaw(doc.contentThreads), doc.content || ''));
+    const [selectionHint, setSelectionHint] = useState(null);
+    const [pendingNewThread, setPendingNewThread] = useState(null);
+    const notesRef = useRef(null);
+
+    const safeAttachments = useMemo(() => {
+        let list = [];
+        if (Array.isArray(doc.attachments)) list = doc.attachments;
+        else if (typeof doc.attachments === 'string') {
+            try {
+                list = JSON.parse(doc.attachments || '[]');
+            } catch (_) {
+                list = [];
+            }
+        }
+        return Array.isArray(list) ? list : [];
+    }, [doc.attachments]);
+
+    const firstPdf = useMemo(
+        () => safeAttachments.find((a) => (a.mimeType && a.mimeType.includes('pdf')) || (a.name || '').toLowerCase().endsWith('.pdf')),
+        [safeAttachments]
+    );
+
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
     const [pdfPreviewError, setPdfPreviewError] = useState('');
     const [pdfPagePreviews, setPdfPagePreviews] = useState([]);
@@ -1515,7 +1625,6 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) 
                 objectUrl = URL.createObjectURL(blob);
                 if (!cancelled) setPdfPreviewUrl(objectUrl);
 
-                // Browser PDF plugins are inconsistent; build a reliable canvas preview with pdf.js.
                 const pdfjsLib = await ensurePdfJs();
                 const pdfDoc = await pdfjsLib.getDocument({ data: pdfArrayBuffer }).promise;
                 const pageImages = [];
@@ -1544,98 +1653,383 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) 
         };
     }, [firstPdf?.url]);
 
+    useEffect(() => {
+        setTitle(doc.title || '');
+        setContent(doc.content || '');
+        setThreads(reconcileThreadsWithContent(parseContentThreadsRaw(doc.contentThreads), doc.content || ''));
+        setPendingNewThread(null);
+        setSelectionHint(null);
+    }, [doc.id, doc.title, doc.content, doc.contentThreads]);
+
+    const threadsView = useMemo(() => reconcileThreadsWithContent(threads, content), [threads, content]);
+
+    const captureSelection = useCallback(() => {
+        const el = notesRef.current;
+        if (!el) return;
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        if (typeof start !== 'number' || typeof end !== 'number' || end <= start) {
+            setSelectionHint(null);
+            return;
+        }
+        const quote = String(content || '').slice(start, end);
+        if (!quote.trim()) {
+            setSelectionHint(null);
+            return;
+        }
+        setSelectionHint({ start, end, quote });
+    }, [content]);
+
+    const persistThreads = useCallback(
+        async (nextThreads) => {
+            setThreads(nextThreads);
+            const reconciled = reconcileThreadsWithContent(nextThreads, content);
+            const forApi = reconciled.map(({ anchorStale, ...t }) => t);
+            await onUpdate({ contentThreads: forApi });
+        },
+        [content, onUpdate]
+    );
+
+    const currentUser = useMemo(() => {
+        const u = window.storage?.getUserInfo?.() || {};
+        return {
+            id: u.id || u.userId || '',
+            name: u.name || u.displayName || 'User',
+            email: u.email || ''
+        };
+    }, []);
+
+    const mentionContext = useMemo(
+        () => ({
+            title: `Team document: ${title || doc.title || 'Untitled'}`,
+            link: buildTeamProcessHubDocLink(teamId, doc.id)
+        }),
+        [title, doc.title, doc.id, teamId]
+    );
+
+    const startThreadFromSelection = useCallback(() => {
+        if (!selectionHint) return;
+        setPendingNewThread(selectionHint);
+    }, [selectionHint]);
+
+    const handleSubmitNewThread = useCallback(
+        async (commentText) => {
+            if (!pendingNewThread || !commentText?.trim()) return;
+            const { start, end, quote } = pendingNewThread;
+            const msg = {
+                id: genMessageId(),
+                text: commentText.trim(),
+                createdAt: new Date().toISOString(),
+                authorId: currentUser.id,
+                authorName: currentUser.name,
+                authorEmail: currentUser.email
+            };
+            const next = [
+                ...threads,
+                {
+                    id: genThreadId(),
+                    start,
+                    end,
+                    quote,
+                    resolved: false,
+                    messages: [msg]
+                }
+            ];
+            await persistThreads(next);
+            setPendingNewThread(null);
+            setSelectionHint(null);
+            void notifyTeamDocumentCommentMentions(commentText.trim(), {
+                contextTitle: mentionContext.title,
+                contextLink: mentionContext.link,
+                authorName: currentUser.name || currentUser.email || 'Someone'
+            });
+        },
+        [pendingNewThread, threads, persistThreads, currentUser, mentionContext]
+    );
+
+    const handleReply = useCallback(
+        async (threadId, commentText) => {
+            if (!commentText?.trim()) return;
+            const msg = {
+                id: genMessageId(),
+                text: commentText.trim(),
+                createdAt: new Date().toISOString(),
+                authorId: currentUser.id,
+                authorName: currentUser.name,
+                authorEmail: currentUser.email
+            };
+            const next = threads.map((t) => (t.id === threadId ? { ...t, messages: [...(t.messages || []), msg] } : t));
+            await persistThreads(next);
+            void notifyTeamDocumentCommentMentions(commentText.trim(), {
+                contextTitle: mentionContext.title,
+                contextLink: mentionContext.link,
+                authorName: currentUser.name || currentUser.email || 'Someone'
+            });
+        },
+        [threads, persistThreads, currentUser, mentionContext]
+    );
+
+    const toggleResolved = useCallback(
+        async (threadId, resolved) => {
+            const next = threads.map((t) => (t.id === threadId ? { ...t, resolved: !!resolved } : t));
+            await persistThreads(next);
+        },
+        [threads, persistThreads]
+    );
+
+    const jumpToThread = useCallback(
+        (threadId) => {
+            const t = threadsView.find((x) => x.id === threadId);
+            const el = notesRef.current;
+            if (!t || !el) return;
+            el.focus();
+            try {
+                el.setSelectionRange(t.start, t.end);
+            } catch (_) {
+                /* ignore */
+            }
+        },
+        [threadsView]
+    );
+
+    const CommentInput = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function' ? window.CommentInputWithMentions : null;
+
+    const sortedThreads = useMemo(() => [...threadsView].sort((a, b) => a.start - b.start), [threadsView]);
+
     return (
-        <div className={`flex-1 overflow-y-auto p-5 space-y-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-            <div className="flex justify-between gap-2 flex-wrap items-center">
-                <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    onBlur={() => onUpdate({ title: title.trim() })}
-                    className={`text-xl font-semibold bg-transparent border-b border-transparent focus:border-cyan-500 outline-none flex-1 min-w-[200px] ${isDark ? 'text-white' : 'text-gray-900'}`}
-                />
-                <button
-                    type="button"
-                    onClick={onAssignGroup}
-                    className={`text-sm px-3 py-1.5 rounded-lg border ${isDark ? 'border-cyan-900 text-cyan-300 hover:bg-cyan-950/40' : 'border-sky-200 text-sky-700 hover:bg-sky-50'}`}
-                >
-                    Group
-                </button>
-                <button
-                    type="button"
-                    onClick={onDelete}
-                    className={`text-sm px-3 py-1.5 rounded-lg border ${isDark ? 'border-red-900 text-red-400' : 'border-red-200 text-red-700'}`}
-                >
-                    Delete
-                </button>
-            </div>
-            <div>
-                <h3 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Attachments</h3>
-                <ul className="space-y-2">
-                    {safeAttachments.length === 0 && <li className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No files attached.</li>}
-                    {safeAttachments.map((att, i) => (
-                        <li key={i} className="text-sm">
-                            <a
-                                href={att.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`underline ${isDark ? 'text-cyan-400' : 'text-sky-700'}`}
-                            >
-                                {att.name || att.url}
-                            </a>
-                        </li>
-                    ))}
-                </ul>
-                {firstPdf && (
-                    <div className="mt-4">
-                        {pdfPreviewError && (
-                            <p className={`text-xs mb-2 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                                {pdfPreviewError} Use the attachment link above to open it in a new tab.
-                            </p>
-                        )}
-                        {pdfPagePreviews.length > 0 ? (
-                            <div className={`w-full max-h-[min(70vh,520px)] overflow-auto rounded-xl border p-2 space-y-2 ${isDark ? 'border-gray-700 bg-gray-950/60' : 'border-gray-300 bg-gray-100/70'}`}>
-                                {pdfPagePreviews.map((src, idx) => (
-                                    <img
-                                        key={`${doc.id}-pdf-page-${idx}`}
-                                        src={src}
-                                        alt={`PDF page ${idx + 1}`}
-                                        className={`w-full rounded-lg border ${isDark ? 'border-gray-800 bg-white' : 'border-gray-200 bg-white'}`}
-                                    />
-                                ))}
-                            </div>
-                        ) : (
-                            <object
-                                data={pdfPreviewUrl || firstPdf.url}
-                                type="application/pdf"
-                                className={`w-full h-[min(70vh,520px)] rounded-xl border ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
-                            >
-                                <div className={`text-sm p-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                    PDF preview is unavailable in this browser. Open{' '}
+        <div className={`flex-1 flex flex-col min-h-0 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+            <div className="flex flex-1 min-h-0 flex-col xl:flex-row gap-4 overflow-hidden p-5">
+                <div className={`flex-1 min-w-0 min-h-0 overflow-y-auto space-y-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                    <div className="flex justify-between gap-2 flex-wrap items-center">
+                        <input
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            onBlur={() => onUpdate({ title: title.trim() })}
+                            className={`text-xl font-semibold bg-transparent border-b border-transparent focus:border-cyan-500 outline-none flex-1 min-w-[200px] ${isDark ? 'text-white' : 'text-gray-900'}`}
+                        />
+                        <button
+                            type="button"
+                            onClick={onAssignGroup}
+                            className={`text-sm px-3 py-1.5 rounded-lg border ${isDark ? 'border-cyan-900 text-cyan-300 hover:bg-cyan-950/40' : 'border-sky-200 text-sky-700 hover:bg-sky-50'}`}
+                        >
+                            Group
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onDelete}
+                            className={`text-sm px-3 py-1.5 rounded-lg border ${isDark ? 'border-red-900 text-red-400' : 'border-red-200 text-red-700'}`}
+                        >
+                            Delete
+                        </button>
+                    </div>
+                    <div>
+                        <h3 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Attachments</h3>
+                        <ul className="space-y-2">
+                            {safeAttachments.length === 0 && <li className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No files attached.</li>}
+                            {safeAttachments.map((att, i) => (
+                                <li key={i} className="text-sm">
                                     <a
-                                        href={firstPdf.url}
+                                        href={att.url}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className={`underline ${isDark ? 'text-cyan-400' : 'text-sky-700'}`}
                                     >
-                                        {firstPdf.name || 'the PDF'}
+                                        {att.name || att.url}
                                     </a>
-                                    .
-                                </div>
-                            </object>
+                                </li>
+                            ))}
+                        </ul>
+                        {firstPdf && (
+                            <div className="mt-4">
+                                {pdfPreviewError && (
+                                    <p className={`text-xs mb-2 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                                        {pdfPreviewError} Use the attachment link above to open it in a new tab.
+                                    </p>
+                                )}
+                                {pdfPagePreviews.length > 0 ? (
+                                    <div className={`w-full max-h-[min(70vh,520px)] overflow-auto rounded-xl border p-2 space-y-2 ${isDark ? 'border-gray-700 bg-gray-950/60' : 'border-gray-300 bg-gray-100/70'}`}>
+                                        {pdfPagePreviews.map((src, idx) => (
+                                            <img
+                                                key={`${doc.id}-pdf-page-${idx}`}
+                                                src={src}
+                                                alt={`PDF page ${idx + 1}`}
+                                                className={`w-full rounded-lg border ${isDark ? 'border-gray-800 bg-white' : 'border-gray-200 bg-white'}`}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <object
+                                        data={pdfPreviewUrl || firstPdf.url}
+                                        type="application/pdf"
+                                        className={`w-full h-[min(70vh,520px)] rounded-xl border ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+                                    >
+                                        <div className={`text-sm p-3 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                            PDF preview is unavailable in this browser. Open{' '}
+                                            <a
+                                                href={firstPdf.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className={`underline ${isDark ? 'text-cyan-400' : 'text-sky-700'}`}
+                                            >
+                                                {firstPdf.name || 'the PDF'}
+                                            </a>
+                                            .
+                                        </div>
+                                    </object>
+                                )}
+                            </div>
                         )}
                     </div>
-                )}
-            </div>
-            <div>
-                <h3 className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Notes</h3>
-                <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    onBlur={() => onUpdate({ content })}
-                    placeholder="Notes, SOP text, or checklist…"
-                    rows={8}
-                    className={`w-full rounded-xl border px-3 py-2 text-sm font-sans ${isDark ? 'bg-gray-900 border-gray-700 text-gray-100' : 'bg-white border-gray-300'}`}
-                />
+                    <div>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Notes</h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={startThreadFromSelection}
+                                    disabled={!selectionHint}
+                                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium disabled:opacity-40 disabled:cursor-not-allowed ${
+                                        isDark ? 'border-cyan-900 text-cyan-200 hover:bg-cyan-950/40' : 'border-sky-200 text-sky-800 hover:bg-sky-50'
+                                    }`}
+                                >
+                                    <i className="fas fa-comment-medical mr-1" aria-hidden="true" />
+                                    Comment on selection
+                                </button>
+                            </div>
+                        </div>
+                        <p className={`text-[11px] mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Select any text in the notes, then use{' '}
+                            <span className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Comment on selection</span> to open a thread. Use{' '}
+                            <span className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>@name</span> to tag people.
+                        </p>
+                        <textarea
+                            ref={notesRef}
+                            value={content}
+                            onChange={(e) => setContent(e.target.value)}
+                            onMouseUp={captureSelection}
+                            onKeyUp={captureSelection}
+                            onBlur={() => onUpdate({ content })}
+                            placeholder="Notes, SOP text, or checklist…"
+                            rows={10}
+                            className={`w-full rounded-xl border px-3 py-2 text-sm font-sans ${isDark ? 'bg-gray-900 border-gray-700 text-gray-100' : 'bg-white border-gray-300'}`}
+                        />
+                    </div>
+                </div>
+
+                <aside
+                    className={`w-full xl:w-[min(100%,380px)] xl:shrink-0 max-h-[55vh] xl:max-h-none min-h-0 overflow-y-auto border-t xl:border-t-0 xl:border-l pt-4 xl:pt-0 xl:pl-4 ${
+                        isDark ? 'border-gray-800' : 'border-gray-200'
+                    }`}
+                >
+                    <h3 className={`text-sm font-semibold mb-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Comments on notes</h3>
+                    <p className={`text-[11px] mb-3 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                        Threads are saved with this document. If you edit the notes heavily, use{' '}
+                        <span className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Jump to text</span> to find the quoted passage.
+                    </p>
+
+                    {pendingNewThread && (
+                        <div className={`mb-4 rounded-xl border p-3 space-y-2 ${isDark ? 'border-cyan-900/60 bg-cyan-950/20' : 'border-sky-200 bg-sky-50/80'}`}>
+                            <div className={`text-xs font-semibold ${isDark ? 'text-cyan-200' : 'text-sky-900'}`}>New thread</div>
+                            <blockquote
+                                className={`text-xs border-l-2 pl-2 italic max-h-24 overflow-y-auto ${
+                                    isDark ? 'border-cyan-700 text-gray-300' : 'border-sky-400 text-gray-700'
+                                }`}
+                            >
+                                {pendingNewThread.quote.length > 400 ? `${pendingNewThread.quote.slice(0, 400)}…` : pendingNewThread.quote}
+                            </blockquote>
+                            {CommentInput ? (
+                                <CommentInput
+                                    onSubmit={handleSubmitNewThread}
+                                    placeholder="Write a comment… (@mention, Enter to send)"
+                                    rows={2}
+                                    showButton={true}
+                                    autoFocus={true}
+                                />
+                            ) : (
+                                <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Comment input unavailable — refresh the page.</p>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => setPendingNewThread(null)}
+                                className={`text-xs ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
+
+                    {sortedThreads.length === 0 && !pendingNewThread && (
+                        <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No comment threads yet.</p>
+                    )}
+
+                    <ul className="space-y-3">
+                        {sortedThreads.map((t) => (
+                            <li
+                                key={t.id}
+                                className={`rounded-xl border p-3 space-y-2 ${isDark ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-white'}`}
+                            >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        {t.anchorStale && (
+                                            <span
+                                                className={`inline-block text-[10px] font-semibold uppercase tracking-wide mb-1 px-1.5 py-0.5 rounded ${
+                                                    isDark ? 'bg-amber-900/50 text-amber-200' : 'bg-amber-100 text-amber-900'
+                                                }`}
+                                            >
+                                                Text moved
+                                            </span>
+                                        )}
+                                        <blockquote
+                                            className={`text-xs border-l-2 pl-2 whitespace-pre-wrap break-words max-h-28 overflow-y-auto ${
+                                                isDark ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'
+                                            }`}
+                                        >
+                                            {(t.quote || '').length > 320 ? `${(t.quote || '').slice(0, 320)}…` : t.quote || '(empty)'}
+                                        </blockquote>
+                                    </div>
+                                    <div className="flex flex-col gap-1 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => jumpToThread(t.id)}
+                                            className={`text-[10px] px-2 py-1 rounded border ${isDark ? 'border-gray-600 hover:bg-gray-800' : 'border-gray-300 hover:bg-gray-50'}`}
+                                        >
+                                            Jump to text
+                                        </button>
+                                        <label className={`flex items-center gap-1.5 text-[10px] cursor-pointer ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!t.resolved}
+                                                onChange={(e) => void toggleResolved(t.id, e.target.checked)}
+                                            />
+                                            Resolved
+                                        </label>
+                                    </div>
+                                </div>
+                                <ul className={`space-y-2 text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    {(t.messages || []).map((m) => (
+                                        <li key={m.id} className={`rounded-lg p-2 ${isDark ? 'bg-black/30' : 'bg-gray-50'}`}>
+                                            <div className={`font-medium mb-0.5 ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                {m.authorName || 'Someone'}{' '}
+                                                <span className={`font-normal ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                    · {m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}
+                                                </span>
+                                            </div>
+                                            <div className="whitespace-pre-wrap break-words">{m.text}</div>
+                                        </li>
+                                    ))}
+                                </ul>
+                                {CommentInput ? (
+                                    <CommentInput
+                                        onSubmit={(txt) => void handleReply(t.id, txt)}
+                                        placeholder="Reply… (@mention, Enter to send)"
+                                        rows={2}
+                                        showButton={true}
+                                    />
+                                ) : null}
+                            </li>
+                        ))}
+                    </ul>
+                </aside>
             </div>
         </div>
     );
