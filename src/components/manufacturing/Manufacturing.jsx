@@ -217,7 +217,7 @@ function inventoryRowsEquivalentForUi(prevRows, nextRows) {
   const fingerprintFor = (row) => {
     const ledgerSig =
       typeof row?.ledgerReconciled === 'boolean'
-        ? `${String(row?.ledgerScope || '')}:${row.ledgerReconciled ? 1 : 0}:${Number(row?.ledgerMovementNet) || 0}:${Number(row?.ledgerVariance) || 0}`
+        ? `${String(row?.ledgerScope || '')}:${row.ledgerReconciled ? 1 : 0}:${Number(row?.ledgerMovementNet) || 0}:${Number(row?.ledgerVariance) || 0}:${row?.ledgerPerSiteMismatch ? 1 : 0}`
         : '';
     return [
       row?.inventoryItemId || row?.id || '',
@@ -3581,7 +3581,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesStockView = inventoryStockView === 'all' || metrics.status === inventoryStockView;
       const matchesLedgerMismatch =
         !showLedgerMismatchOnly ||
-        (typeof item.ledgerReconciled === 'boolean' && item.ledgerReconciled === false);
+        (selectedLocationId === 'all'
+          ? (typeof item.ledgerReconciled === 'boolean' && item.ledgerReconciled === false) ||
+            item.ledgerPerSiteMismatch === true
+          : typeof item.ledgerReconciled === 'boolean' && item.ledgerReconciled === false);
 
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart &&
              matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation && matchesCatalogReview && matchesStockView && matchesLedgerMismatch;
@@ -3650,7 +3653,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
 
     return filtered;
-  }, [inventory, searchTerm, filterCategory, columnFilters, sortConfig, showCatalogReviewOnly, showLedgerMismatchOnly, inventoryStockView]);
+  }, [inventory, searchTerm, filterCategory, columnFilters, sortConfig, showCatalogReviewOnly, showLedgerMismatchOnly, selectedLocationId, inventoryStockView]);
 
   useEffect(() => {
     setInventoryListPage(1);
@@ -3894,13 +3897,31 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       inventory.length > 0
         ? inventoryHasAnyLedgerMeta
           ? selectedLocationId === 'all'
-            ? 'No SKUs currently mismatch the stock movement ledger in the combined (all locations) view.'
+            ? 'No SKUs currently mismatch the combined stock movement ledger or any single-warehouse ledger in this view.'
             : `No rows at ${selectedLocationLabel} currently mismatch the per-warehouse movement ledger (same rules as item detail with this site selected).`
           : 'Ledger audit fields were not returned (cached or older API). Try Refresh, a hard reload, or confirm this host is on the latest deploy.'
         : null;
 
     const inventoryLedgerMeta = (item) => typeof item?.ledgerReconciled === 'boolean';
     const inventoryLedgerUnreconciled = (item) => inventoryLedgerMeta(item) && item.ledgerReconciled === false;
+    /** Combined mismatch (orange) or all-locations per-site-only mismatch (amber). */
+    const inventoryLedgerRowTone = (item) => {
+      if (inventoryLedgerUnreconciled(item)) return 'combined';
+      if (selectedLocationId === 'all' && item?.ledgerPerSiteMismatch === true) return 'perSite';
+      return null;
+    };
+    const renderLedgerPerSiteNote = (item) =>
+      item.ledgerPerSiteMismatch === true ? (
+        <div className={`font-semibold leading-tight ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+          At least one warehouse does not match movements at that site.
+        </div>
+      ) : null;
+    const inventoryLedgerSublineClass = (item) => {
+      const t = inventoryLedgerRowTone(item);
+      if (t === 'combined') return isDark ? 'text-orange-200' : 'text-orange-700';
+      if (t === 'perSite') return isDark ? 'text-amber-200' : 'text-amber-700';
+      return isDark ? 'text-emerald-300' : 'text-emerald-600';
+    };
     const formatLedgerQtyLabel = (n) => {
       const x = Number(n);
       if (!Number.isFinite(x)) return '0';
@@ -3929,9 +3950,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <span className="text-sm">
               {selectedLocationId === 'all' ? (
                 <>
-                  Showing only SKUs where <span className="font-semibold">recorded on-hand</span> (all locations combined) does not match the{' '}
-                  <span className="font-semibold">company-wide net of stock movements</span> (internal transfers net to zero; same rules as{' '}
-                  <span className="font-semibold">verify-ledger-reconciliation</span>).
+                  Showing only SKUs where the <span className="font-semibold">combined</span> on-hand (all locations) does not match the{' '}
+                  <span className="font-semibold">company-wide net of stock movements</span>,{' '}
+                  <span className="font-semibold">or</span> where on-hand at <span className="font-semibold">at least one warehouse</span> does not match movements attributed to that site (same rules as{' '}
+                  <span className="font-semibold">verify-ledger-reconciliation</span> and{' '}
+                  <span className="font-semibold">verify-ledger-per-location</span>).
                 </>
               ) : (
                 <>
@@ -4053,7 +4076,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       }`}
                       title={
                         selectedLocationId === 'all'
-                          ? 'Filter to SKUs where combined movement net ≠ recorded quantity (all locations)'
+                          ? 'Filter to SKUs where combined movement net ≠ recorded total, or any warehouse row ≠ movement net at that site'
                           : 'Filter to rows where this warehouse’s movement net ≠ on-hand at this site'
                       }
                     >
@@ -4069,6 +4092,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           {selectedLocationLabel}
                         </span>
                       </div>
+                      {selectedLocationId === 'all' ? (
+                        <div className={`text-[10px] leading-snug mt-1 ${isDark ? 'text-amber-200/85' : 'text-amber-900/90'}`}>
+                          Amber highlight: at least one warehouse row disagrees with movements at that site (combined total may still match).
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -4296,18 +4324,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               })();
               const availableQty = getAvailableInventoryQuantity(item);
               const lineTotalValue = Number(normalizeInventoryItemRow(item).totalValue) || 0;
+              const ledgerTone = inventoryLedgerRowTone(item);
 
               return (
                 <div 
                   key={getInventoryItemId(item) || item.sku} 
                   className={`mobile-card rounded-xl border p-4 shadow-sm cursor-pointer hover:shadow-md transition-all duration-200 ${
-                    inventoryLedgerUnreconciled(item)
+                    ledgerTone === 'combined'
                       ? isDark
                         ? 'bg-orange-950/25 border-orange-700'
                         : 'bg-orange-50 border-orange-300'
-                      : isDark
-                        ? 'bg-gray-900 border-gray-800'
-                        : 'bg-white border-gray-100'
+                      : ledgerTone === 'perSite'
+                        ? isDark
+                          ? 'bg-amber-950/25 border-amber-700'
+                          : 'bg-amber-50 border-amber-300'
+                        : isDark
+                          ? 'bg-gray-900 border-gray-800'
+                          : 'bg-white border-gray-100'
                   }`}
                   onClick={() => setViewingInventoryItemDetail(item)}
                 >
@@ -4390,13 +4423,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           )}
                           {inventoryLedgerMeta(item) && (
                             <div className="text-center text-[11px] leading-tight space-y-0.5 pt-1">
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {formatLedgerQtyLabel(item.ledgerMovementNet)} from movements
                               </div>
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {Number(item.ledgerVariance) >= 0 ? '+' : ''}
                                 {formatLedgerQtyLabel(item.ledgerVariance)} diff
                               </div>
+                              {renderLedgerPerSiteNote(item)}
                             </div>
                           )}
                         </div>
@@ -4416,13 +4450,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           </div>
                           {inventoryLedgerMeta(item) && (
                             <div className="col-span-3 text-center text-[11px] leading-tight space-y-0.5 pt-1 border-t border-gray-100">
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {formatLedgerQtyLabel(item.ledgerMovementNet)} from movements
                               </div>
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {Number(item.ledgerVariance) >= 0 ? '+' : ''}
                                 {formatLedgerQtyLabel(item.ledgerVariance)} diff
                               </div>
+                              {renderLedgerPerSiteNote(item)}
                             </div>
                           )}
                         </div>
@@ -4917,17 +4952,22 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               <tbody className="divide-y divide-gray-200">
                 {paginatedInventory.map(item => {
                   const lineTotalValue = Number(normalizeInventoryItemRow(item).totalValue) || 0;
+                  const ledgerTone = inventoryLedgerRowTone(item);
                   return (
                     <tr 
                       key={getInventoryItemId(item) || item.sku} 
                       className={`cursor-pointer ${
-                        inventoryLedgerUnreconciled(item)
+                        ledgerTone === 'combined'
                           ? isDark
                             ? 'bg-orange-950/30 hover:bg-orange-950/45 border-l-4 border-orange-500'
                             : 'bg-orange-50 hover:bg-orange-100/90 border-l-4 border-orange-400'
-                          : isDark
-                            ? 'hover:bg-gray-800'
-                            : 'hover:bg-gray-50'
+                          : ledgerTone === 'perSite'
+                            ? isDark
+                              ? 'bg-amber-950/25 hover:bg-amber-950/40 border-l-4 border-amber-500'
+                              : 'bg-amber-50 hover:bg-amber-100/90 border-l-4 border-amber-500'
+                            : isDark
+                              ? 'hover:bg-gray-800'
+                              : 'hover:bg-gray-50'
                       }`}
                       onClick={() => setViewingInventoryItemDetail(item)}
                     >
@@ -5034,13 +5074,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <div className="text-[10px] text-gray-500">{item.unit}</div>
                           {inventoryLedgerMeta(item) && (
                             <div className="text-[10px] mt-0.5 space-y-0">
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {formatLedgerQtyLabel(item.ledgerMovementNet)} from movements
                               </div>
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {Number(item.ledgerVariance) >= 0 ? '+' : ''}
                                 {formatLedgerQtyLabel(item.ledgerVariance)} diff
                               </div>
+                              {renderLedgerPerSiteNote(item)}
                             </div>
                           )}
                         </div>
@@ -5051,13 +5092,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           </div>
                           {inventoryLedgerMeta(item) && (
                             <div className="text-[10px] mt-0.5 space-y-0">
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {formatLedgerQtyLabel(item.ledgerMovementNet)} from movements
                               </div>
-                              <div className={item.ledgerReconciled ? 'text-emerald-600' : 'text-orange-700'}>
+                              <div className={inventoryLedgerSublineClass(item)}>
                                 {Number(item.ledgerVariance) >= 0 ? '+' : ''}
                                 {formatLedgerQtyLabel(item.ledgerVariance)} diff
                               </div>
+                              {renderLedgerPerSiteNote(item)}
                             </div>
                           )}
                         </>

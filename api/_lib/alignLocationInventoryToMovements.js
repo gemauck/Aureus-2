@@ -228,6 +228,7 @@ export function annotateInventoryRowsWithWarehouseSiteLedger(rows, movements, lo
     row.ledgerVariance = variance
     row.ledgerReconciled = Math.abs(variance) <= COMBINED_LEDGER_RECONCILE_EPS
     row.ledgerScope = 'warehouse'
+    row.ledgerPerSiteMismatch = false
   }
   return rows
 }

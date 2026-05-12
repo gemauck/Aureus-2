@@ -21,9 +21,10 @@ import { runStockCountTemplateImport } from './_lib/stockCountTemplateImport.js'
 import { runFlexibleStockCountByLocationImport } from './_lib/flexibleStockCountImport.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
 import {
-  loadMovementNetCombinedBySku,
+  buildCombinedMovementNetBySkuFromMovementRows,
   annotateInventoryRowsWithCompanyWideLedger,
-  annotateInventoryRowsWithWarehouseSiteLedger
+  annotateInventoryRowsWithWarehouseSiteLedger,
+  annotateInventoryRowsWithPerWarehouseLedgerMismatch
 } from './_lib/alignLocationInventoryToMovements.js'
 import XLSX from 'xlsx'
 import QRCode from 'qrcode'
@@ -753,15 +754,21 @@ async function buildLocationInventoryResponse(locationId) {
  * Includes items that have no LocationInventory yet (templates with 0 stock everywhere).
  */
 async function buildAllLocationsInventoryResponse() {
-  const locationInventoryRecords = await prisma.locationInventory.findMany({
-    include: { location: true },
-    orderBy: { itemName: 'asc' }
-  })
-
-  // Load all InventoryItem templates (we need metadata for every SKU, including those with no LocationInventory)
-  const allTemplates = await prisma.inventoryItem.findMany({
-    orderBy: [{ locationId: 'asc' }, { updatedAt: 'desc' }]
-  })
+  const [locationInventoryRecords, allTemplates, stockLocations, movements] = await Promise.all([
+    prisma.locationInventory.findMany({
+      include: { location: true },
+      orderBy: { itemName: 'asc' }
+    }),
+    prisma.inventoryItem.findMany({
+      orderBy: [{ locationId: 'asc' }, { updatedAt: 'desc' }]
+    }),
+    prisma.stockLocation.findMany({
+      select: { id: true, code: true }
+    }),
+    prisma.stockMovement.findMany({
+      select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
+    })
+  ])
 
   // One template per SKU (prefer row with null locationId, else first by order)
   const templateBySku = new Map()
@@ -850,8 +857,14 @@ async function buildAllLocationsInventoryResponse() {
     else row.location = 'Multiple locations'
   }
 
-  const movementNetBySku = await loadMovementNetCombinedBySku(prisma)
+  const movementNetBySku = buildCombinedMovementNetBySkuFromMovementRows(movements)
   annotateInventoryRowsWithCompanyWideLedger(result, movementNetBySku)
+  const liMinimal = locationInventoryRecords.map((r) => ({
+    sku: r.sku,
+    locationId: r.locationId,
+    quantity: r.quantity
+  }))
+  annotateInventoryRowsWithPerWarehouseLedgerMismatch(result, movements, stockLocations, liMinimal)
 
   return result
 }
