@@ -627,6 +627,32 @@ try {
       console.error('Error loading inventory for location:', error);
     }
   }, [selectedLocationId, loadInventoryValueByLocationSummary]);
+
+  /** Keep `?location=` / `?locationId=` aligned with the inventory warehouse dropdown (shareable links). */
+  const applyInventoryListLocationInUrl = useCallback((nextLocationId) => {
+    if (!window.RouteState?.getRoute || !window.RouteState?.navigate) return;
+    const route = window.RouteState.getRoute();
+    if (route.page !== 'manufacturing' || normalizeManufacturingTab(route.segments?.[0]) !== 'inventory') {
+      return;
+    }
+    const search = route.search instanceof URLSearchParams ? route.search : new URLSearchParams(window.location.search || '');
+    const params = new URLSearchParams(search.toString());
+    if (!nextLocationId || nextLocationId === 'all') {
+      params.delete('location');
+      params.delete('locationId');
+    } else {
+      params.set('location', nextLocationId);
+      params.delete('locationId');
+    }
+    window.RouteState.navigate({
+      page: 'manufacturing',
+      segments: ['inventory'],
+      search: params.toString() || undefined,
+      replace: true,
+      preserveHash: false
+    });
+  }, []);
+
   const syncTabToRoute = useCallback((tab, options = {}) => {
     const normalizedTab = normalizeManufacturingTab(tab);
     const segments = normalizedTab === 'dashboard' ? [] : [normalizedTab];
@@ -684,6 +710,7 @@ try {
   const searchTermRef = useRef('');
   const columnFiltersRef = useRef({});
   const inventoryLoadSeqRef = useRef(0);
+  const ledgerFilterMetaRetryRef = useRef(false);
   
   // Sync refs with state
   useEffect(() => {
@@ -3633,6 +3660,23 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
   }, [selectedLocationId]);
 
+  /** Deep link: `/manufacturing/inventory?location=<warehouseId>` selects that warehouse in the list. */
+  useEffect(() => {
+    if (activeTab !== 'inventory' || !window.RouteState?.getRoute || !Array.isArray(stockLocations) || stockLocations.length === 0) {
+      return;
+    }
+    const route = window.RouteState.getRoute();
+    if (route.page !== 'manufacturing' || normalizeManufacturingTab(route.segments?.[0]) !== 'inventory') {
+      return;
+    }
+    const search = route.search instanceof URLSearchParams ? route.search : new URLSearchParams(window.location.search || '');
+    const urlLoc = search.get('location') || search.get('locationId');
+    if (!urlLoc || urlLoc === 'all') return;
+    const match = stockLocations.some((l) => String(l.id) === String(urlLoc));
+    if (!match) return;
+    setSelectedLocationId((prev) => (String(prev) === String(urlLoc) ? prev : urlLoc));
+  }, [activeTab, stockLocations]);
+
   /** Unreconciled filter needs `ledgerReconciled` from API; bypass GET cache once when enabling. */
   useEffect(() => {
     if (!showLedgerMismatchOnly || selectedLocationId !== 'all' || activeTab !== 'inventory') {
@@ -3640,6 +3684,25 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
     void reloadInventoryForLocation({ forceRefresh: true });
   }, [showLedgerMismatchOnly, selectedLocationId, activeTab, reloadInventoryForLocation]);
+
+  useEffect(() => {
+    if (activeTab !== 'inventory' || !showLedgerMismatchOnly || selectedLocationId !== 'all') {
+      ledgerFilterMetaRetryRef.current = false;
+      return undefined;
+    }
+    const hasMeta = inventory.some((item) => typeof item?.ledgerReconciled === 'boolean');
+    if (hasMeta || inventory.length === 0 || ledgerFilterMetaRetryRef.current) {
+      return undefined;
+    }
+    ledgerFilterMetaRetryRef.current = true;
+    try {
+      window.DatabaseAPI?.invalidateInventoryCache?.();
+    } catch {
+      /* ignore */
+    }
+    void reloadInventoryForLocation({ forceRefresh: true });
+    return undefined;
+  }, [activeTab, showLedgerMismatchOnly, selectedLocationId, inventory, reloadInventoryForLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3821,6 +3884,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const invPageStart = (invSafePage - 1) * INVENTORY_LIST_PAGE_SIZE;
     const paginatedInventory = filteredInventory.slice(invPageStart, invPageStart + INVENTORY_LIST_PAGE_SIZE);
 
+    const inventoryHasAnyLedgerMeta = inventory.some((row) => typeof row?.ledgerReconciled === 'boolean');
+    const ledgerFilterEmptyHint =
+      showLedgerMismatchOnly &&
+      selectedLocationId === 'all' &&
+      invFilteredTotal === 0 &&
+      inventory.length > 0
+        ? inventoryHasAnyLedgerMeta
+          ? 'No SKUs currently mismatch the stock movement ledger in the combined (all locations) view.'
+          : 'Ledger audit fields were not returned (cached or older API). Try Refresh, a hard reload, or confirm this host is on the latest deploy.'
+        : null;
+
     const inventoryLedgerMeta = (item) => typeof item?.ledgerReconciled === 'boolean';
     const inventoryLedgerUnreconciled = (item) => inventoryLedgerMeta(item) && item.ledgerReconciled === false;
     const formatLedgerQtyLabel = (n) => {
@@ -3852,9 +3926,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               Showing only SKUs where <span className="font-semibold">recorded on-hand</span> (all locations) does not match the{' '}
               <span className="font-semibold">net of stock movements</span> (same rules as the inventory detail audit and verify-ledger-reconciliation).
             </span>
-            <button
-              type="button"
-              onClick={() => setShowLedgerMismatchOnly(false)}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowLedgerMismatchOnly(false);
+                          applyInventoryListLocationInUrl('all');
+                        }}
               className={`text-sm font-medium px-3 py-1.5 rounded-lg border ${
                 isDark ? 'border-orange-700 hover:bg-orange-950/50' : 'border-orange-300 hover:bg-orange-100'
               }`}
@@ -3893,7 +3970,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   {/* Location Selector */}
                   <select
                     value={selectedLocationId}
-                    onChange={(e) => setSelectedLocationId(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSelectedLocationId(v);
+                      applyInventoryListLocationInUrl(v);
+                    }}
                     className={`w-full px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition-colors ${
                       isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-900'
                     }`}
@@ -3948,7 +4029,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     {selectedLocationId === 'all' && (
                       <button
                         type="button"
-                        onClick={() => setShowLedgerMismatchOnly((v) => !v)}
+                        onClick={() => {
+                          setShowLedgerMismatchOnly((v) => {
+                            const next = !v;
+                            if (next) {
+                              setSelectedLocationId('all');
+                              applyInventoryListLocationInUrl('all');
+                            }
+                            return next;
+                          });
+                        }}
                         className={`shrink-0 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors ${
                           showLedgerMismatchOnly
                             ? isDark
@@ -4149,6 +4239,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 {invFilteredTotal === 0
                   ? `Showing 0 of ${inventory.length} in catalog`
                   : `Showing ${invPageStart + 1}–${Math.min(invPageStart + INVENTORY_LIST_PAGE_SIZE, invFilteredTotal)} of ${invFilteredTotal} (${inventory.length} in catalog)`}
+                {ledgerFilterEmptyHint ? (
+                  <span className={`block mt-1 ${isDark ? 'text-orange-200/90' : 'text-orange-800'}`}>{ledgerFilterEmptyHint}</span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -4178,6 +4271,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className={`text-center py-12 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6`}>
               <i className={`fas fa-box-open text-4xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No inventory items found</p>
+              {ledgerFilterEmptyHint ? (
+                <p className={`text-xs mt-2 max-w-md mx-auto ${isDark ? 'text-orange-200/90' : 'text-orange-800'}`}>{ledgerFilterEmptyHint}</p>
+              ) : null}
             </div>
           ) : (
             paginatedInventory.map(item => {
