@@ -58,6 +58,8 @@
     "plan:location-ledger-rebalance": "node scripts/plan-location-ledger-rebalance.mjs",
     "report:ledger-baseline-drift": "node scripts/fix-ledger-baseline-anchor-drift.mjs",
     "fix:ledger-baseline-drift": "node scripts/fix-ledger-baseline-anchor-drift.mjs --write",
+    "report:ledger-baseline-merge-splits": "node scripts/fix-ledger-baseline-anchor-drift.mjs --merge-baseline-splits",
+    "fix:ledger-baseline-merge-splits": "node scripts/fix-ledger-baseline-anchor-drift.mjs --merge-baseline-splits --write",
     "align:inventory-to-movements": "node scripts/align-location-inventory-to-movements.mjs",
     "undo:li-align-to-movements": "node scripts/undo-li-align-to-movements.mjs",
     "audit:stock-movements:sku-diff": "node scripts/audit-stock-movements-for-sku-diff-window.mjs",

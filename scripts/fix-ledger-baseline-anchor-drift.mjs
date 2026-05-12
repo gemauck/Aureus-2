@@ -2,18 +2,23 @@
 /**
  * Report (default) or safely fix mis-anchored `LEDGER_BASELINE_*` stock movements.
  *
- * **Safe auto-fix scope:** SKU has **only** movements whose `reference` starts with
- * `LEDGER_BASELINE_REF_PREFIX` (from `api/_lib/ledgerBaselinePrefix.js`). Then we
- * delete those rows and insert **one** adjustment at main office (`01_LOC1` / `LOC001`)
- * with `quantity` = sum of the removed baseline quantities (combined net unchanged).
+ * **Mode A (default):** SKU has **only** `LEDGER_BASELINE_*` movements — same as before.
  *
- * SKUs with sales/receipts/transfers/etc. mixed in are **skipped** on `--write` and
- * listed for manual handling (e.g. backup + `ledger-cutover-after-stocktake.js --mismatch-only`).
+ * **Mode B (`--merge-baseline-splits`):** Use when cutover wrongly created **multiple**
+ * baseline rows (e.g. PIETERMARITZBURG + South Coast R&D). Deletes **only** rows whose
+ * `reference` starts with `LEDGER_BASELINE_REF_PREFIX`, inserts **one** adjustment at main
+ * office with **quantity = sum** of those baselines. **Leaves** LI_ALIGN, receipts, sales,
+ * etc. **unchanged** (combined net from non-baseline rows unchanged).
+ *
+ * SKUs with sales/receipts/transfers/etc. mixed in are **skipped** in Mode A on `--write`.
+ * Mode B still runs when those exist, as long as there is something to merge in baseline rows.
  *
  * Usage:
  *   node scripts/fix-ledger-baseline-anchor-drift.mjs
  *   node scripts/fix-ledger-baseline-anchor-drift.mjs --sku=SKU0091
  *   node scripts/fix-ledger-baseline-anchor-drift.mjs --write
+ *   node scripts/fix-ledger-baseline-anchor-drift.mjs --merge-baseline-splits --sku=SKU0091
+ *   node scripts/fix-ledger-baseline-anchor-drift.mjs --merge-baseline-splits --write
  */
 
 import 'dotenv/config'
@@ -23,6 +28,7 @@ import { buildMovementId } from '../api/_lib/stockCountAdjustment.js'
 
 const argv = process.argv.slice(2)
 const write = argv.includes('--write')
+const mergeBaselineSplits = argv.includes('--merge-baseline-splits')
 const skuArg = argv.find((a) => a.startsWith('--sku='))?.slice('--sku='.length)?.trim()
 
 function isBaselineRef(ref) {
@@ -109,8 +115,14 @@ async function main() {
     const combinedBefore = allMov.reduce((s, m) => s + normalizeCombined(m), 0)
     const sumBaselineQty = baseRows.reduce((s, m) => s + (parseFloat(m.quantity) || 0), 0)
 
+    const baselineOnlyEligible =
+      !mergeBaselineSplits && nonBase.length === 0 && baseRows.length >= 1 && needsConsolidation
+    const mergeSplitsEligible =
+      mergeBaselineSplits && baseRows.length >= 1 && needsConsolidation
+
     const row = {
       sku,
+      strategy: mergeBaselineSplits ? 'merge-baseline-splits' : 'baseline-only',
       baselineRowCount: baseRows.length,
       otherMovementCount: nonBase.length,
       wrongAnchorCount: wrongAnchor.length,
@@ -118,7 +130,7 @@ async function main() {
       anchorCode: anchorMeta?.code || null,
       combinedNetBefore: combinedBefore,
       sumBaselineQuantities: sumBaselineQty,
-      eligibleForConsolidate: nonBase.length === 0 && baseRows.length >= 1 && needsConsolidation
+      eligibleForConsolidate: baselineOnlyEligible || mergeSplitsEligible
     }
 
     if (row.eligibleForConsolidate) {
@@ -127,14 +139,10 @@ async function main() {
         movementIdsToDelete: baseRows.map((m) => m.id),
         sampleFromLocations: [...new Set(baseRows.map((m) => String(m.fromLocation || '').slice(0, 24)))]
       })
-    } else if (needsConsolidation) {
-      let reason = 'Needs consolidation but not eligible'
-      if (nonBase.length > 0) {
-        reason = `Has ${nonBase.length} non-baseline movement(s); use backup + ledger-cutover --mismatch-only or manual transfers`
-      }
+    } else if (needsConsolidation && !mergeBaselineSplits) {
       skippedMixedHistory.push({
         sku,
-        reason,
+        reason: `Has ${nonBase.length} non-baseline movement(s); re-run with --merge-baseline-splits to fix baseline rows only, or use ledger-cutover / manual transfers`,
         otherMovementCount: nonBase.length,
         baselineRowCount: baseRows.length,
         wrongAnchorCount: wrongAnchor.length
@@ -146,6 +154,7 @@ async function main() {
     JSON.stringify(
       {
         mode: write ? 'write' : 'dry-run',
+        mergeBaselineSplits,
         refPrefix: LEDGER_BASELINE_REF_PREFIX,
         anchorId,
         anchorCode: anchorMeta?.code || null,
@@ -164,9 +173,10 @@ async function main() {
   )
 
   if (!write) {
-    console.error(
-      '\nDry run. To apply safe consolidation (baseline-only SKUs): node scripts/fix-ledger-baseline-anchor-drift.mjs --write'
-    )
+    const hint = mergeBaselineSplits
+      ? '\nDry run. Apply merge: node scripts/fix-ledger-baseline-anchor-drift.mjs --merge-baseline-splits --write'
+      : '\nDry run. Baseline-only SKUs: node scripts/fix-ledger-baseline-anchor-drift.mjs --write\nSplit baselines + other movements: node scripts/fix-ledger-baseline-anchor-drift.mjs --merge-baseline-splits --write'
+    console.error(hint)
     await prisma.$disconnect()
     return
   }
@@ -187,6 +197,11 @@ async function main() {
       const movementDate = new Date(Math.min(...dates))
       const itemName = String(template.itemName || sku).slice(0, 500)
       const sumQty = baseRows.reduce((s, m) => s + (parseFloat(m.quantity) || 0), 0)
+      const strat = item.strategy || 'baseline-only'
+      const notes =
+        strat === 'merge-baseline-splits'
+          ? `Merged ${baseRows.length} split LEDGER_BASELINE row(s) onto main office; total qty ${sumQty}; other movement types unchanged.`
+          : `Consolidated ${baseRows.length} baseline row(s) onto main office anchor; total qty ${sumQty}.`
 
       await prisma.$transaction(async (tx) => {
         await tx.stockMovement.deleteMany({
@@ -204,10 +219,7 @@ async function main() {
             toLocation: '',
             reference: `${LEDGER_BASELINE_REF_PREFIX}:${sku}:${anchorId}`.slice(0, 500),
             performedBy: 'fix-ledger-baseline-anchor-drift.mjs',
-            notes: `Consolidated ${baseRows.length} baseline row(s) onto main office anchor; total qty ${sumQty}.`.slice(
-              0,
-              2000
-            ),
+            notes: notes.slice(0, 2000),
             ownerId: null
           }
         })
