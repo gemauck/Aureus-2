@@ -618,6 +618,43 @@ function gmSetSelectionByPlainOffsets(editorEl, start, end) {
     }
 }
 
+/** Wrap current selection range in a persistent anchor span (rich text only). */
+function wrapGmThreadRangeStable(range, threadId) {
+    if (!range || range.collapsed || !threadId) {
+        return false;
+    }
+    try {
+        const span = document.createElement('span');
+        span.setAttribute('data-gm-thread-id', threadId);
+        span.className = 'gm-thread-anchor';
+        const r = range.cloneRange();
+        r.surroundContents(span);
+        return true;
+    } catch (_) {
+        try {
+            const span = document.createElement('span');
+            span.setAttribute('data-gm-thread-id', threadId);
+            span.className = 'gm-thread-anchor';
+            const contents = range.extractContents();
+            span.appendChild(contents);
+            range.insertNode(span);
+            return true;
+        } catch (e2) {
+            console.warn('wrapGmThreadRangeStable', e2);
+            return false;
+        }
+    }
+}
+
+function wrapGmThreadRangeFromSelection(threadId) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        return false;
+    }
+    const range = sel.getRangeAt(0);
+    return wrapGmThreadRangeStable(range, threadId);
+}
+
 async function gmNotifyInlineCommentMentions(commentText, { contextTitle, contextLink, authorName }) {
     if (!commentText?.trim() || !window.MentionHelper?.hasMentions?.(commentText)) {
         return;
@@ -1397,6 +1434,11 @@ const ManagementMeetingNotes = () => {
                 return;
             }
             const w = currentMonthlyNotes?.weeklyNotes?.find((x) => x.id === pop.weeklyNotesId);
+            if (!w) {
+                setGmMinuteInlinePopover(null);
+                return;
+            }
+            const monthlyId = currentMonthlyNotes?.id || null;
             const existing = gmParseInlineThreadsRaw(w?.generalMinutesThreads);
             const user = window.storage?.getUserInfo?.() || {};
             const msg = {
@@ -1407,10 +1449,11 @@ const ManagementMeetingNotes = () => {
                 authorName: user.name || user.displayName || 'User',
                 authorEmail: user.email || ''
             };
+            const threadId = gmGenInlineThreadId();
             const next = [
                 ...existing,
                 {
-                    id: gmGenInlineThreadId(),
+                    id: threadId,
                     start: pop.start,
                     end: pop.end,
                     quote: pop.quote,
@@ -1418,7 +1461,43 @@ const ManagementMeetingNotes = () => {
                     messages: [msg]
                 }
             ];
-            await persistGeneralMinutesThreads(pop.weeklyNotesId, next);
+
+            let generalMinutesUpdate;
+            const host =
+                typeof document !== 'undefined'
+                    ? document.querySelector(`[data-gm-editor-host="${String(pop.weeklyNotesId)}"]`)
+                    : null;
+            const editor = host?.querySelector('[contenteditable="true"]');
+            if (editor && pop.editorKind === 'richtext') {
+                editor.focus();
+                gmSetSelectionByPlainOffsets(editor, pop.start, pop.end);
+                if (wrapGmThreadRangeFromSelection(threadId)) {
+                    generalMinutesUpdate = editor.innerHTML;
+                    generalMinutesValuesRef.current[pop.weeklyNotesId] = generalMinutesUpdate;
+                    lastSavedGeneralMinutesHash.current[pop.weeklyNotesId] = generalMinutesUpdate;
+                }
+            }
+
+            const htmlForPlain =
+                generalMinutesUpdate !== undefined
+                    ? generalMinutesUpdate
+                    : generalMinutesValuesRef.current[pop.weeklyNotesId] !== undefined
+                      ? generalMinutesValuesRef.current[pop.weeklyNotesId]
+                      : w.generalMinutes ?? '';
+            const plain = window.RichTextEditor ? gmHtmlToPlainText(htmlForPlain) : String(htmlForPlain || '');
+            const reconciled = gmReconcileThreadsWithPlain(next, plain).map(({ anchorStale, ...t }) => t);
+
+            const payload = { generalMinutesThreads: reconciled };
+            if (generalMinutesUpdate !== undefined) {
+                payload.generalMinutes = generalMinutesUpdate;
+            }
+            await window.DatabaseAPI.updateWeeklyNotes(pop.weeklyNotesId, payload);
+            const localPartial = { generalMinutesThreads: reconciled };
+            if (generalMinutesUpdate !== undefined) {
+                localPartial.generalMinutes = generalMinutesUpdate;
+            }
+            updateWeeklyNotesLocal(pop.weeklyNotesId, localPartial, monthlyId);
+
             const title = `General minutes (${selectedMonth || ''} · ${pop.weekKey || 'week'})`;
             const link = `${window.location.origin}${window.location.pathname}${window.location.search}#/teams/management?tab=meeting-notes&team=management&month=${encodeURIComponent(
                 selectedMonth || ''
@@ -1430,7 +1509,7 @@ const ManagementMeetingNotes = () => {
             });
             setGmMinuteInlinePopover(null);
         },
-        [gmMinuteInlinePopover, currentMonthlyNotes, persistGeneralMinutesThreads, selectedMonth]
+        [gmMinuteInlinePopover, currentMonthlyNotes, selectedMonth, updateWeeklyNotesLocal]
     );
 
     const replyGmMinuteThread = useCallback(
@@ -1471,9 +1550,48 @@ const ManagementMeetingNotes = () => {
             const w = currentMonthlyNotes?.weeklyNotes?.find((x) => x.id === weeklyNotesId);
             const existing = gmParseInlineThreadsRaw(w?.generalMinutesThreads);
             const next = existing.map((t) => (t.id === threadId ? { ...t, resolved: !!resolved } : t));
-            await persistGeneralMinutesThreads(weeklyNotesId, next);
+
+            const monthlyId = currentMonthlyNotes?.id || null;
+            const host =
+                typeof document !== 'undefined'
+                    ? document.querySelector(`[data-gm-editor-host="${String(weeklyNotesId)}"]`)
+                    : null;
+            const editor = host?.querySelector('[contenteditable="true"]');
+            let generalMinutesUpdate;
+            if (editor) {
+                editor.querySelectorAll(`span[data-gm-thread-id="${String(threadId)}"]`).forEach((el) => {
+                    if (resolved) {
+                        el.classList.add('gm-thread-resolved');
+                    } else {
+                        el.classList.remove('gm-thread-resolved');
+                    }
+                });
+                generalMinutesUpdate = editor.innerHTML;
+                generalMinutesValuesRef.current[weeklyNotesId] = generalMinutesUpdate;
+                lastSavedGeneralMinutesHash.current[weeklyNotesId] = generalMinutesUpdate;
+            }
+
+            const htmlForPlain =
+                generalMinutesUpdate !== undefined
+                    ? generalMinutesUpdate
+                    : generalMinutesValuesRef.current[weeklyNotesId] !== undefined
+                      ? generalMinutesValuesRef.current[weeklyNotesId]
+                      : w?.generalMinutes ?? '';
+            const plain = window.RichTextEditor ? gmHtmlToPlainText(htmlForPlain) : String(htmlForPlain || '');
+            const reconciled = gmReconcileThreadsWithPlain(next, plain).map(({ anchorStale, ...t }) => t);
+
+            const payload = { generalMinutesThreads: reconciled };
+            if (generalMinutesUpdate !== undefined) {
+                payload.generalMinutes = generalMinutesUpdate;
+            }
+            await window.DatabaseAPI.updateWeeklyNotes(weeklyNotesId, payload);
+            const localPartial = { generalMinutesThreads: reconciled };
+            if (generalMinutesUpdate !== undefined) {
+                localPartial.generalMinutes = generalMinutesUpdate;
+            }
+            updateWeeklyNotesLocal(weeklyNotesId, localPartial, monthlyId);
         },
-        [currentMonthlyNotes, persistGeneralMinutesThreads]
+        [currentMonthlyNotes, updateWeeklyNotesLocal]
     );
 
     const handleGmEditorHostMouseUp = useCallback((e, week, gmIdentifier) => {
@@ -5276,8 +5394,42 @@ const ManagementMeetingNotes = () => {
         );
     }
 
+    const CommentInpSidebar = window.CommentInputWithMentions;
+    const gmScreenSidebarWeeks = (() => {
+        const wks = currentMonthlyNotes?.weeklyNotes;
+        if (!Array.isArray(wks)) {
+            return [];
+        }
+        return wks
+            .filter((week) => week && week.id)
+            .map((week) => {
+                const rawGmId = getWeekIdentifier(week);
+                const gmIdent = rawGmId || week.weekKey || week.id;
+                const htmlNow =
+                    generalMinutesEditingWeekIdRef.current === week.id &&
+                    generalMinutesValuesRef.current[week.id] !== undefined
+                        ? generalMinutesValuesRef.current[week.id]
+                        : week.generalMinutes || '';
+                const plain = window.RichTextEditor ? gmHtmlToPlainText(htmlNow) : String(htmlNow || '');
+                const threads = gmReconcileThreadsWithPlain(
+                    gmParseInlineThreadsRaw(week.generalMinutesThreads),
+                    plain
+                ).sort((a, b) => a.start - b.start);
+                return {
+                    week,
+                    gmIdent,
+                    weekLabel: formatWeek(week.weekKey, week.weekStart),
+                    threads
+                };
+            })
+            .filter((row) => row.threads.length > 0);
+    })();
+
     return (
-        <div className={`relative space-y-5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+        <div
+            className={`relative flex flex-col xl:flex-row xl:items-start xl:gap-5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}
+        >
+            <div className="flex-1 min-w-0 w-full space-y-5">
             {/* Blocking Overlay - Prevents all navigation until saves complete */}
             {/* Navigation blocking happens silently - no messages shown */}
             
@@ -5972,123 +6124,6 @@ const ManagementMeetingNotes = () => {
                                                             rows={6}
                                                         />
                                                     )}
-                                                    {(() => {
-                                                        const htmlNow =
-                                                            generalMinutesEditingWeekIdRef.current === week.id &&
-                                                            generalMinutesValuesRef.current[week.id] !== undefined
-                                                                ? generalMinutesValuesRef.current[week.id]
-                                                                : week.generalMinutes || '';
-                                                        const plain = window.RichTextEditor ? gmHtmlToPlainText(htmlNow) : String(htmlNow || '');
-                                                        const threadsView = gmReconcileThreadsWithPlain(
-                                                            gmParseInlineThreadsRaw(week.generalMinutesThreads),
-                                                            plain
-                                                        ).sort((a, b) => a.start - b.start);
-                                                        const CommentInp = window.CommentInputWithMentions;
-                                                        if (threadsView.length === 0) {
-                                                            return null;
-                                                        }
-                                                        return (
-                                                            <div
-                                                                className={`shrink-0 max-h-40 overflow-y-auto rounded-lg border px-2 py-1.5 ${
-                                                                    isDark ? 'border-slate-600/80 bg-slate-900/50' : 'border-slate-200 bg-slate-50/90'
-                                                                }`}
-                                                            >
-                                                                <p
-                                                                    className={`text-[10px] font-bold uppercase tracking-wide mb-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}
-                                                                >
-                                                                    Text comments
-                                                                </p>
-                                                                <ul className="space-y-1.5">
-                                                                    {threadsView.map((t) => (
-                                                                        <li
-                                                                            key={t.id}
-                                                                            className={`rounded-md border px-2 py-1 text-[11px] ${
-                                                                                isDark ? 'border-slate-700 bg-slate-800/80' : 'border-slate-200 bg-white'
-                                                                            }`}
-                                                                        >
-                                                                            <div className="flex items-start justify-between gap-1">
-                                                                                <span
-                                                                                    className={`italic line-clamp-2 min-w-0 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
-                                                                                >
-                                                                                    {(t.quote || '').slice(0, 120)}
-                                                                                    {(t.quote || '').length > 120 ? '…' : ''}
-                                                                                </span>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className={`shrink-0 text-[10px] underline ${isDark ? 'text-primary-400' : 'text-primary-600'}`}
-                                                                                    onClick={() => {
-                                                                                        const host = document.querySelector(
-                                                                                            `[data-gm-editor-host="${String(week.id)}"]`
-                                                                                        );
-                                                                                        if (!host) {
-                                                                                            return;
-                                                                                        }
-                                                                                        const ed = host.querySelector('[contenteditable="true"]');
-                                                                                        const ta = host.querySelector('textarea');
-                                                                                        if (ed) {
-                                                                                            gmSetSelectionByPlainOffsets(ed, t.start, t.end);
-                                                                                        } else if (ta) {
-                                                                                            ta.focus();
-                                                                                            try {
-                                                                                                ta.setSelectionRange(t.start, t.end);
-                                                                                            } catch (_) {
-                                                                                                /* ignore */
-                                                                                            }
-                                                                                        }
-                                                                                    }}
-                                                                                >
-                                                                                    Jump
-                                                                                </button>
-                                                                            </div>
-                                                                            {t.anchorStale ? (
-                                                                                <span
-                                                                                    className={`text-[9px] font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}
-                                                                                >
-                                                                                    Text may have moved
-                                                                                </span>
-                                                                            ) : null}
-                                                                            <label
-                                                                                className={`mt-0.5 flex items-center gap-1 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}
-                                                                            >
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    checked={!!t.resolved}
-                                                                                    onChange={(e) =>
-                                                                                        void toggleGmMinuteThreadResolved(
-                                                                                            week.id,
-                                                                                            t.id,
-                                                                                            e.target.checked
-                                                                                        )
-                                                                                    }
-                                                                                />
-                                                                                Resolved
-                                                                            </label>
-                                                                            <div className={`mt-1 space-y-0.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                                                                                {(t.messages || []).map((m) => (
-                                                                                    <div key={m.id} className="whitespace-pre-wrap break-words">
-                                                                                        <span className="font-medium">{m.authorName || 'Someone'}:</span>{' '}
-                                                                                        {m.text}
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                            {CommentInp ? (
-                                                                                <div className="mt-1">
-                                                                                    <CommentInp
-                                                                                        onSubmit={(txt) =>
-                                                                                            void replyGmMinuteThread(week.id, t.id, txt, gmIdentifier)
-                                                                                        }
-                                                                                        placeholder="Reply… (@mention)"
-                                                                                        rows={2}
-                                                                                        showButton={true}
-                                                                                    />
-                                                                                </div>
-                                                                            ) : null}
-                                                                        </li>
-                                                                    ))}
-                                                                </ul>
-                                                            </div>
-                                                        );
-                                                    })()}
                                                 </div>
                                             ) : (
                                                 <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
@@ -7271,6 +7306,132 @@ const ManagementMeetingNotes = () => {
                       document.body
                   )
                 : null}
+            </div>
+            {currentMonthlyNotes && Array.isArray(weeks) && weeks.length > 0 ? (
+                <aside
+                    className={`mt-4 w-full shrink-0 rounded-2xl border p-4 sm:p-5 xl:mt-0 xl:w-[min(22rem,calc(100vw-2rem))] xl:max-h-[calc(100vh-1.5rem)] xl:overflow-y-auto xl:sticky xl:top-4 ${
+                        isDark ? 'border-slate-700/80 bg-slate-900/55' : 'border-slate-200/90 bg-white shadow-sm'
+                    }`}
+                    aria-label="General minutes text comments"
+                >
+                    <h3
+                        className={`text-[10px] font-bold uppercase tracking-[0.14em] mb-3 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
+                    >
+                        General minutes comments
+                    </h3>
+                    {gmScreenSidebarWeeks.length === 0 ? (
+                        <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+                            No threads yet. Select text in a week’s General minutes, then use Comment to start a discussion.
+                        </p>
+                    ) : (
+                        <div className="space-y-4">
+                            {gmScreenSidebarWeeks.map(({ week, gmIdent, weekLabel, threads }) => (
+                                <div key={week.id}>
+                                    <p
+                                        className={`text-[11px] font-semibold tracking-tight mb-2 ${isDark ? 'text-slate-200' : 'text-slate-900'}`}
+                                    >
+                                        {weekLabel}
+                                    </p>
+                                    <ul className="space-y-2">
+                                        {threads.map((t) => (
+                                            <li
+                                                key={t.id}
+                                                className={`rounded-lg border px-2.5 py-2 text-[11px] ${
+                                                    isDark ? 'border-slate-700 bg-slate-800/80' : 'border-slate-200 bg-slate-50/90'
+                                                }`}
+                                            >
+                                                <div className="flex items-start justify-between gap-1">
+                                                    <span
+                                                        className={`italic line-clamp-3 min-w-0 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
+                                                    >
+                                                        {(t.quote || '').slice(0, 160)}
+                                                        {(t.quote || '').length > 160 ? '…' : ''}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        className={`shrink-0 text-[10px] underline ${isDark ? 'text-primary-400' : 'text-primary-600'}`}
+                                                        onClick={() => {
+                                                            setSelectedWeek(gmIdent);
+                                                            scrollToWeekId(gmIdent);
+                                                            const run = () => {
+                                                                const host = document.querySelector(
+                                                                    `[data-gm-editor-host="${String(week.id)}"]`
+                                                                );
+                                                                if (!host) {
+                                                                    return;
+                                                                }
+                                                                const ed = host.querySelector('[contenteditable="true"]');
+                                                                const ta = host.querySelector('textarea');
+                                                                if (ed) {
+                                                                    ed.focus();
+                                                                    gmSetSelectionByPlainOffsets(ed, t.start, t.end);
+                                                                } else if (ta) {
+                                                                    ta.focus();
+                                                                    try {
+                                                                        ta.setSelectionRange(t.start, t.end);
+                                                                    } catch (_) {
+                                                                        /* ignore */
+                                                                    }
+                                                                }
+                                                            };
+                                                            requestAnimationFrame(() => requestAnimationFrame(run));
+                                                        }}
+                                                    >
+                                                        Jump
+                                                    </button>
+                                                </div>
+                                                {t.anchorStale ? (
+                                                    <span
+                                                        className={`text-[9px] font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}
+                                                    >
+                                                        Text may have moved
+                                                    </span>
+                                                ) : null}
+                                                <label
+                                                    className={`mt-1 flex items-center gap-1.5 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!t.resolved}
+                                                        onChange={(e) =>
+                                                            void toggleGmMinuteThreadResolved(
+                                                                week.id,
+                                                                t.id,
+                                                                e.target.checked
+                                                            )
+                                                        }
+                                                    />
+                                                    Resolved
+                                                </label>
+                                                <div className={`mt-1.5 space-y-0.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                                    {(t.messages || []).map((m) => (
+                                                        <div key={m.id} className="whitespace-pre-wrap break-words">
+                                                            <span className="font-medium">{m.authorName || 'Someone'}:</span>{' '}
+                                                            {m.text}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {CommentInpSidebar ? (
+                                                    <div className="mt-1.5">
+                                                        <CommentInpSidebar
+                                                            onSubmit={(txt) =>
+                                                                void replyGmMinuteThread(week.id, t.id, txt, gmIdent)
+                                                            }
+                                                            placeholder="Reply… (@mention)"
+                                                            rows={2}
+                                                            showButton={true}
+                                                        />
+                                                    </div>
+                                                ) : null}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </aside>
+            ) : null}
         </div>
     );
 };

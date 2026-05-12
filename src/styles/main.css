@@ -744,3 +744,24 @@ html.dark .meeting-notes-grid-h-scroll--body::-webkit-scrollbar-track {
 html.dark .meeting-notes-week-nav-scroll::-webkit-scrollbar-thumb {
     background-color: #64748b;
 }
+
+/* General minutes inline comment anchors (content inside RichTextEditor) */
+[data-gm-editor-host] .gm-thread-anchor {
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    border-radius: 2px;
+    background-color: rgba(253, 224, 71, 0.42);
+    box-shadow: inset 0 -2px 0 rgba(234, 179, 8, 0.55);
+}
+[data-gm-editor-host] .gm-thread-anchor.gm-thread-resolved {
+    background-color: rgba(187, 247, 208, 0.45);
+    box-shadow: inset 0 -2px 0 rgba(34, 197, 94, 0.45);
+}
+html.dark [data-gm-editor-host] .gm-thread-anchor {
+    background-color: rgba(202, 138, 4, 0.22);
+    box-shadow: inset 0 -2px 0 rgba(250, 204, 21, 0.45);
+}
+html.dark [data-gm-editor-host] .gm-thread-anchor.gm-thread-resolved {
+    background-color: rgba(22, 163, 74, 0.22);
+    box-shadow: inset 0 -2px 0 rgba(74, 222, 128, 0.45);
+}
