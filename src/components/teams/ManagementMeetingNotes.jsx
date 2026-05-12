@@ -6355,20 +6355,6 @@ const ManagementMeetingNotes = () => {
                                 <i className={`fas mr-2 ${gmCommentsSidebarVisible ? 'fa-eye-slash' : 'fa-comments'}`} aria-hidden />
                                 {gmCommentsSidebarVisible ? 'Hide comments' : 'Show comments'}
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => setMeetingNotesMonthlyGoalsColumnVisiblePersisted(!meetingNotesMonthlyGoalsColumnVisible)}
-                                className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                                    isDark
-                                        ? 'border-slate-600/80 bg-slate-800/80 text-slate-200 hover:bg-slate-800'
-                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
-                                }`}
-                                aria-expanded={meetingNotesMonthlyGoalsColumnVisible}
-                                aria-label={meetingNotesMonthlyGoalsColumnVisible ? 'Hide monthly goals column' : 'Show monthly goals column'}
-                            >
-                                <i className={`fas mr-2 ${meetingNotesMonthlyGoalsColumnVisible ? 'fa-columns' : 'fa-table'}`} aria-hidden />
-                                {meetingNotesMonthlyGoalsColumnVisible ? 'Hide goals' : 'Show goals'}
-                            </button>
                         </div>
                     </div>
 
@@ -6407,7 +6393,27 @@ const ManagementMeetingNotes = () => {
                                                 : 'border-slate-200/90 bg-white shadow-sm'
                                         }`}
                                     >
-                                        <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
+                                        <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setMeetingNotesMonthlyGoalsColumnVisiblePersisted(!meetingNotesMonthlyGoalsColumnVisible)
+                                                }
+                                                className={`self-start rounded-lg border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                                                    isDark
+                                                        ? 'border-slate-500/80 bg-slate-800/90 text-slate-200 hover:bg-slate-700/90'
+                                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
+                                                }`}
+                                                aria-expanded={meetingNotesMonthlyGoalsColumnVisible}
+                                                aria-label={
+                                                    meetingNotesMonthlyGoalsColumnVisible
+                                                        ? 'Hide monthly goals column'
+                                                        : 'Show monthly goals column'
+                                                }
+                                            >
+                                                <i className="fas mr-1.5 fa-columns" aria-hidden />
+                                                Hide goals
+                                            </button>
                                             <div className="min-w-0 flex-1">
                                                 <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                                     Monthly goals
@@ -6456,29 +6462,49 @@ const ManagementMeetingNotes = () => {
                                                                 : 'border-slate-200/90 bg-white hover:border-slate-300'
                                             }`}
                                         >
-                                            <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
-                                                <div className="min-w-0 flex-1">
-                                                    <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                        Week
-                                                    </p>
-                                                    <h3 className={`text-sm font-bold leading-tight flex items-start gap-1.5 min-w-0 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                                        <i className={`fas fa-calendar-week mt-0.5 shrink-0 text-xs ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
-                                                        <span className="line-clamp-2 min-w-0 break-words">{formatWeek(week.weekKey, week.weekStart)}</span>
-                                                    </h3>
-                                                </div>
-                                                <div className="flex shrink-0 items-center self-center">
+                                            <div className="flex min-h-0 flex-1 flex-col gap-2">
+                                                {!meetingNotesMonthlyGoalsColumnVisible && index === 0 ? (
                                                     <button
                                                         type="button"
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            handleDeleteWeek(week);
-                                                        }}
-                                                        className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-md font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-red-900/50 text-red-200 hover:bg-red-800/50 border border-red-700' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
+                                                        onClick={() =>
+                                                            setMeetingNotesMonthlyGoalsColumnVisiblePersisted(!meetingNotesMonthlyGoalsColumnVisible)
+                                                        }
+                                                        className={`self-start rounded-lg border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                                                            isDark
+                                                                ? 'border-slate-500/80 bg-slate-800/90 text-slate-200 hover:bg-slate-700/90'
+                                                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
+                                                        }`}
+                                                        aria-expanded={meetingNotesMonthlyGoalsColumnVisible}
+                                                        aria-label="Show monthly goals column"
                                                     >
-                                                        <i className="fas fa-trash text-[9px]" />
-                                                        <span className="hidden sm:inline">Delete</span>
+                                                        <i className="fas mr-1.5 fa-table" aria-hidden />
+                                                        Show goals
                                                     </button>
+                                                ) : null}
+                                                <div className="flex min-h-0 flex-1 items-center justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className={`text-[10px] uppercase tracking-wider font-semibold mb-0 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                            Week
+                                                        </p>
+                                                        <h3 className={`text-sm font-bold leading-tight flex items-start gap-1.5 min-w-0 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                            <i className={`fas fa-calendar-week mt-0.5 shrink-0 text-xs ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
+                                                            <span className="line-clamp-2 min-w-0 break-words">{formatWeek(week.weekKey, week.weekStart)}</span>
+                                                        </h3>
+                                                    </div>
+                                                    <div className="flex shrink-0 items-center self-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                handleDeleteWeek(week);
+                                                            }}
+                                                            className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded-md font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-red-900/50 text-red-200 hover:bg-red-800/50 border border-red-700' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
+                                                        >
+                                                            <i className="fas fa-trash text-[9px]" />
+                                                            <span className="hidden sm:inline">Delete</span>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
