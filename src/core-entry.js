@@ -45,7 +45,6 @@ import './components/common/QuickFallback.jsx';
 import './components/common/CommentInputWithMentions.jsx';
 import './components/common/NotificationCenter.jsx';
 import './components/common/GlobalSearch.jsx';
-import './components/maps/MapComponent.jsx';
 
 // Auth flow
 import './components/auth/AuthProvider.jsx';
@@ -59,23 +58,10 @@ import './components/dashboard/Calendar.jsx';
 import './components/dashboard/DashboardSimple.jsx';
 import './components/dashboard/DashboardFallback.jsx';
 
-// Core business modules needed immediately
-import './components/clients/ClientDetailModal.jsx';
-import './components/clients/LeadDetailModal.jsx';
-import './components/clients/OpportunityDetailModal.jsx';
-import './components/clients/Clients.jsx';
-import './components/clients/Pipeline.jsx';
-import './components/clients/PipelineIntegration.js';
+// Settings + notifications for shell; CRM / maps / leave load via lazy-load-components.js
 import './components/settings/NotificationSettings.jsx';
-import './utils/leaveUtils.js';
+// Public job-card flow expects this on window before Manufacturing lazy chunk
 import './utils/manufacturingStockLocations.js';
-import './utils/inventoryQrPayload.js';
-import './utils/hrPolicyFormat.js';
-import './components/leave-platform/EmployeeDetail.jsx';
-import './components/leave-platform/HrPoliciesPanel.jsx';
-import './components/leave-platform/HrDocumentsPanel.jsx';
-import './components/leave-platform/HrAdminShell.jsx';
-import './components/leave-platform/LeavePlatform.jsx';
 import './components/notifications/NotificationsPage.jsx';
 import './components/layout/MainLayout.jsx';
 

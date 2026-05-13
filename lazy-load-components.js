@@ -1,52 +1,26 @@
 // Lazy loading script to defer non-critical component loading
-// VERSION: 20260124-weekly-fms-override - Ensure WeeklyFMSReviewTracker override
-console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded');
+// VERSION: 20260513-core-slim - CRM/maps/leave moved out of core-bundle for faster first load
+console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
 (function() {
-    // Note: Components already loaded in index.html are not included here to avoid duplicate loading
-    // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
-    
-    // CRITICAL: Filter out LeadDetailModal and ClientDetailModal BEFORE creating componentFiles array
-    // These are loaded early in index.html and must NOT be overwritten
-    // ProjectDetail CAN be loaded via lazy-loader (it has robust dependency checking)
-    const shouldBlockComponent = (path) => {
-        if (typeof path !== 'string') return false;
-        const lowerPath = path.toLowerCase();
-        return lowerPath.includes('leaddetailmodal') || 
-               lowerPath.includes('clientdetailmodal');
-        // ProjectDetail is NOT blocked - it can be loaded via lazy-loader after dependencies
-    };
-    
+    // CRM + maps: first batch (was in core-entry.js; shrinking dist/core-bundle.js parse cost)
     const componentFiles = [
-        // Defer heavier or non-critical modules until after first paint
-        // Dashboard variants
-        // Calendar.jsx is loaded early in index.html - DO NOT load here to avoid conflicts
-        // './src/components/dashboard/Calendar.jsx',
+        './src/components/maps/MapComponent.jsx',
+        './src/components/clients/OpportunityDetailModal.jsx',
+        './src/components/clients/ClientDetailModal.jsx',
+        './src/components/clients/LeadDetailModal.jsx',
+        './src/components/clients/Clients.jsx',
+        './src/components/clients/Pipeline.jsx',
+        './src/components/clients/PipelineIntegration.js',
         './src/components/daily-notes/DailyNotes.jsx',
         './src/components/dashboard/DashboardLive.jsx',
         './src/components/dashboard/DashboardDatabaseFirst.jsx',
         './src/components/dashboard/DashboardEnhanced.jsx',
         './src/components/tasks/TaskManagement.jsx',
-        
-        // Clients and related modals
-        // ClientDetailModal, LeadDetailModal, Clients.jsx, and ClientDetailModalMobile are loaded early in index.html - DO NOT load here to avoid conflicts
-        // './src/components/clients/ClientDetailModal.jsx',
-        // './src/components/clients/LeadDetailModal.jsx',
-        // './src/components/clients/Clients.jsx', // Loaded in index.html BEFORE lazy-loader runs
-        // './src/components/clients/ClientDetailModalMobile.jsx', // Loaded in index.html - blocked to prevent conflicts
-        // './src/components/clients/ClientsSimple.jsx', // REMOVED - no longer needed
         './src/components/clients/ClientsMobile.jsx',
         './src/components/clients/ClientsMobileOptimized.jsx',
         './src/components/clients/BulkOperations.jsx',
-        './src/components/clients/Pipeline.jsx',
         './src/components/clients/ClientNewsFeed.jsx',
-    ].filter(path => {
-        // DOUBLE-CHECK: Filter out blocked components even if they're in the array
-        if (shouldBlockComponent(path)) {
-            console.warn(`🚫 BLOCKED from componentFiles: ${path}`);
-            return false;
-        }
-        return true;
-    }).concat([
+    ].concat([
         // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail (with robust loader), then Projects
         './src/components/projects/CustomFieldModal.jsx',
         './src/components/projects/TaskDetailModal.jsx',
@@ -143,8 +117,13 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
         './src/components/reports/Reports.jsx',
         './src/components/reports/SystemReports.jsx',
         
-        // Leave Platform - Load EmployeeDetail BEFORE LeavePlatform since it depends on it
+        // Leave Platform — utils + HR shells before LeavePlatform (same order as former core-entry)
+        './src/utils/leaveUtils.js',
+        './src/utils/hrPolicyFormat.js',
         './src/components/leave-platform/EmployeeDetail.jsx',
+        './src/components/leave-platform/HrPoliciesPanel.jsx',
+        './src/components/leave-platform/HrDocumentsPanel.jsx',
+        './src/components/leave-platform/HrAdminShell.jsx',
         './src/components/leave-platform/LeavePlatform.jsx',
         // HR - QuickBooksPayrollSync before Payroll
         './src/components/hr/QuickBooksPayrollSync.jsx',
@@ -195,14 +174,7 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
 
         // Last: heaviest projects chunk; final batch also triggers loadBatch completion + explicit ProjectDetail retries
         './src/components/projects/ProjectDetail.jsx'
-    ].filter(path => {
-        // FINAL CHECK: Filter out blocked components
-        if (shouldBlockComponent(path)) {
-            console.warn(`🚫 BLOCKED from componentFiles: ${path}`);
-            return false;
-        }
-        return true;
-    }));
+    ]);
     
     let loadedComponents = 0;
     
@@ -247,15 +219,6 @@ console.log('🚀 lazy-load-components.js v20260124-weekly-fms-override loaded')
                 if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
                     console.log('✅ WeeklyFMSReviewTracker already available from vite-projects module - loading dist override anyway');
                 }
-            }
-            
-            // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader
-            // They are loaded early in index.html and must NOT be overwritten
-            // ProjectDetail CAN be loaded via lazy-loader (it has robust dependency checking)
-            if (shouldBlockComponent(src)) {
-                console.log(`⏭️ BLOCKED: ${src} must be loaded from index.html only - skipping lazy-loader`);
-                resolve();
-                return;
             }
             
             // Special handling for ProjectDetail - log when loading
