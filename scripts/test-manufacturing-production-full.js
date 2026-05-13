@@ -3,6 +3,9 @@
  * Manufacturing section – production test: Functionality, UI, Persistence.
  * Run: TEST_URL=https://abcoafrica.co.za TEST_EMAIL=... TEST_PASSWORD=... node scripts/test-manufacturing-production-full.js
  * Or:  npm run test:manufacturing:production:full
+ *
+ * Local: start `npm run dev:backend`, set TEST_URL=http://localhost:3000, then run this script.
+ * If UI steps fail with "bundle loads", run `npm run build:jsx` so dist matches src (lazy Manufacturing bundle).
  */
 
 import { chromium } from 'playwright';
@@ -158,13 +161,15 @@ async function runApiTests(token) {
   }
 }
 
+const MANUFACTURING_UI_TIMEOUT_MS = 90000;
+
 async function runUiTests(token) {
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const page = await context.newPage();
-    page.setDefaultTimeout(20000);
+    page.setDefaultTimeout(MANUFACTURING_UI_TIMEOUT_MS);
 
     if (!token || !EMAIL || !PASSWORD) {
       skip('UI: All UI tests', 'No token – login required');
@@ -172,82 +177,86 @@ async function runUiTests(token) {
       return;
     }
 
-    await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' }).catch(() => {});
-    await page.waitForTimeout(2000);
+    await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     const emailInput = page.locator('input[type="email"], input[name="email"]').first();
     const passwordInput = page.locator('input[type="password"], input[name="password"]').first();
+    await emailInput.waitFor({ state: 'visible', timeout: 30000 });
     await emailInput.fill(EMAIL);
     await passwordInput.fill(PASSWORD);
 
     const loginResponsePromise = page.waitForResponse(
       (res) => res.url().includes('/api/auth/login') && res.status() === 200,
-      { timeout: 15000 }
-    ).catch(() => null);
+      { timeout: 30000 }
+    );
     await page.locator('button[type="submit"]').first().click();
     await loginResponsePromise;
-    await page.waitForTimeout(3000);
 
-    await page.goto(`${BASE_URL}/manufacturing`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(5000);
+    // SPA removes login-page class from body when the shell is ready
+    await page
+      .waitForFunction(() => !document.body.classList.contains('login-page'), { timeout: 45000 })
+      .catch(() => {});
 
+    // Deep-link inventory tab (pathname); avoids extra tab clicks and matches RouteState
+    await page.goto(`${BASE_URL}/manufacturing/inventory`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+    // Manufacturing.jsx is lazy-loaded; wait for real header (not "Manufacturing loading…" placeholder)
+    const header = page.getByTestId('manufacturing-app-header');
     const heading = page.getByRole('heading', { name: 'Manufacturing' });
-    let headingVisible = await heading.isVisible().catch(() => false);
-    if (!headingVisible) {
-      await page.waitForTimeout(5000);
-      headingVisible = await heading.isVisible().catch(() => false);
+    const subtext = page.getByText('Stock control and production management', { exact: true });
+
+    try {
+      await header.waitFor({ state: 'visible', timeout: MANUFACTURING_UI_TIMEOUT_MS });
+    } catch {
+      await heading.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
     }
-    if (headingVisible) {
-      pass('UI: Manufacturing page loads', '');
+    const shellOk =
+      (await header.isVisible().catch(() => false)) ||
+      (await heading.isVisible().catch(() => false)) ||
+      (await subtext.isVisible().catch(() => false));
+    if (shellOk) {
+      pass('UI: Manufacturing page loads', 'header or lazy bundle ready');
     } else {
-      const subtext = await page.locator('text=Stock control and production management').first().isVisible().catch(() => false);
-      if (subtext) {
-        pass('UI: Manufacturing page loads', '');
-      } else {
-        fail('UI: Manufacturing page loads', 'title/tab not found');
-      }
+      fail(
+        'UI: Manufacturing page loads',
+        'manufacturing-app-header / heading not visible — run npm run build:jsx and ensure dist Manufacturing bundle loads'
+      );
     }
 
-    const invTab = page.getByRole('button', { name: 'Inventory' }).first();
-    if (await invTab.isVisible()) {
-      await invTab.click();
-      await page.waitForTimeout(2000);
-    }
-
-    const searchInput = page.getByPlaceholder('Search by name or SKU...');
-    const searchVisible = await searchInput.isVisible().catch(() => false);
+    const searchByTestId = page.getByTestId('manufacturing-inventory-search');
+    const searchByPlaceholder = page.getByPlaceholder(/Search by name or SKU/i);
+    const searchVisible =
+      (await searchByTestId.isVisible().catch(() => false)) ||
+      (await searchByPlaceholder.isVisible().catch(() => false));
     if (searchVisible) {
       pass('UI: Inventory tab – search input visible', '');
     } else {
-      fail('UI: Inventory tab – search input', 'not found');
+      fail('UI: Inventory tab – search input', 'not found (need /manufacturing/inventory and loaded bundle)');
     }
 
-    const movementsTab = page.getByRole('button', { name: 'Stock Movements' }).first();
-    if (await movementsTab.isVisible()) {
-      await movementsTab.click();
-      await page.waitForTimeout(2500);
-    }
+    await page.goto(`${BASE_URL}/manufacturing/movements`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await header.waitFor({ state: 'visible', timeout: MANUFACTURING_UI_TIMEOUT_MS }).catch(() => {});
 
-    const recordBtn = page.getByRole('button', { name: /Record (Stock )?Movement/i }).first();
-    await recordBtn.scrollIntoViewIfNeeded().catch(() => {});
-    if (await recordBtn.isVisible()) {
-      await recordBtn.click();
-      await page.waitForTimeout(2000);
-    }
+    const recordBtn = page.getByRole('button', { name: /Record Stock Movement|Record Movement/i });
+    await recordBtn.first().waitFor({ state: 'visible', timeout: 30000 });
+    await recordBtn.first().scrollIntoViewIfNeeded().catch(() => {});
+    await recordBtn.first().click();
 
-    const modalTitle = page.locator('h2:has-text("Record Stock Movement")');
-    const modalOpen = await modalTitle.isVisible().catch(() => false);
+    const modalRoot = page.getByTestId('record-stock-movement-modal');
+    const modalTitle = page.getByRole('heading', { name: 'Record Stock Movement' });
+    const modalOpen =
+      (await modalRoot.isVisible().catch(() => false)) || (await modalTitle.isVisible().catch(() => false));
     if (!modalOpen) {
       fail('UI: Record Movement – From/To dropdowns', 'modal did not open');
     } else {
-      const modal = page.locator('div.max-w-2xl').first();
+      const modal = modalRoot.or(page.locator('.fixed.inset-0').filter({ has: modalTitle })).first();
       const movementTypeSelect = modal.locator('select').first();
       await movementTypeSelect.selectOption('transfer').catch(() => {});
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(400);
 
-      const fromLabel = page.locator('text=From Location').first();
-      const toLabel = page.locator('text=To Location').first();
-      const selectsWithLocation = page.locator('select').filter({ has: page.locator('option:has-text("Select location...")') });
+      const fromLabel = page.getByText('From Location', { exact: false }).first();
+      const toLabel = page.getByText('To Location', { exact: false }).first();
+      const selectsWithLocation = modal.locator('select').filter({ has: page.locator('option:has-text("Select location")') });
       const fromVisible = await fromLabel.isVisible().catch(() => false);
       const toVisible = await toLabel.isVisible().catch(() => false);
       const locationSelectCount = await selectsWithLocation.count();

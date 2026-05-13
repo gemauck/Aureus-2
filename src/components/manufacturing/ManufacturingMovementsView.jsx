@@ -67,6 +67,9 @@
               'aria-label': 'Record Stock Movement'
             }, React.createElement('i', { className: 'fas fa-plus text-xs' }), ' Record Movement')
           )
+        ),
+        React.createElement('p', { className: 'mt-2 text-xs text-gray-500' },
+          'The table lists movements loaded from the server (full list on open and after Refresh). Use Refresh if another user posted changes while this tab stayed open.'
         )
       ),
       React.createElement('div', { className: 'bg-white rounded-lg border border-gray-200 overflow-hidden min-w-0' },

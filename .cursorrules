@@ -80,6 +80,8 @@ When adding a new `resourceType` branch in `api/manufacturing.js` or new order e
 
 Run **`npm run lint:audit`** before merging manufacturing/order API changes; ESLint enforces `auditManufacturing` / `logAuditFromRequest` before `ok`/`created` in `POST`/`PATCH`/`DELETE` branches (`eslint-rules/manufacturing-audit.mjs`).
 
+- **Full manufacturing audit (local / staging):** `npm run audit:manufacturing:mega` — runs API stock-movement smoke (`test:stock-movements:all`), manufacturing API integration script, Playwright UI movements + `--extended` (PO goods receipt, SO ship, production completion) + `--mega-ui` tab surface, then `verify:ledger` + `verify:ledger:locations` (quiet) and static script checks. Requires **`TEST_EMAIL` / `TEST_PASSWORD`**, **`DATABASE_URL`**, and the app reachable at **`TEST_URL`**. Orchestrator: `scripts/manufacturing-mega-audit.mjs`.
+
 ## Manufacturing inventory: Option B (multi-warehouse truth)
 
 - **Policy:** Every site that holds stock should have **movement rows attributed to that site** for ongoing operations (receipts, issues, transfers, adjustments). **`LEDGER_BASELINE_*` from `ledger-cutover-after-stocktake.js --mismatch-only`** is an exception: it anchors **combined** on-hand on **main office (01_LOC1)** only; use transfers / rebalance plan to align other bins in the ledger.

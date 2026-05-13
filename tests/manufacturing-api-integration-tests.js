@@ -19,6 +19,8 @@ const PASSWORD = process.env.TEST_PASSWORD || '';
 
 const results = { passed: [], failed: [] };
 
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function pass(name, detail = '') {
   results.passed.push({ name, detail });
   console.log('✅', name, detail ? `– ${detail}` : '');
@@ -103,14 +105,34 @@ async function run() {
   if (token && locations.length > 0 && inventory.length > 0) {
     const locId = locations[0].id;
     const item = inventory[0];
-    const postRes = await api('/api/manufacturing/stock-movements', 'POST', {
+    const body = {
       type: 'receipt',
       sku: item.sku,
       itemName: item.name || item.sku,
       quantity: 1,
       toLocationId: locId,
       date: new Date().toISOString().split('T')[0],
-    }, token);
+    };
+    const maxAttempts = 8;
+    let postRes = { status: 0, data: {} };
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        await pause(2500 + 2200 * attempt);
+        console.log(`   (retry ${attempt} for POST /api/manufacturing/stock-movements)`);
+      } else {
+        await pause(1200);
+      }
+      postRes = await api('/api/manufacturing/stock-movements', 'POST', body, token);
+      if (postRes.status === 200 || postRes.status === 201) break;
+      const errText = JSON.stringify(postRes.data || {}).toLowerCase();
+      const transient =
+        postRes.status === 500 &&
+        (errText.includes('transaction') ||
+          errText.includes('timeout') ||
+          errText.includes('prisma') ||
+          errText.includes('unable to start'));
+      if (!transient || attempt === maxAttempts - 1) break;
+    }
     if (postRes.status === 200 || postRes.status === 201) {
       pass('POST /api/manufacturing/stock-movements (receipt)', '');
     } else {

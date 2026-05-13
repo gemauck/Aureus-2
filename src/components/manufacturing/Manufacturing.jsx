@@ -1191,7 +1191,7 @@ try {
         // Stock Movements
         if (typeof window.DatabaseAPI.getStockMovements === 'function') {
           deferredApiCalls.push(
-            window.DatabaseAPI.getStockMovements({ page: 1, pageSize: 120 })
+            window.DatabaseAPI.getStockMovements()
               .then(movementsResponse => {
                 const movementsData = movementsResponse?.data?.movements || [];
                 const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
@@ -1438,7 +1438,7 @@ try {
       // Movements
       if (window.DatabaseAPI?.getStockMovements) {
         apiCalls.push(
-          window.DatabaseAPI.getStockMovements({ page: 1, pageSize: 120 })
+          window.DatabaseAPI.getStockMovements()
             .then(movementsResponse => {
               const movementsData = movementsResponse?.data?.movements || [];
               const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
@@ -4107,6 +4107,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     key="inventory-search-input"
                     ref={searchInputRef}
                     type="text"
+                    data-testid="manufacturing-inventory-search"
                     placeholder="Search by name or SKU..."
                     defaultValue={searchTerm}
                     onFocus={(e) => {
@@ -5385,6 +5386,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                   <div><span className="text-gray-500">Overhead</span> <span className="font-medium">{formatCurrency(bom.overheadCost)}</span></div>
                                   <div><span className="text-gray-500">Total per unit</span> <span className="font-semibold text-blue-600">{formatCurrency(bom.totalCost)}</span></div>
                                 </div>
+                                <p className="text-xs text-gray-500 mt-2">
+                                  Material and totals are per one finished unit. Production completion uses saved material as the unit material cost for finished output when valuing stock.
+                                </p>
                               </div>
                             </td>
                           </tr>
@@ -7405,7 +7409,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         
         setShowModal(false);
         setFormData({});
-        alert('Stock movement recorded successfully!');
+        setTimeout(() => {
+          alert('Stock movement recorded successfully!');
+        }, 0);
       } else {
         console.error('❌ Invalid response structure:', response);
         throw new Error('Invalid response from server');
@@ -8883,6 +8889,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <p className="text-lg font-bold text-blue-600">{formatCurrency(totalCost)}</p>
                     </div>
                   </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    Figures above are per finished unit (sum of component line costs for the quantities shown on one unit of output).
+                  </p>
                 </div>
               </div>
 
@@ -9660,6 +9669,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                           <p className="text-lg font-bold text-blue-600">{formatCurrency(selectedItem.totalCost)}</p>
                         </div>
                       </div>
+                      <p className="text-xs text-gray-600 mt-2">
+                        Per finished unit. Production completion values output using the BOM material total as unit material cost when posting the receipt movement.
+                      </p>
                     </div>
                   </div>
 
@@ -9870,7 +9882,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     if (modalType === 'add_movement') {
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div
+            className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            data-testid="record-stock-movement-modal"
+          >
             <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h2 className="text-lg font-semibold text-gray-900">Record Stock Movement</h2>
               <button
@@ -9942,13 +9957,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Quantity */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="record-stock-movement-quantity" className="block text-sm font-medium text-gray-700 mb-1">
                     Quantity *
                     {formData.type === 'adjustment' && (
                       <span className="text-xs font-normal text-gray-500 ml-2">(Negative values allowed)</span>
                     )}
                   </label>
                   <input
+                    id="record-stock-movement-quantity"
                     type="number"
                     step="0.01"
                     value={formData.quantity || ''}
@@ -10031,8 +10047,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Reference */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+                  <label htmlFor="record-stock-movement-reference" className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
                   <input
+                    id="record-stock-movement-reference"
                     type="text"
                     value={formData.reference || ''}
                     onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
@@ -10043,8 +10060,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Date */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <label htmlFor="record-stock-movement-date" className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input
+                    id="record-stock-movement-date"
                     type="date"
                     value={formData.date || new Date().toISOString().split('T')[0]}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -10054,8 +10072,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <label htmlFor="record-stock-movement-notes" className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                   <textarea
+                    id="record-stock-movement-notes"
                     value={formData.notes || ''}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     rows={3}
@@ -14572,7 +14591,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       ) : (
         <>
           {/* Header */}
-          <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}>
+          <div
+            className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-5 shadow-sm`}
+            data-testid="manufacturing-app-header"
+          >
             <div className="flex items-center gap-3 sm:gap-4">
               <div className={`w-10 h-10 sm:w-12 sm:h-12 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl flex items-center justify-center flex-shrink-0`}>
                 <i className={`fas fa-industry ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>

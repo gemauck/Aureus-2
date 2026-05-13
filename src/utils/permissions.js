@@ -467,7 +467,6 @@ export class PermissionChecker {
     }
 
     canManageManufacturing() {
-        // All users can manage manufacturing - always return true
         return this.hasPermission(PERMISSIONS.ACCESS_MANUFACTURING);
     }
 

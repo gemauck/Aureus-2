@@ -2116,7 +2116,12 @@ const DatabaseAPI = {
         return normalized;
     },
 
-    // STOCK TRANSACTIONS (per-location aware)
+    /**
+     * Stock mutations exist on two endpoints; keep behaviour aligned when changing either.
+     * - `createStockMovement` → POST `/manufacturing/stock-movements` (legacy aggregate list + Manufacturing UI).
+     * - `createStockTransaction` → POST `/manufacturing/stock-transactions` (per-location-aware path; audit via `auditManufacturing`).
+     * Prefer new code on stock-movements unless you need the transaction-specific payload/audit branch.
+     */
     async createStockTransaction(data) {
         const response = await this.makeRequest('/manufacturing/stock-transactions', {
             method: 'POST',
