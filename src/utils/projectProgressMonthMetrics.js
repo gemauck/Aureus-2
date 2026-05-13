@@ -218,10 +218,24 @@ function shouldExcludeFromMonthlyDataReviewPercent(sectionName, docName) {
         /post\s*processing|post\s*process|prost\s*process/i.test(doc);
 }
 
+function normalizeDocumentCollectionStatusKey(raw) {
+    if (raw == null || raw === '') return '';
+    if (typeof raw === 'object' && raw !== null) {
+        if (typeof raw.status === 'string') return normalizeDocumentCollectionStatusKey(raw.status);
+        if (typeof raw.value === 'string') return normalizeDocumentCollectionStatusKey(raw.value);
+    }
+    let s = String(raw).trim().toLowerCase();
+    s = s.replace(/[\s_]+/g, '-').replace(/-+/g, '-');
+    return s;
+}
+
+function isDocumentCollectionExcludedFromMonthPercent(raw) {
+    const k = normalizeDocumentCollectionStatusKey(raw);
+    return k === 'available-on-request' || k === 'not-required';
+}
+
 function isCompletedDocumentCollectionStatus(rawStatus) {
-    if (!rawStatus) return false;
-    const normalized = String(rawStatus).toLowerCase();
-    return normalized === 'collected';
+    return normalizeDocumentCollectionStatusKey(rawStatus) === 'collected';
 }
 
 export function getDocumentCollectionProgressForMonth(project, monthName, year) {
@@ -247,10 +261,13 @@ export function getDocumentCollectionProgressForMonth(project, monthName, year) 
     yearSections.forEach((section) => {
         const docs = Array.isArray(section?.documents) ? section.documents : [];
         docs.forEach((doc) => {
-            total += 1;
             const rawStatus =
                 (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
                 doc?.collectionStatus?.[legacyMonthKey];
+            if (isDocumentCollectionExcludedFromMonthPercent(rawStatus)) {
+                return;
+            }
+            total += 1;
             if (isCompletedDocumentCollectionStatus(rawStatus)) {
                 completed += 1;
             }

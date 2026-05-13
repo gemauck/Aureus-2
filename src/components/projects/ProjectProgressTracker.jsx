@@ -1092,10 +1092,23 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         };
     };
 
-    const isCompletedDocumentCollectionStatus = (rawStatus) => {
-        if (!rawStatus) return false;
-        const normalized = String(rawStatus).toLowerCase();
-        return normalized === 'collected';
+    const normalizeDocumentCollectionStatusKeyForProgress = (raw) => {
+        if (raw == null || raw === '') return '';
+        if (typeof raw === 'object' && raw !== null) {
+            if (typeof raw.status === 'string') return normalizeDocumentCollectionStatusKeyForProgress(raw.status);
+            if (typeof raw.value === 'string') return normalizeDocumentCollectionStatusKeyForProgress(raw.value);
+        }
+        let s = String(raw).trim().toLowerCase();
+        s = s.replace(/[\s_]+/g, '-').replace(/-+/g, '-');
+        return s;
+    };
+
+    const isCompletedDocumentCollectionStatus = (rawStatus) =>
+        normalizeDocumentCollectionStatusKeyForProgress(rawStatus) === 'collected';
+
+    const isDocumentCollectionExcludedFromMonthPercent = (rawStatus) => {
+        const k = normalizeDocumentCollectionStatusKeyForProgress(rawStatus);
+        return k === 'available-on-request' || k === 'not-required';
     };
 
     const getDocumentCollectionProgressForMonth = (project, monthName) => {
@@ -1124,10 +1137,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 if (isNonActionableParentRow(section, doc, isSubRow)) {
                     return;
                 }
-                total += 1;
                 const rawStatus =
                     (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
                     doc?.collectionStatus?.[legacyMonthKey];
+                if (isDocumentCollectionExcludedFromMonthPercent(rawStatus)) {
+                    return;
+                }
+                total += 1;
                 if (isCompletedDocumentCollectionStatus(rawStatus)) {
                     completed += 1;
                 }

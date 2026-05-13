@@ -81,6 +81,28 @@ const DOCUMENT_COLLECTION_MONTHS = Object.freeze([
     'July', 'August', 'September', 'October', 'November', 'December'
 ]);
 
+/** Stabilize stored document-collection status strings for % math (labels, spaces, objects). */
+function normalizeDocumentCollectionStatusKey(raw) {
+    if (raw == null || raw === '') return '';
+    if (typeof raw === 'object' && raw !== null) {
+        if (typeof raw.status === 'string') return normalizeDocumentCollectionStatusKey(raw.status);
+        if (typeof raw.value === 'string') return normalizeDocumentCollectionStatusKey(raw.value);
+    }
+    let s = String(raw).trim().toLowerCase();
+    s = s.replace(/[\s_]+/g, '-').replace(/-+/g, '-');
+    return s;
+}
+
+/** Only these rows participate in month % (Collected = done; everything else in-denominator or excluded). */
+function isDocumentCollectionExcludedFromMonthPercent(raw) {
+    const k = normalizeDocumentCollectionStatusKey(raw);
+    return k === 'available-on-request' || k === 'not-required';
+}
+
+function isDocumentCollectionCollectedForPercent(raw) {
+    return normalizeDocumentCollectionStatusKey(raw) === 'collected';
+}
+
 // Derive a human‑readable facilities label from the project, handling both
 // array and string shapes and falling back gracefully when nothing is set.
 const getFacilitiesLabel = (project) => {
@@ -2322,7 +2344,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const getStatusForYear = (collectionStatus, month, year = selectedYear) => {
         if (!collectionStatus) return null;
         const monthKey = getMonthKey(month, year);
-        return collectionStatus[monthKey] || null;
+        const isoVal = monthKey != null ? collectionStatus[monthKey] : undefined;
+        if (isoVal != null && isoVal !== '') return isoVal;
+        // Legacy keys e.g. "January-2026" (imports / older saves) — keep UI and % aligned.
+        if (typeof month === 'string') {
+            const legacyKey = `${month}-${year}`;
+            const leg = collectionStatus[legacyKey];
+            if (leg != null && leg !== '') return leg;
+        }
+        return null;
     };
     
     // Get comments for a specific month in the selected year only
@@ -2534,7 +2564,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
 
     function isCompletedStatusForTracker(rawStatus) {
         if (!rawStatus) return false;
-        const normalized = String(rawStatus).toLowerCase();
 
         if (isMonthlyDataReview) {
             const statusKey = resolveMonthlyDataReviewStatusKey(rawStatus);
@@ -2546,8 +2575,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return statusKey === 'reviewed-in-order' || statusKey === 'reviewed-issue';
         }
 
-        // Document Collection: only physical collection moves %; waivers / alternate paths do not.
-        return normalized === 'collected';
+        // Document Collection: only Collected counts; Available on Request / Not Required ignored entirely.
+        return isDocumentCollectionCollectedForPercent(rawStatus);
     }
 
     function shouldExcludeFromMonthlyDataReviewPercent(section, doc) {
@@ -2594,8 +2623,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     if (shouldExcludeFromMonthlyDataReviewPercent(section, doc)) {
                         return;
                     }
-                    total += 1;
                     const rawStatus = getStatusForYear(doc?.collectionStatus || {}, monthLabel, selectedYear);
+                    if (!isMonthlyDataReview && !isComplianceReview && isDocumentCollectionExcludedFromMonthPercent(rawStatus)) {
+                        return;
+                    }
+                    total += 1;
                     if (isCompletedStatusForTracker(rawStatus)) {
                         completed += 1;
                     }
@@ -2607,7 +2639,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         });
 
         return completionMap;
-    }, [months, sections, selectedYear, isMonthlyDataReview, isComplianceReview]);
+    }, [months, sections, selectedYear, isMonthlyDataReview, isComplianceReview, dataSource]);
 
     // Email request per document/month: saved recipients, subject, body, recipientName, schedule (for "Request documents via email")
     const getEmailRequestForYear = (doc, month, year = selectedYear) => {
