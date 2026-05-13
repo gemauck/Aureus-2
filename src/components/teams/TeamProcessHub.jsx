@@ -1501,6 +1501,90 @@ const TeamProcessHub = ({ team, isDark, searchTerm = '' }) => {
     );
 };
 
+/** .docx / .xlsx / etc. are ZIP archives; first bytes are PK\x03\x04 or PK\x05\x06 (empty zip). */
+function bufferLooksLikeOfficeOpenXmlZip(buffer) {
+    if (!buffer || buffer.byteLength < 4) return false;
+    const u = new Uint8Array(buffer.slice(0, 4));
+    return u[0] === 0x50 && u[1] === 0x4b && (u[2] === 3 || u[2] === 5) && (u[3] === 4 || u[3] === 6);
+}
+
+function bufferLooksLikeHtmlResponse(buffer) {
+    if (!buffer || buffer.byteLength < 2) return false;
+    const t = new TextDecoder('utf-8', { fatal: false })
+        .decode(buffer.slice(0, Math.min(512, buffer.byteLength)))
+        .trimStart();
+    return /^<!?doctype\s+html/i.test(t) || /^<html[\s>]/i.test(t);
+}
+
+/**
+ * Load attachment bytes for in-browser preview (Mammoth / PDF.js).
+ * Handles same-origin /uploads with optional Bearer; data: URLs; clearer errors when the response is HTML or not a docx zip.
+ */
+async function fetchTeamAttachmentAsArrayBuffer(rawUrl) {
+    const url = (rawUrl || '').trim();
+    if (!url) throw new Error('Missing attachment URL.');
+
+    if (url.startsWith('data:')) {
+        const m = url.match(/^data:([^;,]*)(;base64)?,(.*)$/is);
+        if (!m || !m[2]) throw new Error('Inline data attachment is not base64-encoded.');
+        let b64 = m[3].replace(/\s/g, '');
+        if (b64.includes('%')) {
+            try {
+                b64 = decodeURIComponent(b64);
+            } catch (_) {
+                /* keep raw */
+            }
+        }
+        let binary;
+        try {
+            binary = atob(b64);
+        } catch (_) {
+            throw new Error('Could not decode inline attachment (invalid base64).');
+        }
+        const len = binary.length;
+        const out = new Uint8Array(len);
+        for (let i = 0; i < len; i++) out[i] = binary.charCodeAt(i);
+        return out.buffer;
+    }
+
+    const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token');
+    let isSameOrigin = false;
+    try {
+        isSameOrigin = new URL(url, window.location.origin).origin === window.location.origin;
+    } catch (_) {
+        throw new Error('Invalid attachment URL.');
+    }
+
+    let response;
+    try {
+        response = await fetch(url, {
+            credentials: isSameOrigin ? 'include' : 'omit',
+            mode: isSameOrigin ? 'same-origin' : 'cors',
+            headers: token && isSameOrigin ? { Authorization: `Bearer ${token}` } : undefined
+        });
+    } catch (e) {
+        const msg = e?.message || String(e);
+        if (!isSameOrigin) {
+            throw new Error(
+                `Could not read this file in the browser (${msg}). It may be hosted on another domain that blocks preview—use the attachment link to download or open it.`
+            );
+        }
+        throw new Error(`Could not download file (${msg}).`);
+    }
+
+    if (!response.ok) {
+        throw new Error(`Could not download file (HTTP ${response.status}).`);
+    }
+
+    const buf = await response.arrayBuffer();
+    if (bufferLooksLikeHtmlResponse(buf)) {
+        throw new Error(
+            'The server returned a web page instead of the document file. The file may be missing, or the link may be out of date. Try the attachment link above.'
+        );
+    }
+    return buf;
+}
+
 function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) {
     const [title, setTitle] = useState(doc.title || '');
     const [content, setContent] = useState(doc.content || '');
@@ -1610,21 +1694,12 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) 
 
         (async () => {
             try {
-                const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token');
-                const isSameOrigin = (() => {
-                    try {
-                        const target = new URL(firstDocx.url, window.location.origin);
-                        return target.origin === window.location.origin;
-                    } catch (_) {
-                        return false;
-                    }
-                })();
-                const response = await fetch(firstDocx.url, {
-                    credentials: isSameOrigin ? 'include' : 'omit',
-                    headers: token && isSameOrigin ? { Authorization: `Bearer ${token}` } : undefined
-                });
-                if (!response.ok) throw new Error(`Document fetch failed (${response.status})`);
-                const arrayBuffer = await response.arrayBuffer();
+                const arrayBuffer = await fetchTeamAttachmentAsArrayBuffer(firstDocx.url);
+                if (!bufferLooksLikeOfficeOpenXmlZip(arrayBuffer)) {
+                    throw new Error(
+                        'This file does not look like a .docx (Office Open XML). It may be an older .doc file, a renamed file, or corrupted. Use the attachment link to download it and open in Word.'
+                    );
+                }
                 const mammoth = await ensureMammoth();
                 const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
                 if (!cancelled) setDocxHtml(html || '');
@@ -1734,9 +1809,12 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) 
                                     Word preview
                                 </h4>
                                 {docxPreviewError && (
-                                    <p className={`text-xs mb-2 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                                        {docxPreviewError} Use the attachment link above to download the file.
-                                    </p>
+                                    <div className={`text-xs mb-2 space-y-1 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                                        <p>{docxPreviewError}</p>
+                                        <p className={isDark ? 'text-amber-200/90' : 'text-amber-900/80'}>
+                                            You can still use the attachment link above to download or open the file.
+                                        </p>
+                                    </div>
                                 )}
                                 {!docxHtml && !docxPreviewError && (
                                     <p className={`text-xs mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Loading preview…</p>

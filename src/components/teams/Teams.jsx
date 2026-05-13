@@ -4,6 +4,46 @@ const storage = window.storage;
 const DiscussionModal = window.DiscussionModal;
 const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
+/** On-demand dist scripts — keeps ~380KB of meeting notes + process hub out of the global lazy-loader batches. */
+const teamsDistScriptInflight = new Map();
+function teamsCompiledScriptUrl(componentBaseName) {
+    const isDev =
+        typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    let cacheVersion = String(Date.now());
+    try {
+        if (typeof window !== 'undefined' && window.BUILD_VERSION) {
+            cacheVersion = isDev ? `${window.BUILD_VERSION}-${Date.now()}` : String(window.BUILD_VERSION);
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    return `/dist/src/components/teams/${componentBaseName}.js?v=${encodeURIComponent(cacheVersion)}`;
+}
+
+function loadTeamsDistScript(componentBaseName) {
+    if (componentBaseName === 'TeamProcessHub' && window.TeamProcessHub) return Promise.resolve();
+    if (componentBaseName === 'ManagementMeetingNotes' && window.ManagementMeetingNotes) return Promise.resolve();
+    if (teamsDistScriptInflight.has(componentBaseName)) return teamsDistScriptInflight.get(componentBaseName);
+
+    const p = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.async = true;
+        script.src = teamsCompiledScriptUrl(componentBaseName);
+        script.onload = () => {
+            teamsDistScriptInflight.delete(componentBaseName);
+            resolve();
+        };
+        script.onerror = () => {
+            teamsDistScriptInflight.delete(componentBaseName);
+            reject(new Error(`Failed to load ${componentBaseName}`));
+        };
+        document.body.appendChild(script);
+    });
+    teamsDistScriptInflight.set(componentBaseName, p);
+    return p;
+}
+
 const Teams = () => {
     // Teams state - fetched from API
     const [teams, setTeams] = useState([]);
@@ -321,8 +361,10 @@ const Teams = () => {
     const isInitialMount = useRef(true);
     
     // Modal states
-    // State to track ManagementMeetingNotes availability
-    const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
+    // State to track ManagementMeetingNotes availability (set when script registers or on-demand load finishes)
+    const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(!!window.ManagementMeetingNotes);
+    const [meetingNotesLoadError, setMeetingNotesLoadError] = useState('');
+    const [processHubLoadError, setProcessHubLoadError] = useState('');
     // Force re-render when on discussions tab until lazy-loaded TeamDiscussions is available
     const [, setDiscussionsReadyTick] = useState(0);
     const [, setProcessFlowsReadyTick] = useState(0);
@@ -524,52 +566,74 @@ const Teams = () => {
         };
     }, [isTeamAccessible]); // Removed selectedTeam from dependencies to prevent reset on selection
 
-    // Check modal components on mount only
+    // Load Management Meeting Notes only when the tab is opened (avoids downloading/parsing ~300KB for every Teams visit)
     useEffect(() => {
-    }, []);
-
-    // Wait for ManagementMeetingNotes component to load
-    useEffect(() => {
-        const checkForManagementMeetingNotes = () => {
-            if (window.ManagementMeetingNotes) {
-                setManagementMeetingNotesAvailable(true);
-                return true;
-            }
-            return false;
-        };
-
-        // Check immediately
-        if (checkForManagementMeetingNotes()) {
-            return;
+        setMeetingNotesLoadError('');
+        if (activeTab !== 'meeting-notes' || selectedTeam?.id !== 'management') {
+            return undefined;
         }
-
-        // Poll for the component (components load asynchronously)
-        // Reduced polling frequency and max attempts for better performance
-        let attempts = 0;
-        const maxAttempts = 20; // 2 seconds max wait (reduced from 5 seconds)
-        const interval = setInterval(() => {
-            attempts++;
-            if (checkForManagementMeetingNotes() || attempts >= maxAttempts) {
-                clearInterval(interval);
-                if (attempts >= maxAttempts) {
-                    console.warn('⚠️ Teams: ManagementMeetingNotes component not found after waiting');
+        if (window.ManagementMeetingNotes) {
+            setManagementMeetingNotesAvailable(true);
+            return undefined;
+        }
+        setManagementMeetingNotesAvailable(false);
+        let cancelled = false;
+        loadTeamsDistScript('ManagementMeetingNotes')
+            .then(() => {
+                if (cancelled) return;
+                if (window.ManagementMeetingNotes) {
+                    setManagementMeetingNotesAvailable(true);
+                } else {
+                    setMeetingNotesLoadError('Meeting notes failed to register. Try refreshing the page.');
+                    setManagementMeetingNotesAvailable(false);
                 }
-            }
-        }, 100);
+            })
+            .catch((e) => {
+                if (!cancelled) {
+                    setMeetingNotesLoadError(e?.message || 'Could not load meeting notes.');
+                    setManagementMeetingNotesAvailable(false);
+                    console.warn('Teams: ManagementMeetingNotes on-demand load failed', e);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, selectedTeam?.id]);
 
-        return () => clearInterval(interval);
-    }, []);
+    // Load Process Hub only when the tab is opened
+    useEffect(() => {
+        setProcessHubLoadError('');
+        if (activeTab !== 'process-flows' || !selectedTeam) {
+            return undefined;
+        }
+        if (window.TeamProcessHub) {
+            setProcessFlowsReadyTick((t) => t + 1);
+            return undefined;
+        }
+        let cancelled = false;
+        loadTeamsDistScript('TeamProcessHub')
+            .then(() => {
+                if (cancelled) return;
+                if (!window.TeamProcessHub) {
+                    setProcessHubLoadError('Process hub failed to register. Try refreshing the page.');
+                }
+                setProcessFlowsReadyTick((t) => t + 1);
+            })
+            .catch((e) => {
+                if (!cancelled) {
+                    setProcessHubLoadError(e?.message || 'Could not load process hub.');
+                    console.warn('Teams: TeamProcessHub on-demand load failed', e);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, selectedTeam?.id]);
 
     // When on discussions tab, re-render periodically until lazy-loaded TeamDiscussions is available
     useEffect(() => {
         if (activeTab !== 'discussions' || window.TeamDiscussions) return;
         const id = setInterval(() => setDiscussionsReadyTick((t) => t + 1), 300);
-        return () => clearInterval(id);
-    }, [activeTab]);
-
-    useEffect(() => {
-        if (activeTab !== 'process-flows' || window.TeamProcessHub) return;
-        const id = setInterval(() => setProcessFlowsReadyTick((t) => t + 1), 300);
         return () => clearInterval(id);
     }, [activeTab]);
 
@@ -1000,6 +1064,13 @@ const Teams = () => {
                             );
                         })()}
                         {activeTab === 'process-flows' && (() => {
+                            if (processHubLoadError) {
+                                return (
+                                    <div className={`text-center py-12 px-4 text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                        {processHubLoadError}
+                                    </div>
+                                );
+                            }
                             const Hub = window.TeamProcessHub;
                             if (!Hub) {
                                 return (
@@ -1024,9 +1095,15 @@ const Teams = () => {
                             return <SarsMonitoringComponent />;
                         })()}
                         {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && (() => {
+                            if (meetingNotesLoadError) {
+                                return (
+                                    <div className={`text-center py-12 px-4 text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                        {meetingNotesLoadError}
+                                    </div>
+                                );
+                            }
                             const ComponentToRender = window.ManagementMeetingNotes || ManagementMeetingNotes;
-                            
-                            
+
                             if (!ComponentToRender) {
                                 // Show loading state while waiting for component
                                 if (managementMeetingNotesAvailable) {
