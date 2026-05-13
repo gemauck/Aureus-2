@@ -2392,7 +2392,7 @@ const getAssigneeColor = (identifier, users) => {
                     total += 1;
                     const status = getStatusForYear(document?.collectionStatus || {}, month, selectedYear);
                     const normalized = String(status || '').toLowerCase();
-                    if (normalized === 'checked' || normalized === 'issue') {
+                    if (normalized === 'checked' || normalized === 'issue' || normalized === 'sent') {
                         completed += 1;
                     }
                 });
