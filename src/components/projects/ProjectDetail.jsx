@@ -3429,6 +3429,15 @@ function initializeProjectDetail() {
         if (document.body) {
             scrollToTop(document.body);
         }
+        // App shell (`MainLayout`) scrolls inside this element, not the window — without this,
+        // opening a project keeps the projects list scroll offset and the detail view appears "at the bottom".
+        const mainPageScroll = document.getElementById('main-page-scroll');
+        if (mainPageScroll) {
+            scrollToTop(mainPageScroll);
+            if (typeof mainPageScroll.scrollTop === 'number') {
+                mainPageScroll.scrollTop = 0;
+            }
+        }
     }, [project?.id]);
 
     const loadActivityLog = useCallback(async () => {
