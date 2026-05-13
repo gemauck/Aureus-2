@@ -1597,21 +1597,23 @@ function initializeProjectDetail() {
      * which remounts all children and breaks controlled inputs (focus loss / "can't type").
      */
     const OnlineDriveLinksEditor = ({ projectId, initialSerialized, onProjectUpdate }) => {
-        const row = (url) => ({
+        const row = (url, name = '') => ({
             id:
                 typeof crypto !== 'undefined' && crypto.randomUUID
                     ? crypto.randomUUID()
                     : `row-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-            url: String(url ?? '')
+            url: String(url ?? ''),
+            name: String(name ?? '')
         });
 
         const parseOnlineDriveLinks = useCallback((rawValue) => {
-            const mk = (u) => ({
+            const mk = (u, label = '') => ({
                 id:
                     typeof crypto !== 'undefined' && crypto.randomUUID
                         ? crypto.randomUUID()
                         : `row-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-                url: String(u ?? '')
+                url: String(u ?? ''),
+                name: String(label ?? '')
             });
             const empty = { googleDrive: [mk('')], oneDrive: [mk('')] };
             if (!rawValue) return empty;
@@ -1651,8 +1653,16 @@ function initializeProjectDetail() {
                 const mapped = rawList.map((entry) => {
                     if (typeof entry === 'string') return mk(entry);
                     if (entry && typeof entry === 'object') {
-                        if (typeof entry.url === 'string') return mk(entry.url);
-                        if (typeof entry.link === 'string') return mk(entry.link);
+                        const label =
+                            typeof entry.name === 'string'
+                                ? entry.name
+                                : typeof entry.label === 'string'
+                                  ? entry.label
+                                  : typeof entry.title === 'string'
+                                    ? entry.title
+                                    : '';
+                        if (typeof entry.url === 'string') return mk(entry.url, label);
+                        if (typeof entry.link === 'string') return mk(entry.link, label);
                     }
                     return mk('');
                 });
@@ -1754,10 +1764,18 @@ function initializeProjectDetail() {
             }
         }, [projectId, initialSerialized, parseOnlineDriveLinks]);
 
-        const normalizeForApi = useCallback((state) => ({
-            googleDrive: (state?.googleDrive || []).map((r) => String(r?.url || '').trim()),
-            oneDrive: (state?.oneDrive || []).map((r) => String(r?.url || '').trim())
-        }), []);
+        const normalizeForApi = useCallback((state) => {
+            const serializeRow = (r) => {
+                const url = String(r?.url || '').trim();
+                const name = String(r?.name || '').trim();
+                if (name) return { url, name };
+                return url;
+            };
+            return {
+                googleDrive: (state?.googleDrive || []).map(serializeRow),
+                oneDrive: (state?.oneDrive || []).map(serializeRow)
+            };
+        }, []);
 
         const updateUrl = (provider, index, value) => {
             dirtyRef.current = true;
@@ -1766,6 +1784,18 @@ function initializeProjectDetail() {
                 while (arr.length <= index) arr.push(row(''));
                 const next = [...arr];
                 next[index] = { ...next[index], url: value };
+                return { ...prev, [provider]: next };
+            });
+            setSaveHint(null);
+        };
+
+        const updateName = (provider, index, value) => {
+            dirtyRef.current = true;
+            setLinks((prev) => {
+                const arr = Array.isArray(prev?.[provider]) ? [...prev[provider]] : [];
+                while (arr.length <= index) arr.push(row(''));
+                const next = [...arr];
+                next[index] = { ...next[index], name: value };
                 return { ...prev, [provider]: next };
             });
             setSaveHint(null);
@@ -1868,20 +1898,31 @@ function initializeProjectDetail() {
                         Add link
                     </button>
                 </div>
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                     {(links[provider] || []).map((entry, index) => (
-                        <li key={entry.id} className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <input
-                                type="text"
-                                inputMode="url"
-                                autoComplete="off"
-                                spellCheck={false}
-                                value={entry.url}
-                                onChange={(e) => updateUrl(provider, index, e.target.value)}
-                                placeholder={placeholder}
-                                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
-                            />
-                            <div className="flex shrink-0 items-center gap-2">
+                        <li key={entry.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                            <div className="min-w-0 flex flex-1 flex-col gap-2">
+                                <input
+                                    type="text"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    value={entry.name ?? ''}
+                                    onChange={(e) => updateName(provider, index, e.target.value)}
+                                    placeholder="Display name (optional)"
+                                    className="min-w-0 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                />
+                                <input
+                                    type="text"
+                                    inputMode="url"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    value={entry.url}
+                                    onChange={(e) => updateUrl(provider, index, e.target.value)}
+                                    placeholder={placeholder}
+                                    className="min-w-0 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                />
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2 sm:pt-0.5">
                                 {entry.url?.trim() ? (
                                     <a
                                         href={
@@ -1891,10 +1932,13 @@ function initializeProjectDetail() {
                                         }
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                        title={entry.name?.trim() || entry.url.trim()}
+                                        className="inline-flex max-w-[10rem] items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                                     >
-                                        <i className="fas fa-external-link-alt mr-1.5 text-[10px]" />
-                                        Open
+                                        <i className="fas fa-external-link-alt mr-1.5 shrink-0 text-[10px]" />
+                                        <span className="truncate">
+                                            {entry.name?.trim() ? entry.name.trim() : 'Open'}
+                                        </span>
                                     </a>
                                 ) : null}
                                 <button
