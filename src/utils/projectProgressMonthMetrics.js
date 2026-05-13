@@ -221,7 +221,7 @@ function shouldExcludeFromMonthlyDataReviewPercent(sectionName, docName) {
 function isCompletedDocumentCollectionStatus(rawStatus) {
     if (!rawStatus) return false;
     const normalized = String(rawStatus).toLowerCase();
-    return normalized === 'collected' || normalized === 'available-on-request' || normalized === 'not-required';
+    return normalized === 'collected';
 }
 
 export function getDocumentCollectionProgressForMonth(project, monthName, year) {

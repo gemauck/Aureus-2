@@ -1095,7 +1095,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const isCompletedDocumentCollectionStatus = (rawStatus) => {
         if (!rawStatus) return false;
         const normalized = String(rawStatus).toLowerCase();
-        return normalized === 'collected' || normalized === 'available-on-request' || normalized === 'not-required';
+        return normalized === 'collected';
     };
 
     const getDocumentCollectionProgressForMonth = (project, monthName) => {

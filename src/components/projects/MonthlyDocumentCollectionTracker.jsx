@@ -2546,8 +2546,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return statusKey === 'reviewed-in-order' || statusKey === 'reviewed-issue';
         }
 
-        // Document Collection
-        return normalized === 'collected' || normalized === 'available-on-request' || normalized === 'not-required';
+        // Document Collection: only physical collection moves %; waivers / alternate paths do not.
+        return normalized === 'collected';
     }
 
     function shouldExcludeFromMonthlyDataReviewPercent(section, doc) {
