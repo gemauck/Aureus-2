@@ -86,6 +86,14 @@ async function ensurePdfJs() {
     return pdfjsLib;
 }
 
+async function ensureMammoth() {
+    if (window.mammoth) return window.mammoth;
+    await loadScriptOnce('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js');
+    const mammoth = window.mammoth;
+    if (!mammoth || typeof mammoth.convertToHtml !== 'function') throw new Error('mammoth failed to load');
+    return mammoth;
+}
+
 /** Rasterize PDF page → Excalidraw canvasData with a locked dim image as trace background. */
 async function buildTraceCanvasDataFromPdf(file, pageNum, viewBackgroundColor) {
     const pdfjsLib = await ensurePdfJs();
@@ -1515,6 +1523,19 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) 
         [safeAttachments]
     );
 
+    const firstDocx = useMemo(() => {
+        const isDocx = (a) => {
+            const n = (a.name || '').toLowerCase();
+            const m = (a.mimeType || '').toLowerCase();
+            return (
+                n.endsWith('.docx') ||
+                m.includes('wordprocessingml') ||
+                m === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            );
+        };
+        return safeAttachments.find(isDocx);
+    }, [safeAttachments]);
+
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
     const [pdfPreviewError, setPdfPreviewError] = useState('');
     const [pdfPagePreviews, setPdfPagePreviews] = useState([]);
@@ -1576,6 +1597,48 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) 
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
     }, [firstPdf?.url]);
+
+    const [docxHtml, setDocxHtml] = useState('');
+    const [docxPreviewError, setDocxPreviewError] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        setDocxHtml('');
+        setDocxPreviewError('');
+
+        if (!firstDocx?.url) return undefined;
+
+        (async () => {
+            try {
+                const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token');
+                const isSameOrigin = (() => {
+                    try {
+                        const target = new URL(firstDocx.url, window.location.origin);
+                        return target.origin === window.location.origin;
+                    } catch (_) {
+                        return false;
+                    }
+                })();
+                const response = await fetch(firstDocx.url, {
+                    credentials: isSameOrigin ? 'include' : 'omit',
+                    headers: token && isSameOrigin ? { Authorization: `Bearer ${token}` } : undefined
+                });
+                if (!response.ok) throw new Error(`Document fetch failed (${response.status})`);
+                const arrayBuffer = await response.arrayBuffer();
+                const mammoth = await ensureMammoth();
+                const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+                if (!cancelled) setDocxHtml(html || '');
+            } catch (e) {
+                if (!cancelled) {
+                    setDocxPreviewError(e?.message || 'Could not load Word preview.');
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [firstDocx?.url]);
 
     useEffect(() => {
         setTitle(doc.title || '');
@@ -1663,6 +1726,31 @@ function DocumentDetailPane({ doc, isDark, onUpdate, onDelete, onAssignGroup }) 
                                         </div>
                                     </object>
                                 )}
+                            </div>
+                        )}
+                        {firstDocx && (
+                            <div className="mt-4">
+                                <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    Word preview
+                                </h4>
+                                {docxPreviewError && (
+                                    <p className={`text-xs mb-2 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                                        {docxPreviewError} Use the attachment link above to download the file.
+                                    </p>
+                                )}
+                                {!docxHtml && !docxPreviewError && (
+                                    <p className={`text-xs mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Loading preview…</p>
+                                )}
+                                {docxHtml ? (
+                                    <div
+                                        className={`team-process-hub-docx-preview w-full max-h-[min(70vh,520px)] overflow-auto rounded-xl border px-4 py-3 text-sm leading-relaxed [&_img]:max-w-full [&_table]:max-w-full [&_table]:border-collapse [&_td]:border [&_th]:border [&_td]:px-2 [&_th]:px-2 [&_td]:py-1 [&_th]:py-1 ${
+                                            isDark
+                                                ? 'border-gray-700 bg-gray-950/60 text-gray-100 [&_td]:border-gray-600 [&_th]:border-gray-600'
+                                                : 'border-gray-300 bg-white text-gray-900 [&_td]:border-gray-300 [&_th]:border-gray-300'
+                                        }`}
+                                        dangerouslySetInnerHTML={{ __html: docxHtml }}
+                                    />
+                                ) : null}
                             </div>
                         )}
                     </div>
