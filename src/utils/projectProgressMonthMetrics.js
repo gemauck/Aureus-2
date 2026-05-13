@@ -229,13 +229,9 @@ function normalizeDocumentCollectionStatusKey(raw) {
     return s;
 }
 
-function isDocumentCollectionExcludedFromMonthPercent(raw) {
-    const k = normalizeDocumentCollectionStatusKey(raw);
-    return k === 'available-on-request' || k === 'not-required';
-}
-
 function isCompletedDocumentCollectionStatus(rawStatus) {
-    return normalizeDocumentCollectionStatusKey(rawStatus) === 'collected';
+    const k = normalizeDocumentCollectionStatusKey(rawStatus);
+    return k === 'collected' || k === 'available-on-request' || k === 'not-required';
 }
 
 export function getDocumentCollectionProgressForMonth(project, monthName, year) {
@@ -261,13 +257,10 @@ export function getDocumentCollectionProgressForMonth(project, monthName, year) 
     yearSections.forEach((section) => {
         const docs = Array.isArray(section?.documents) ? section.documents : [];
         docs.forEach((doc) => {
+            total += 1;
             const rawStatus =
                 (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
                 doc?.collectionStatus?.[legacyMonthKey];
-            if (isDocumentCollectionExcludedFromMonthPercent(rawStatus)) {
-                return;
-            }
-            total += 1;
             if (isCompletedDocumentCollectionStatus(rawStatus)) {
                 completed += 1;
             }

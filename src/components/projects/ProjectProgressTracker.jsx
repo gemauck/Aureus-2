@@ -1103,12 +1103,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return s;
     };
 
-    const isCompletedDocumentCollectionStatus = (rawStatus) =>
-        normalizeDocumentCollectionStatusKeyForProgress(rawStatus) === 'collected';
-
-    const isDocumentCollectionExcludedFromMonthPercent = (rawStatus) => {
+    const isCompletedDocumentCollectionStatus = (rawStatus) => {
         const k = normalizeDocumentCollectionStatusKeyForProgress(rawStatus);
-        return k === 'available-on-request' || k === 'not-required';
+        return k === 'collected' || k === 'available-on-request' || k === 'not-required';
     };
 
     const getDocumentCollectionProgressForMonth = (project, monthName) => {
@@ -1137,13 +1134,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 if (isNonActionableParentRow(section, doc, isSubRow)) {
                     return;
                 }
+                total += 1;
                 const rawStatus =
                     (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
                     doc?.collectionStatus?.[legacyMonthKey];
-                if (isDocumentCollectionExcludedFromMonthPercent(rawStatus)) {
-                    return;
-                }
-                total += 1;
                 if (isCompletedDocumentCollectionStatus(rawStatus)) {
                     completed += 1;
                 }

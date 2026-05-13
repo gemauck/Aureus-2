@@ -93,14 +93,10 @@ function normalizeDocumentCollectionStatusKey(raw) {
     return s;
 }
 
-/** Only these rows participate in month % (Collected = done; everything else in-denominator or excluded). */
-function isDocumentCollectionExcludedFromMonthPercent(raw) {
+/** True when status counts as “done” for document-collection month % headers. */
+function isDocumentCollectionCompleteForPercent(raw) {
     const k = normalizeDocumentCollectionStatusKey(raw);
-    return k === 'available-on-request' || k === 'not-required';
-}
-
-function isDocumentCollectionCollectedForPercent(raw) {
-    return normalizeDocumentCollectionStatusKey(raw) === 'collected';
+    return k === 'collected' || k === 'available-on-request' || k === 'not-required';
 }
 
 // Derive a human‑readable facilities label from the project, handling both
@@ -2575,8 +2571,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             return statusKey === 'reviewed-in-order' || statusKey === 'reviewed-issue';
         }
 
-        // Document Collection: only Collected counts; Available on Request / Not Required ignored entirely.
-        return isDocumentCollectionCollectedForPercent(rawStatus);
+        // Document Collection: Collected, Available on Request, and Not Required all count as complete for %.
+        return isDocumentCollectionCompleteForPercent(rawStatus);
     }
 
     function shouldExcludeFromMonthlyDataReviewPercent(section, doc) {
@@ -2623,11 +2619,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     if (shouldExcludeFromMonthlyDataReviewPercent(section, doc)) {
                         return;
                     }
-                    const rawStatus = getStatusForYear(doc?.collectionStatus || {}, monthLabel, selectedYear);
-                    if (!isMonthlyDataReview && !isComplianceReview && isDocumentCollectionExcludedFromMonthPercent(rawStatus)) {
-                        return;
-                    }
                     total += 1;
+                    const rawStatus = getStatusForYear(doc?.collectionStatus || {}, monthLabel, selectedYear);
                     if (isCompletedStatusForTracker(rawStatus)) {
                         completed += 1;
                     }
