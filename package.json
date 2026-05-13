@@ -79,6 +79,7 @@
     "audit:forensic:movements:e2e:full": "node scripts/forensic-movements-e2e-playwright.mjs --extended",
     "audit:forensic:movements:e2e:mega-ui": "node scripts/forensic-movements-e2e-playwright.mjs --extended --mega-ui",
     "audit:manufacturing:mega": "node scripts/manufacturing-mega-audit.mjs",
+    "cleanup:test-manufacturing-db": "node scripts/cleanup-test-manufacturing-db-artifacts.mjs",
     "audit:manufacturing:static": "node --check scripts/forensic-stock-movement-audit.mjs && node --check scripts/forensic-movements-e2e-playwright.mjs && node --check scripts/test-all-stock-movements.mjs && node --check scripts/manufacturing-mega-audit.mjs",
     "validate:deps": "node scripts/validate-component-deps.js",
     "precommit": "npm run validate:deps",
